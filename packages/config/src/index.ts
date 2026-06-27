@@ -1,4 +1,31 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+
+/**
+ * 从 startDir 向上查找最近的 `.env` 并加载到 process.env（开发环境用）。
+ * 生产/容器环境通常没有 `.env`，环境变量由容器注入，此函数静默跳过。
+ * 返回被加载的文件路径，未找到返回 null。
+ */
+export function loadDotenv(startDir: string = process.cwd()): string | null {
+  const proc = process as NodeJS.Process & {
+    loadEnvFile?: (path?: string) => void;
+  };
+  if (typeof proc.loadEnvFile !== "function") return null;
+
+  let dir = startDir;
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, ".env");
+    if (existsSync(candidate)) {
+      proc.loadEnvFile(candidate);
+      return candidate;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
 
 /**
  * 运行时配置读取与校验。

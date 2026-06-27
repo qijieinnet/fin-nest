@@ -16,6 +16,10 @@
     "db:generate": "pnpm --filter @fin-nest/db run generate",
     "db:migrate": "pnpm --filter @fin-nest/db run migrate:dev",
     "db:deploy": "pnpm --filter @fin-nest/db run migrate:deploy",
+    "dev": "pnpm --parallel --filter @fin-nest/api --filter @fin-nest/web run dev",
+    "dev:api": "pnpm --filter @fin-nest/api run dev",
+    "dev:web": "pnpm --filter @fin-nest/web run dev",
+    "dev:worker": "pnpm --filter @fin-nest/worker run dev",
     "db:studio": "pnpm --filter @fin-nest/db run studio",
     "infra:up": "docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d",
     "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down"

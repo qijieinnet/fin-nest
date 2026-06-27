@@ -75,6 +75,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@fin-nest/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@fin-nest/shared':
         specifier: workspace:*
         version: link:../../packages/shared

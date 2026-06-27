@@ -2,10 +2,11 @@ import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { loadConfig } from "@fin-nest/config";
+import { loadConfig, loadDotenv } from "@fin-nest/config";
 import { AppModule } from "./app.module";
 
 async function bootstrap(): Promise<void> {
+  loadDotenv();
   const config = loadConfig();
   const app = await NestFactory.create(AppModule);
 
