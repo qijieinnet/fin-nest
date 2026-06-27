@@ -1,0 +1,12 @@
+// Fin Nest 数据库 schema。
+// v1 使用 Prisma + Prisma Migrate；citext 等 PostgreSQL 特性通过 raw SQL migration 补充。
+// 完整模型在任务 B0 中按 DATABASE_DESIGN.md 落地，本文件先建立 datasource/generator 骨架。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

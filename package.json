@@ -1,0 +1,30 @@
+{
+  "name": "fin-nest",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.26.2",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build:packages": "pnpm --filter \"./packages/*\" -r run build",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm build:packages && pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @fin-nest/db run generate",
+    "db:migrate": "pnpm --filter @fin-nest/db run migrate:dev",
+    "db:deploy": "pnpm --filter @fin-nest/db run migrate:deploy",
+    "db:studio": "pnpm --filter @fin-nest/db run studio",
+    "infra:up": "docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d",
+    "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.5",
+    "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "prisma", "sharp"]
+  }
+}
