@@ -1,6 +1,5 @@
 // Fin Nest 数据库 schema。
-// v1 使用 Prisma + Prisma Migrate；citext 等 PostgreSQL 特性通过 raw SQL migration 补充。
-// 完整模型在任务 B0 中按 DATABASE_DESIGN.md 落地，本文件先建立 datasource/generator 骨架。
+// v1 使用 Prisma + Prisma Migrate；Prisma 难以表达的 PostgreSQL 约束在 migration.sql 中补充。
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +8,600 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.Citext
+  account      String    @unique @db.Citext
+  alias        String
+  isAdmin      Boolean   @default(false) @map("is_admin")
+  passwordHash String    @map("password_hash")
+  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("users")
+}
+
+model AppSetting {
+  id                  Int      @id @default(1) @db.SmallInt
+  registrationEnabled Boolean  @default(true) @map("registration_enabled")
+  updatedBy           String?  @map("updated_by") @db.Uuid
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_settings")
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  deviceName String?   @map("device_name")
+  userAgent  String?   @map("user_agent")
+  ip         String?   @db.Inet
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastSeenAt DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model ServiceToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  tokenHash  String    @unique @map("token_hash")
+  scopes     String[]  @default([])
+  allowedIps String[]  @default([]) @map("allowed_ips")
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdBy  String?   @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("service_tokens")
+}
+
+model Ledger {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  icon        String?
+  currency    String    @default("CNY") @db.Char(3)
+  ownerUserId String    @map("owner_user_id") @db.Uuid
+  createdBy   String    @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("ledgers")
+}
+
+model LedgerMember {
+  id        String    @id @default(uuid()) @db.Uuid
+  ledgerId  String    @map("ledger_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  role      String
+  joinedAt  DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  removedAt DateTime? @map("removed_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ledgerId, userId])
+  @@index([userId, removedAt])
+  @@index([ledgerId, role])
+  @@map("ledger_members")
+}
+
+model LedgerInvite {
+  id        String    @id @default(uuid()) @db.Uuid
+  ledgerId  String    @map("ledger_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  createdBy String    @map("created_by") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  usedCount Int       @default(0) @map("used_count")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("ledger_invites")
+}
+
+model LedgerJoinRequest {
+  id              String    @id @default(uuid()) @db.Uuid
+  ledgerId        String    @map("ledger_id") @db.Uuid
+  inviteId        String?   @map("invite_id") @db.Uuid
+  requesterUserId String    @map("requester_user_id") @db.Uuid
+  status          String
+  reviewedBy      String?   @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  message         String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, status])
+  @@index([requesterUserId, status])
+  @@map("ledger_join_requests")
+}
+
+model RecordSetting {
+  ledgerId            String   @id @map("ledger_id") @db.Uuid
+  fieldOrder          Json     @map("field_order") @db.JsonB
+  visibleFields       Json     @map("visible_fields") @db.JsonB
+  acctRequired        Boolean  @default(false) @map("acct_required")
+  personRequired      Boolean  @default(false) @map("person_required")
+  amountDecimalPlaces Int      @default(2) @map("amount_decimal_places") @db.SmallInt
+  updatedBy           String?  @map("updated_by") @db.Uuid
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("record_settings")
+}
+
+model Category {
+  id         String    @id @default(uuid()) @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  type       String
+  name       String
+  icon       String?
+  sortOrder  Int       @default(0) @map("sort_order")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy  String?   @map("created_by") @db.Uuid
+  updatedBy  String?   @map("updated_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ledgerId, type, name])
+  @@index([ledgerId, type, archivedAt])
+  @@map("categories")
+}
+
+model Subcategory {
+  id         String    @id @default(uuid()) @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  categoryId String    @map("category_id") @db.Uuid
+  name       String
+  icon       String?
+  sortOrder  Int       @default(0) @map("sort_order")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy  String?   @map("created_by") @db.Uuid
+  updatedBy  String?   @map("updated_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([categoryId, name])
+  @@index([categoryId, archivedAt])
+  @@map("subcategories")
+}
+
+model Person {
+  id         String    @id @default(uuid()) @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  name       String
+  icon       String?
+  isDefault  Boolean   @default(false) @map("is_default")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy  String?   @map("created_by") @db.Uuid
+  updatedBy  String?   @map("updated_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ledgerId, name])
+  @@index([ledgerId, archivedAt])
+  @@map("people")
+}
+
+model Account {
+  id                   String    @id @default(uuid()) @db.Uuid
+  ledgerId             String    @map("ledger_id") @db.Uuid
+  type                 String
+  name                 String
+  icon                 String?
+  balanceMicros        BigInt    @default(0) @map("balance_micros")
+  includeInNetWorth    Boolean   @default(true) @map("include_in_net_worth")
+  creditLimitMicros    BigInt?   @map("credit_limit_micros")
+  investmentCostMicros BigInt?   @map("investment_cost_micros")
+  counterparty         String?
+  dueDate              DateTime? @map("due_date") @db.Date
+  billDay              Int?      @map("bill_day") @db.SmallInt
+  repayDay             Int?      @map("repay_day") @db.SmallInt
+  settledAt            DateTime? @map("settled_at") @db.Timestamptz(6)
+  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy            String?   @map("created_by") @db.Uuid
+  updatedBy            String?   @map("updated_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, type, archivedAt])
+  @@map("accounts")
+}
+
+model SubAccount {
+  id            String    @id @default(uuid()) @db.Uuid
+  ledgerId      String    @map("ledger_id") @db.Uuid
+  accountId     String    @map("account_id") @db.Uuid
+  name          String
+  balanceMicros BigInt    @default(0) @map("balance_micros")
+  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([accountId, name])
+  @@index([accountId, archivedAt])
+  @@map("sub_accounts")
+}
+
+model AccountAdjustment {
+  id                  String   @id @default(uuid()) @db.Uuid
+  ledgerId            String   @map("ledger_id") @db.Uuid
+  accountId           String   @map("account_id") @db.Uuid
+  subAccountId        String?  @map("sub_account_id") @db.Uuid
+  balanceBeforeMicros BigInt   @map("balance_before_micros")
+  balanceAfterMicros  BigInt   @map("balance_after_micros")
+  deltaMicros         BigInt   @map("delta_micros")
+  note                String?
+  createdBy           String   @map("created_by") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("account_adjustments")
+}
+
+model Transaction {
+  id                    String    @id @default(uuid()) @db.Uuid
+  ledgerId              String    @map("ledger_id") @db.Uuid
+  type                  String
+  grossAmountMicros     BigInt    @map("gross_amount_micros")
+  effectiveAmountMicros BigInt    @map("effective_amount_micros")
+  currency              String    @default("CNY") @db.Char(3)
+  occurredOn            DateTime  @map("occurred_on") @db.Date
+  occurredAt            DateTime  @map("occurred_at") @db.Timestamptz(6)
+  categoryId            String?   @map("category_id") @db.Uuid
+  subcategoryId         String?   @map("subcategory_id") @db.Uuid
+  categorySnapshot      Json?     @map("category_snapshot") @db.JsonB
+  personId              String?   @map("person_id") @db.Uuid
+  personSnapshot        Json?     @map("person_snapshot") @db.JsonB
+  accountId             String?   @map("account_id") @db.Uuid
+  subAccountId          String?   @map("sub_account_id") @db.Uuid
+  fromAccountId         String?   @map("from_account_id") @db.Uuid
+  fromSubAccountId      String?   @map("from_sub_account_id") @db.Uuid
+  toAccountId           String?   @map("to_account_id") @db.Uuid
+  toSubAccountId        String?   @map("to_sub_account_id") @db.Uuid
+  note                  String?
+  source                String    @default("manual")
+  sourceId              String?   @map("source_id") @db.Uuid
+  createdBy             String    @map("created_by") @db.Uuid
+  updatedBy             String?   @map("updated_by") @db.Uuid
+  deletedBy             String?   @map("deleted_by") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, occurredOn(sort: Desc)])
+  @@index([ledgerId, type, occurredOn(sort: Desc)])
+  @@index([ledgerId, categoryId])
+  @@index([ledgerId, personId])
+  @@index([ledgerId, createdBy])
+  @@index([accountId])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@map("transactions")
+}
+
+model AccountEntry {
+  id                  String   @id @default(uuid()) @db.Uuid
+  ledgerId            String   @map("ledger_id") @db.Uuid
+  accountId           String   @map("account_id") @db.Uuid
+  subAccountId        String?  @map("sub_account_id") @db.Uuid
+  entryType           String   @map("entry_type")
+  amountDeltaMicros   BigInt   @map("amount_delta_micros")
+  balanceBeforeMicros BigInt   @map("balance_before_micros")
+  balanceAfterMicros  BigInt   @map("balance_after_micros")
+  transactionId       String?  @map("transaction_id") @db.Uuid
+  adjustmentId        String?  @map("adjustment_id") @db.Uuid
+  relatedAccountId    String?  @map("related_account_id") @db.Uuid
+  note                String?
+  occurredAt          DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdBy           String?  @map("created_by") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, accountId, occurredAt(sort: Desc)])
+  @@index([transactionId])
+  @@index([adjustmentId])
+  @@map("account_entries")
+}
+
+model TransactionAccountRelation {
+  id            String   @id @default(uuid()) @db.Uuid
+  ledgerId      String   @map("ledger_id") @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  accountId     String   @map("account_id") @db.Uuid
+  relationKind  String   @map("relation_kind")
+  amountMicros  BigInt   @map("amount_micros")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("transaction_account_relations")
+}
+
+model TransactionLink {
+  id            String   @id @default(uuid()) @db.Uuid
+  ledgerId      String   @map("ledger_id") @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  linkedType    String   @map("linked_type")
+  linkedId      String   @map("linked_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([transactionId, linkedType, linkedId])
+  @@index([ledgerId, linkedType, linkedId])
+  @@map("transaction_links")
+}
+
+model AutoRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  ledgerId      String    @map("ledger_id") @db.Uuid
+  enabled       Boolean   @default(true)
+  type          String
+  amountMicros  BigInt    @map("amount_micros")
+  categoryId    String    @map("category_id") @db.Uuid
+  subcategoryId String?   @map("subcategory_id") @db.Uuid
+  accountId     String?   @map("account_id") @db.Uuid
+  subAccountId  String?   @map("sub_account_id") @db.Uuid
+  personId      String?   @map("person_id") @db.Uuid
+  note          String?
+  repeatRule    String    @map("repeat_rule")
+  startDate     DateTime  @map("start_date") @db.Date
+  nextRunOn     DateTime? @map("next_run_on") @db.Date
+  createdBy     String    @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  @@map("auto_rules")
+}
+
+model AutoPendingTransaction {
+  id                     String    @id @default(uuid()) @db.Uuid
+  ledgerId               String    @map("ledger_id") @db.Uuid
+  autoRuleId             String    @map("auto_rule_id") @db.Uuid
+  periodKey              String    @map("period_key")
+  scheduledFor           DateTime  @map("scheduled_for") @db.Date
+  status                 String
+  type                   String
+  amountMicros           BigInt    @map("amount_micros")
+  categoryId             String    @map("category_id") @db.Uuid
+  subcategoryId          String?   @map("subcategory_id") @db.Uuid
+  accountId              String?   @map("account_id") @db.Uuid
+  subAccountId           String?   @map("sub_account_id") @db.Uuid
+  personId               String?   @map("person_id") @db.Uuid
+  note                   String?
+  relationPayload        Json?     @map("relation_payload") @db.JsonB
+  confirmedTransactionId String?   @map("confirmed_transaction_id") @db.Uuid
+  confirmedBy            String?   @map("confirmed_by") @db.Uuid
+  confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  deletedBy              String?   @map("deleted_by") @db.Uuid
+  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
+  updatedBy              String?   @map("updated_by") @db.Uuid
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([autoRuleId, periodKey])
+  @@index([ledgerId, status, scheduledFor])
+  @@map("auto_pending_transactions")
+}
+
+model QuickTemplate {
+  id              String    @id @default(uuid()) @db.Uuid
+  ledgerId        String    @map("ledger_id") @db.Uuid
+  type            String
+  name            String?
+  amountMicros    BigInt?   @map("amount_micros")
+  categoryId      String    @map("category_id") @db.Uuid
+  subcategoryId   String?   @map("subcategory_id") @db.Uuid
+  accountId       String?   @map("account_id") @db.Uuid
+  subAccountId    String?   @map("sub_account_id") @db.Uuid
+  personId        String?   @map("person_id") @db.Uuid
+  note            String?
+  relationPayload Json?     @map("relation_payload") @db.JsonB
+  directEnabled   Boolean   @default(false) @map("direct_enabled")
+  sortOrder       Int       @default(0) @map("sort_order")
+  createdBy       String    @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  @@map("quick_templates")
+}
+
+model Plan {
+  id                String    @id @default(uuid()) @db.Uuid
+  ledgerId          String    @map("ledger_id") @db.Uuid
+  kind              String
+  metric            String
+  name              String
+  limitAmountMicros BigInt?   @map("limit_amount_micros")
+  limitCount        Int?      @map("limit_count")
+  startDate         DateTime  @map("start_date") @db.Date
+  repeatRule        String    @map("repeat_rule")
+  matchRule         Json?     @map("match_rule") @db.JsonB
+  foresightEnabled  Boolean   @default(false) @map("foresight_enabled")
+  createdBy         String    @map("created_by") @db.Uuid
+  updatedBy         String?   @map("updated_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  @@map("plans")
+}
+
+model BudgetSetting {
+  ledgerId          String   @id @map("ledger_id") @db.Uuid
+  enabled           Boolean  @default(false)
+  totalAmountMicros BigInt?  @map("total_amount_micros")
+  updatedBy         String?  @map("updated_by") @db.Uuid
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("budget_settings")
+}
+
+model CategoryBudget {
+  id           String   @id @default(uuid()) @db.Uuid
+  ledgerId     String   @map("ledger_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  amountMicros BigInt   @map("amount_micros")
+  createdBy    String?  @map("created_by") @db.Uuid
+  updatedBy    String?  @map("updated_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ledgerId, categoryId])
+  @@index([ledgerId])
+  @@map("category_budgets")
+}
+
+model Insurance {
+  id             String    @id @default(uuid()) @db.Uuid
+  ledgerId       String    @map("ledger_id") @db.Uuid
+  type           String
+  name           String
+  insurer        String?
+  method         String?
+  policyNo       String?   @map("policy_no")
+  coverageMicros BigInt?   @map("coverage_micros")
+  premiumMicros  BigInt?   @map("premium_micros")
+  premiumFreq    String?   @map("premium_freq")
+  periods        Int?
+  renewal        String?
+  coverageDesc   String?   @map("coverage_desc")
+  startDate      DateTime? @map("start_date") @db.Date
+  endDate        DateTime? @map("end_date") @db.Date
+  note           String?
+  terminatedAt   DateTime? @map("terminated_at") @db.Timestamptz(6)
+  createdBy      String    @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("insurances")
+}
+
+model InsuranceInsuredPerson {
+  insuranceId String @map("insurance_id") @db.Uuid
+  personId    String @map("person_id") @db.Uuid
+
+  @@id([insuranceId, personId])
+  @@map("insurance_insured_people")
+}
+
+model ItemType {
+  id        String   @id @default(uuid()) @db.Uuid
+  ledgerId  String   @map("ledger_id") @db.Uuid
+  name      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("item_types")
+}
+
+model Item {
+  id                  String    @id @default(uuid()) @db.Uuid
+  ledgerId            String    @map("ledger_id") @db.Uuid
+  name                String
+  typeId              String?   @map("type_id") @db.Uuid
+  purchasePriceMicros BigInt?   @map("purchase_price_micros")
+  purchaseDate        DateTime? @map("purchase_date") @db.Date
+  expectedYears       Decimal?  @map("expected_years") @db.Decimal(6, 2)
+  note                String?
+  scrappedAt          DateTime? @map("scrapped_at") @db.Timestamptz(6)
+  scrapDate           DateTime? @map("scrap_date") @db.Date
+  sellPriceMicros     BigInt?   @map("sell_price_micros")
+  createdBy           String    @map("created_by") @db.Uuid
+  updatedBy           String?   @map("updated_by") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("items")
+}
+
+model File {
+  id           String    @id @default(uuid()) @db.Uuid
+  ledgerId     String    @map("ledger_id") @db.Uuid
+  ownerUserId  String    @map("owner_user_id") @db.Uuid
+  bucket       String
+  objectKey    String    @unique @map("object_key")
+  originalName String?   @map("original_name")
+  mime         String
+  sizeBytes    BigInt    @map("size_bytes")
+  checksum     String?
+  status       String
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("files")
+}
+
+model Attachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  ledgerId  String   @map("ledger_id") @db.Uuid
+  fileId    String   @map("file_id") @db.Uuid
+  ownerType String   @map("owner_type")
+  ownerId   String   @map("owner_id") @db.Uuid
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([fileId, ownerType, ownerId])
+  @@index([ledgerId, ownerType, ownerId])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  ledgerId       String?  @map("ledger_id") @db.Uuid
+  actorUserId    String?  @map("actor_user_id") @db.Uuid
+  serviceTokenId String?  @map("service_token_id") @db.Uuid
+  source         String
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String?  @map("entity_id") @db.Uuid
+  metadata       Json?    @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("audit_logs")
+}
+
+model BackgroundJob {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        String
+  status      String
+  payload     Json      @db.JsonB
+  runAfter    DateTime  @default(now()) @map("run_after") @db.Timestamptz(6)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3) @map("max_attempts")
+  lockedAt    DateTime? @map("locked_at") @db.Timestamptz(6)
+  lockedBy    String?   @map("locked_by")
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, runAfter])
+  @@index([type, status])
+  @@map("background_jobs")
+}
+
+model IdempotencyKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  keyHash   String   @unique @map("key_hash")
+  scope     String
+  userId    String?  @map("user_id") @db.Uuid
+  response  Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }

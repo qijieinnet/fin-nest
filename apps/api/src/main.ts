@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { ApiExceptionFilter, BigIntSerializeInterceptor } from "@fin-nest/backend";
 import { loadConfig, loadDotenv } from "@fin-nest/config";
 import { AppModule } from "./app.module";
 
@@ -10,6 +11,8 @@ async function bootstrap(): Promise<void> {
   const config = loadConfig();
   const app = await NestFactory.create(AppModule);
 
+  app.useGlobalFilters(app.get(ApiExceptionFilter));
+  app.useGlobalInterceptors(app.get(BigIntSerializeInterceptor));
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );

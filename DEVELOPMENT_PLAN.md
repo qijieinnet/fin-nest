@@ -104,6 +104,7 @@
 - 依赖：I2。
 - 关键约束：金额 micros、软删除/归档字段、`ledger_id`、各唯一约束（如 `auto_pending(auto_rule_id, period_key)`、`category_budgets(ledger_id, category_id)`）。
 - 验收：迁移可重放；schema 与 `DATABASE_DESIGN.md` 一一对应；幂等初始化脚本可空跑。
+- 状态：✅ 已完成。`packages/db/prisma/schema.prisma` 已按 `DATABASE_DESIGN.md` 落地 33 个业务模型；新增 `1_create_business_schema` 迁移，包含 users/session/service token、账本与加入申请、记账设置/分类/人员、账户/流水/交易、自动记账/快捷模板、计划与独立预算、保险/物品、文件附件、审计日志、background_jobs；raw SQL 覆盖 `citext`/`pgcrypto`、唯一/部分索引、check constraint、交易关联金额上限保护。`prisma validate` 通过；迁移验证使用本地 `.env` 数据库连接执行。
 
 ### B1 — 后端平台底座
 - 目标：搭好所有模块共享的基建。
@@ -115,6 +116,7 @@
   - `background_jobs` 入队/取任务/锁/重试基建（PostgreSQL 实现，供 Worker 用）。
 - 依赖：B0。
 - 验收：能起服务、Swagger 可访问、错误结构统一、事务封装有单测、任务表能入队/被取。
+- 状态：✅ 已完成。新增 `@fin-nest/backend` 共享后端平台包，API 与 Worker 均接入 `BackendPlatformModule`；提供统一 `{code,message,details}` 异常过滤器、Prisma 注入、事务封装、幂等键工具、审计日志写入服务、PostgreSQL `background_jobs` 入队/领取/成功/失败/取消基建。验证：packages 构建通过，API/Worker typecheck 通过，backend lint 通过；API 启动后 `/health` 与 Swagger `/docs` 可访问，404 返回统一错误结构；使用本地 `.env` 数据库完成 background job 入队→领取→成功标记 smoke test 并清理测试数据。
 
 ### B2 — 鉴权与令牌
 - 目标：opaque session token + service token + scope。
@@ -126,6 +128,7 @@
 - 依赖：B1。
 - 关键约束：禁止纯 JWT 作主登录态；service token 不得绕过账本权限。
 - 验收（对照 `TESTING_STRATEGY §2 权限`）：未登录拒绝、禁用即失效、吊销即失败、service token 越权被拒。
+- 状态：✅ 已完成。新增 AuthModule：注册/登录/登出/当前用户/改密接口，session 使用 opaque token + SHA-256 hash 入库，并写入 HttpOnly SameSite Cookie；首个注册用户自动 `is_admin`，管理员可读取/更新开放注册开关；SessionAuthGuard 每次请求校验 token hash、过期/吊销、用户禁用状态，并刷新 `lastSeenAt`。新增 service token 管理接口：管理员创建/列出/吊销，明文 token 仅创建时返回，库存 hash，支持 scopes、过期时间、allowed CIDR IP；ServiceTokenService 提供 scope + actorUserId + ledgerId 权限校验能力并写审计。验证：API typecheck/lint/build 通过；本地 `.env` 数据库完成注册→me→管理员注册开关→service token 创建/列表/吊销→登出→session 失效 smoke test，并清理测试数据。
 
 ### B3 — 账本、成员、邀请、初始化
 - 目标：账本生命周期 + 权限模型 + 默认数据初始化。
@@ -137,6 +140,7 @@
   - 初始化（幂等）：首个用户 → 默认账本 + owner membership + 默认记账设置 + 默认人员「我」+ 基础收支分类；新建账本同样初始化；不建默认账户。
 - 依赖：B2。
 - 验收（对照 `TESTING_STRATEGY`）：邀请码只生成申请、owner 审批入伙、member 不能删账本、初始化幂等。
+- 状态：✅ 已完成。新增 LedgersModule：账本列表/详情/创建/编辑/软删除，成员列表/移除，owner 权限校验；邀请码创建/撤销（明文 code 仅返回一次，库存 hash，默认 1 天有效）；邀请码创建 pending 加入申请，owner 查询/审批/拒绝，申请人取消；审批通过后创建或恢复 membership。首个注册用户会自动创建默认账本、owner membership、默认 record settings、默认人员「我」、基础收支分类、预算设置；新建账本复用同一幂等初始化逻辑，不创建默认账户。验证：API typecheck/lint/build 通过；本地 `.env` 数据库完成首用户默认账本、新建账本默认数据、邀请码→pending 申请→owner 审批→member 入伙、member 禁删账本、owner 移除 member 后失权 smoke test，并清理测试数据。
 
 ### B4 — 交易与账户一致性（核心，单独成块）
 - 目标：实现财务事实中枢，文档中最关键、最易错的部分。
@@ -153,6 +157,7 @@
 - 依赖：B3。
 - 关键约束：所有写入单事务；幂等；金额 micros。
 - 验收（对照 `TESTING_STRATEGY §2 交易与账户`，必须全覆盖）：绑定账户增减余额、未绑定不动余额、转账双边、编辑/删除反向流水、调整生成记录、关联扣减有效金额且合计不超原始。
+- 状态：✅ 已完成。新增 AccountsModule / TransactionsModule：账户扩展字段、子账户 CRUD、账户流水查询、账户调整、可收回/需归还收款/还款/结清；支出/收入/转账新增、详情、列表、编辑、删除；`record_settings.acct_required` 校验；账户绑定后在同一事务内滚动余额并写 `account_entries`；交易关联写 `transaction_account_relations`，现金流按原始金额、有效金额按关联扣减；编辑/删除按当前净影响写反向流水，避免旧流水重复冲回。新增 BigInt 响应序列化。验证：backend/api typecheck/lint/build 通过；使用本地 `.env` 数据库完成账户扩展字段、子账户、未绑定交易、账户必填、子账户支出、收入、转账、调整、结清、关联金额上限、编辑/删除反向流水、账户流水列表 smoke test，并清理测试数据。
 
 ### B5 — 分类 / 人员 / 记账设置 / 筛选 / 统计
 - 目标：交易周边读模型与配置。
@@ -161,9 +166,10 @@
   - 人员（默认「我」不可删；有交易禁删；归档）。
   - 记账设置（字段顺序、字段显隐、账户必填、人员必填、金额小数位；小数位只影响输入/展示）。
   - 筛选 DTO（类型/分类/时间区间/账户/人员/记录人/金额范围/备注关键词；不落库）。
-  - 统计（支出/收入切换、分类占比、二级下钻、近 6 月趋势、净资产趋势；读模型，可缓存非事实源）。
+- 统计（支出/收入切换、分类占比、二级下钻、近 6 月趋势、净资产趋势；读模型，可缓存非事实源）。
 - 依赖：B4。
 - 验收：分类/人员删除边界、统计口径用有效金额、筛选不绕权限。
+- 状态：✅ 已完成。新增 RecordsModule：一级/二级分类列表、创建、编辑、删除/归档；人员列表、创建、编辑、删除/归档，默认人员禁止删除；记账设置读取/更新，`acct_required` / `person_required` 会进入交易校验；交易列表新增类型、分类、日期区间、账户、人员、记录人、金额、备注筛选；统计 overview 输出月度支出/收入有效金额、分类/人员排行、近 6 月趋势、净资产与净资产趋势。交易继续保存分类/人员快照，后续分类/人员改名不会影响历史交易。验证：API typecheck/lint/build 通过；使用本地 `.env` 数据库完成分类/二级分类、人员、默认人员删除边界、记账设置、人员必填、交易筛选、快照稳定、统计有效金额口径、有关联数据的归档边界、非成员筛选越权拦截 smoke test，并清理测试数据。
 
 ### B6 — 计划与预算
 - 目标：命名计划 + 独立预算（注意二者数据模型分开，见 `FUNCTION_BOUNDARIES §7.3/§7.4`）。
@@ -173,6 +179,7 @@
 - 依赖：B5。
 - 关键约束：预算不复用 `plans`；预算是滚动月度、不存历史周期；计划实际进度只统计已确认交易。
 - 验收：计划命中口径、预知能力范围、预算已用/剩余/百分比计算正确。
+- 状态：✅ 已完成。新增 PlansModule：计划列表/创建/编辑/归档、当前周期进度和近 6 个历史周期；支持支出/收入、金额/次数、周/月/年/不重复周期、`match_rule`（分类、二级分类、账户、人员、记录人、备注）和预知能力。计划进度区分已确认实际、未来已确认和自动记账待确认，草稿未纳入。预算独立使用 `budget_settings` 与 `category_budgets`，支持总预算开关/金额、分类预算 upsert/delete、月度总预算与分类预算 used/remaining/percent 进度，按当月有效支出计算，不复用 `plans`。验证：API typecheck/lint/build 通过；使用本地 `.env` 数据库完成金额计划、预知能力（未来已确认 + 待确认）、次数计划、预算设置、分类预算、预算进度不纳入自动待确认、计划归档 smoke test，并清理测试数据。
 
 ### B7 — 自动记账、快捷记账、Worker
 - 目标：自动化记账链路。

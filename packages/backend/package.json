@@ -1,28 +1,28 @@
 {
-  "name": "@fin-nest/worker",
+  "name": "@fin-nest/backend",
   "version": "0.1.0",
   "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
-    "start": "node dist/main.js",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@fin-nest/backend": "workspace:*",
-    "@fin-nest/config": "workspace:*",
     "@fin-nest/db": "workspace:*",
-    "@fin-nest/shared": "workspace:*",
     "@nestjs/common": "^11.1.27",
-    "@nestjs/core": "^11.1.27",
-    "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
     "@fin-nest/eslint-config": "workspace:*",
     "@fin-nest/tsconfig": "workspace:*",
-    "@nestjs/cli": "^11.0.23",
     "@types/node": "^22.8.7",
     "eslint": "^9.8.0",
     "typescript": "^5.8.3"

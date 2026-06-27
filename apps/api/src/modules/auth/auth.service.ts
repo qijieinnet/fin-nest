@@ -1,0 +1,239 @@
+import { Injectable } from "@nestjs/common";
+import { AppError, AuditLogService, DatabaseTransactionService, PrismaService } from "@fin-nest/backend";
+import { Prisma } from "@fin-nest/db";
+import { SESSION_COOKIE_NAME, SESSION_TTL_DAYS } from "./auth.constants";
+import { RequestWithAuth, SessionAuthContext } from "./auth.types";
+import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
+import { addDays, createOpaqueToken, hashOpaqueToken, hashPassword, verifyPassword } from "./token-utils";
+import { normalizeIp } from "./ip-utils";
+import { initializeLedgerDefaults } from "../ledgers/ledger-defaults";
+
+export type PublicUser = {
+  id: string;
+  email: string;
+  account: string;
+  alias: string;
+  isAdmin: boolean;
+};
+
+export type AuthResult = {
+  user: PublicUser;
+  token: string;
+  expiresAt: Date;
+};
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly txs: DatabaseTransactionService,
+    private readonly audit: AuditLogService,
+  ) {}
+
+  async register(input: RegisterDto, request: RequestWithAuth): Promise<AuthResult> {
+    return this.txs.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(931733001)`;
+      const userCount = await tx.user.count();
+      const firstUser = userCount === 0;
+      if (!firstUser) {
+        const settings = await tx.appSetting.findUnique({ where: { id: 1 } });
+        if (settings && !settings.registrationEnabled) {
+          throw new AppError("REGISTRATION_DISABLED", "当前不允许开放注册", 403);
+        }
+      }
+
+      const passwordHash = await hashPassword(input.password);
+      const user = await tx.user.create({
+        data: {
+          email: input.email,
+          account: input.account,
+          alias: input.alias,
+          passwordHash,
+          isAdmin: firstUser,
+        },
+      });
+
+      if (firstUser) {
+        const ledger = await tx.ledger.create({
+          data: {
+            name: "默认账本",
+            icon: "book",
+            currency: "CNY",
+            ownerUserId: user.id,
+            createdBy: user.id,
+          },
+        });
+        await tx.ledgerMember.create({
+          data: { ledgerId: ledger.id, userId: user.id, role: "owner" },
+        });
+        await initializeLedgerDefaults(tx, ledger.id, user.id);
+        await tx.appSetting.upsert({
+          where: { id: 1 },
+          create: { id: 1, registrationEnabled: true, updatedBy: user.id },
+          update: { updatedBy: user.id },
+        });
+      }
+
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: user.id,
+          action: "auth.register",
+          entityType: "user",
+          entityId: user.id,
+          metadata: { firstUser },
+        },
+        tx,
+      );
+
+      return this.createSessionForUser(user, input.deviceName, request, tx);
+    });
+  }
+
+  async login(input: LoginDto, request: RequestWithAuth): Promise<AuthResult> {
+    const user = await this.prisma.client.user.findFirst({
+      where: {
+        OR: [{ email: input.login }, { account: input.login }],
+      },
+    });
+    if (!user || user.disabledAt) {
+      throw new AppError("INVALID_CREDENTIALS", "账号或密码错误", 401);
+    }
+    if (!(await verifyPassword(input.password, user.passwordHash))) {
+      throw new AppError("INVALID_CREDENTIALS", "账号或密码错误", 401);
+    }
+
+    return this.createSessionForUser(user, input.deviceName, request);
+  }
+
+  async logout(auth: SessionAuthContext): Promise<void> {
+    await this.prisma.client.session.update({
+      where: { id: auth.sessionId },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  async me(auth: SessionAuthContext): Promise<PublicUser> {
+    const user = await this.prisma.client.user.findUniqueOrThrow({ where: { id: auth.userId } });
+    return this.toPublicUser(user);
+  }
+
+  async changePassword(auth: SessionAuthContext, currentPassword: string, newPassword: string): Promise<void> {
+    await this.txs.run(async (tx) => {
+      const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
+      if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+        throw new AppError("INVALID_CREDENTIALS", "当前密码错误", 401);
+      }
+      await tx.user.update({
+        where: { id: auth.userId },
+        data: { passwordHash: await hashPassword(newPassword) },
+      });
+      await tx.session.updateMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: auth.userId,
+          action: "auth.change_password",
+          entityType: "user",
+          entityId: auth.userId,
+        },
+        tx,
+      );
+    });
+  }
+
+  async authenticateSessionRequest(request: RequestWithAuth): Promise<SessionAuthContext> {
+    const token = this.extractSessionToken(request);
+    if (!token) {
+      throw new AppError("UNAUTHENTICATED", "请先登录", 401);
+    }
+
+    const tokenHash = hashOpaqueToken(token);
+    const session = await this.prisma.client.session.findUnique({ where: { tokenHash } });
+    const now = new Date();
+    if (!session || session.revokedAt || session.expiresAt <= now) {
+      throw new AppError("SESSION_INVALID", "登录已失效", 401);
+    }
+
+    const user = await this.prisma.client.user.findUnique({ where: { id: session.userId } });
+    if (!user || user.disabledAt) {
+      throw new AppError("SESSION_INVALID", "登录已失效", 401);
+    }
+
+    await this.prisma.client.session.update({
+      where: { id: session.id },
+      data: { lastSeenAt: now },
+    });
+
+    return { kind: "session", userId: user.id, sessionId: session.id, isAdmin: user.isAdmin };
+  }
+
+  async getRegistrationSetting(): Promise<{ registrationEnabled: boolean }> {
+    const settings = await this.prisma.client.appSetting.findUnique({ where: { id: 1 } });
+    return { registrationEnabled: settings?.registrationEnabled ?? true };
+  }
+
+  async updateRegistrationSetting(enabled: boolean, admin: SessionAuthContext): Promise<{ registrationEnabled: boolean }> {
+    const settings = await this.prisma.client.appSetting.upsert({
+      where: { id: 1 },
+      create: { id: 1, registrationEnabled: enabled, updatedBy: admin.userId },
+      update: { registrationEnabled: enabled, updatedBy: admin.userId },
+    });
+    return { registrationEnabled: settings.registrationEnabled };
+  }
+
+  private async createSessionForUser(
+    user: Prisma.UserGetPayload<object>,
+    deviceName: string | undefined,
+    request: RequestWithAuth,
+    tx: Prisma.TransactionClient = this.prisma.client,
+  ): Promise<AuthResult> {
+    const token = createOpaqueToken("fn_sess");
+    const expiresAt = addDays(new Date(), SESSION_TTL_DAYS);
+    await tx.session.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashOpaqueToken(token),
+        deviceName,
+        userAgent: this.getHeader(request, "user-agent"),
+        ip: normalizeIp(this.getHeader(request, "x-forwarded-for") ?? request.ip ?? request.socket?.remoteAddress),
+        expiresAt,
+      },
+    });
+    return { user: this.toPublicUser(user), token, expiresAt };
+  }
+
+  private extractSessionToken(request: RequestWithAuth): string | null {
+    const authorization = this.getHeader(request, "authorization");
+    if (authorization?.startsWith("Bearer fn_sess_")) {
+      return authorization.slice("Bearer ".length);
+    }
+
+    const cookie = this.getHeader(request, "cookie");
+    if (!cookie) return null;
+    const match = cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${SESSION_COOKIE_NAME}=`));
+    return match ? decodeURIComponent(match.slice(SESSION_COOKIE_NAME.length + 1)) : null;
+  }
+
+  private getHeader(request: RequestWithAuth, name: string): string | undefined {
+    const value = request.headers[name];
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  private toPublicUser(user: Prisma.UserGetPayload<object>): PublicUser {
+    return {
+      id: user.id,
+      email: user.email,
+      account: user.account,
+      alias: user.alias,
+      isAdmin: user.isAdmin,
+    };
+  }
+}
