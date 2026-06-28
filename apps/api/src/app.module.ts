@@ -9,6 +9,7 @@ import { FilesModule } from "./modules/files/files.module";
 import { LedgersModule } from "./modules/ledgers/ledgers.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { RecordsModule } from "./modules/records/records.module";
+import { RemindersModule } from "./modules/reminders/reminders.module";
 import { TransactionsModule } from "./modules/transactions/transactions.module";
 
 /**
@@ -27,6 +28,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     TransactionsModule,
     RecordsModule,
     PlansModule,
+    RemindersModule,
   ],
   controllers: [HealthController],
 })
