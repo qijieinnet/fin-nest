@@ -1,6 +1,6 @@
 # Fin Nest
 
-个人/家庭记账 Web 应用（移动端优先 PWA）。技术方向与边界见根目录设计文档，开发任务分解见 [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)。
+个人/家庭记账 Web 应用（移动端优先 PWA）。技术方向与边界见 [`docs/`](docs) 下设计文档，开发任务分解见 [`DEVELOPMENT_PLAN.md`](docs/product/DEVELOPMENT_PLAN.md)。
 
 ## 仓库结构
 
@@ -18,7 +18,9 @@ packages/
 infra/
   compose/  # 本地依赖 docker-compose（postgres + minio）
   docker/   # Dockerfile（I3 阶段补充）
-docs/       # product / architecture（设计文档当前在根目录）
+docs/
+  architecture/  # ARCHITECTURE / *_ENGINEERING / *_DESIGN / DATABASE_DESIGN / TESTING_STRATEGY
+  product/       # FUNCTION_BOUNDARIES、DEVELOPMENT_PLAN
 ```
 
 ## 环境要求

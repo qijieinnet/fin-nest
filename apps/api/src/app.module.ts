@@ -14,7 +14,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
 
 /**
  * 根模块。
- * 业务模块（auth / ledgers / transactions ...）在 B1 起按 BACKEND_ENGINEERING.md 分层接入。
+ * 业务模块（auth / ledgers / transactions ...）在 B1 起按 docs/architecture/BACKEND_ENGINEERING.md 分层接入。
  */
 @Module({
   imports: [
