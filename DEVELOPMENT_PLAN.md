@@ -190,6 +190,7 @@
   - Worker：消费 `background_jobs` 跑周期调度生成待确认、附件删除重试等；与 API 共享领域代码、独立进程。
 - 依赖：B4（交易服务）、B1（任务基建）。
 - 验收（对照 `TESTING_STRATEGY`）：只生成待确认、同 period 不重复、确认建交易、快捷直接记账必填校验、模板不绕交易校验。
+- 状态：✅ 已完成。新增 AutomationModule：自动记账规则 CRUD、启用/停用、`next_run_on` 与调度入队；Worker 消费 `background_jobs` 的 `auto.schedule` 任务，到期只生成 `auto_pending_transactions`，并通过 `(auto_rule_id, period_key)` 避免同周期重复；待确认记录支持列表、编辑、确认、批量确认、删除/忽略，确认时复用 TransactionsService 创建正式交易并写 `source=auto`；快捷模板支持 CRUD、预填和直接记账，直接记账必须开启且仍走交易服务校验。验证：API/Worker typecheck/lint/build 通过；使用本地 `.env` 数据库完成 Worker 生成待确认、重复 Worker 不重复、编辑待确认、确认建交易并影响账户、删除待确认、快捷预填、快捷直接记账必填校验、快捷直接记账 source、批量确认 smoke test，并清理测试数据。
 
 ### B8 — 保险与物品
 - 目标：关联资产档案。

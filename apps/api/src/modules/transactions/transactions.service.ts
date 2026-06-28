@@ -20,6 +20,12 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
   entries: Prisma.AccountEntryGetPayload<Record<string, never>>[];
 };
 
+export type CreateTransactionOptions = {
+  source?: "manual" | "quick" | "auto" | "import" | "ai";
+  sourceId?: string | null;
+  auditAction?: string;
+};
+
 @Injectable()
 export class TransactionsService {
   constructor(
@@ -71,17 +77,23 @@ export class TransactionsService {
     return this.getWithRelations(this.prisma.client, ledgerId, transactionId);
   }
 
-  async create(ledgerId: string, userId: string, input: CreateTransactionDto, idempotencyKey?: string) {
+  async create(
+    ledgerId: string,
+    userId: string,
+    input: CreateTransactionDto,
+    idempotencyKey?: string,
+    options: CreateTransactionOptions = {},
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.idempotency.run({ scope: `transaction.create:${ledgerId}`, key: idempotencyKey, userId }, () =>
       this.txs.run(async (tx) => {
-        const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input);
+        const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input, options);
         await this.audit.write(
           {
             source: "user",
             actorUserId: userId,
             ledgerId,
-            action: "transaction.create",
+            action: options.auditAction ?? "transaction.create",
             entityType: "transaction",
             entityId: transaction.id,
           },
@@ -90,6 +102,28 @@ export class TransactionsService {
         return this.getWithRelations(tx, ledgerId, transaction.id);
       }),
     );
+  }
+
+  async createInsideExistingTransaction(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    userId: string,
+    input: CreateTransactionDto,
+    options: CreateTransactionOptions = {},
+  ) {
+    const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input, options);
+    await this.audit.write(
+      {
+        source: "user",
+        actorUserId: userId,
+        ledgerId,
+        action: options.auditAction ?? "transaction.create",
+        entityType: "transaction",
+        entityId: transaction.id,
+      },
+      tx,
+    );
+    return this.getWithRelations(tx, ledgerId, transaction.id);
   }
 
   async update(ledgerId: string, transactionId: string, userId: string, input: UpdateTransactionDto) {
@@ -172,6 +206,7 @@ export class TransactionsService {
     ledgerId: string,
     userId: string,
     input: CreateTransactionDto,
+    options: CreateTransactionOptions = {},
   ) {
     const normalized = await this.normalize(tx, ledgerId, input);
     const transaction = await tx.transaction.create({
@@ -195,6 +230,8 @@ export class TransactionsService {
         toAccountId: input.type === "transfer" ? input.toAccountId : null,
         toSubAccountId: input.type === "transfer" ? (input.toSubAccountId ?? null) : null,
         note: input.note ?? null,
+        source: options.source ?? "manual",
+        sourceId: options.sourceId ?? null,
         createdBy: userId,
         updatedBy: userId,
       },

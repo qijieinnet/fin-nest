@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { BackendPlatformModule } from "@fin-nest/backend";
+import { AutoSchedulerService } from "./automation/auto-scheduler.service";
+import { WorkerRunnerService } from "./worker-runner.service";
 
 /**
  * Worker 根模块。
@@ -7,5 +9,6 @@ import { BackendPlatformModule } from "@fin-nest/backend";
  */
 @Module({
   imports: [BackendPlatformModule],
+  providers: [AutoSchedulerService, WorkerRunnerService],
 })
 export class WorkerModule {}
