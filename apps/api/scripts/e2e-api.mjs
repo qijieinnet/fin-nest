@@ -62,6 +62,7 @@ async function main() {
     expected: 201,
     body: { name: `E2E Person ${stamp}` },
   });
+  await assertPartialPatchRegressions({ ledgerId: ledger.id, owner, account, category, person });
 
   const idempotencyKey = `${prefix}-transaction-create`;
   const transactionBody = {
@@ -132,7 +133,7 @@ async function main() {
 
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
-  console.log(JSON.stringify({ ok: true, checks: ["auth", "ledger", "transaction_crud", "balance_adjustment", "attachment_auth", "reminder_summary", "idempotency"] }, null, 2));
+  console.log(JSON.stringify({ ok: true, checks: ["auth", "ledger", "partial_patch", "transaction_crud", "balance_adjustment", "attachment_auth", "reminder_summary", "idempotency"] }, null, 2));
 }
 
 async function ensureApi() {
@@ -194,6 +195,121 @@ async function assertAttachmentAuthorization(ledgerId, transactionId, ownerToken
   const download = await api("GET", `/ledgers/${ledgerId}/attachments/${bound.attachment.id}/download-url`, { token: ownerToken });
   assert.ok(download.downloadUrl.startsWith("http"));
   await api("GET", `/ledgers/${ledgerId}/attachments/${bound.attachment.id}/download-url`, { token: requesterToken, expected: 403 });
+}
+
+async function assertPartialPatchRegressions({ ledgerId, owner, account, category, person }) {
+  const insurance = await api("POST", `/ledgers/${ledgerId}/insurances`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "medical",
+      name: `E2E Original Insurance ${stamp}`,
+      insurer: "Acme",
+      coverageMicros: "500000000",
+      premiumMicros: "12000000",
+      premiumFreq: "yearly",
+      renewal: "manual",
+      startDate: todayIso(),
+      endDate: addDaysIso(60),
+      insuredPersonIds: [person.id],
+    },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/insurances/${insurance.id}`, {
+    token: owner.token,
+    body: { name: `E2E Renamed Insurance ${stamp}` },
+  });
+  const updatedInsurance = await api("GET", `/ledgers/${ledgerId}/insurances/${insurance.id}`, { token: owner.token });
+  assert.equal(updatedInsurance.name, `E2E Renamed Insurance ${stamp}`);
+  assert.equal(updatedInsurance.type, "medical");
+  assert.equal(updatedInsurance.insurer, "Acme");
+  assert.equal(updatedInsurance.coverageMicros, "500000000");
+  assert.equal(updatedInsurance.premiumMicros, "12000000");
+  assert.equal(updatedInsurance.endDate.slice(0, 10), addDaysIso(60));
+
+  const itemType = await api("POST", `/ledgers/${ledgerId}/item-types`, {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E Device ${stamp}` },
+  });
+  const item = await api("POST", `/ledgers/${ledgerId}/items`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      name: `E2E Original Item ${stamp}`,
+      typeId: itemType.id,
+      purchasePriceMicros: "80000000",
+      purchaseDate: todayIso(),
+      expectedYears: "3.5",
+      note: "keep me",
+    },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/items/${item.id}`, {
+    token: owner.token,
+    body: { name: `E2E Renamed Item ${stamp}` },
+  });
+  const updatedItem = await api("GET", `/ledgers/${ledgerId}/items/${item.id}`, { token: owner.token });
+  assert.equal(updatedItem.name, `E2E Renamed Item ${stamp}`);
+  assert.equal(updatedItem.typeId, itemType.id);
+  assert.equal(updatedItem.purchasePriceMicros, "80000000");
+  assert.equal(updatedItem.purchaseDate.slice(0, 10), todayIso());
+  assert.notEqual(updatedItem.expectedYears, null);
+  assert.equal(updatedItem.note, "keep me");
+
+  const template = await api("POST", `/ledgers/${ledgerId}/quick-templates`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "expense",
+      name: `E2E Original Template ${stamp}`,
+      amountMicros: "6000000",
+      categoryId: category.id,
+      accountId: account.id,
+      personId: person.id,
+      directEnabled: true,
+      sortOrder: 2,
+    },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/quick-templates/${template.id}`, {
+    token: owner.token,
+    body: { name: `E2E Renamed Template ${stamp}` },
+  });
+  const templates = await api("GET", `/ledgers/${ledgerId}/quick-templates`, { token: owner.token });
+  const updatedTemplate = templates.find((entry) => entry.id === template.id);
+  assert.equal(updatedTemplate.name, `E2E Renamed Template ${stamp}`);
+  assert.equal(updatedTemplate.type, "expense");
+  assert.equal(updatedTemplate.amountMicros, "6000000");
+  assert.equal(updatedTemplate.categoryId, category.id);
+  assert.equal(updatedTemplate.accountId, account.id);
+  assert.equal(updatedTemplate.personId, person.id);
+  assert.equal(updatedTemplate.directEnabled, true);
+  assert.equal(updatedTemplate.sortOrder, 2);
+
+  const rule = await api("POST", `/ledgers/${ledgerId}/auto-rules`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "expense",
+      amountMicros: "3000000",
+      categoryId: category.id,
+      accountId: account.id,
+      personId: person.id,
+      repeatRule: "monthly",
+      startDate: monthStartIso(),
+      enabled: true,
+      note: "original cursor",
+    },
+  });
+  const cursor = addDaysIso(13);
+  await prisma.autoRule.update({ where: { id: rule.id }, data: { nextRunOn: dateOnly(cursor) } });
+  const jobsBefore = await countLedgerJobs(ledgerId, "auto.schedule");
+  await api("PATCH", `/ledgers/${ledgerId}/auto-rules/${rule.id}`, {
+    token: owner.token,
+    body: { note: "note only" },
+  });
+  const ruleAfterNote = await prisma.autoRule.findUniqueOrThrow({ where: { id: rule.id } });
+  const jobsAfter = await countLedgerJobs(ledgerId, "auto.schedule");
+  assert.equal(ruleAfterNote.nextRunOn?.toISOString().slice(0, 10), cursor);
+  assert.equal(jobsAfter, jobsBefore);
 }
 
 async function seedReminderData({ ledgerId, owner, requester, account, category, person }) {
@@ -273,6 +389,11 @@ async function accountBalance(ledgerId, accountId, token) {
   return accounts.find((item) => item.id === accountId)?.balanceMicros;
 }
 
+async function countLedgerJobs(ledgerId, type) {
+  const jobs = await prisma.backgroundJob.findMany({ where: { type } });
+  return jobs.filter((job) => job.payload?.ledgerId === ledgerId).length;
+}
+
 async function api(method, url, { token, body, expected, idempotencyKey } = {}) {
   const response = await fetch(`${baseUrl}${url}`, {
     method,
@@ -315,7 +436,11 @@ async function cleanup() {
   try {
     if (ledgerIds.length) {
       const insuranceIds = (await prisma.insurance.findMany({ where: { ledgerId: { in: ledgerIds } }, select: { id: true } })).map((item) => item.id);
-      await prisma.backgroundJob.deleteMany({ where: { payload: { path: ["fileId"], in: [...touched.fileIds] } } }).catch(() => undefined);
+      const jobs = await prisma.backgroundJob.findMany();
+      const jobIds = jobs
+        .filter((job) => ledgerIds.includes(job.payload?.ledgerId) || [...touched.fileIds].includes(job.payload?.fileId))
+        .map((job) => job.id);
+      if (jobIds.length) await prisma.backgroundJob.deleteMany({ where: { id: { in: jobIds } } });
       await prisma.attachment.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.file.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.transactionLink.deleteMany({ where: { ledgerId: { in: ledgerIds } } });

@@ -77,6 +77,11 @@ export class AutomationService {
       const enabled = input.enabled ?? existing.enabled;
       const startDate = input.startDate ? parseDateOnly(input.startDate) : existing.startDate;
       const repeatRule = input.repeatRule ?? existing.repeatRule;
+      const scheduleChanged =
+        (input.enabled !== undefined && input.enabled !== existing.enabled) ||
+        input.startDate !== undefined ||
+        input.repeatRule !== undefined;
+      const nextRunOn = scheduleChanged ? (enabled ? startDate : null) : undefined;
       const rule = await tx.autoRule.update({
         where: { id: ruleId },
         data: {
@@ -90,11 +95,11 @@ export class AutomationService {
           note: input.note,
           repeatRule: input.repeatRule,
           startDate: input.startDate ? startDate : undefined,
-          nextRunOn: enabled ? startDate : null,
+          nextRunOn,
           updatedBy: userId,
         },
       });
-      if (enabled) await this.jobs.enqueue({ type: "auto.schedule", payload: { ledgerId }, runAfter: startDate }, tx);
+      if (scheduleChanged && enabled) await this.jobs.enqueue({ type: "auto.schedule", payload: { ledgerId }, runAfter: startDate }, tx);
       return { ...rule, repeatRule };
     });
   }
@@ -235,7 +240,15 @@ export class AutomationService {
 
   async updateTemplate(ledgerId: string, templateId: string, userId: string, input: UpdateQuickTemplateDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertTemplate(ledgerId, templateId);
+    const existing = await this.assertTemplate(ledgerId, templateId);
+    const type = input.type ?? existing.type;
+    const categoryId = input.categoryId ?? existing.categoryId;
+    const subcategoryId = input.subcategoryId === undefined ? (existing.subcategoryId ?? undefined) : input.subcategoryId;
+    await this.assertCategory(ledgerId, type, categoryId, subcategoryId);
+    if (input.accountId || input.subAccountId !== undefined) {
+      await this.assertAccount(ledgerId, input.accountId ?? existing.accountId ?? "", input.subAccountId ?? existing.subAccountId ?? undefined);
+    }
+    if (input.personId) await this.assertPerson(ledgerId, input.personId);
     return this.prisma.client.quickTemplate.update({
       where: { id: templateId },
       data: {

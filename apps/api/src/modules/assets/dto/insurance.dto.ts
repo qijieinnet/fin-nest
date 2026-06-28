@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
 
 export class CreateInsuranceDto {
@@ -85,4 +85,4 @@ export class CreateInsuranceDto {
   insuredPersonIds?: string[];
 }
 
-export class UpdateInsuranceDto extends CreateInsuranceDto {}
+export class UpdateInsuranceDto extends PartialType(CreateInsuranceDto) {}

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
 
@@ -62,4 +62,4 @@ export class CreateQuickTemplateDto {
   sortOrder?: number;
 }
 
-export class UpdateQuickTemplateDto extends CreateQuickTemplateDto {}
+export class UpdateQuickTemplateDto extends PartialType(CreateQuickTemplateDto) {}

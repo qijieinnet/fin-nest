@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
 
 export class CreateItemTypeDto {
@@ -49,7 +49,7 @@ export class CreateItemDto {
   note?: string;
 }
 
-export class UpdateItemDto extends CreateItemDto {}
+export class UpdateItemDto extends PartialType(CreateItemDto) {}
 
 export class ScrapItemDto {
   @ApiPropertyOptional({ example: "2026-06-28" })

@@ -44,7 +44,7 @@ export class AssetsService {
     return this.prisma.client.$transaction(async (tx) => {
       const insurance = await tx.insurance.update({
         where: { id: insuranceId },
-        data: { ...this.insuranceData(ledgerId, userId, input), ledgerId: undefined, createdBy: undefined, updatedBy: userId },
+        data: this.insuranceUpdateData(userId, input),
       });
       if (input.insuredPersonIds) await this.replaceInsuredPeople(tx, ledgerId, insuranceId, input.insuredPersonIds);
       return insurance;
@@ -99,7 +99,7 @@ export class AssetsService {
     if (input.typeId) await this.assertItemType(ledgerId, input.typeId);
     return this.prisma.client.item.update({
       where: { id: itemId },
-      data: { ...this.itemData(ledgerId, userId, input), ledgerId: undefined, createdBy: undefined, updatedBy: userId },
+      data: this.itemUpdateData(userId, input),
     });
   }
 
@@ -168,6 +168,26 @@ export class AssetsService {
     };
   }
 
+  private insuranceUpdateData(userId: string, input: UpdateInsuranceDto): Prisma.InsuranceUncheckedUpdateInput {
+    return {
+      type: input.type,
+      name: input.name,
+      insurer: input.insurer,
+      method: input.method,
+      policyNo: input.policyNo,
+      coverageMicros: input.coverageMicros === undefined ? undefined : BigInt(input.coverageMicros),
+      premiumMicros: input.premiumMicros === undefined ? undefined : BigInt(input.premiumMicros),
+      premiumFreq: input.premiumFreq,
+      periods: input.periods,
+      renewal: input.renewal,
+      coverageDesc: input.coverageDesc,
+      startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
+      endDate: input.endDate === undefined ? undefined : parseDateOnly(input.endDate),
+      note: input.note,
+      updatedBy: userId,
+    };
+  }
+
   private itemData(ledgerId: string, userId: string, input: CreateItemDto): Prisma.ItemUncheckedCreateInput {
     return {
       ledgerId,
@@ -178,6 +198,18 @@ export class AssetsService {
       expectedYears: input.expectedYears ? new Prisma.Decimal(input.expectedYears) : null,
       note: input.note,
       createdBy: userId,
+      updatedBy: userId,
+    };
+  }
+
+  private itemUpdateData(userId: string, input: UpdateItemDto): Prisma.ItemUncheckedUpdateInput {
+    return {
+      name: input.name,
+      typeId: input.typeId,
+      purchasePriceMicros: input.purchasePriceMicros === undefined ? undefined : BigInt(input.purchasePriceMicros),
+      purchaseDate: input.purchaseDate === undefined ? undefined : parseDateOnly(input.purchaseDate),
+      expectedYears: input.expectedYears === undefined ? undefined : new Prisma.Decimal(input.expectedYears),
+      note: input.note,
       updatedBy: userId,
     };
   }

@@ -27,9 +27,6 @@ export class FileDeleteService {
       throw new Error("Invalid file.delete payload");
     }
     await this.minio.removeObject(payload.bucket, payload.objectKey);
-    await this.prisma.client.file.update({
-      where: { id: payload.fileId },
-      data: { status: "delete_pending" },
-    });
+    await this.prisma.client.file.deleteMany({ where: { id: payload.fileId, status: "delete_pending" } });
   }
 }
