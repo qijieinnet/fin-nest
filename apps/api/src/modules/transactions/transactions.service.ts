@@ -10,6 +10,7 @@ import {
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { AccountsService } from "../accounts/accounts.service";
+import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { CreateTransactionDto, TransactionAccountRelationDto } from "./dto/create-transaction.dto";
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
@@ -35,6 +36,7 @@ export class TransactionsService {
     private readonly ledgers: LedgersService,
     private readonly accounts: AccountsService,
     private readonly idempotency: IdempotencyService,
+    private readonly files: FilesService,
   ) {}
 
   async list(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
@@ -199,6 +201,7 @@ export class TransactionsService {
         tx,
       );
     });
+    await this.files.deleteAttachmentsForOwner(ledgerId, "transaction", transactionId);
   }
 
   private async createInsideTransaction(

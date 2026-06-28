@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AppError, parseDateOnly, PrismaService } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
+import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { CreateInsuranceDto, UpdateInsuranceDto } from "./dto/insurance.dto";
 import { CreateItemDto, CreateItemTypeDto, ScrapItemDto, UpdateItemDto } from "./dto/item.dto";
@@ -10,6 +11,7 @@ export class AssetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgers: LedgersService,
+    private readonly files: FilesService,
   ) {}
 
   async listInsurances(ledgerId: string, userId: string) {
@@ -59,6 +61,7 @@ export class AssetsService {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertInsurance(ledgerId, insuranceId);
     await this.prisma.client.insurance.update({ where: { id: insuranceId }, data: { deletedAt: new Date(), updatedBy: userId } });
+    await this.files.deleteAttachmentsForOwner(ledgerId, "insurance", insuranceId);
   }
 
   async listItemTypes(ledgerId: string, userId: string) {
@@ -127,6 +130,7 @@ export class AssetsService {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertItem(ledgerId, itemId);
     await this.prisma.client.item.update({ where: { id: itemId }, data: { deletedAt: new Date(), updatedBy: userId } });
+    await this.files.deleteAttachmentsForOwner(ledgerId, "item", itemId);
   }
 
   async linkTransaction(ledgerId: string, linkedType: "insurance" | "item", linkedId: string, transactionId: string, userId: string) {

@@ -211,6 +211,7 @@
   - 删除业务对象 → 同步删附件元数据 + MinIO 对象；失败入 `background_jobs` 重试（与 B7 Worker 衔接）。
 - 依赖：B4（交易绑定）、B8（保险/物品绑定）、B1。
 - 验收：越权不可访问、key 不可猜、删除联动与失败重试。
+- 状态：✅ 已完成。新增 FilesModule：按账本和业务对象签发 MinIO 上传 URL，生成 `ledgers/{ledgerId}/{bizType}/{bizId}/{yyyy}/{mm}/{uuid}.{ext}` 私有对象 key，绑定附件、查询附件、签发下载 URL、删除附件；交易/保险/物品删除会联动清附件元数据并清 MinIO 对象，失败时写入 `background_jobs` 的 `file.delete` 任务，由 Worker 重试。验证：API/Worker typecheck/build 通过；使用本地 `.env` 数据库完成上传 URL、key 不含原文件名、绑定、成员下载、非成员 403、删除交易联动清附件 smoke test，并清理测试数据。
 
 ### B10 — 红点提醒聚合
 - 目标：`GET /ledgers/:ledgerId/reminder-summary`。
