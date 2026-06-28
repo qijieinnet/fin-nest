@@ -224,6 +224,7 @@
 - 目标：收尾测试与一致性回归。
 - 交付物：补 `TESTING_STRATEGY §3` 的集成/E2E（登录注册、建账本、交易增删改、余额调整、上传授权、reminder summary）；并发/幂等回归。
 - 依赖：B2–B10。
+- 状态：✅ 已完成。新增 API E2E 脚本 `pnpm e2e:api`（内部执行 API build 并运行 `apps/api/scripts/e2e-api.mjs`），可复用已启动 API，也可在未启动时拉起当前构建；脚本加载本地 `.env`、创建临时数据并清理。覆盖注册/建账本、交易创建幂等、交易编辑/删除余额回滚、账户余额调整、附件上传授权与越权拒绝、reminder summary 计数、幂等键落库。迁移一致性：已用本地 `.env` 执行 `prisma migrate deploy`，补齐 `2_add_idempotency_keys` 到本地数据库。验证：`pnpm e2e:api` 通过。
 
 ---
 

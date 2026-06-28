@@ -6,6 +6,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
+    "e2e": "pnpm run build && node scripts/e2e-api.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },

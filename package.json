@@ -16,6 +16,7 @@
     "db:generate": "pnpm --filter @fin-nest/db run generate",
     "db:migrate": "pnpm --filter @fin-nest/db run migrate:dev",
     "db:deploy": "pnpm --filter @fin-nest/db run migrate:deploy",
+    "e2e:api": "pnpm --filter @fin-nest/api run e2e",
     "dev": "pnpm --parallel --filter @fin-nest/api --filter @fin-nest/web run dev",
     "dev:api": "pnpm --filter @fin-nest/api run dev",
     "dev:web": "pnpm --filter @fin-nest/web run dev",
