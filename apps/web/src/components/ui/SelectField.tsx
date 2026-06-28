@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, List } from "lucide-react";
 import { cn } from "@/lib/format/class-names";
 
@@ -29,10 +29,34 @@ export function SelectField({
 }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
+  const containerRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
 
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className={cn("select-field", className)}>
+    <div className={cn("select-field", className)} ref={containerRef}>
       <button
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
@@ -49,13 +73,12 @@ export function SelectField({
 
       {open ? (
         <div className="select-field__menu" id={menuId} role="listbox">
-          {options.map((option, index) => {
+          {options.map((option) => {
             const selected = option.value === value;
-            const hasDivider = index === 1;
             return (
               <button
                 aria-selected={selected}
-                className={cn("select-field__option", hasDivider && "select-field__option--divider")}
+                className="select-field__option"
                 key={option.value}
                 onClick={() => {
                   onValueChange(option.value);

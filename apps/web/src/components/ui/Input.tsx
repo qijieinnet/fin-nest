@@ -1,6 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes, ReactNode } from "react";
+import { useId } from "react";
 import { cn } from "@/lib/format/class-names";
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & {
@@ -10,7 +11,8 @@ type InputProps = InputHTMLAttributes<HTMLInputElement> & {
 };
 
 export function Input({ className, error, id, label, prefix, ...props }: InputProps) {
-  const inputId = id ?? props.name ?? label;
+  const generatedId = useId();
+  const inputId = id ?? props.name ?? generatedId;
 
   return (
     <label className="ui-field" htmlFor={inputId}>

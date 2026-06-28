@@ -59,12 +59,13 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clear = useCallback(() => {
+    const depth = stackRef.current.length;
     setStack([]);
-    window.history.replaceState(
-      { ...window.history.state, finNestSheetId: undefined },
-      "",
-      window.location.href,
-    );
+    if (depth > 0) {
+      // Rewind the history entries pushed for each sheet so the back button is
+      // not left clicking through orphaned same-URL entries.
+      window.history.go(-depth);
+    }
   }, []);
 
   useEffect(() => {

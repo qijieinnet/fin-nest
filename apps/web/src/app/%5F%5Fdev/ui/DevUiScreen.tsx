@@ -19,7 +19,6 @@ import {
 import {
   GlassBottomSheet,
   GlassButton,
-  GlassIconButton,
   GlassMenu,
   GlassSegmentedControl,
 } from "@/components/glass";
@@ -95,16 +94,17 @@ export function DevUiScreen() {
 
   return (
     <MobileAppShell>
-      <MobilePage
-        action={<GlassIconButton icon={<Settings size={18} />} label="设置" />}
-        title="组件预览"
-      >
+      <MobilePage title="组件预览">
         <div className="dev-ui">
           <section className="dev-section">
             <h2>按钮</h2>
             <div className="dev-row">
               <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" />
-              <ActionButton icon={<Check size={24} strokeWidth={2.6} />} label="确认" tone="primary" />
+              <ActionButton
+                icon={<Check size={24} strokeWidth={2.6} />}
+                label="确认"
+                tone="primary"
+              />
               <ActionButton
                 disabled
                 icon={<Check size={24} strokeWidth={2.6} />}
@@ -123,7 +123,9 @@ export function DevUiScreen() {
               <IconButton icon={<Bell size={18} />} label="提醒" />
               <IconButton icon={<Settings size={18} />} label="设置" />
               <Button
-                onClick={() => showToast({ title: "保存成功", message: "这是一条 Toast。", tone: "success" })}
+                onClick={() =>
+                  showToast({ title: "保存成功", message: "这是一条 Toast。", tone: "success" })
+                }
                 variant="secondary"
               >
                 Toast
@@ -203,8 +205,16 @@ export function DevUiScreen() {
             </div>
             <GlassMenu
               items={[
-                { label: "快捷记账", icon: <Plus size={16} />, onSelect: () => showToast({ message: "已选择快捷记账" }) },
-                { label: "提醒设置", icon: <Bell size={16} />, onSelect: () => showToast({ message: "已选择提醒设置" }) },
+                {
+                  label: "快捷记账",
+                  icon: <Plus size={16} />,
+                  onSelect: () => showToast({ message: "已选择快捷记账" }),
+                },
+                {
+                  label: "提醒设置",
+                  icon: <Bell size={16} />,
+                  onSelect: () => showToast({ message: "已选择提醒设置" }),
+                },
               ]}
             />
           </section>
@@ -230,7 +240,11 @@ export function DevUiScreen() {
         </div>
       </MobilePage>
 
-      <Sheet onClose={() => setPlainSheetOpen(false)} open={plainSheetOpen} title="普通 Bottom Sheet">
+      <Sheet
+        onClose={() => setPlainSheetOpen(false)}
+        open={plainSheetOpen}
+        title="普通 Bottom Sheet"
+      >
         <div className="dev-sheet-content">
           <p>用于基础 UI 的可读实底弹层。</p>
           <Button onClick={() => setPlainSheetOpen(false)}>完成</Button>

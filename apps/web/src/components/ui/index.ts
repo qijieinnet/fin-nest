@@ -8,6 +8,7 @@ export { MobileAppShell } from "./MobileAppShell";
 export { MobilePage } from "./MobilePage";
 export { NavigationBar } from "./NavigationBar";
 export { Sheet } from "./Sheet";
+export { SheetShell } from "./SheetShell";
 export { Switch } from "./Switch";
 export { TabBar } from "./TabBar";
 export { Tabs } from "./Tabs";

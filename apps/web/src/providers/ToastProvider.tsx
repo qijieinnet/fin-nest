@@ -2,7 +2,7 @@
 
 import { AnimatePresence } from "framer-motion";
 import type { ReactNode } from "react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Toast, type ToastItem, type ToastTone } from "@/components/ui";
 
 type ToastInput = {
@@ -20,9 +20,15 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const timersRef = useRef<Map<string, number>>(new Map());
 
   const dismiss = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
+    const timer = timersRef.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
   }, []);
 
   const showToast = useCallback(
@@ -30,11 +36,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID();
       const toast: ToastItem = { id, message, title, tone };
       setToasts((current) => [...current, toast].slice(-3));
-      window.setTimeout(() => dismiss(id), 3200);
+      const timer = window.setTimeout(() => dismiss(id), 3200);
+      timersRef.current.set(id, timer);
       return id;
     },
     [dismiss],
   );
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    };
+  }, []);
 
   const value = useMemo(() => ({ dismiss, showToast }), [dismiss, showToast]);
 

@@ -12,8 +12,13 @@ type GlassMenuItem = {
 export function GlassMenu({ items }: { items: GlassMenuItem[] }) {
   return (
     <GlassSurface className="glass-menu" variant="menu">
-      {items.map((item) => (
-        <button className="glass-menu__item" key={item.label} onClick={item.onSelect} type="button">
+      {items.map((item, index) => (
+        <button
+          className="glass-menu__item"
+          key={`${item.label}-${index}`}
+          onClick={item.onSelect}
+          type="button"
+        >
           {item.icon}
           <span>{item.label}</span>
         </button>
