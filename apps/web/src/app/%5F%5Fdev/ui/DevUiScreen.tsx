@@ -13,9 +13,40 @@ import {
   MoreHorizontal,
   Plus,
   Settings,
+  ShoppingBag,
   WalletCards,
   X,
 } from "lucide-react";
+import {
+  AccountBalanceCard,
+  AccountPicker,
+  AmountInput,
+  AttachmentPicker,
+  BudgetProgress,
+  CategoryPicker,
+  CategoryRingChart,
+  DateWheelPicker,
+  EmptyState,
+  FilterBar,
+  FilterSheet,
+  LoadingState,
+  MoneyText,
+  MonthWheelPicker,
+  PersonPicker,
+  PlanProgress,
+  RecoverablePayableEditor,
+  SwipeActionRow,
+  TransactionGroup,
+  TransactionRow,
+  TransactionTypeSwitch,
+  TrendChart,
+  type AttachmentItem,
+  type BusinessFilterValue,
+  type BusinessOption,
+  type CategoryOption,
+  type RecoverablePayableItem,
+  type TransactionType,
+} from "@/components/business";
 import {
   GlassBottomSheet,
   GlassButton,
@@ -51,14 +82,61 @@ const typeItems = [
   { label: "转账", value: "transfer", icon: <CreditCard size={16} /> },
 ];
 
+const categoryOptions: CategoryOption[] = [
+  { id: "food", label: "餐饮", color: "#ff8a3d", iconName: "food", kind: "expense" },
+  { id: "food-lunch", label: "午餐", color: "#ff8a3d", iconName: "food", parentId: "food", kind: "expense" },
+  { id: "food-drink", label: "饮料", color: "#ff8a3d", iconName: "coffee", parentId: "food", kind: "expense" },
+  { id: "shopping", label: "购物", color: "#0a84ff", iconName: "shopping", kind: "expense" },
+  { id: "shopping-digital", label: "数码", color: "#0a84ff", iconName: "shopping", parentId: "shopping", kind: "expense" },
+  { id: "salary", label: "工资", color: "#2f9e77", iconName: "income", kind: "income" },
+];
+
+const accountOptions: BusinessOption[] = [
+  { id: "cash", label: "现金账户", description: "日常支出" },
+  { id: "cash-default", label: "默认", description: "现金账户", parentId: "cash" },
+  { id: "cash-travel", label: "旅行备用金", description: "现金账户", parentId: "cash" },
+  { id: "card", label: "信用卡", description: "本月待还" },
+  { id: "card-main", label: "主卡", description: "信用卡", parentId: "card" },
+];
+
+const personOptions: BusinessOption[] = [
+  { id: "me", label: "我" },
+  { id: "family", label: "家人" },
+];
+
+const attachmentItems: AttachmentItem[] = [
+  { id: "receipt", name: "晚餐小票.jpg", contentType: "image/jpeg", sizeBytes: 246000 },
+  { id: "policy", name: "保单.pdf", contentType: "application/pdf", sizeBytes: 860000 },
+];
+
+const chartSegments = [
+  { id: "food", label: "餐饮", valueMicros: "1280000000", color: "#ff8a3d", icon: "food" },
+  { id: "shopping", label: "购物", valueMicros: "860000000", color: "#0a84ff", icon: "shopping" },
+  { id: "traffic", label: "交通", valueMicros: "520000000", color: "#2f9e77", icon: "bus" },
+];
+
 export function DevUiScreen() {
   const [tab, setTab] = useState("bills");
-  const [type, setType] = useState("expense");
+  const [type, setType] = useState<TransactionType>("expense");
   const [listType, setListType] = useState("standard");
   const [budgetAlert, setBudgetAlert] = useState(true);
   const [plainTab, setPlainTab] = useState("first");
   const [plainSheetOpen, setPlainSheetOpen] = useState(false);
   const [glassSheetOpen, setGlassSheetOpen] = useState(false);
+  const [amount, setAmount] = useState("128.50");
+  const [categoryId, setCategoryId] = useState<string | null>("food");
+  const [accountId, setAccountId] = useState<string | null>("cash-default");
+  const [personId, setPersonId] = useState<string | null>("me");
+  const [date, setDate] = useState("2026-06-28");
+  const [month, setMonth] = useState("2026-06");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filter, setFilter] = useState<BusinessFilterValue>({ timePreset: "month", type: "expense" });
+  const [attachmentEnabled, setAttachmentEnabled] = useState(true);
+  const [recoverableEnabled, setRecoverableEnabled] = useState(true);
+  const [statsDrill, setStatsDrill] = useState<string | null>(null);
+  const [recoverableItems, setRecoverableItems] = useState<RecoverablePayableItem[]>([
+    { id: "rp-1", accountId: "cash-default", amount: "38.00" },
+  ]);
   const { showToast } = useToast();
   const sheetStack = useSheetStack();
 
@@ -137,6 +215,17 @@ export function DevUiScreen() {
             <h2>输入框</h2>
             <Input label="备注" placeholder="晚餐、交通、房租..." />
             <Input error="金额不能为空" label="金额" placeholder="0.00" prefix="¥" />
+            <AmountInput
+              label="业务金额"
+              onMicrosChange={() => undefined}
+              onValueChange={setAmount}
+              value={amount}
+            />
+            <div className="dev-row">
+              <MoneyText amountMicros="-128500000" />
+              <MoneyText amountMicros="9800000000" showPositiveSign />
+              <MoneyText amountMicros="0" tone="muted" />
+            </div>
           </section>
 
           <section className="dev-section">
@@ -169,6 +258,21 @@ export function DevUiScreen() {
               ]}
               value={listType}
             />
+            <TransactionTypeSwitch onValueChange={setType} value={type} />
+            <CategoryPicker
+              onValueChange={setCategoryId}
+              options={categoryOptions}
+              value={categoryId}
+            />
+            <AccountPicker onValueChange={setAccountId} options={accountOptions} value={accountId} />
+            <PersonPicker onValueChange={setPersonId} options={personOptions} value={personId} />
+            <DateWheelPicker onValueChange={setDate} value={date} />
+            <MonthWheelPicker onValueChange={setMonth} value={month} />
+            <FilterBar
+              onOpen={() => setFilterOpen(true)}
+              onReset={() => setFilter({ timePreset: "month", type: "all" })}
+              value={filter}
+            />
           </section>
 
           <section className="dev-section">
@@ -196,7 +300,11 @@ export function DevUiScreen() {
 
           <section className="dev-section">
             <h2>玻璃材质</h2>
-            <GlassSegmentedControl items={typeItems} onValueChange={setType} value={type} />
+            <GlassSegmentedControl
+              items={typeItems}
+              onValueChange={(nextValue) => setType(nextValue as TransactionType)}
+              value={type}
+            />
             <div className="dev-row">
               <GlassButton icon={<Plus size={17} />} tone="primary">
                 记一笔
@@ -234,6 +342,106 @@ export function DevUiScreen() {
             </div>
           </section>
 
+          <section className="dev-section">
+            <h2>交易列表</h2>
+            <TransactionGroup dateLabel="今天" totalMicros="-128500000">
+              <SwipeActionRow
+                actions={[
+                  { label: "编辑", onClick: () => showToast({ message: "编辑交易" }) },
+                  {
+                    label: "删除",
+                    onClick: () => showToast({ message: "删除交易", tone: "error" }),
+                    tone: "danger",
+                  },
+                ]}
+              >
+                <TransactionRow
+                  accountName="现金账户"
+                  amountMicros="-128500000"
+                  categoryColor="#ff8a3d"
+                  categoryIcon="food"
+                  categoryName="餐饮"
+                  description="周末聚餐"
+                  personName="我"
+                  time="19:30"
+                  title="晚餐"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
+              <TransactionRow
+                accountName="工资卡"
+                amountMicros="9800000000"
+                categoryColor="#2f9e77"
+                categoryIcon="income"
+                categoryName="工资"
+                title="六月工资"
+                type="income"
+                onClick={() => showToast({ message: "打开记录详情" })}
+              />
+            </TransactionGroup>
+          </section>
+
+          <section className="dev-section">
+            <h2>附件与关联</h2>
+            <AttachmentPicker
+              enabled={attachmentEnabled}
+              items={attachmentItems}
+              onEnabledChange={setAttachmentEnabled}
+              onFilesSelected={(files) => showToast({ message: `选择了 ${files.length} 个文件` })}
+              onOpen={(item) => showToast({ message: `打开 ${item.name}` })}
+              onRemove={(id) => showToast({ message: `移除 ${id}` })}
+            />
+            <RecoverablePayableEditor
+              accountOptions={accountOptions}
+              enabled={recoverableEnabled}
+              hint="这笔支出中可向他人收回的部分，打开后选择项目并填写金额"
+              items={recoverableItems}
+              label="可收回"
+              onChange={setRecoverableItems}
+              onEnabledChange={setRecoverableEnabled}
+            />
+          </section>
+
+          <section className="dev-section">
+            <h2>数据展示</h2>
+            <AccountBalanceCard
+              balanceMicros="2800000000"
+              icon={<WalletCards size={20} />}
+              name="现金账户"
+              subtitle="计入净资产"
+            />
+            <BudgetProgress budgetMicros="5000000000" usedMicros="3120000000" />
+            <PlanProgress label="旅行基金" targetMicros="12000000000" usedMicros="7600000000" />
+            <TrendChart
+              points={[
+                { label: "1月", valueMicros: "2800000000" },
+                { label: "2月", valueMicros: "3600000000" },
+                { label: "3月", valueMicros: "2200000000" },
+                { label: "4月", valueMicros: "4200000000", highlight: true },
+              ]}
+            />
+            {statsDrill ? (
+              <Button onClick={() => setStatsDrill(null)} variant="secondary">
+                返回分类占比
+              </Button>
+            ) : null}
+            <CategoryRingChart
+              onSegmentClick={(segment) => {
+                setStatsDrill(segment.label);
+                showToast({ message: `下钻到 ${segment.label}` });
+              }}
+              segments={statsDrill ? chartSegments.filter((segment) => segment.label === statsDrill) : chartSegments}
+              title={statsDrill ? `${statsDrill}明细` : "分类占比"}
+            />
+            <EmptyState
+              action={<Button icon={<ShoppingBag size={16} />}>去添加</Button>}
+              title="还没有记录"
+              message="这里会展示当前条件下的业务数据。"
+            />
+            <LoadingState />
+          </section>
+
           <div className="dev-tab-preview">
             <TabBar items={tabItems} onValueChange={setTab} value={tab} />
           </div>
@@ -258,9 +466,27 @@ export function DevUiScreen() {
       >
         <div className="dev-sheet-content">
           <p>玻璃层在 Safari/Firefox 会自动降级为可读的 CSS fallback。</p>
-          <GlassSegmentedControl items={typeItems} onValueChange={setType} value={type} />
+          <GlassSegmentedControl
+            items={typeItems}
+            onValueChange={(nextValue) => setType(nextValue as TransactionType)}
+            value={type}
+          />
         </div>
       </GlassBottomSheet>
+
+      <FilterSheet
+        accountOptions={accountOptions}
+        categoryOptions={categoryOptions}
+        creatorOptions={personOptions}
+        fields={["type", "category", "dateRange", "account", "person", "creator", "amountRange", "keyword"]}
+        onApply={() => showToast({ message: "筛选已应用" })}
+        onChange={setFilter}
+        onOpenChange={setFilterOpen}
+        onReset={() => setFilter({ timePreset: "month", type: "all" })}
+        open={filterOpen}
+        personOptions={personOptions}
+        value={filter}
+      />
     </MobileAppShell>
   );
 }

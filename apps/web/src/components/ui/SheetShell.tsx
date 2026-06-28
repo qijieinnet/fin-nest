@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type SheetShellProps = {
@@ -14,7 +16,13 @@ type SheetShellProps = {
 };
 
 export function SheetShell({ children, onClose, open, renderPanel, title }: SheetShellProps) {
-  return (
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const sheet = (
     <AnimatePresence>
       {open ? (
         <div className="sheet-root">
@@ -29,9 +37,9 @@ export function SheetShell({ children, onClose, open, renderPanel, title }: Shee
           />
           <motion.div
             className="sheet-panel-wrap"
-            initial={{ y: "105%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "105%" }}
+            initial={{ x: "-50%", y: "105%" }}
+            animate={{ x: "-50%", y: 0 }}
+            exit={{ x: "-50%", y: "105%" }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
             {renderPanel(
@@ -51,4 +59,8 @@ export function SheetShell({ children, onClose, open, renderPanel, title }: Shee
       ) : null}
     </AnimatePresence>
   );
+
+  if (!mounted) return null;
+
+  return createPortal(sheet, document.body);
 }
