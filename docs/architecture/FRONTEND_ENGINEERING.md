@@ -366,6 +366,7 @@ lib/money/
 
 - 已读 `FRONTEND_DESIGN.md` 和本文档。
 - 已先搜索已有组件。
+- iOS 风格、Liquid Glass 风格或类系统控件已先查 Apple 官方资料，并记录参考页面、采用的交互依据和尺寸依据。
 - 新增通用组件优先于页面内实现。
 - 已确认对主 Tab、更多页入口或 Sheet 栈的影响。
 - 已使用统一 API client 和 query hooks。
