@@ -3,13 +3,16 @@ import {
   AppError,
   BackgroundJobsService,
   DatabaseTransactionService,
+  dateKey,
+  parseDateOnly,
   PrismaService,
+  PrismaTransactionClient,
+  todayKey,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { CreateTransactionDto } from "../transactions/dto/create-transaction.dto";
 import { TransactionsService } from "../transactions/transactions.service";
-import { dateKey, nextRunDate, parseDateOnly, todayKey } from "./automation-date";
 import { ListAutoPendingQueryDto, UpdateAutoPendingDto } from "./dto/auto-pending.dto";
 import { CreateAutoRuleDto, UpdateAutoRuleDto } from "./dto/auto-rule.dto";
 import { CreateQuickTemplateDto, UpdateQuickTemplateDto } from "./dto/quick-template.dto";
@@ -58,7 +61,10 @@ export class AutomationService {
           updatedBy: userId,
         },
       });
-      await this.jobs.enqueue({ type: "auto.schedule", payload: { ledgerId }, runAfter: startDate }, tx);
+      await this.jobs.enqueue(
+        { type: "auto.schedule", payload: { ledgerId }, runAfter: startDate },
+        tx,
+      );
       return rule;
     });
   }
@@ -67,10 +73,19 @@ export class AutomationService {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertRule(ledgerId, ruleId);
     if (input.categoryId || input.subcategoryId !== undefined) {
-      await this.assertCategory(ledgerId, existing.type, input.categoryId ?? existing.categoryId, input.subcategoryId ?? existing.subcategoryId ?? undefined);
+      await this.assertCategory(
+        ledgerId,
+        existing.type,
+        input.categoryId ?? existing.categoryId,
+        input.subcategoryId ?? existing.subcategoryId ?? undefined,
+      );
     }
     if (input.accountId || input.subAccountId !== undefined) {
-      await this.assertAccount(ledgerId, input.accountId ?? existing.accountId ?? "", input.subAccountId ?? existing.subAccountId ?? undefined);
+      await this.assertAccount(
+        ledgerId,
+        input.accountId ?? existing.accountId ?? "",
+        input.subAccountId ?? existing.subAccountId ?? undefined,
+      );
     }
     if (input.personId) await this.assertPerson(ledgerId, input.personId);
     return this.txs.run(async (tx) => {
@@ -99,7 +114,11 @@ export class AutomationService {
           updatedBy: userId,
         },
       });
-      if (scheduleChanged && enabled) await this.jobs.enqueue({ type: "auto.schedule", payload: { ledgerId }, runAfter: startDate }, tx);
+      if (scheduleChanged && enabled)
+        await this.jobs.enqueue(
+          { type: "auto.schedule", payload: { ledgerId }, runAfter: startDate },
+          tx,
+        );
       return { ...rule, repeatRule };
     });
   }
@@ -113,47 +132,6 @@ export class AutomationService {
     });
   }
 
-  async generateDuePending(until = new Date()): Promise<{ created: number }> {
-    let created = 0;
-    const rules = await this.prisma.client.autoRule.findMany({
-      where: { enabled: true, archivedAt: null, nextRunOn: { not: null, lte: until } },
-      orderBy: { nextRunOn: "asc" },
-    });
-    for (const rule of rules) {
-      await this.txs.run(async (tx) => {
-        let cursor = rule.nextRunOn;
-        let lastNext: Date | null = cursor;
-        while (cursor && cursor <= until) {
-          const periodKey = dateKey(cursor);
-          const pending = await tx.autoPendingTransaction.upsert({
-            where: { autoRuleId_periodKey: { autoRuleId: rule.id, periodKey } },
-            create: {
-              ledgerId: rule.ledgerId,
-              autoRuleId: rule.id,
-              periodKey,
-              scheduledFor: cursor,
-              status: "pending",
-              type: rule.type,
-              amountMicros: rule.amountMicros,
-              categoryId: rule.categoryId,
-              subcategoryId: rule.subcategoryId,
-              accountId: rule.accountId,
-              subAccountId: rule.subAccountId,
-              personId: rule.personId,
-              note: rule.note,
-            },
-            update: {},
-          });
-          if (pending.createdAt.getTime() === pending.updatedAt.getTime()) created += 1;
-          lastNext = nextRunDate(cursor, rule.repeatRule);
-          cursor = lastNext;
-        }
-        await tx.autoRule.update({ where: { id: rule.id }, data: { nextRunOn: lastNext } });
-      });
-    }
-    return { created };
-  }
-
   async listPending(ledgerId: string, userId: string, query: ListAutoPendingQueryDto = {}) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.autoPendingTransaction.findMany({
@@ -162,7 +140,12 @@ export class AutomationService {
     });
   }
 
-  async updatePending(ledgerId: string, pendingId: string, userId: string, input: UpdateAutoPendingDto) {
+  async updatePending(
+    ledgerId: string,
+    pendingId: string,
+    userId: string,
+    input: UpdateAutoPendingDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertPending(ledgerId, pendingId);
     return this.prisma.client.autoPendingTransaction.update({
@@ -183,34 +166,49 @@ export class AutomationService {
 
   async confirmPending(ledgerId: string, pendingId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.txs.run(async (tx) => {
-      const pending = await tx.autoPendingTransaction.findFirst({ where: { id: pendingId, ledgerId, status: "pending" } });
-      if (!pending) throw new AppError("AUTO_PENDING_NOT_FOUND", "待确认记录不存在", 404);
-      const transaction = await this.transactions.createInsideExistingTransaction(
-        tx,
-        ledgerId,
-        userId,
-        this.pendingToTransaction(pending),
-        { source: "auto", sourceId: pending.id, auditAction: "auto_pending.confirm" },
-      );
-      await tx.autoPendingTransaction.update({
-        where: { id: pending.id },
-        data: {
-          status: "confirmed",
-          confirmedTransactionId: transaction.id,
-          confirmedBy: userId,
-          confirmedAt: new Date(),
-          updatedBy: userId,
-        },
-      });
-      return transaction;
-    });
+    return this.txs.run((tx) => this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId));
   }
 
   async confirmPendingBatch(ledgerId: string, pendingIds: string[], userId: string) {
-    const transactions = [];
-    for (const pendingId of pendingIds) transactions.push(await this.confirmPending(ledgerId, pendingId, userId));
-    return transactions;
+    await this.ledgers.assertMember(ledgerId, userId);
+    // All-or-nothing: a single failing pending rolls back the whole batch.
+    return this.txs.run(async (tx) => {
+      const transactions = [];
+      for (const pendingId of pendingIds) {
+        transactions.push(await this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId));
+      }
+      return transactions;
+    });
+  }
+
+  private async confirmPendingInTransaction(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    pendingId: string,
+    userId: string,
+  ) {
+    const pending = await tx.autoPendingTransaction.findFirst({
+      where: { id: pendingId, ledgerId, status: "pending" },
+    });
+    if (!pending) throw new AppError("AUTO_PENDING_NOT_FOUND", "待确认记录不存在", 404);
+    const transaction = await this.transactions.createInsideExistingTransaction(
+      tx,
+      ledgerId,
+      userId,
+      this.pendingToTransaction(pending),
+      { source: "auto", sourceId: pending.id, auditAction: "auto_pending.confirm" },
+    );
+    await tx.autoPendingTransaction.update({
+      where: { id: pending.id },
+      data: {
+        status: "confirmed",
+        confirmedTransactionId: transaction.id,
+        confirmedBy: userId,
+        confirmedAt: new Date(),
+        updatedBy: userId,
+      },
+    });
+    return transaction;
   }
 
   async deletePending(ledgerId: string, pendingId: string, userId: string): Promise<void> {
@@ -238,15 +236,27 @@ export class AutomationService {
     });
   }
 
-  async updateTemplate(ledgerId: string, templateId: string, userId: string, input: UpdateQuickTemplateDto) {
+  async updateTemplate(
+    ledgerId: string,
+    templateId: string,
+    userId: string,
+    input: UpdateQuickTemplateDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertTemplate(ledgerId, templateId);
     const type = input.type ?? existing.type;
     const categoryId = input.categoryId ?? existing.categoryId;
-    const subcategoryId = input.subcategoryId === undefined ? (existing.subcategoryId ?? undefined) : input.subcategoryId;
+    const subcategoryId =
+      input.subcategoryId === undefined
+        ? (existing.subcategoryId ?? undefined)
+        : input.subcategoryId;
     await this.assertCategory(ledgerId, type, categoryId, subcategoryId);
     if (input.accountId || input.subAccountId !== undefined) {
-      await this.assertAccount(ledgerId, input.accountId ?? existing.accountId ?? "", input.subAccountId ?? existing.subAccountId ?? undefined);
+      await this.assertAccount(
+        ledgerId,
+        input.accountId ?? existing.accountId ?? "",
+        input.subAccountId ?? existing.subAccountId ?? undefined,
+      );
     }
     if (input.personId) await this.assertPerson(ledgerId, input.personId);
     return this.prisma.client.quickTemplate.update({
@@ -286,16 +296,26 @@ export class AutomationService {
   async runTemplate(ledgerId: string, templateId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     const template = await this.assertTemplate(ledgerId, templateId);
-    if (!template.directEnabled) throw new AppError("QUICK_TEMPLATE_DIRECT_DISABLED", "模板未开启直接记账", 400);
-    if (!template.amountMicros) throw new AppError("QUICK_TEMPLATE_AMOUNT_REQUIRED", "直接记账模板必须包含金额", 400);
-    return this.transactions.create(ledgerId, userId, this.templateToTransaction(template, todayKey()), undefined, {
-      source: "quick",
-      sourceId: template.id,
-      auditAction: "quick_template.run",
-    });
+    if (!template.directEnabled)
+      throw new AppError("QUICK_TEMPLATE_DIRECT_DISABLED", "模板未开启直接记账", 400);
+    if (!template.amountMicros)
+      throw new AppError("QUICK_TEMPLATE_AMOUNT_REQUIRED", "直接记账模板必须包含金额", 400);
+    return this.transactions.create(
+      ledgerId,
+      userId,
+      this.templateToTransaction(template, todayKey()),
+      undefined,
+      {
+        source: "quick",
+        sourceId: template.id,
+        auditAction: "quick_template.run",
+      },
+    );
   }
 
-  private pendingToTransaction(pending: Prisma.AutoPendingTransactionGetPayload<Record<string, never>>): CreateTransactionDto {
+  private pendingToTransaction(
+    pending: Prisma.AutoPendingTransactionGetPayload<Record<string, never>>,
+  ): CreateTransactionDto {
     return {
       type: pending.type,
       grossAmountMicros: pending.amountMicros.toString(),
@@ -326,7 +346,11 @@ export class AutomationService {
     };
   }
 
-  private templateData(ledgerId: string, userId: string, input: CreateQuickTemplateDto): Prisma.QuickTemplateUncheckedCreateInput {
+  private templateData(
+    ledgerId: string,
+    userId: string,
+    input: CreateQuickTemplateDto,
+  ): Prisma.QuickTemplateUncheckedCreateInput {
     return {
       ledgerId,
       type: input.type,
@@ -346,7 +370,9 @@ export class AutomationService {
   }
 
   private async assertRule(ledgerId: string, ruleId: string) {
-    const rule = await this.prisma.client.autoRule.findFirst({ where: { id: ruleId, ledgerId, archivedAt: null } });
+    const rule = await this.prisma.client.autoRule.findFirst({
+      where: { id: ruleId, ledgerId, archivedAt: null },
+    });
     if (!rule) throw new AppError("AUTO_RULE_NOT_FOUND", "自动记账规则不存在", 404);
     return rule;
   }
@@ -367,8 +393,15 @@ export class AutomationService {
     return template;
   }
 
-  private async assertCategory(ledgerId: string, type: string, categoryId: string, subcategoryId?: string) {
-    const category = await this.prisma.client.category.findFirst({ where: { id: categoryId, ledgerId, type, archivedAt: null } });
+  private async assertCategory(
+    ledgerId: string,
+    type: string,
+    categoryId: string,
+    subcategoryId?: string,
+  ) {
+    const category = await this.prisma.client.category.findFirst({
+      where: { id: categoryId, ledgerId, type, archivedAt: null },
+    });
     if (!category) throw new AppError("CATEGORY_NOT_FOUND", "分类不存在", 404);
     if (!subcategoryId) return;
     const subcategory = await this.prisma.client.subcategory.findFirst({
@@ -378,7 +411,9 @@ export class AutomationService {
   }
 
   private async assertAccount(ledgerId: string, accountId: string, subAccountId?: string) {
-    const account = await this.prisma.client.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
+    const account = await this.prisma.client.account.findFirst({
+      where: { id: accountId, ledgerId, archivedAt: null },
+    });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
     if (!subAccountId) return;
     const subAccount = await this.prisma.client.subAccount.findFirst({
@@ -388,7 +423,9 @@ export class AutomationService {
   }
 
   private async assertPerson(ledgerId: string, personId: string) {
-    const person = await this.prisma.client.person.findFirst({ where: { id: personId, ledgerId, archivedAt: null } });
+    const person = await this.prisma.client.person.findFirst({
+      where: { id: personId, ledgerId, archivedAt: null },
+    });
     if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
   }
 }
