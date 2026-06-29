@@ -8,14 +8,23 @@ import { GlassSurface } from "./GlassSurface";
 type GlassBottomSheetProps = {
   children: ReactNode;
   className?: string;
+  hideDefaultHeader?: boolean;
   onClose: () => void;
   open: boolean;
   title?: string;
 };
 
-export function GlassBottomSheet({ children, className, onClose, open, title }: GlassBottomSheetProps) {
+export function GlassBottomSheet({
+  children,
+  className,
+  hideDefaultHeader = false,
+  onClose,
+  open,
+  title,
+}: GlassBottomSheetProps) {
   return (
     <SheetShell
+      hideDefaultHeader={hideDefaultHeader}
       onClose={onClose}
       open={open}
       renderPanel={(content) => (

@@ -43,7 +43,7 @@ export function RegisterScreen() {
     onSuccess: async (result) => {
       setUser(result.user);
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
-      router.replace(routes.ledgers);
+      router.replace(routes.bills);
     },
   });
 

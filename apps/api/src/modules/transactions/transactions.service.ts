@@ -19,6 +19,7 @@ import { UpdateTransactionDto } from "./dto/update-transaction.dto";
 type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, never>> & {
   relations: Prisma.TransactionAccountRelationGetPayload<Record<string, never>>[];
   entries: Prisma.AccountEntryGetPayload<Record<string, never>>[];
+  links: Prisma.TransactionLinkGetPayload<Record<string, never>>[];
 };
 
 export type CreateTransactionOptions = {
@@ -464,11 +465,12 @@ export class TransactionsService {
   ): Promise<TransactionWithRelations> {
     const transaction = await client.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
     if (!transaction) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
-    const [relations, entries] = await Promise.all([
+    const [relations, entries, links] = await Promise.all([
       client.transactionAccountRelation.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
       client.accountEntry.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
+      client.transactionLink.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
     ]);
-    return { ...transaction, relations, entries };
+    return { ...transaction, relations, entries, links };
   }
 
   private async categorySnapshot(

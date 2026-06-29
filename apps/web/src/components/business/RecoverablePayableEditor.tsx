@@ -15,6 +15,7 @@ type RecoverablePayableEditorProps = {
   accountOptions: BusinessOption[];
   addLabel?: string;
   enabled?: boolean;
+  emptyText?: string;
   hint?: string;
   items: RecoverablePayableItem[];
   label?: string;
@@ -30,6 +31,7 @@ export function RecoverablePayableEditor({
   accountOptions,
   addLabel,
   enabled,
+  emptyText = "还没有可选项目，可到「账户」中先添加项目",
   hint,
   items,
   label = "可收回 / 需归还",
@@ -51,7 +53,8 @@ export function RecoverablePayableEditor({
       </div>
       {active ? (
         <div className="biz-rp-editor__body">
-          {items.length === 0 ? <p className="biz-muted">还没有关联项目</p> : null}
+          {accountOptions.length === 0 ? <p className="biz-muted">{emptyText}</p> : null}
+          {accountOptions.length > 0 && items.length === 0 ? <p className="biz-muted">还没有关联项目</p> : null}
           {items.map((item, index) => (
             <div className="biz-rp-editor__row" key={item.id}>
               <div className="biz-rp-editor__field">
@@ -98,13 +101,15 @@ export function RecoverablePayableEditor({
               />
             </div>
           ))}
-          <Button
-            icon={<Plus size={16} />}
-            onClick={() => onChange([...items, makeItem()])}
-            variant="secondary"
-          >
-            {addLabel ?? `添加${label}项目`}
-          </Button>
+          {accountOptions.length > 0 ? (
+            <Button
+              icon={<Plus size={16} />}
+              onClick={() => onChange([...items, makeItem()])}
+              variant="secondary"
+            >
+              {addLabel ?? `添加${label}项目`}
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </div>

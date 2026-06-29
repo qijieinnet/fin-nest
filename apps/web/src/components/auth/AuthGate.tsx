@@ -34,7 +34,7 @@ export function AuthGate({ children, mode }: { children: ReactNode; mode: AuthGa
       router.replace(routes.login);
     }
     if (mode === "guest" && status === "authenticated") {
-      router.replace(routes.ledgers);
+      router.replace(routes.bills);
     }
   }, [status, mode, router]);
 

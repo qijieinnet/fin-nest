@@ -8,6 +8,7 @@ import { X } from "lucide-react";
 
 type SheetShellProps = {
   children: ReactNode;
+  hideDefaultHeader?: boolean;
   onClose: () => void;
   open: boolean;
   title?: string;
@@ -15,7 +16,14 @@ type SheetShellProps = {
   renderPanel: (content: ReactNode) => ReactNode;
 };
 
-export function SheetShell({ children, onClose, open, renderPanel, title }: SheetShellProps) {
+export function SheetShell({
+  children,
+  hideDefaultHeader = false,
+  onClose,
+  open,
+  renderPanel,
+  title,
+}: SheetShellProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -44,13 +52,14 @@ export function SheetShell({ children, onClose, open, renderPanel, title }: Shee
           >
             {renderPanel(
               <>
-                <div className="sheet-grabber" />
-                <div className="sheet-header">
-                  <h2>{title}</h2>
-                  <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
-                    <X size={18} />
-                  </button>
-                </div>
+                {hideDefaultHeader ? null : (
+                  <div className="sheet-header">
+                    <h2>{title}</h2>
+                    <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
+                      <X size={18} />
+                    </button>
+                  </div>
+                )}
                 <div className="sheet-body">{children}</div>
               </>,
             )}

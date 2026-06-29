@@ -13,7 +13,9 @@ import {
 import { GlassBottomSheet } from "@/components/glass";
 
 type SheetStackEntry = {
+  className?: string;
   content: ReactNode;
+  hideDefaultHeader?: boolean;
   id?: string;
   title?: string;
 };
@@ -85,7 +87,13 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
   return (
     <SheetStackContext.Provider value={value}>
       {children}
-      <GlassBottomSheet onClose={pop} open={Boolean(activeSheet)} title={activeSheet?.title}>
+      <GlassBottomSheet
+        className={activeSheet?.className}
+        hideDefaultHeader={activeSheet?.hideDefaultHeader}
+        onClose={pop}
+        open={Boolean(activeSheet)}
+        title={activeSheet?.title}
+      >
         {activeSheet?.content}
       </GlassBottomSheet>
     </SheetStackContext.Provider>

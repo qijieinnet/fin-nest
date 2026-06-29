@@ -1,65 +1,63 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { Button, MobileAppShell, MobilePage } from "@/components/ui";
-import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
+import { ActionButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
-import { useAuth, useLedger, useSheetStack, useToast } from "@/providers";
+import { useAuth, useLedger, useSheetStack } from "@/providers";
 import { CreateLedgerSheet } from "./_components/CreateLedgerSheet";
+import { JoinLedgerSheet } from "./_components/JoinLedgerSheet";
 import { LedgerCard } from "./_components/LedgerCard";
 import { LedgerDetailSheet } from "./_components/LedgerDetailSheet";
 
 export function LedgersScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const { user, clearUser } = useAuth();
-  const { clearLedger, isLoading, ledgerId, ledgers, setLedgerId } = useLedger();
+  const { user } = useAuth();
+  const { isLoading, ledgerId, ledgers } = useLedger();
   const { push } = useSheetStack();
-  const { showToast } = useToast();
 
-  const logout = useMutation({
-    mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
-    onSettled: () => {
-      clearLedger();
-      clearUser();
-      queryClient.clear();
-      router.replace(routes.login);
-    },
-  });
+  const goBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(routes.more);
+    }
+  };
 
   const openCreate = () => {
-    push({ title: "新建账本", content: <CreateLedgerSheet /> });
+    push({ hideDefaultHeader: true, content: <CreateLedgerSheet /> });
   };
 
   const openDetail = (id: string) => {
-    push({ title: "账本详情", content: <LedgerDetailSheet ledgerId={id} /> });
-  };
-
-  const switchLedger = (id: string) => {
-    if (id === ledgerId) return;
-    setLedgerId(id);
-    const next = ledgers.find((ledger) => ledger.id === id);
-    showToast({ tone: "success", message: `已切换到「${next?.name ?? "账本"}」` });
+    push({ hideDefaultHeader: true, content: <LedgerDetailSheet ledgerId={id} /> });
   };
 
   return (
     <MobileAppShell>
       <MobilePage
         action={
-          <button
-            className="text-sm font-medium text-[var(--color-tint)]"
+          <ActionButton
+            icon={<Plus size={24} strokeWidth={2.3} />}
+            label="新建账本"
             onClick={openCreate}
-            type="button"
-          >
-            新建
-          </button>
+          />
         }
         description={user ? `${user.alias} · ${user.account}` : undefined}
+        leading={
+          <ActionButton
+            icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+            label="返回"
+            onClick={goBack}
+          />
+        }
         title="账本"
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col">
+          <p className="px-1.5 pb-2.5 text-xs leading-relaxed text-[var(--color-text-muted)]">
+            当前账本决定账单、统计、账户等数据展示。点击账本可查看详情、切换、分享或管理成员。
+          </p>
+
           {isLoading ? (
             <LoadingState rows={3} title="加载账本" />
           ) : ledgers.length === 0 ? (
@@ -73,38 +71,26 @@ export function LedgersScreen() {
               title="还没有账本"
             />
           ) : (
-            <ul className="flex flex-col gap-3">
+            <div className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
               {ledgers.map((ledger) => (
-                <li key={ledger.id}>
-                  <LedgerCard
-                    isCurrent={ledger.id === ledgerId}
-                    isOwner={ledger.ownerUserId === user?.id}
-                    ledger={ledger}
-                    onOpenDetail={() => openDetail(ledger.id)}
-                    onSelect={() => switchLedger(ledger.id)}
-                  />
-                </li>
+                <LedgerCard
+                  isCurrent={ledger.id === ledgerId}
+                  isOwner={ledger.ownerUserId === user?.id}
+                  key={ledger.id}
+                  ledger={ledger}
+                  onOpenDetail={() => openDetail(ledger.id)}
+                />
               ))}
-            </ul>
+            </div>
           )}
 
-          <div className="mt-2 flex flex-col gap-3">
-            <Button onClick={() => router.push(routes.ledgersJoin)} variant="secondary">
-              通过邀请码加入账本
-            </Button>
-            <Button
-              disabled={logout.isPending}
-              onClick={() => logout.mutate()}
-              variant="ghost"
-            >
-              {logout.isPending ? "退出中…" : "退出登录"}
-            </Button>
-            {logout.isError ? (
-              <p className="text-center text-xs text-[var(--color-accent-expense)]">
-                {getApiErrorMessage(logout.error)}
-              </p>
-            ) : null}
-          </div>
+          <Button
+            className="mt-3.5 w-full !bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]"
+            onClick={() => push({ hideDefaultHeader: true, content: <JoinLedgerSheet /> })}
+            variant="secondary"
+          >
+            输入邀请码加入账本
+          </Button>
         </div>
       </MobilePage>
     </MobileAppShell>

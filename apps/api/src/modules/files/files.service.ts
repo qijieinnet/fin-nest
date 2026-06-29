@@ -92,6 +92,7 @@ export class FilesService {
     await this.assertOwner(ledgerId, ownerType, ownerId);
     return this.prisma.client.attachment.findMany({
       where: { ledgerId, ownerType, ownerId },
+      include: { file: true },
       orderBy: { createdAt: "asc" },
     });
   }

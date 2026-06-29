@@ -6,12 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
-import {
-  API_ENDPOINTS,
-  apiRequest,
-  type AuthResult,
-  getApiErrorMessage,
-} from "@/lib/api";
+import { API_ENDPOINTS, apiRequest, type AuthResult, getApiErrorMessage } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAuth } from "@/providers";
@@ -32,7 +27,7 @@ export function LoginScreen() {
     onSuccess: async (result) => {
       setUser(result.user);
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
-      router.replace(routes.ledgers);
+      router.replace(routes.bills);
     },
   });
 
@@ -52,7 +47,7 @@ export function LoginScreen() {
           label="邮箱或账号"
           name="login"
           onChange={(event) => setLogin(event.target.value)}
-          placeholder="qijie 或 user@example.com"
+          placeholder="邮箱或账号"
           value={login}
         />
         <Input

@@ -243,9 +243,13 @@ space
 应用骨架：
 
 - `MobileAppShell`：移动端容器、safe area、全局背景。
-- `MobilePage`：页面标题区、内容滚动区、底部留白。
+- `MobilePage`：页面标题区（支持 `leading` / `action` 插槽）、内容滚动区、底部留白。
 - `AppTabBar`：账单、账户、计划、更多四个主入口。
 - `FloatingActionButton`：快捷记账/新增记账入口。
+
+通用控件（`components/ui`）：
+
+- `EmojiPicker`：通用 emoji 选择弹窗（Bottom Sheet），内容与 iOS 表情键盘分组一致（笑脸与人物 / 动物与自然 / 食物与饮料 / 活动 / 旅行与地点 / 物品 / 符号 / 旗帜），底部分类导航 + 网格 + 选中高亮。新建/编辑账本、分类、账户等任何需要选图标的表单统一复用，不允许各自实现 emoji 网格。默认分组数据导出为 `EMOJI_CATEGORIES`，可通过 `categories` 自定义。
 
 玻璃组件：
 
@@ -339,6 +343,7 @@ apps/web/src/features/plans/
 - `EmptyState`
 - `LoadingState`
 - `AttachmentPicker`
+- `EmojiPicker`
 
 ### 8.1 筛选组件边界
 

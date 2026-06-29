@@ -13,7 +13,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (status === "loading") return;
-    router.replace(status === "authenticated" ? routes.ledgers : routes.login);
+    router.replace(status === "authenticated" ? routes.bills : routes.login);
   }, [status, router]);
 
   return (

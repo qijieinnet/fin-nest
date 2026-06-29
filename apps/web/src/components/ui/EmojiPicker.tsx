@@ -1,0 +1,253 @@
+"use client";
+
+import { useCallback, useRef, useState } from "react";
+import { cn } from "@/lib/format/class-names";
+import { Sheet } from "./Sheet";
+
+export type EmojiCategory = {
+  id: string;
+  /** 分类名称（中文，对齐 iOS 表情键盘分组）。 */
+  name: string;
+  /** 底部分类导航上展示的代表 emoji。 */
+  icon: string;
+  emojis: string[];
+};
+
+/**
+ * iOS 表情键盘分组内容（笑脸与人物 / 动物与自然 / 食物与饮料 / 活动 / 旅行与地点 / 物品 / 符号 / 旗帜）。
+ * 与 Apple 表情面板的分组与顺序一致，作为可复用 emoji 选择器的默认数据源。
+ */
+export const EMOJI_CATEGORIES: EmojiCategory[] = [
+  {
+    id: "smileys",
+    name: "笑脸与人物",
+    icon: "😀",
+    emojis: [
+      "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍", "🤩",
+      "😘", "😗", "😚", "😙", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐", "🤨",
+      "😐", "😑", "😶", "😏", "😒", "🙄", "😬", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕",
+      "🤧", "🥵", "🥶", "🥴", "😵", "🤯", "🤠", "🥳", "😎", "🤓", "🧐", "😕", "😟", "🙁", "😮", "😯",
+      "😲", "😳", "🥺", "😦", "😧", "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩",
+      "😫", "🥱", "😤", "😡", "😠", "🤬", "😈", "👿", "💀", "💩", "🤡", "👻", "👽", "🤖", "😺", "😸",
+      "👋", "🤚", "✋", "🖖", "👌", "🤏", "✌️", "🤞", "🤟", "🤘", "👈", "👉", "👆", "👇", "👍", "👎",
+      "✊", "👊", "👏", "🙌", "👐", "🤲", "🙏", "💪", "🧠", "👀", "👶", "🧒", "👦", "👧", "🧑", "👨",
+      "👩", "🧓", "👴", "👵", "👮", "🕵️", "💂", "👷", "🤴", "👸", "👰", "🤵", "🦸", "🦹", "🧑‍⚕️", "🧑‍🍳",
+    ],
+  },
+  {
+    id: "animals",
+    name: "动物与自然",
+    icon: "🐶",
+    emojis: [
+      "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🙈",
+      "🙉", "🙊", "🐒", "🐔", "🐧", "🐦", "🐤", "🦆", "🦅", "🦉", "🦇", "🐺", "🐗", "🐴", "🦄", "🐝",
+      "🐛", "🦋", "🐌", "🐞", "🐜", "🦗", "🕷️", "🦂", "🐢", "🐍", "🦎", "🐙", "🦑", "🦐", "🦀", "🐡",
+      "🐠", "🐟", "🐬", "🐳", "🐋", "🦈", "🐊", "🐅", "🐆", "🦓", "🦍", "🐘", "🦏", "🐪", "🐫", "🦒",
+      "🐃", "🐂", "🐄", "🐎", "🐖", "🐏", "🐑", "🐐", "🦌", "🐕", "🐩", "🐈", "🐓", "🦃", "🕊️", "🐇",
+      "🌵", "🎄", "🌲", "🌳", "🌴", "🌱", "🌿", "🍀", "🎍", "🍃", "🍂", "🍁", "🍄", "🌾", "💐", "🌷",
+      "🌹", "🌺", "🌸", "🌼", "🌻", "🌞", "🌝", "🌚", "🌙", "⭐", "🌟", "✨", "⚡", "🔥", "🌈", "☀️",
+      "⛅", "☁️", "🌧️", "⛈️", "❄️", "⛄", "💧", "🌊",
+    ],
+  },
+  {
+    id: "food",
+    name: "食物与饮料",
+    icon: "🍎",
+    emojis: [
+      "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝",
+      "🍅", "🍆", "🥑", "🥦", "🥬", "🥒", "🌶️", "🌽", "🥕", "🧄", "🧅", "🥔", "🍠", "🥐", "🍞", "🥖",
+      "🥨", "🧀", "🥚", "🍳", "🧈", "🥞", "🧇", "🥓", "🥩", "🍗", "🍖", "🌭", "🍔", "🍟", "🍕", "🥪",
+      "🥙", "🧆", "🌮", "🌯", "🥗", "🥘", "🍝", "🍜", "🍲", "🍛", "🍣", "🍱", "🥟", "🦪", "🍤", "🍙",
+      "🍚", "🍘", "🍥", "🥠", "🍢", "🍡", "🍧", "🍨", "🍦", "🥧", "🧁", "🍰", "🎂", "🍮", "🍭", "🍬",
+      "🍫", "🍿", "🍩", "🍪", "🌰", "🥜", "🍯", "🥛", "🍼", "☕", "🍵", "🧃", "🥤", "🍶", "🍺", "🍻",
+      "🥂", "🍷", "🥃", "🍸", "🍹", "🧉", "🍾",
+    ],
+  },
+  {
+    id: "activity",
+    name: "活动",
+    icon: "⚽",
+    emojis: [
+      "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱", "🪀", "🏓", "🏸", "🏒", "🏑", "🥍",
+      "🏏", "🥅", "⛳", "🪁", "🏹", "🎣", "🤿", "🥊", "🥋", "🎽", "🛹", "🛼", "🛷", "⛸️", "🥌", "🎿",
+      "⛷️", "🏂", "🏋️", "🤼", "🤸", "⛹️", "🤺", "🤾", "🏌️", "🏇", "🧘", "🏄", "🏊", "🤽", "🚣", "🧗",
+      "🚵", "🚴", "🏆", "🥇", "🥈", "🥉", "🏅", "🎖️", "🏵️", "🎗️", "🎫", "🎟️", "🎪", "🤹", "🎭", "🎨",
+      "🎬", "🎤", "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🪕", "🎻", "🎲", "♟️", "🎯", "🎳", "🎮",
+      "🎰", "🧩",
+    ],
+  },
+  {
+    id: "travel",
+    name: "旅行与地点",
+    icon: "🚗",
+    emojis: [
+      "🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐", "🚚", "🚛", "🚜", "🛵", "🏍️", "🛺",
+      "🚲", "🛴", "🚨", "🚔", "🚍", "🚘", "🚖", "🚡", "🚠", "🚟", "🚃", "🚋", "🚞", "🚝", "🚄", "🚅",
+      "🚈", "🚂", "🚆", "🚇", "🚊", "🚉", "✈️", "🛫", "🛬", "🛩️", "💺", "🛰️", "🚀", "🛸", "🚁", "🛶",
+      "⛵", "🚤", "🛥️", "🛳️", "⛴️", "🚢", "⚓", "⛽", "🚧", "🚦", "🚥", "🗺️", "🗿", "🗽", "🗼", "🏰",
+      "🏯", "🏟️", "🎡", "🎢", "🎠", "⛲", "⛱️", "🏖️", "🏝️", "🏜️", "🌋", "⛰️", "🏔️", "🗻", "🏕️", "⛺",
+      "🏠", "🏡", "🏘️", "🏢", "🏬", "🏣", "🏤", "🏥", "🏦", "🏨", "🏪", "🏫", "🏩", "💒", "🏛️", "⛪",
+      "🕌", "🕍", "🛕", "🌃", "🌆", "🌇", "🌉", "🌁",
+    ],
+  },
+  {
+    id: "objects",
+    name: "物品",
+    icon: "💡",
+    emojis: [
+      "⌚", "📱", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "💽", "💾", "💿", "📀", "📷", "📸", "📹", "🎥", "📽️",
+      "📞", "☎️", "📟", "📠", "📺", "📻", "🎙️", "⏱️", "⏰", "⏲️", "🕰️", "🔋", "🔌", "💡", "🔦", "🕯️",
+      "🧯", "🛢️", "💸", "💵", "💴", "💶", "💷", "💰", "💳", "🧾", "💎", "⚖️", "🧰", "🔧", "🔨", "⛏️",
+      "🛠️", "⚙️", "🔩", "🧲", "🔫", "💣", "🔪", "🗡️", "🛡️", "🚪", "🛏️", "🛋️", "🚽", "🚿", "🛁", "🧴",
+      "🧷", "🧹", "🧺", "🧻", "🧼", "🪥", "🔑", "🗝️", "🚸", "🛎️", "🧳", "🌂", "☂️", "🎁", "🎈", "🎉",
+      "🎊", "🎀", "📦", "📫", "📮", "📝", "✏️", "✒️", "🖊️", "🖌️", "📏", "📐", "📌", "📍", "🔖", "📎",
+      "📚", "📖", "📕", "📗", "📘", "📙", "📔", "📒", "📃", "📄", "📰", "🗂️", "📅", "📆", "📈", "📉",
+      "📊", "💼", "🔬", "🔭", "🧪", "🧫", "🧬", "💊", "💉", "🩺", "🩹", "🚬", "⚰️",
+    ],
+  },
+  {
+    id: "symbols",
+    name: "符号",
+    icon: "❤️",
+    emojis: [
+      "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖",
+      "💘", "💝", "💟", "☮️", "✝️", "☪️", "🕉️", "☸️", "✡️", "🔯", "🕎", "☯️", "☦️", "⛎", "♈", "♉",
+      "♊", "♋", "♌", "♍", "♎", "♏", "♐", "♑", "♒", "♓", "🆔", "⚛️", "🉑", "☢️", "☣️", "📴",
+      "📳", "🈶", "🈚", "🈸", "🈺", "🈷️", "✴️", "🆚", "💮", "🉐", "㊙️", "㊗️", "🈴", "🈵", "🈹", "🈲",
+      "🅰️", "🅱️", "🆎", "🆑", "🅾️", "🆘", "❌", "⭕", "🛑", "⛔", "📛", "🚫", "💯", "💢", "♨️", "🚷",
+      "🚯", "🚳", "🚱", "🔞", "📵", "❗", "❓", "❕", "❔", "‼️", "⁉️", "🔅", "🔆", "〽️", "⚠️", "🚸",
+      "✅", "✔️", "☑️", "🔘", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫", "⚪", "🟤", "🔺", "🔻", "💠",
+      "🔷", "🔶", "🔸", "🔹", "⭐", "🌟",
+    ],
+  },
+  {
+    id: "flags",
+    name: "旗帜",
+    icon: "🏁",
+    emojis: [
+      "🏁", "🚩", "🎌", "🏴", "🏳️", "🏳️‍🌈", "🏴‍☠️", "🇨🇳", "🇭🇰", "🇲🇴", "🇹🇼", "🇯🇵", "🇰🇷", "🇺🇸", "🇬🇧", "🇫🇷",
+      "🇩🇪", "🇮🇹", "🇪🇸", "🇵🇹", "🇷🇺", "🇨🇦", "🇦🇺", "🇳🇿", "🇸🇬", "🇲🇾", "🇹🇭", "🇻🇳", "🇵🇭", "🇮🇩", "🇮🇳", "🇧🇷",
+      "🇲🇽", "🇦🇷", "🇿🇦", "🇪🇬", "🇸🇦", "🇦🇪", "🇹🇷", "🇳🇱", "🇨🇭", "🇸🇪", "🇳🇴", "🇩🇰", "🇫🇮", "🇮🇪", "🇵🇱", "🇬🇷",
+    ],
+  },
+];
+
+type EmojiPickerProps = {
+  /** 弹窗是否打开。 */
+  open: boolean;
+  /** 关闭弹窗回调。 */
+  onClose: () => void;
+  /** 选中某个 emoji 时触发（默认选中后自动关闭，可通过 closeOnSelect 关闭该行为）。 */
+  onSelect: (emoji: string) => void;
+  /** 当前已选 emoji，用于高亮。 */
+  value?: string | null;
+  /** 弹窗标题。 */
+  title?: string;
+  /** 选中后是否自动关闭，默认 true。 */
+  closeOnSelect?: boolean;
+  /** 自定义分类数据，默认使用 iOS 风格全量分组。 */
+  categories?: EmojiCategory[];
+};
+
+/**
+ * 通用 emoji 选择弹窗（Bottom Sheet）。内容与 iOS 表情键盘分组一致，可在新建/编辑账本、分类、账户等任意需要选图标的表单中复用。
+ */
+export function EmojiPicker({
+  open,
+  onClose,
+  onSelect,
+  value,
+  title = "选择 Emoji",
+  closeOnSelect = true,
+  categories = EMOJI_CATEGORIES,
+}: EmojiPickerProps) {
+  const [activeCat, setActiveCat] = useState(categories[0]?.id ?? "");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const handleScroll = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const threshold = container.scrollTop + 16;
+    let current = categories[0]?.id ?? "";
+    for (const category of categories) {
+      const section = sectionRefs.current[category.id];
+      if (section && section.offsetTop <= threshold) current = category.id;
+    }
+    setActiveCat(current);
+  }, [categories]);
+
+  const scrollToCategory = (id: string) => {
+    const container = scrollRef.current;
+    const section = sectionRefs.current[id];
+    if (container && section) {
+      container.scrollTo({ top: Math.max(section.offsetTop - 4, 0), behavior: "smooth" });
+    }
+    setActiveCat(id);
+  };
+
+  const handleSelect = (emoji: string) => {
+    onSelect(emoji);
+    if (closeOnSelect) onClose();
+  };
+
+  return (
+    <Sheet onClose={onClose} open={open} title={title}>
+      <div className="flex flex-col gap-2">
+        <div
+          className="relative max-h-[46dvh] overflow-y-auto pr-1"
+          onScroll={handleScroll}
+          ref={scrollRef}
+        >
+          {categories.map((category) => (
+            <section
+              key={category.id}
+              ref={(element) => {
+                sectionRefs.current[category.id] = element;
+              }}
+            >
+              <h3 className="sticky top-0 z-10 bg-[var(--color-bg-elevated)]/90 py-1.5 text-xs font-semibold text-[var(--color-text-muted)] backdrop-blur-sm">
+                {category.name}
+              </h3>
+              <div className="grid grid-cols-8 gap-0.5 pb-2">
+                {category.emojis.map((emoji, index) => (
+                  <button
+                    aria-label={emoji}
+                    className={cn(
+                      "flex aspect-square items-center justify-center rounded-xl text-[26px] leading-none transition-colors active:bg-[var(--color-control-pressed)]",
+                      value === emoji ? "bg-[var(--color-tint-soft)]" : "hover:bg-[var(--color-control-fill-muted)]",
+                    )}
+                    key={`${category.id}-${index}-${emoji}`}
+                    onClick={() => handleSelect(emoji)}
+                    type="button"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between gap-1 border-t border-[var(--color-border-subtle)] pt-2">
+          {categories.map((category) => (
+            <button
+              aria-label={category.name}
+              className={cn(
+                "flex h-9 flex-1 items-center justify-center rounded-lg text-xl leading-none transition-colors",
+                activeCat === category.id
+                  ? "bg-[var(--color-tint-soft)]"
+                  : "opacity-60 active:bg-[var(--color-control-fill-muted)]",
+              )}
+              key={category.id}
+              onClick={() => scrollToCategory(category.id)}
+              type="button"
+            >
+              {category.icon}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
+  );
+}

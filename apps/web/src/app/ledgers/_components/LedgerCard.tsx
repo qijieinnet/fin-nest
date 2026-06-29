@@ -1,62 +1,51 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import type { Ledger } from "@/lib/api";
-import { cn } from "@/lib/format/class-names";
 
 type LedgerCardProps = {
   isCurrent: boolean;
   isOwner: boolean;
   ledger: Ledger;
   onOpenDetail: () => void;
-  onSelect: () => void;
 };
 
-export function LedgerCard({ isCurrent, isOwner, ledger, onOpenDetail, onSelect }: LedgerCardProps) {
+export function LedgerCard({ isCurrent, isOwner, ledger, onOpenDetail }: LedgerCardProps) {
+  const iconText = ledger.icon?.trim() || ledger.name.slice(0, 1);
+
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 rounded-[var(--radius-panel)] border bg-[var(--color-bg-surface)] p-3 shadow-[var(--shadow-soft)] transition-colors",
-        isCurrent
-          ? "border-[var(--color-tint)]"
-          : "border-[var(--color-border-subtle)]",
-      )}
-    >
+    <div className="flex items-center gap-3 px-4 py-3.5 [box-shadow:inset_0_-1px_0_var(--color-border-subtle)] last:[box-shadow:none]">
       <button
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        onClick={onSelect}
+        aria-label={`查看${ledger.name}详情`}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-control-fill-muted)] text-[22px] leading-none"
+        onClick={onOpenDetail}
         type="button"
       >
-        <span
-          aria-hidden
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-tint-soft)] text-lg font-semibold text-[var(--color-tint)]"
-        >
-          {ledger.name.slice(0, 1)}
+        {iconText}
+      </button>
+      <button className="min-w-0 flex-1 text-left" onClick={onOpenDetail} type="button">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-base font-medium text-[var(--color-text-primary)]">
+            {ledger.name}
+          </span>
+          {isCurrent ? (
+            <span
+              aria-hidden
+              className="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--color-tint)]"
+            />
+          ) : null}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-base font-medium text-[var(--color-text-primary)]">
-              {ledger.name}
-            </span>
-            {isCurrent ? (
-              <span className="shrink-0 rounded-full bg-[var(--color-tint)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-tint-contrast)]">
-                当前
-              </span>
-            ) : null}
-          </span>
-          <span className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
-            <span>{isOwner ? "所有者" : "成员"}</span>
-            <span aria-hidden>·</span>
-            <span>{ledger.currency}</span>
-          </span>
+        <span className="mt-0.5 block truncate text-xs text-[var(--color-text-secondary)]">
+          {isOwner ? "所有者" : "成员"} · {ledger.currency}
         </span>
       </button>
       <button
         aria-label="账本详情"
-        className="shrink-0 rounded-full px-3 py-2 text-sm font-medium text-[var(--color-tint)]"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-bg-app)] text-[var(--color-text-muted)]"
         onClick={onOpenDetail}
         type="button"
       >
-        详情
+        <ChevronRight size={17} />
       </button>
     </div>
   );

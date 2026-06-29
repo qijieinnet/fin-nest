@@ -7,6 +7,8 @@ loadDotenv();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // 关闭开发模式左下角的 Next.js Dev Tools 指示器（避免遮挡底部导航）。
+  devIndicators: false,
   // 复用 workspace 内的共享包源码/产物
   transpilePackages: ["@fin-nest/shared"],
 };

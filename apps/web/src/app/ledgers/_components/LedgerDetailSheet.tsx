@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pencil, X } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui";
+import { ActionButton, Button } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -12,7 +13,7 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useAuth, useLedger, useSheetStack, useToast } from "@/providers";
-import { EditLedgerSheet } from "./EditLedgerSheet";
+import { CreateLedgerSheet } from "./CreateLedgerSheet";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import { MembersSection } from "./MembersSection";
 import { ShareInviteSheet } from "./ShareInviteSheet";
@@ -52,15 +53,33 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
 
   const isOwner = ledger.ownerUserId === user?.id;
   const isCurrent = ledger.id === currentLedgerId;
+  const iconText = ledger.icon?.trim() || ledger.name.slice(0, 1);
+  const whiteButtonClass = "!bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]";
 
   return (
     <div className="flex flex-col gap-5 pb-2">
+      <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
+        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
+          账本详情
+        </h2>
+        {isOwner ? (
+          <ActionButton
+            icon={<Pencil size={20} strokeWidth={2.2} />}
+            label="编辑账本"
+            onClick={() => push({ hideDefaultHeader: true, content: <CreateLedgerSheet ledger={ledger} /> })}
+          />
+        ) : (
+          <span aria-hidden />
+        )}
+      </div>
+
       <header className="flex items-center gap-3">
         <span
           aria-hidden
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-tint-soft)] text-xl font-semibold text-[var(--color-tint)]"
         >
-          {ledger.name.slice(0, 1)}
+          {iconText}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-semibold text-[var(--color-text-primary)]">
@@ -70,46 +89,43 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
             {isOwner ? "所有者" : "成员"} · {ledger.currency}
           </p>
         </div>
-        {isOwner ? (
-          <button
-            className="shrink-0 text-sm font-medium text-[var(--color-tint)]"
-            onClick={() => push({ title: "编辑账本", content: <EditLedgerSheet ledger={ledger} /> })}
-            type="button"
-          >
-            编辑
-          </button>
-        ) : null}
       </header>
-
-      {!isCurrent ? (
-        <Button
-          onClick={() => {
-            setLedgerId(ledger.id);
-            showToast({ tone: "success", message: `已切换到「${ledger.name}」` });
-            pop();
-          }}
-          variant="secondary"
-        >
-          切换到此账本
-        </Button>
-      ) : null}
-
-      {isOwner ? (
-        <Button
-          disabled={createInvite.isPending}
-          onClick={() => createInvite.mutate()}
-          variant="secondary"
-        >
-          {createInvite.isPending ? "生成中…" : "生成邀请码"}
-        </Button>
-      ) : null}
 
       {isOwner ? <JoinRequestsSection ledgerId={ledger.id} /> : null}
 
       <MembersSection currentUserId={user?.id} isOwner={isOwner} ledgerId={ledger.id} />
 
-      {isOwner ? (
+      {!isCurrent || isOwner ? (
         <div className="flex flex-col gap-2 border-t border-[var(--color-border-subtle)] pt-4">
+          {!isCurrent ? (
+            <Button
+              className={whiteButtonClass}
+              onClick={() => {
+                setLedgerId(ledger.id);
+                showToast({ tone: "success", message: `已切换到「${ledger.name}」` });
+                pop();
+              }}
+              variant="secondary"
+            >
+              切换到此账本
+            </Button>
+          ) : null}
+
+          {isOwner ? (
+            <Button
+              className={whiteButtonClass}
+              disabled={createInvite.isPending}
+              onClick={() => createInvite.mutate()}
+              variant="secondary"
+            >
+              {createInvite.isPending ? "生成中…" : "生成邀请码"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isOwner ? (
+        <div className="flex flex-col gap-2">
           {confirmingDelete ? (
             <>
               <p className="text-sm text-[var(--color-text-secondary)]">
@@ -134,7 +150,11 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
               </div>
             </>
           ) : (
-            <Button onClick={() => setConfirmingDelete(true)} variant="danger">
+            <Button
+              className={`${whiteButtonClass} !text-[var(--color-accent-expense)]`}
+              onClick={() => setConfirmingDelete(true)}
+              variant="danger"
+            >
               删除账本
             </Button>
           )}

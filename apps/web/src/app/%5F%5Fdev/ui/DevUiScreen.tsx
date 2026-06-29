@@ -57,6 +57,7 @@ import {
 import {
   ActionButton,
   Button,
+  EmojiPicker,
   IconButton,
   Input,
   MobileAppShell,
@@ -124,6 +125,8 @@ export function DevUiScreen() {
   const [plainTab, setPlainTab] = useState("first");
   const [plainSheetOpen, setPlainSheetOpen] = useState(false);
   const [glassSheetOpen, setGlassSheetOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emoji, setEmoji] = useState("📒");
   const [amount, setAmount] = useState("128.50");
   const [categoryId, setCategoryId] = useState<string | null>("food");
   const [accountId, setAccountId] = useState<string | null>("cash-default");
@@ -357,6 +360,16 @@ export function DevUiScreen() {
           </section>
 
           <section className="dev-section">
+            <h2>Emoji 选择器</h2>
+            <div className="dev-row">
+              <Button onClick={() => setEmojiPickerOpen(true)} variant="secondary">
+                <span className="text-xl leading-none">{emoji}</span>
+                选择 Emoji
+              </Button>
+            </div>
+          </section>
+
+          <section className="dev-section">
             <h2>交易列表</h2>
             <TransactionGroup dateLabel="6月27日 周六" incomeMicros="0" totalMicros="-211000000">
               <SwipeActionRow actions={transactionActions}>
@@ -521,6 +534,13 @@ export function DevUiScreen() {
           </div>
         </div>
       </MobilePage>
+
+      <EmojiPicker
+        onClose={() => setEmojiPickerOpen(false)}
+        onSelect={setEmoji}
+        open={emojiPickerOpen}
+        value={emoji}
+      />
 
       <Sheet
         onClose={() => setPlainSheetOpen(false)}

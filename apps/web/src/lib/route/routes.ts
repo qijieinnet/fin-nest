@@ -4,5 +4,13 @@ export const routes = {
   register: "/register",
   ledgers: "/ledgers",
   ledgersJoin: "/ledgers/join",
+  bills: "/bills",
+  billNew: "/bills/new",
+  bill: (transactionId: string) => `/bills/${transactionId}`,
+  billEdit: (transactionId: string) => `/bills/${transactionId}/edit`,
+  accounts: "/accounts",
+  stats: "/stats",
+  budget: "/budget",
+  more: "/more",
   devUi: "/__dev/ui",
 } as const;
