@@ -10,6 +10,7 @@ apps/
   api/      # Nest.js HTTP API（REST + OpenAPI）
   worker/   # Nest.js Worker（消费 background_jobs）
 packages/
+  backend/        # 后端共享平台模块（Prisma/事务/异常过滤等，供 api/worker 复用）
   db/             # Prisma schema、迁移、PrismaClient
   shared/         # 前后端共享类型/常量（金额单位等）
   config/         # 运行时配置读取与校验（zod）
@@ -36,9 +37,11 @@ cp .env.example .env          # 配置环境变量
 pnpm install                  # 安装依赖
 pnpm infra:up                 # 启动 postgres + minio（需 Docker）
 pnpm db:migrate               # 执行数据库迁移（DB 起来后）
-pnpm --filter @fin-nest/api dev     # 启动 API（:4000，文档 /docs）
-pnpm --filter @fin-nest/web dev     # 启动 Web（:3000）
+pnpm dev                      # 启动 API（:4000，文档 /docs）+ Web（:4001）
 ```
+
+> `pnpm dev`（含 `dev:api` / `dev:web` / `dev:worker`）会先执行 `pnpm build:packages` 再启动；
+> api/worker 引用的是 `packages/*` 的构建产物（`dist/`，已 gitignore），新环境直接启动否则会报 `Cannot find module '@fin-nest/backend'`。
 
 ## 常用脚本（根目录）
 

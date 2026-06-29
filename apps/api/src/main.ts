@@ -11,6 +11,9 @@ async function bootstrap(): Promise<void> {
   const config = loadConfig();
   const app = await NestFactory.create(AppModule);
 
+  // 浏览器端 web 直连 API 为跨域请求；放行 WEB_ORIGIN 并允许携带 session cookie。
+  app.enableCors({ origin: config.WEB_ORIGIN, credentials: true });
+
   app.useGlobalFilters(app.get(ApiExceptionFilter));
   app.useGlobalInterceptors(app.get(BigIntSerializeInterceptor));
   app.useGlobalPipes(

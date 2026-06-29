@@ -36,6 +36,17 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
 
+  // 允许跨域访问 API 的 web 来源；多个用逗号分隔。浏览器端直连 API 需要它放行。
+  WEB_ORIGIN: z
+    .string()
+    .default("http://localhost:4001")
+    .transform((v) =>
+      v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   MINIO_ENDPOINT: z.string().default("localhost"),
