@@ -1,17 +1,26 @@
-import { APP_NAME } from "@fin-nest/shared";
-import { MobileAppShell, MobilePage } from "@/components/ui";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { LoadingState } from "@/components/business";
+import { MobileAppShell } from "@/components/ui";
+import { routes } from "@/lib/route/routes";
+import { useAuth } from "@/providers";
 
 export default function HomePage() {
+  const { status } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "loading") return;
+    router.replace(status === "authenticated" ? routes.ledgers : routes.login);
+  }, [status, router]);
+
   return (
     <MobileAppShell>
-      <MobilePage title={APP_NAME} description="移动端应用骨架就绪，业务页面在 F3 起逐步实现。">
-        <section className="rounded-[var(--radius-panel)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
-          <p className="text-sm leading-6 text-[var(--color-text-secondary)]">
-            F0 已提供移动端容器、safe area、设计 token、API client、OpenAPI 类型生成入口和 PWA
-            manifest。
-          </p>
-        </section>
-      </MobilePage>
+      <main className="flex min-h-dvh items-center justify-center px-[var(--space-page-x)]">
+        <LoadingState rows={3} title="加载中" />
+      </main>
     </MobileAppShell>
   );
 }

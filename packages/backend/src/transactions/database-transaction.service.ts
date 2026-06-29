@@ -8,7 +8,10 @@ export type PrismaTransactionClient = Prisma.TransactionClient;
 export class DatabaseTransactionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  run<T>(fn: (tx: PrismaTransactionClient) => Promise<T>): Promise<T> {
-    return this.prisma.client.$transaction(fn);
+  run<T>(
+    fn: (tx: PrismaTransactionClient) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number },
+  ): Promise<T> {
+    return this.prisma.client.$transaction(fn, options);
   }
 }

@@ -61,7 +61,7 @@ export class LedgersController {
   }
 
   @Get("ledgers/:ledgerId/members")
-  @ApiOkResponse()
+  @ApiOkResponse({ description: "成员列表，每项附带成员的 alias/account" })
   members(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
     return this.ledgers.listMembers(ledgerId, (auth as SessionAuthContext).userId);
   }
@@ -97,7 +97,7 @@ export class LedgersController {
   }
 
   @Get("ledgers/:ledgerId/join-requests")
-  @ApiOkResponse()
+  @ApiOkResponse({ description: "加入申请列表，每项附带申请人的 requesterAlias/requesterAccount" })
   joinRequests(
     @CurrentAuth() auth: AuthContext,
     @Param("ledgerId") ledgerId: string,

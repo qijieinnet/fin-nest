@@ -64,7 +64,7 @@ export class LedgersService {
         tx,
       );
       return ledger;
-    });
+    }, { timeout: 20000 });
   }
 
   async update(ledgerId: string, userId: string, input: UpdateLedgerDto) {
@@ -103,9 +103,14 @@ export class LedgersService {
 
   async listMembers(ledgerId: string, userId: string) {
     await this.assertMember(ledgerId, userId);
-    return this.prisma.client.ledgerMember.findMany({
+    const members = await this.prisma.client.ledgerMember.findMany({
       where: { ledgerId, removedAt: null },
       orderBy: { joinedAt: "asc" },
+    });
+    const identities = await this.loadUserIdentities(members.map((member) => member.userId));
+    return members.map((member) => {
+      const identity = identities.get(member.userId);
+      return { ...member, alias: identity?.alias ?? "", account: identity?.account ?? "" };
     });
   }
 
@@ -191,9 +196,20 @@ export class LedgersService {
 
   async listJoinRequests(ledgerId: string, actorUserId: string, status = "pending") {
     await this.assertOwner(ledgerId, actorUserId);
-    return this.prisma.client.ledgerJoinRequest.findMany({
+    const requests = await this.prisma.client.ledgerJoinRequest.findMany({
       where: { ledgerId, status },
       orderBy: { createdAt: "asc" },
+    });
+    const identities = await this.loadUserIdentities(
+      requests.map((request) => request.requesterUserId),
+    );
+    return requests.map((request) => {
+      const identity = identities.get(request.requesterUserId);
+      return {
+        ...request,
+        requesterAlias: identity?.alias ?? "",
+        requesterAccount: identity?.account ?? "",
+      };
     });
   }
 
@@ -216,6 +232,17 @@ export class LedgersService {
       where: { id: requestId },
       data: { status: "cancelled" },
     });
+  }
+
+  /** 批量取用户身份（仅 alias/account，不暴露 email 等敏感字段）。 */
+  private async loadUserIdentities(userIds: string[]) {
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) return new Map<string, { alias: string; account: string }>();
+    const users = await this.prisma.client.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, alias: true, account: true },
+    });
+    return new Map(users.map((user) => [user.id, { alias: user.alias, account: user.account }]));
   }
 
   async assertMember(ledgerId: string, userId: string): Promise<LedgerRole> {

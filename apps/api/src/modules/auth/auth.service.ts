@@ -32,6 +32,8 @@ export class AuthService {
   ) {}
 
   async register(input: RegisterDto, request: RequestWithAuth): Promise<AuthResult> {
+    // 密码哈希（bcrypt）是 CPU 密集操作，放在事务外完成，避免占用 interactive transaction 时间预算。
+    const passwordHash = await hashPassword(input.password);
     return this.txs.run(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(931733001)`;
       const userCount = await tx.user.count();
@@ -43,7 +45,6 @@ export class AuthService {
         }
       }
 
-      const passwordHash = await hashPassword(input.password);
       const user = await tx.user.create({
         data: {
           email: input.email,
@@ -88,7 +89,7 @@ export class AuthService {
       );
 
       return this.createSessionForUser(user, input.deviceName, request, tx);
-    });
+    }, { timeout: 20000 });
   }
 
   async login(input: LoginDto, request: RequestWithAuth): Promise<AuthResult> {
