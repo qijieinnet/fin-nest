@@ -1,10 +1,9 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { Button, IconButton, Switch } from "@/components/ui";
-import { AmountInput } from "./AmountInput";
-import { AccountPicker } from "./AccountPicker";
+import { Button, IconButton, SelectField, Switch } from "@/components/ui";
 import type { BusinessOption } from "./business-types";
+import { InlineHint } from "./InlineHint";
 
 export type RecoverablePayableItem = {
   accountId: string | null;
@@ -43,8 +42,10 @@ export function RecoverablePayableEditor({
     <div className="biz-rp-editor biz-toggle-card">
       <div className="biz-toggle-card__header">
         <span className="biz-toggle-card__copy">
-          <strong>{label}</strong>
-          {hint ? <small>{hint}</small> : null}
+          <strong>
+            {label}
+            {hint ? <InlineHint text={hint} /> : null}
+          </strong>
         </span>
         <Switch checked={active} disabled={!onEnabledChange} label={label} onCheckedChange={onEnabledChange} />
       </div>
@@ -53,21 +54,43 @@ export function RecoverablePayableEditor({
           {items.length === 0 ? <p className="biz-muted">还没有关联项目</p> : null}
           {items.map((item, index) => (
             <div className="biz-rp-editor__row" key={item.id}>
-              <AccountPicker
-                label={`项目 ${index + 1}`}
-                onValueChange={(accountId) =>
-                  onChange(items.map((current) => (current.id === item.id ? { ...current, accountId } : current)))
-                }
-                options={accountOptions}
-                value={item.accountId}
-              />
-              <AmountInput
-                label="金额"
-                onValueChange={(amount) =>
-                  onChange(items.map((current) => (current.id === item.id ? { ...current, amount } : current)))
-                }
-                value={item.amount}
-              />
+              <div className="biz-rp-editor__field">
+                <SelectField
+                  className="biz-rp-editor__select"
+                  clearLabel="清除账户"
+                  clearable
+                  icon={null}
+                  label={`项目 ${index + 1}`}
+                  menuWidth="trigger"
+                  onValueChange={(accountId) =>
+                    onChange(
+                      items.map((current) =>
+                        current.id === item.id ? { ...current, accountId: accountId || null } : current,
+                      ),
+                    )
+                  }
+                  options={accountOptions.map((option) => ({
+                    label: option.parentId ? `  ${option.label}` : option.label,
+                    value: option.id,
+                  }))}
+                  placeholder="选择账户"
+                  value={item.accountId ?? ""}
+                />
+              </div>
+              <label className="biz-rp-editor__field biz-rp-editor__field--amount">
+                <span className="biz-rp-editor__amount">
+                  <span>¥</span>
+                  <input
+                    aria-label="金额"
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      onChange(items.map((current) => (current.id === item.id ? { ...current, amount: event.currentTarget.value } : current)))
+                    }
+                    placeholder="0.00"
+                    value={item.amount}
+                  />
+                </span>
+              </label>
               <IconButton
                 icon={<Trash2 size={17} />}
                 label="删除关联金额"

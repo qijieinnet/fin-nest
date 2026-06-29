@@ -1,9 +1,10 @@
 "use client";
 
-import { Paperclip, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Switch } from "@/components/ui";
 import type { AttachmentItem } from "./business-types";
 import { AttachmentPreview } from "./AttachmentPreview";
+import { InlineHint } from "./InlineHint";
 
 type AttachmentPickerProps = {
   accept?: string;
@@ -25,13 +26,16 @@ export function AttachmentPicker({
   onRemove,
 }: AttachmentPickerProps) {
   const active = enabled ?? items.length > 0;
+  const hint = active ? "上传票据、截图或凭证" : "关闭后不显示附件区域";
 
   return (
     <div className="biz-attachment-card">
       <div className="biz-toggle-card__header">
         <span className="biz-toggle-card__copy">
-          <strong>附件</strong>
-          <small>{active ? "上传票据、截图或凭证" : "关闭后不显示附件区域"}</small>
+          <strong>
+            附件
+            <InlineHint text={hint} />
+          </strong>
         </span>
         <Switch checked={active} disabled={!onEnabledChange} label="附件" onCheckedChange={onEnabledChange} />
       </div>
@@ -56,12 +60,7 @@ export function AttachmentPicker({
           </span>
         </label>
         </div>
-      ) : (
-        <span className="biz-attachment-card__off">
-          <Paperclip size={16} />
-          未开启附件
-        </span>
-      )}
+      ) : null}
     </div>
   );
 }

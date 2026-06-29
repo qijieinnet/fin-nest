@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { GlassBottomSheet } from "@/components/glass";
+import { Tabs } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption, CategoryOption, TransactionType } from "./business-types";
+import { CategorySelectionList } from "./CategorySelectionList";
 import type { BusinessFilterValue, FilterField } from "./filter-types";
 import { resetFilterValue } from "./filter-utils";
 
@@ -119,6 +121,10 @@ export function FilterSheet({
     if (effectiveType === "income" || effectiveType === "expense") return option.kind === effectiveType || !option.kind;
     return true;
   });
+  const visibleCategoryOptions = categoryOptions.filter((option) => {
+    if (!option.parentId) return categoriesForType.some((category) => category.id === option.id);
+    return categoriesForType.some((category) => category.id === option.parentId);
+  });
 
   return (
     <GlassBottomSheet
@@ -152,20 +158,12 @@ export function FilterSheet({
           </button>
         </div>
 
-        <div className="biz-filter-tabs" role="tablist">
-          {tabs.map((item) => (
-            <button
-              aria-selected={tab === item}
-              className={cn(tab === item && "biz-filter-tabs__item--selected")}
-              key={item}
-              onClick={() => setTab(item)}
-              role="tab"
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          className="biz-filter-tabs"
+          items={tabs.map((item) => ({ label: item, value: item }))}
+          onValueChange={(nextTab) => setTab(nextTab as FilterTab)}
+          value={tab}
+        />
 
         <div className="biz-filter-prototype__body">
           {tab === "分类" ? (
@@ -196,41 +194,21 @@ export function FilterSheet({
               {hasField(fields, "category") && effectiveType !== "transfer" ? (
                 <>
                   <p className="biz-filter-label">分类（可选到二级，多选）</p>
-                  <div className="biz-filter-category-list">
-                    {categoriesForType.map((category) => {
-                      const children = categoryOptions.filter((option) => option.parentId === category.id);
-                      const selected = categoryIds.includes(category.id);
-                      return (
-                        <div className="biz-filter-category" key={category.id}>
-                          <FilterChip
-                            icon={category.icon}
-                            label={category.label}
-                            onClick={() => {
-                              const next = toggleValue(categoryIds, category.id);
-                              patch({ categoryId: next.at(-1) ?? null, categoryIds: next });
-                            }}
-                            selected={selected}
-                          />
-                          {children.length ? (
-                            <div className="biz-filter-chip-row biz-filter-chip-row--sub">
-                              {children.map((child) => {
-                                const childSelected = subcategoryIds.includes(child.id);
-                                return (
-                                  <FilterChip
-                                    icon={child.icon}
-                                    key={child.id}
-                                    label={child.label}
-                                    onClick={() => patch({ subcategoryIds: toggleValue(subcategoryIds, child.id) })}
-                                    selected={childSelected}
-                                  />
-                                );
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CategorySelectionList
+                    highlightParentWhenChildSelected={false}
+                    onSelect={(option, parent) => {
+                      if (parent) {
+                        patch({ subcategoryIds: toggleValue(subcategoryIds, option.id) });
+                        return;
+                      }
+
+                      const next = toggleValue(categoryIds, option.id);
+                      patch({ categoryId: next.at(-1) ?? null, categoryIds: next });
+                    }}
+                    options={visibleCategoryOptions}
+                    selectedIds={categoryIds}
+                    selectedSubcategoryIds={subcategoryIds}
+                  />
                 </>
               ) : null}
 

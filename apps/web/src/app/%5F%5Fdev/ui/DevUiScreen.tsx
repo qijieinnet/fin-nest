@@ -11,9 +11,11 @@ import {
   Home,
   Layers,
   MoreHorizontal,
+  Pencil,
   Plus,
   Settings,
   ShoppingBag,
+  Trash2,
   WalletCards,
   X,
 } from "lucide-react";
@@ -22,7 +24,6 @@ import {
   AccountPicker,
   AmountInput,
   AttachmentPicker,
-  BudgetProgress,
   CategoryPicker,
   CategoryRingChart,
   DateWheelPicker,
@@ -33,7 +34,7 @@ import {
   MoneyText,
   MonthWheelPicker,
   PersonPicker,
-  PlanProgress,
+  PlanLimitCard,
   RecoverablePayableEditor,
   SwipeActionRow,
   TransactionGroup,
@@ -139,6 +140,19 @@ export function DevUiScreen() {
   ]);
   const { showToast } = useToast();
   const sheetStack = useSheetStack();
+  const transactionActions = [
+    {
+      icon: <Pencil size={20} />,
+      label: "编辑",
+      onClick: () => showToast({ message: "编辑交易" }),
+    },
+    {
+      icon: <Trash2 size={20} />,
+      label: "删除",
+      onClick: () => showToast({ message: "删除交易", tone: "error" }),
+      tone: "danger" as const,
+    },
+  ];
 
   function openStackLevelOne() {
     sheetStack.push({
@@ -344,41 +358,89 @@ export function DevUiScreen() {
 
           <section className="dev-section">
             <h2>交易列表</h2>
-            <TransactionGroup dateLabel="今天" totalMicros="-128500000">
-              <SwipeActionRow
-                actions={[
-                  { label: "编辑", onClick: () => showToast({ message: "编辑交易" }) },
-                  {
-                    label: "删除",
-                    onClick: () => showToast({ message: "删除交易", tone: "error" }),
-                    tone: "danger",
-                  },
-                ]}
-              >
+            <TransactionGroup dateLabel="6月27日 周六" incomeMicros="0" totalMicros="-211000000">
+              <SwipeActionRow actions={transactionActions}>
                 <TransactionRow
-                  accountName="现金账户"
-                  amountMicros="-128500000"
+                  amountMicros="-5000000"
                   categoryColor="#ff8a3d"
-                  categoryIcon="food"
-                  categoryName="餐饮"
-                  description="周末聚餐"
-                  personName="我"
-                  time="19:30"
-                  title="晚餐"
+                  categoryIcon="coffee"
+                  categoryName="咖啡"
+                  icon="☕️"
+                  recordName="启杰_记"
+                  title="咖啡"
                   type="expense"
                   onClick={() => showToast({ message: "打开记录详情" })}
                 />
               </SwipeActionRow>
-              <TransactionRow
-                accountName="工资卡"
-                amountMicros="9800000000"
-                categoryColor="#2f9e77"
-                categoryIcon="income"
-                categoryName="工资"
-                title="六月工资"
-                type="income"
-                onClick={() => showToast({ message: "打开记录详情" })}
-              />
+              <SwipeActionRow actions={transactionActions}>
+                <TransactionRow
+                  amountMicros="-8000000"
+                  categoryColor="#ff8a3d"
+                  categoryIcon="food"
+                  categoryName="吃饭"
+                  icon="🍛"
+                  recordName="启杰_记"
+                  title="吃饭"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
+              <SwipeActionRow actions={transactionActions}>
+                <TransactionRow
+                  amountMicros="-26000000"
+                  categoryColor="#ff8a3d"
+                  categoryIcon="food"
+                  categoryName="吃饭"
+                  icon="🍛"
+                  recordName="启杰_记"
+                  title="吃饭"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
+              <SwipeActionRow actions={transactionActions}>
+                <TransactionRow
+                  accountName="沙县充值"
+                  amountMicros="-98000000"
+                  categoryColor="#ff8a3d"
+                  categoryIcon="food"
+                  categoryName="吃饭"
+                  icon="🍛"
+                  recordName="启杰_记"
+                  title="吃饭"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
+              <SwipeActionRow actions={transactionActions}>
+                <TransactionRow
+                  amountMicros="-39000000"
+                  categoryColor="#ff8a3d"
+                  categoryIcon="wear"
+                  categoryName="美发"
+                  icon="💇‍♀️"
+                  recordName="启杰_记"
+                  title="美发"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
+            </TransactionGroup>
+            <TransactionGroup dateLabel="6月26日 周五" incomeMicros="0" totalMicros="-73000000">
+              <SwipeActionRow actions={transactionActions}>
+                <TransactionRow
+                  accountName="家庭"
+                  amountMicros="-73000000"
+                  categoryColor="#0a84ff"
+                  categoryIcon="home"
+                  categoryName="基金"
+                  icon="⌛️"
+                  recordName="启杰_记"
+                  title="基金"
+                  type="expense"
+                  onClick={() => showToast({ message: "打开记录详情" })}
+                />
+              </SwipeActionRow>
             </TransactionGroup>
           </section>
 
@@ -406,13 +468,25 @@ export function DevUiScreen() {
           <section className="dev-section">
             <h2>数据展示</h2>
             <AccountBalanceCard
-              balanceMicros="2800000000"
-              icon={<WalletCards size={20} />}
-              name="现金账户"
-              subtitle="计入净资产"
+              balanceMicros="1280000000"
+              icon={<span aria-hidden>💵</span>}
+              name="现金"
+              subtitle="储蓄账户"
             />
-            <BudgetProgress budgetMicros="5000000000" usedMicros="3120000000" />
-            <PlanProgress label="旅行基金" targetMicros="12000000000" usedMicros="7600000000" />
+            <PlanLimitCard
+              endDate="2026-06-30"
+              limitMicros="8000000000"
+              name="月限额"
+              startDate="2026-06-01"
+              usedMicros="1431000000"
+            />
+            <PlanLimitCard
+              endDate="2026-12-31"
+              limitMicros="150000000000"
+              name="年限额"
+              startDate="2026-01-01"
+              usedMicros="28520000000"
+            />
             <TrendChart
               points={[
                 { label: "1月", valueMicros: "2800000000" },

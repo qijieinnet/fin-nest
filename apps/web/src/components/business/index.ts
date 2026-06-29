@@ -15,6 +15,7 @@ export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
 export { PersonPicker } from "./PersonPicker";
+export { PlanLimitCard } from "./PlanLimitCard";
 export { PlanProgress } from "./PlanProgress";
 export { RecoverablePayableEditor } from "./RecoverablePayableEditor";
 export { SwipeActionRow } from "./SwipeActionRow";
