@@ -543,6 +543,8 @@ model File {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  attachments Attachment[]
+
   @@map("files")
 }
 
@@ -550,6 +552,7 @@ model Attachment {
   id        String   @id @default(uuid()) @db.Uuid
   ledgerId  String   @map("ledger_id") @db.Uuid
   fileId    String   @map("file_id") @db.Uuid
+  file      File     @relation(fields: [fileId], references: [id])
   ownerType String   @map("owner_type")
   ownerId   String   @map("owner_id") @db.Uuid
   createdBy String?  @map("created_by") @db.Uuid
