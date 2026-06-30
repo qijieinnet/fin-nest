@@ -20,6 +20,13 @@ export { PlanProgress } from "./PlanProgress";
 export { RecoverablePayableEditor } from "./RecoverablePayableEditor";
 export { SwipeActionRow } from "./SwipeActionRow";
 export { TransactionGroup, TransactionRow } from "./TransactionRow";
+export {
+  AccountSelectRow,
+  CategorySelectRow,
+  FieldCard,
+  nestedOptionLabel,
+  ToggleCard,
+} from "./TransactionFieldRows";
 export { TransactionTypeSwitch } from "./TransactionTypeSwitch";
 export { countActiveFilters, resetFilterValue } from "./filter-utils";
 export { defaultFilterValue } from "./filter-types";

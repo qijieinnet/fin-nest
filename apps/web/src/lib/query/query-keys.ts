@@ -8,6 +8,9 @@ export const queryKeys = {
   categories: (ledgerId: string) => ["ledger", ledgerId, "categories"] as const,
   people: (ledgerId: string) => ["ledger", ledgerId, "people"] as const,
   accounts: (ledgerId: string) => ["ledger", ledgerId, "accounts"] as const,
+  autoRules: (ledgerId: string) => ["ledger", ledgerId, "auto-rules"] as const,
+  autoPending: (ledgerId: string, status = "pending") =>
+    ["ledger", ledgerId, "auto-pending-transactions", status] as const,
   recordSetting: (ledgerId: string) => ["ledger", ledgerId, "record-setting"] as const,
   quickTemplates: (ledgerId: string) => ["ledger", ledgerId, "quick-templates"] as const,
   insurances: (ledgerId: string) => ["ledger", ledgerId, "insurances"] as const,

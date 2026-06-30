@@ -272,7 +272,7 @@ function matchesPending(plan: PlanRow, pending: PendingRow): boolean {
   return (
     includesOrEmpty(rule.categoryIds, pending.categoryId) &&
     includesOrEmpty(rule.subcategoryIds, pending.subcategoryId) &&
-    includesOrEmpty(rule.accountIds, pending.accountId) &&
+    includesOrEmpty(rule.accountIds, pending.accountId ?? pending.fromAccountId ?? pending.toAccountId) &&
     includesOrEmpty(rule.personIds, pending.personId) &&
     (!rule.noteContains || (pending.note ?? "").includes(rule.noteContains))
   );

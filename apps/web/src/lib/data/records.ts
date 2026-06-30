@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   apiRequest,
   type Account,
+  type AutoPendingTransaction,
+  type AutoRule,
   type AttachmentRecord,
   type BudgetProgress,
   type Category,
@@ -51,6 +53,27 @@ export function useAccounts(ledgerId: string | null) {
     queryFn: () => apiRequest<Account[]>(ledgerApiPath(ledgerId!, "/accounts")),
     enabled: Boolean(ledgerId),
     staleTime: 30_000,
+  });
+}
+
+export function useAutoRules(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.autoRules(ledgerId ?? "none"),
+    queryFn: () => apiRequest<AutoRule[]>(ledgerApiPath(ledgerId!, "/auto-rules")),
+    enabled: Boolean(ledgerId),
+    staleTime: 30_000,
+  });
+}
+
+export function useAutoPending(ledgerId: string | null, status = "pending") {
+  return useQuery({
+    queryKey: queryKeys.autoPending(ledgerId ?? "none", status),
+    queryFn: () =>
+      apiRequest<AutoPendingTransaction[]>(ledgerApiPath(ledgerId!, "/auto-pending-transactions"), {
+        query: { status },
+      }),
+    enabled: Boolean(ledgerId),
+    staleTime: 15_000,
   });
 }
 

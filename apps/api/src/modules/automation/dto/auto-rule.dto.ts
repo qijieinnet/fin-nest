@@ -2,8 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsBoolean, IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
 
 export class CreateAutoRuleDto {
-  @ApiProperty({ enum: ["expense", "income"] })
-  @IsIn(["expense", "income"])
+  @ApiProperty({ enum: ["expense", "income", "transfer"] })
+  @IsIn(["expense", "income", "transfer"])
   type!: string;
 
   @ApiProperty({ example: "8800000" })
@@ -11,9 +11,10 @@ export class CreateAutoRuleDto {
   @Matches(/^(0|[1-9]\d*)$/)
   amountMicros!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  categoryId!: string;
+  categoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -29,6 +30,26 @@ export class CreateAutoRuleDto {
   @IsOptional()
   @IsString()
   subAccountId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toSubAccountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -57,6 +78,11 @@ export class CreateAutoRuleDto {
 }
 
 export class UpdateAutoRuleDto {
+  @ApiPropertyOptional({ enum: ["expense", "income", "transfer"] })
+  @IsOptional()
+  @IsIn(["expense", "income", "transfer"])
+  type?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -71,27 +97,47 @@ export class UpdateAutoRuleDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  categoryId?: string;
+  categoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  subcategoryId?: string;
+  subcategoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  accountId?: string;
+  accountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  subAccountId?: string;
+  subAccountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  personId?: string;
+  fromAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  personId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -340,25 +340,29 @@ model TransactionLink {
 }
 
 model AutoRule {
-  id            String    @id @default(uuid()) @db.Uuid
-  ledgerId      String    @map("ledger_id") @db.Uuid
-  enabled       Boolean   @default(true)
-  type          String
-  amountMicros  BigInt    @map("amount_micros")
-  categoryId    String    @map("category_id") @db.Uuid
-  subcategoryId String?   @map("subcategory_id") @db.Uuid
-  accountId     String?   @map("account_id") @db.Uuid
-  subAccountId  String?   @map("sub_account_id") @db.Uuid
-  personId      String?   @map("person_id") @db.Uuid
-  note          String?
-  repeatRule    String    @map("repeat_rule")
-  startDate     DateTime  @map("start_date") @db.Date
-  nextRunOn     DateTime? @map("next_run_on") @db.Date
-  createdBy     String    @map("created_by") @db.Uuid
-  updatedBy     String?   @map("updated_by") @db.Uuid
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(6)
+  id               String    @id @default(uuid()) @db.Uuid
+  ledgerId         String    @map("ledger_id") @db.Uuid
+  enabled          Boolean   @default(true)
+  type             String
+  amountMicros     BigInt    @map("amount_micros")
+  categoryId       String?   @map("category_id") @db.Uuid
+  subcategoryId    String?   @map("subcategory_id") @db.Uuid
+  accountId        String?   @map("account_id") @db.Uuid
+  subAccountId     String?   @map("sub_account_id") @db.Uuid
+  fromAccountId    String?   @map("from_account_id") @db.Uuid
+  fromSubAccountId String?   @map("from_sub_account_id") @db.Uuid
+  toAccountId      String?   @map("to_account_id") @db.Uuid
+  toSubAccountId   String?   @map("to_sub_account_id") @db.Uuid
+  personId         String?   @map("person_id") @db.Uuid
+  note             String?
+  repeatRule       String    @map("repeat_rule")
+  startDate        DateTime  @map("start_date") @db.Date
+  nextRunOn        DateTime? @map("next_run_on") @db.Date
+  createdBy        String    @map("created_by") @db.Uuid
+  updatedBy        String?   @map("updated_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
 
   @@map("auto_rules")
 }
@@ -372,10 +376,14 @@ model AutoPendingTransaction {
   status                 String
   type                   String
   amountMicros           BigInt    @map("amount_micros")
-  categoryId             String    @map("category_id") @db.Uuid
+  categoryId             String?   @map("category_id") @db.Uuid
   subcategoryId          String?   @map("subcategory_id") @db.Uuid
   accountId              String?   @map("account_id") @db.Uuid
   subAccountId           String?   @map("sub_account_id") @db.Uuid
+  fromAccountId          String?   @map("from_account_id") @db.Uuid
+  fromSubAccountId       String?   @map("from_sub_account_id") @db.Uuid
+  toAccountId            String?   @map("to_account_id") @db.Uuid
+  toSubAccountId         String?   @map("to_sub_account_id") @db.Uuid
   personId               String?   @map("person_id") @db.Uuid
   note                   String?
   relationPayload        Json?     @map("relation_payload") @db.JsonB

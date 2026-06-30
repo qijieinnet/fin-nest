@@ -17,6 +17,23 @@ import { ListAutoPendingQueryDto, UpdateAutoPendingDto } from "./dto/auto-pendin
 import { CreateAutoRuleDto, UpdateAutoRuleDto } from "./dto/auto-rule.dto";
 import { CreateQuickTemplateDto, UpdateQuickTemplateDto } from "./dto/quick-template.dto";
 
+type AutoPayload = {
+  accountId?: string | null;
+  categoryId?: string | null;
+  fromAccountId?: string | null;
+  fromSubAccountId?: string | null;
+  personId?: string | null;
+  subAccountId?: string | null;
+  subcategoryId?: string | null;
+  toAccountId?: string | null;
+  toSubAccountId?: string | null;
+};
+
+type AccountPair = {
+  accountId: string | null;
+  subAccountId: string | null;
+};
+
 @Injectable()
 export class AutomationService {
   constructor(
@@ -37,22 +54,25 @@ export class AutomationService {
 
   async createRule(ledgerId: string, userId: string, input: CreateAutoRuleDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertCategory(ledgerId, input.type, input.categoryId, input.subcategoryId);
-    if (input.accountId) await this.assertAccount(ledgerId, input.accountId, input.subAccountId);
-    if (input.personId) await this.assertPerson(ledgerId, input.personId);
+    await this.assertAutoPayload(ledgerId, input.type, input);
     return this.txs.run(async (tx) => {
       const startDate = parseDateOnly(input.startDate);
+      const isTransfer = input.type === "transfer";
       const rule = await tx.autoRule.create({
         data: {
           ledgerId,
           enabled: input.enabled ?? true,
           type: input.type,
           amountMicros: BigInt(input.amountMicros),
-          categoryId: input.categoryId,
-          subcategoryId: input.subcategoryId ?? null,
-          accountId: input.accountId ?? null,
-          subAccountId: input.subAccountId ?? null,
-          personId: input.personId ?? null,
+          categoryId: isTransfer ? null : input.categoryId!,
+          subcategoryId: isTransfer ? null : (input.subcategoryId ?? null),
+          accountId: isTransfer ? null : (input.accountId ?? null),
+          subAccountId: isTransfer ? null : (input.subAccountId ?? null),
+          fromAccountId: isTransfer ? input.fromAccountId! : null,
+          fromSubAccountId: isTransfer ? (input.fromSubAccountId ?? null) : null,
+          toAccountId: isTransfer ? input.toAccountId! : null,
+          toSubAccountId: isTransfer ? (input.toSubAccountId ?? null) : null,
+          personId: isTransfer ? null : (input.personId ?? null),
           note: input.note ?? null,
           repeatRule: input.repeatRule,
           startDate,
@@ -72,22 +92,34 @@ export class AutomationService {
   async updateRule(ledgerId: string, ruleId: string, userId: string, input: UpdateAutoRuleDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertRule(ledgerId, ruleId);
-    if (input.categoryId || input.subcategoryId !== undefined) {
-      await this.assertCategory(
-        ledgerId,
-        existing.type,
-        input.categoryId ?? existing.categoryId,
-        input.subcategoryId ?? existing.subcategoryId ?? undefined,
-      );
-    }
-    if (input.accountId || input.subAccountId !== undefined) {
-      await this.assertAccount(
-        ledgerId,
-        input.accountId ?? existing.accountId ?? "",
-        input.subAccountId ?? existing.subAccountId ?? undefined,
-      );
-    }
-    if (input.personId) await this.assertPerson(ledgerId, input.personId);
+    const type = input.type ?? existing.type;
+    const account = this.mergeAccountPair(
+      { accountId: existing.accountId, subAccountId: existing.subAccountId },
+      { accountId: input.accountId, subAccountId: input.subAccountId },
+    );
+    const fromAccount = this.mergeAccountPair(
+      { accountId: existing.fromAccountId, subAccountId: existing.fromSubAccountId },
+      { accountId: input.fromAccountId, subAccountId: input.fromSubAccountId },
+    );
+    const toAccount = this.mergeAccountPair(
+      { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
+      { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
+    );
+    await this.assertAutoPayload(ledgerId, type, {
+      categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
+      subcategoryId: input.categoryId !== undefined && input.subcategoryId === undefined
+        ? null
+        : input.subcategoryId === undefined
+          ? existing.subcategoryId
+          : input.subcategoryId,
+      accountId: account.accountId,
+      subAccountId: account.subAccountId,
+      fromAccountId: fromAccount.accountId,
+      fromSubAccountId: fromAccount.subAccountId,
+      toAccountId: toAccount.accountId,
+      toSubAccountId: toAccount.subAccountId,
+      personId: input.personId === undefined ? existing.personId : input.personId,
+    });
     return this.txs.run(async (tx) => {
       const enabled = input.enabled ?? existing.enabled;
       const startDate = input.startDate ? parseDateOnly(input.startDate) : existing.startDate;
@@ -100,13 +132,38 @@ export class AutomationService {
       const rule = await tx.autoRule.update({
         where: { id: ruleId },
         data: {
+          type: input.type,
           enabled: input.enabled,
           amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
-          categoryId: input.categoryId,
-          subcategoryId: input.subcategoryId,
-          accountId: input.accountId,
-          subAccountId: input.subAccountId,
-          personId: input.personId,
+          categoryId: type === "transfer" ? null : input.categoryId,
+          subcategoryId:
+            type === "transfer"
+              ? null
+              : input.categoryId !== undefined && input.subcategoryId === undefined
+                ? null
+                : input.subcategoryId,
+          accountId: type === "transfer" ? null : input.accountId,
+          subAccountId:
+            type === "transfer"
+              ? null
+              : input.accountId !== undefined && input.subAccountId === undefined
+                ? null
+                : input.subAccountId,
+          fromAccountId: type === "transfer" ? input.fromAccountId : null,
+          fromSubAccountId:
+            type === "transfer"
+              ? input.fromAccountId !== undefined && input.fromSubAccountId === undefined
+                ? null
+                : input.fromSubAccountId
+              : null,
+          toAccountId: type === "transfer" ? input.toAccountId : null,
+          toSubAccountId:
+            type === "transfer"
+              ? input.toAccountId !== undefined && input.toSubAccountId === undefined
+                ? null
+                : input.toSubAccountId
+              : null,
+          personId: type === "transfer" ? null : input.personId,
           note: input.note,
           repeatRule: input.repeatRule,
           startDate: input.startDate ? startDate : undefined,
@@ -147,17 +204,69 @@ export class AutomationService {
     input: UpdateAutoPendingDto,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertPending(ledgerId, pendingId);
+    const existing = await this.assertPending(ledgerId, pendingId);
+    const account = this.mergeAccountPair(
+      { accountId: existing.accountId, subAccountId: existing.subAccountId },
+      { accountId: input.accountId, subAccountId: input.subAccountId },
+    );
+    const fromAccount = this.mergeAccountPair(
+      { accountId: existing.fromAccountId, subAccountId: existing.fromSubAccountId },
+      { accountId: input.fromAccountId, subAccountId: input.fromSubAccountId },
+    );
+    const toAccount = this.mergeAccountPair(
+      { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
+      { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
+    );
+    await this.assertAutoPayload(ledgerId, existing.type, {
+      categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
+      subcategoryId:
+        input.categoryId !== undefined && input.subcategoryId === undefined
+          ? null
+          : input.subcategoryId === undefined
+            ? existing.subcategoryId
+            : input.subcategoryId,
+      accountId: account.accountId,
+      subAccountId: account.subAccountId,
+      fromAccountId: fromAccount.accountId,
+      fromSubAccountId: fromAccount.subAccountId,
+      toAccountId: toAccount.accountId,
+      toSubAccountId: toAccount.subAccountId,
+      personId: input.personId === undefined ? existing.personId : input.personId,
+    });
     return this.prisma.client.autoPendingTransaction.update({
       where: { id: pendingId },
       data: {
         amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
         scheduledFor: input.scheduledFor ? parseDateOnly(input.scheduledFor) : undefined,
-        categoryId: input.categoryId,
-        subcategoryId: input.subcategoryId,
-        accountId: input.accountId,
-        subAccountId: input.subAccountId,
-        personId: input.personId,
+        categoryId: existing.type === "transfer" ? null : input.categoryId,
+        subcategoryId:
+          existing.type === "transfer"
+            ? null
+            : input.categoryId !== undefined && input.subcategoryId === undefined
+              ? null
+              : input.subcategoryId,
+        accountId: existing.type === "transfer" ? null : input.accountId,
+        subAccountId:
+          existing.type === "transfer"
+            ? null
+            : input.accountId !== undefined && input.subAccountId === undefined
+              ? null
+              : input.subAccountId,
+        fromAccountId: existing.type === "transfer" ? input.fromAccountId : null,
+        fromSubAccountId:
+          existing.type === "transfer"
+            ? input.fromAccountId !== undefined && input.fromSubAccountId === undefined
+              ? null
+              : input.fromSubAccountId
+            : null,
+        toAccountId: existing.type === "transfer" ? input.toAccountId : null,
+        toSubAccountId:
+          existing.type === "transfer"
+            ? input.toAccountId !== undefined && input.toSubAccountId === undefined
+              ? null
+              : input.toSubAccountId
+            : null,
+        personId: existing.type === "transfer" ? null : input.personId,
         note: input.note,
         updatedBy: userId,
       },
@@ -316,11 +425,23 @@ export class AutomationService {
   private pendingToTransaction(
     pending: Prisma.AutoPendingTransactionGetPayload<Record<string, never>>,
   ): CreateTransactionDto {
+    if (pending.type === "transfer") {
+      return {
+        type: pending.type,
+        grossAmountMicros: pending.amountMicros.toString(),
+        occurredOn: dateKey(pending.scheduledFor),
+        fromAccountId: pending.fromAccountId ?? undefined,
+        fromSubAccountId: pending.fromSubAccountId ?? undefined,
+        toAccountId: pending.toAccountId ?? undefined,
+        toSubAccountId: pending.toSubAccountId ?? undefined,
+        note: pending.note ?? undefined,
+      };
+    }
     return {
       type: pending.type,
       grossAmountMicros: pending.amountMicros.toString(),
       occurredOn: dateKey(pending.scheduledFor),
-      categoryId: pending.categoryId,
+      categoryId: pending.categoryId ?? undefined,
       subcategoryId: pending.subcategoryId ?? undefined,
       accountId: pending.accountId ?? undefined,
       subAccountId: pending.subAccountId ?? undefined,
@@ -391,6 +512,44 @@ export class AutomationService {
     });
     if (!template) throw new AppError("QUICK_TEMPLATE_NOT_FOUND", "快捷模板不存在", 404);
     return template;
+  }
+
+  private mergeAccountPair(existing: AccountPair, input: Partial<AccountPair>): AccountPair {
+    const accountId = input.accountId === undefined ? existing.accountId : input.accountId;
+    const subAccountId =
+      input.accountId !== undefined && input.subAccountId === undefined
+        ? null
+        : input.subAccountId === undefined
+          ? existing.subAccountId
+          : input.subAccountId;
+    return { accountId: accountId ?? null, subAccountId: subAccountId ?? null };
+  }
+
+  private async assertAutoPayload(ledgerId: string, type: string, payload: AutoPayload) {
+    if (type === "transfer") {
+      if (!payload.fromAccountId || !payload.toAccountId) {
+        throw new AppError("TRANSFER_ACCOUNTS_REQUIRED", "转账必须选择转出和转入账户", 400);
+      }
+      await this.assertAccount(ledgerId, payload.fromAccountId, payload.fromSubAccountId ?? undefined);
+      await this.assertAccount(ledgerId, payload.toAccountId, payload.toSubAccountId ?? undefined);
+      if (
+        payload.fromAccountId === payload.toAccountId &&
+        (payload.fromSubAccountId ?? null) === (payload.toSubAccountId ?? null)
+      ) {
+        throw new AppError("TRANSFER_SAME_ACCOUNT", "转出和转入账户不能相同", 400);
+      }
+      return;
+    }
+
+    if (!payload.categoryId) throw new AppError("CATEGORY_REQUIRED", "请选择分类", 400);
+    await this.assertCategory(ledgerId, type, payload.categoryId, payload.subcategoryId ?? undefined);
+    if (payload.subAccountId && !payload.accountId) {
+      throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    }
+    if (payload.accountId) {
+      await this.assertAccount(ledgerId, payload.accountId, payload.subAccountId ?? undefined);
+    }
+    if (payload.personId) await this.assertPerson(ledgerId, payload.personId);
   }
 
   private async assertCategory(

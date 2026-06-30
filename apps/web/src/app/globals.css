@@ -581,6 +581,18 @@ select:focus-visible {
   min-height: min(72dvh, 620px);
 }
 
+.glass-bottom-sheet--full-height {
+  height: calc(100dvh - env(safe-area-inset-top));
+  max-height: calc(100dvh - env(safe-area-inset-top));
+}
+
+.glass-bottom-sheet--full-height .sheet-body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  padding-top: 0;
+}
+
 .ui-sheet {
   -webkit-backdrop-filter: blur(24px) saturate(1.24);
   backdrop-filter: blur(24px) saturate(1.24);
@@ -1389,6 +1401,48 @@ select:focus-visible {
   gap: 10px;
   max-width: 100%;
   min-width: 0;
+}
+
+.auto-transaction-sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding-top: 8px;
+}
+
+.auto-transaction-sheet__header {
+  align-items: center;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  grid-template-columns: var(--space-control-height) minmax(0, 1fr) var(--space-control-height);
+}
+
+.auto-transaction-sheet__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.auto-transaction-sheet__body::-webkit-scrollbar {
+  display: none;
+}
+
+.auto-transaction-sheet__settings {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 2px;
 }
 
 .transaction-form__top > [role="tablist"],

@@ -1,24 +1,22 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AccountSelectRow,
   AmountInput,
   AttachmentPicker,
+  CategorySelectRow,
   DateWheelPicker,
+  FieldCard,
   LoadingState,
   RecoverablePayableEditor,
+  ToggleCard,
   type AttachmentItem,
-  type BusinessOption,
-  type CategoryOption,
   type RecoverablePayableItem,
 } from "@/components/business";
-import { GlassBottomSheet } from "@/components/glass";
-import { ActionButton, Input, Switch, Tabs } from "@/components/ui";
-import { CategorySelectionList } from "@/components/business/CategorySelectionList";
-import { InlineHint } from "@/components/business/InlineHint";
+import { Input, Tabs } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import {
   apiRequest,
@@ -39,6 +37,7 @@ import {
   relationKindFor,
   resolveAccountSelection,
 } from "@/lib/data/options";
+import { createClientId } from "@/lib/id/client-id";
 import {
   useAccounts,
   useCategories,
@@ -119,14 +118,6 @@ function formatDateLabel(value: string): string {
   return value.replaceAll("-", ".");
 }
 
-function nestedOptionLabel(options: Array<{ id: string; label: string; parentId?: string }>, value: string | null, fallback: string): string {
-  const selected = options.find((option) => option.id === value);
-  if (!selected) return fallback;
-  if (!selected.parentId) return selected.label;
-  const parent = options.find((option) => option.id === selected.parentId);
-  return parent ? `${parent.label}/${selected.label}` : selected.label;
-}
-
 async function uploadAttachment(ledgerId: string, transactionId: string, item: PendingAttachment) {
   const mime = item.file.type || "application/octet-stream";
   const upload = await apiRequest<UploadUrlResult>(ledgerApiPath(ledgerId, "/files/upload-url"), {
@@ -155,202 +146,6 @@ async function uploadAttachment(ledgerId: string, transactionId: string, item: P
       sizeBytes: String(item.file.size),
     },
   });
-}
-
-type FieldCardProps = {
-  children?: ReactNode;
-  className?: string;
-  label: string;
-  onClick?: () => void;
-  value?: string;
-};
-
-function FieldCard({ children, className, label, onClick, value }: FieldCardProps) {
-  if (children) {
-    return <div className={cn("transaction-form__card", className)}>{children}</div>;
-  }
-  return (
-    <button className={cn("transaction-form__row-card", className)} onClick={onClick} type="button">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <ChevronRight size={18} />
-    </button>
-  );
-}
-
-type CategorySelectRowProps = {
-  onValueChange: (value: string | null) => void;
-  options: CategoryOption[];
-  value: string | null;
-};
-
-function CategorySelectRow({ onValueChange, options, value }: CategorySelectRowProps) {
-  const [open, setOpen] = useState(false);
-  const displayValue = nestedOptionLabel(options, value, "选择分类");
-
-  return (
-    <>
-      <button className="transaction-form__select-row" onClick={() => setOpen(true)} type="button">
-        <span>分类</span>
-        <strong>{displayValue}</strong>
-        <ChevronRight size={18} />
-      </button>
-      <GlassBottomSheet
-        className="glass-bottom-sheet--transaction-picker"
-        hideDefaultHeader
-        onClose={() => setOpen(false)}
-        open={open}
-      >
-        <div className="transaction-form__sheet-header">
-          <ActionButton
-            icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
-            onClick={() => setOpen(false)}
-          />
-          <h2>选择分类</h2>
-          <span aria-hidden />
-        </div>
-        <CategorySelectionList
-          disableParentWithChildren
-          onSelect={(option) => {
-            onValueChange(option.id);
-            setOpen(false);
-          }}
-          options={options}
-          selectedIds={value ? [value] : []}
-        />
-      </GlassBottomSheet>
-    </>
-  );
-}
-
-type AccountSelectRowProps = {
-  allowClear?: boolean;
-  hideLabel?: boolean;
-  label: string;
-  onValueChange: (value: string | null) => void;
-  options: BusinessOption[];
-  placeholder?: string;
-  value: string | null;
-};
-
-function AccountSelectRow({
-  allowClear = false,
-  hideLabel = false,
-  label,
-  onValueChange,
-  options,
-  placeholder = "选择账户",
-  value,
-}: AccountSelectRowProps) {
-  const [open, setOpen] = useState(false);
-  const displayValue = nestedOptionLabel(options, value, placeholder);
-  const primaryOptions = options.filter((option) => !option.parentId);
-
-  return (
-    <>
-      <button
-        className={cn("transaction-form__select-row", hideLabel && "transaction-form__select-row--value-only")}
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        {hideLabel ? null : <span>{label}</span>}
-        <strong>{displayValue}</strong>
-        <ChevronRight size={18} />
-      </button>
-      <GlassBottomSheet
-        className="glass-bottom-sheet--transaction-picker"
-        onClose={() => setOpen(false)}
-        open={open}
-        title={label}
-      >
-        <div className="transaction-form__option-list">
-          {primaryOptions.map((option) => {
-            const children = options.filter((child) => child.parentId === option.id);
-            const selected = option.id === value;
-            return (
-              <section className="transaction-form__option-group" key={option.id}>
-                <button
-                  aria-selected={selected}
-                  className="transaction-form__option-row"
-                  disabled={option.disabled}
-                  onClick={() => {
-                    onValueChange(option.id);
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  <span>{option.label}</span>
-                  {selected ? <Check size={16} strokeWidth={3} /> : null}
-                </button>
-                {children.length > 0 ? (
-                  <div className="transaction-form__suboption-list">
-                    {children.map((child) => {
-                      const childSelected = child.id === value;
-                      return (
-                        <button
-                          aria-selected={childSelected}
-                          className="transaction-form__option-row transaction-form__option-row--sub"
-                          disabled={child.disabled}
-                          key={child.id}
-                          onClick={() => {
-                            onValueChange(child.id);
-                            setOpen(false);
-                          }}
-                          type="button"
-                        >
-                          <span>{child.label}</span>
-                          {childSelected ? <Check size={16} strokeWidth={3} /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-          {allowClear && value ? (
-            <button
-              className="transaction-form__option-row transaction-form__option-row--clear"
-              onClick={() => {
-                onValueChange(null);
-                setOpen(false);
-              }}
-              type="button"
-            >
-              <span>清除选项</span>
-            </button>
-          ) : null}
-        </div>
-      </GlassBottomSheet>
-    </>
-  );
-}
-
-type ToggleCardProps = {
-  children?: ReactNode;
-  checked: boolean;
-  disabled?: boolean;
-  hint?: string;
-  label: string;
-  onCheckedChange: (checked: boolean) => void;
-};
-
-function ToggleCard({ children, checked, disabled, hint, label, onCheckedChange }: ToggleCardProps) {
-  return (
-    <div className="transaction-form__card">
-      <div className="transaction-form__toggle-head">
-        <span>
-          <strong>
-            {label}
-            {hint ? <InlineHint text={hint} /> : null}
-          </strong>
-        </span>
-        <Switch checked={checked} disabled={disabled} label={label} onCheckedChange={onCheckedChange} />
-      </div>
-      {checked ? <div className="transaction-form__toggle-body">{children}</div> : null}
-    </div>
-  );
 }
 
 type AssetLinkCardProps = {
@@ -446,7 +241,7 @@ export function TransactionForm({
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
   const decimalPlaces = setting?.amountDecimalPlaces ?? 2;
-  const idempotencyKey = useRef(crypto.randomUUID());
+  const idempotencyKey = useRef(createClientId("transaction"));
 
   const seedAmountMicros = initial?.grossAmountMicros ?? seed?.grossAmountMicros ?? null;
   const seedAccountSelection = accountSelectionId(
@@ -769,7 +564,7 @@ export function TransactionForm({
     setAttachments((current) => [
       ...current,
       ...files.map((file) => ({
-        id: crypto.randomUUID(),
+        id: createClientId("attachment"),
         name: file.name,
         contentType: file.type,
         sizeBytes: file.size,

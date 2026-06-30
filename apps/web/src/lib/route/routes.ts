@@ -5,6 +5,8 @@ export const routes = {
   ledgers: "/ledgers",
   ledgersJoin: "/ledgers/join",
   categories: "/more/categories",
+  people: "/more/people",
+  autoAccounting: "/more/auto",
   bills: "/bills",
   billNew: "/bills/new",
   bill: (transactionId: string) => `/bills/${transactionId}`,

@@ -17,27 +17,47 @@ export class UpdateAutoPendingDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  categoryId?: string;
+  categoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  subcategoryId?: string;
+  subcategoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  accountId?: string;
+  accountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  subAccountId?: string;
+  subAccountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  personId?: string;
+  fromAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  personId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

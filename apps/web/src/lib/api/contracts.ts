@@ -311,6 +311,60 @@ export type QuickTemplate = {
   archivedAt: string | null;
 };
 
+export type AutoRepeatRule = "daily" | "weekly" | "monthly" | "yearly" | "once";
+
+export type AutoRule = {
+  id: string;
+  ledgerId: string;
+  enabled: boolean;
+  type: TransactionType;
+  amountMicros: string;
+  categoryId: string | null;
+  subcategoryId: string | null;
+  accountId: string | null;
+  subAccountId: string | null;
+  fromAccountId: string | null;
+  fromSubAccountId: string | null;
+  toAccountId: string | null;
+  toSubAccountId: string | null;
+  personId: string | null;
+  note: string | null;
+  repeatRule: AutoRepeatRule;
+  startDate: string;
+  nextRunOn: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+};
+
+export type AutoPendingStatus = "pending" | "confirmed" | "deleted";
+
+export type AutoPendingTransaction = {
+  id: string;
+  ledgerId: string;
+  autoRuleId: string;
+  periodKey: string;
+  scheduledFor: string;
+  status: AutoPendingStatus;
+  type: TransactionType;
+  amountMicros: string;
+  categoryId: string | null;
+  subcategoryId: string | null;
+  accountId: string | null;
+  subAccountId: string | null;
+  fromAccountId: string | null;
+  fromSubAccountId: string | null;
+  toAccountId: string | null;
+  toSubAccountId: string | null;
+  personId: string | null;
+  note: string | null;
+  confirmedTransactionId: string | null;
+  confirmedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Insurance = {
   id: string;
   ledgerId: string;
