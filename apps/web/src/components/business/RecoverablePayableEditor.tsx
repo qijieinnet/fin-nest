@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { Button, IconButton, SelectField, Switch } from "@/components/ui";
+import { createClientId } from "@/lib/id/client-id";
 import type { BusinessOption } from "./business-types";
 import { InlineHint } from "./InlineHint";
 
@@ -24,7 +25,7 @@ type RecoverablePayableEditorProps = {
 };
 
 function makeItem(): RecoverablePayableItem {
-  return { accountId: null, amount: "", id: crypto.randomUUID() };
+  return { accountId: null, amount: "", id: createClientId("relation") };
 }
 
 export function RecoverablePayableEditor({

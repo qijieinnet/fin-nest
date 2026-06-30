@@ -5,7 +5,26 @@ import type { NextConfig } from "next";
 // NEXT_PUBLIC_* 变量在编译时从 process.env 内联，因此需在配置阶段先加载。
 loadDotenv();
 
+function parseAllowedDevOrigins(): string[] {
+  const origins = process.env.WEB_ORIGIN?.split(",") ?? [];
+  const hostnames = new Set<string>();
+
+  for (const origin of origins) {
+    const trimmed = origin.trim();
+    if (!trimmed) continue;
+
+    try {
+      hostnames.add(new URL(trimmed).hostname);
+    } catch {
+      hostnames.add(trimmed);
+    }
+  }
+
+  return [...hostnames];
+}
+
 const nextConfig: NextConfig = {
+  allowedDevOrigins: parseAllowedDevOrigins(),
   reactStrictMode: true,
   // 关闭开发模式左下角的 Next.js Dev Tools 指示器（避免遮挡底部导航）。
   devIndicators: false,

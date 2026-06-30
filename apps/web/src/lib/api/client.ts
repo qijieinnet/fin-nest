@@ -1,4 +1,4 @@
-import { publicEnv } from "@/lib/config/public-env";
+import { resolveApiBaseUrl } from "@/lib/config/public-env";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
 
 type PrimitiveQueryValue = string | number | boolean | null | undefined;
@@ -10,7 +10,7 @@ export type ApiRequestOptions = Omit<RequestInit, "body" | "credentials"> & {
 };
 
 function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
-  const url = new URL(path.startsWith("http") ? path : `${publicEnv.apiBaseUrl}${path}`);
+  const url = new URL(path.startsWith("http") ? path : `${resolveApiBaseUrl()}${path}`);
 
   if (query) {
     for (const [key, rawValue] of Object.entries(query)) {

@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { GlassBottomSheet } from "@/components/glass";
+import { createClientId } from "@/lib/id/client-id";
 
 type SheetStackEntry = {
   className?: string;
@@ -33,7 +34,7 @@ type SheetStackContextValue = {
 const SheetStackContext = createContext<SheetStackContextValue | null>(null);
 
 function makeSheetId(): string {
-  return `sheet-${crypto.randomUUID()}`;
+  return createClientId("sheet");
 }
 
 export function SheetStackProvider({ children }: { children: ReactNode }) {

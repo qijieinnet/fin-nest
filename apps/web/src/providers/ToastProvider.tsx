@@ -4,6 +4,7 @@ import { AnimatePresence } from "framer-motion";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Toast, type ToastItem, type ToastTone } from "@/components/ui";
+import { createClientId } from "@/lib/id/client-id";
 
 type ToastInput = {
   message: string;
@@ -33,7 +34,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback(
     ({ message, title, tone = "info" }: ToastInput) => {
-      const id = crypto.randomUUID();
+      const id = createClientId("toast");
       const toast: ToastItem = { id, message, title, tone };
       setToasts((current) => [...current, toast].slice(-3));
       const timer = window.setTimeout(() => dismiss(id), 3200);

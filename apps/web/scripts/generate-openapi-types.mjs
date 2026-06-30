@@ -7,7 +7,11 @@ import { spawnSync } from "node:child_process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(__dirname, "..");
 const output = resolve(appRoot, "src/lib/generated/api-types.ts");
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+const apiBaseUrl =
+  configuredApiBaseUrl && configuredApiBaseUrl !== "auto"
+    ? configuredApiBaseUrl
+    : "http://localhost:4000";
 const schemaUrl = process.env.OPENAPI_SCHEMA_URL ?? `${apiBaseUrl.replace(/\/$/, "")}/docs-json`;
 
 mkdirSync(dirname(output), { recursive: true });
