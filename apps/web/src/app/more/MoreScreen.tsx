@@ -5,6 +5,7 @@ import { ChevronRight, LogOut, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MobileAppShell, MobileTabBar } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
+import { useCategories } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger } from "@/providers";
 
@@ -13,6 +14,7 @@ export function MoreScreen() {
   const queryClient = useQueryClient();
   const { clearUser, user } = useAuth();
   const { clearLedger, currentLedger, ledgers } = useLedger();
+  const categoriesQuery = useCategories(currentLedger?.id ?? null);
 
   const logout = useMutation({
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
@@ -26,6 +28,12 @@ export function MoreScreen() {
 
   const avatarChar = (user?.alias ?? user?.account ?? "?").slice(0, 1).toUpperCase();
   const subtitle = [user?.account, user?.email].filter(Boolean).join(" · ");
+  const categories = categoriesQuery.data ?? [];
+  const expenseCount = categories.filter((category) => category.type === "expense").length;
+  const incomeCount = categories.filter((category) => category.type === "income").length;
+  const categoryCountText = categoriesQuery.isPending
+    ? "加载中"
+    : `${expenseCount + incomeCount} 个分类`;
 
   return (
     <MobileAppShell>
@@ -71,6 +79,21 @@ export function MoreScreen() {
             </span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {ledgers.length} 个账本
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+        </section>
+
+        {/* 分类管理入口 */}
+        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left"
+            onClick={() => router.push(routes.categories)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">分类管理</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {categoryCountText}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>

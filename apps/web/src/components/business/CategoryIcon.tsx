@@ -47,12 +47,14 @@ type CategoryIconProps = {
 };
 
 export function CategoryIcon({ color, icon = "receipt" }: CategoryIconProps) {
+  const content = iconMap[icon] ?? <span className="text-[18px] leading-none">{icon}</span>;
+
   return (
     <span
       className="biz-category-icon"
       style={color ? ({ "--biz-icon-color": color } as CSSProperties) : undefined}
     >
-      {iconMap[icon] ?? iconMap.receipt}
+      {content}
     </span>
   );
 }

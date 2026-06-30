@@ -149,18 +149,26 @@ type EmojiPickerProps = {
   categories?: EmojiCategory[];
 };
 
+type EmojiPickerContentProps = {
+  /** 自定义分类数据，默认使用 iOS 风格全量分组。 */
+  categories?: EmojiCategory[];
+  /** 选中某个 emoji 时触发。 */
+  onSelect: (emoji: string) => void;
+  /** 当前已选 emoji，用于高亮。 */
+  value?: string | null;
+  /** 滚动区最大高度，默认用于独立弹窗。 */
+  maxHeightClassName?: string;
+};
+
 /**
- * 通用 emoji 选择弹窗（Bottom Sheet）。内容与 iOS 表情键盘分组一致，可在新建/编辑账本、分类、账户等任意需要选图标的表单中复用。
+ * Emoji 选择内容区：iOS 风格分组、滚动网格、底部分组切换。可嵌入表单，也可由 EmojiPicker 包成弹窗。
  */
-export function EmojiPicker({
-  open,
-  onClose,
+export function EmojiPickerContent({
+  categories = EMOJI_CATEGORIES,
+  maxHeightClassName = "max-h-[46dvh]",
   onSelect,
   value,
-  title = "选择 Emoji",
-  closeOnSelect = true,
-  categories = EMOJI_CATEGORIES,
-}: EmojiPickerProps) {
+}: EmojiPickerContentProps) {
   const [activeCat, setActiveCat] = useState(categories[0]?.id ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -186,6 +194,74 @@ export function EmojiPicker({
     setActiveCat(id);
   };
 
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className={cn("relative overflow-y-auto pr-1", maxHeightClassName)}
+        onScroll={handleScroll}
+        ref={scrollRef}
+      >
+        {categories.map((category) => (
+          <section
+            key={category.id}
+            ref={(element) => {
+              sectionRefs.current[category.id] = element;
+            }}
+          >
+            <div className="grid grid-cols-8 gap-0.5 pb-2">
+              {category.emojis.map((emoji, index) => (
+                <button
+                  aria-label={emoji}
+                  className={cn(
+                    "flex aspect-square items-center justify-center rounded-xl text-[26px] leading-none transition-colors active:bg-[var(--color-control-pressed)]",
+                    value === emoji ? "bg-[var(--color-tint-soft)]" : "hover:bg-[var(--color-control-fill-muted)]",
+                  )}
+                  key={`${category.id}-${index}-${emoji}`}
+                  onClick={() => onSelect(emoji)}
+                  type="button"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between gap-1 border-t border-[var(--color-border-subtle)] pt-2">
+        {categories.map((category) => (
+          <button
+            aria-label={category.name}
+            className={cn(
+              "flex h-9 flex-1 items-center justify-center rounded-lg text-xl leading-none transition-colors",
+              activeCat === category.id
+                ? "bg-[var(--color-tint-soft)]"
+                : "opacity-60 active:bg-[var(--color-control-fill-muted)]",
+            )}
+            key={category.id}
+            onClick={() => scrollToCategory(category.id)}
+            type="button"
+          >
+            {category.icon}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 通用 emoji 选择弹窗（Bottom Sheet）。内容与 iOS 表情键盘分组一致，可在新建/编辑账本、分类、账户等任意需要选图标的表单中复用。
+ */
+export function EmojiPicker({
+  open,
+  onClose,
+  onSelect,
+  value,
+  title = "选择 Emoji",
+  closeOnSelect = true,
+  categories = EMOJI_CATEGORIES,
+}: EmojiPickerProps) {
   const handleSelect = (emoji: string) => {
     onSelect(emoji);
     if (closeOnSelect) onClose();
@@ -193,61 +269,7 @@ export function EmojiPicker({
 
   return (
     <Sheet onClose={onClose} open={open} title={title}>
-      <div className="flex flex-col gap-2">
-        <div
-          className="relative max-h-[46dvh] overflow-y-auto pr-1"
-          onScroll={handleScroll}
-          ref={scrollRef}
-        >
-          {categories.map((category) => (
-            <section
-              key={category.id}
-              ref={(element) => {
-                sectionRefs.current[category.id] = element;
-              }}
-            >
-              <h3 className="sticky top-0 z-10 bg-[var(--color-bg-elevated)]/90 py-1.5 text-xs font-semibold text-[var(--color-text-muted)] backdrop-blur-sm">
-                {category.name}
-              </h3>
-              <div className="grid grid-cols-8 gap-0.5 pb-2">
-                {category.emojis.map((emoji, index) => (
-                  <button
-                    aria-label={emoji}
-                    className={cn(
-                      "flex aspect-square items-center justify-center rounded-xl text-[26px] leading-none transition-colors active:bg-[var(--color-control-pressed)]",
-                      value === emoji ? "bg-[var(--color-tint-soft)]" : "hover:bg-[var(--color-control-fill-muted)]",
-                    )}
-                    key={`${category.id}-${index}-${emoji}`}
-                    onClick={() => handleSelect(emoji)}
-                    type="button"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between gap-1 border-t border-[var(--color-border-subtle)] pt-2">
-          {categories.map((category) => (
-            <button
-              aria-label={category.name}
-              className={cn(
-                "flex h-9 flex-1 items-center justify-center rounded-lg text-xl leading-none transition-colors",
-                activeCat === category.id
-                  ? "bg-[var(--color-tint-soft)]"
-                  : "opacity-60 active:bg-[var(--color-control-fill-muted)]",
-              )}
-              key={category.id}
-              onClick={() => scrollToCategory(category.id)}
-              type="button"
-            >
-              {category.icon}
-            </button>
-          ))}
-        </div>
-      </div>
+      <EmojiPickerContent categories={categories} onSelect={handleSelect} value={value} />
     </Sheet>
   );
 }
