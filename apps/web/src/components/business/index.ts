@@ -1,6 +1,7 @@
 export { AccountBalanceCard } from "./AccountBalanceCard";
 export { AccountPicker } from "./AccountPicker";
 export { AmountInput } from "./AmountInput";
+export { AssetLinkCard } from "./AssetLinkCard";
 export { AttachmentPicker } from "./AttachmentPicker";
 export { AttachmentPreview } from "./AttachmentPreview";
 export { BudgetProgress } from "./BudgetProgress";
@@ -15,6 +16,7 @@ export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
 export { PersonPicker } from "./PersonPicker";
+export { PersonSelectField } from "./PersonSelectField";
 export { PlanLimitCard } from "./PlanLimitCard";
 export { PlanProgress } from "./PlanProgress";
 export { RecoverablePayableEditor } from "./RecoverablePayableEditor";
@@ -30,6 +32,7 @@ export {
 export { TransactionTypeSwitch } from "./TransactionTypeSwitch";
 export { countActiveFilters, resetFilterValue } from "./filter-utils";
 export { defaultFilterValue } from "./filter-types";
+export type { AssetLinkOption } from "./AssetLinkCard";
 export type { AttachmentItem, BusinessOption, CategoryOption, TransactionType } from "./business-types";
 export type { BusinessFilterValue, FilterField } from "./filter-types";
 export type { CategoryRingSegment } from "./CategoryRingChart";

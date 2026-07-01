@@ -10,6 +10,7 @@ import {
   type BudgetProgress,
   type Category,
   type Insurance,
+  type InsuranceDetail,
   type ItemAsset,
   ledgerApiPath,
   type Person,
@@ -101,6 +102,14 @@ export function useInsurances(ledgerId: string | null) {
     queryFn: () => apiRequest<Insurance[]>(ledgerApiPath(ledgerId!, "/insurances")),
     enabled: Boolean(ledgerId),
     staleTime: 30_000,
+  });
+}
+
+export function useInsurance(ledgerId: string | null, insuranceId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.insurance(ledgerId ?? "none", insuranceId ?? "none"),
+    queryFn: () => apiRequest<InsuranceDetail>(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}`)),
+    enabled: Boolean(ledgerId) && Boolean(insuranceId),
   });
 }
 

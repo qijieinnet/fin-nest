@@ -75,6 +75,12 @@ export class AutoSchedulerService {
             toSubAccountId: rule.toSubAccountId,
             personId: rule.personId,
             note: rule.note,
+            relationPayload:
+              rule.relationPayload === null || rule.relationPayload === undefined
+                ? Prisma.JsonNull
+                : (rule.relationPayload as Prisma.InputJsonValue),
+            insuranceId: rule.insuranceId,
+            itemId: rule.itemId,
           },
         });
         created += 1;

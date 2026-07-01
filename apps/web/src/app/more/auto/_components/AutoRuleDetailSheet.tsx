@@ -2,7 +2,7 @@
 
 import { Edit3, Trash2 } from "lucide-react";
 import { Button, Switch } from "@/components/ui";
-import type { Account, AutoRule, Category, Person } from "@/lib/api";
+import type { Account, AutoRule, Category, Insurance, ItemAsset, Person } from "@/lib/api";
 import {
   accountSummary,
   amountToneClass,
@@ -20,6 +20,8 @@ import {
 type AutoRuleDetailSheetProps = {
   accounts: Account[];
   categories: Category[];
+  insurances: Insurance[];
+  items: ItemAsset[];
   onDelete: () => void;
   onEdit: () => void;
   onToggle: () => void;
@@ -42,6 +44,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export function AutoRuleDetailSheet({
   accounts,
   categories,
+  insurances,
+  items,
   onDelete,
   onEdit,
   onToggle,
@@ -49,6 +53,9 @@ export function AutoRuleDetailSheet({
   pendingToggle = false,
   rule,
 }: AutoRuleDetailSheetProps) {
+  const insuranceName = insurances.find((insurance) => insurance.id === rule.insuranceId)?.name ?? null;
+  const itemName = items.find((item) => item.id === rule.itemId)?.name ?? null;
+  const relationCount = rule.relationPayload?.length ?? 0;
   const summary =
     rule.type === "transfer"
       ? transferAccountSummary(
@@ -103,6 +110,9 @@ export function AutoRuleDetailSheet({
               <DetailRow label="分类" value={summary.fullName} />
               <DetailRow label="账户" value={account.name} />
               <DetailRow label="人员" value={personName(people, rule.personId)} />
+              {relationCount > 0 ? <DetailRow label="可收回 / 需归还" value={`${relationCount} 项`} /> : null}
+              {insuranceName ? <DetailRow label="保险" value={insuranceName} /> : null}
+              {itemName ? <DetailRow label="关联物品" value={itemName} /> : null}
             </>
           )}
           <DetailRow label="重复周期" value={REPEAT_LABELS[rule.repeatRule]} />

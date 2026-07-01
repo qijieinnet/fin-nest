@@ -1,5 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
+import { Type } from "class-transformer";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  ValidateNested,
+} from "class-validator";
+import { TransactionAccountRelationDto } from "../../transactions/dto/create-transaction.dto";
 
 export class CreateAutoRuleDto {
   @ApiProperty({ enum: ["expense", "income", "transfer"] })
@@ -61,6 +73,24 @@ export class CreateAutoRuleDto {
   @IsString()
   @Length(0, 240)
   note?: string;
+
+  @ApiPropertyOptional({ type: [TransactionAccountRelationDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => TransactionAccountRelationDto)
+  relations?: TransactionAccountRelationDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  insuranceId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemId?: string | null;
 
   @ApiProperty({ enum: ["daily", "weekly", "monthly", "yearly", "once"] })
   @IsIn(["daily", "weekly", "monthly", "yearly", "once"])
@@ -144,6 +174,24 @@ export class UpdateAutoRuleDto {
   @IsString()
   @Length(0, 240)
   note?: string;
+
+  @ApiPropertyOptional({ type: [TransactionAccountRelationDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => TransactionAccountRelationDto)
+  relations?: TransactionAccountRelationDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  insuranceId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemId?: string | null;
 
   @ApiPropertyOptional({ enum: ["daily", "weekly", "monthly", "yearly", "once"] })
   @IsOptional()

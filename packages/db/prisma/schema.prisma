@@ -355,6 +355,9 @@ model AutoRule {
   toSubAccountId   String?   @map("to_sub_account_id") @db.Uuid
   personId         String?   @map("person_id") @db.Uuid
   note             String?
+  relationPayload  Json?     @map("relation_payload") @db.JsonB
+  insuranceId      String?   @map("insurance_id") @db.Uuid
+  itemId           String?   @map("item_id") @db.Uuid
   repeatRule       String    @map("repeat_rule")
   startDate        DateTime  @map("start_date") @db.Date
   nextRunOn        DateTime? @map("next_run_on") @db.Date
@@ -387,6 +390,8 @@ model AutoPendingTransaction {
   personId               String?   @map("person_id") @db.Uuid
   note                   String?
   relationPayload        Json?     @map("relation_payload") @db.JsonB
+  insuranceId            String?   @map("insurance_id") @db.Uuid
+  itemId                 String?   @map("item_id") @db.Uuid
   confirmedTransactionId String?   @map("confirmed_transaction_id") @db.Uuid
   confirmedBy            String?   @map("confirmed_by") @db.Uuid
   confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(6)
@@ -414,6 +419,8 @@ model QuickTemplate {
   personId        String?   @map("person_id") @db.Uuid
   note            String?
   relationPayload Json?     @map("relation_payload") @db.JsonB
+  insuranceId     String?   @map("insurance_id") @db.Uuid
+  itemId          String?   @map("item_id") @db.Uuid
   directEnabled   Boolean   @default(false) @map("direct_enabled")
   sortOrder       Int       @default(0) @map("sort_order")
   createdBy       String    @map("created_by") @db.Uuid

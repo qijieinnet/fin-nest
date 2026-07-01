@@ -19,6 +19,9 @@ type PrefillResponse = {
   subAccountId?: string;
   personId?: string;
   note?: string;
+  relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }>;
+  insuranceId?: string | null;
+  itemId?: string | null;
 };
 
 export function NewBillScreen() {
@@ -50,6 +53,9 @@ export function NewBillScreen() {
         accountId: prefillQuery.data.accountId ?? null,
         subAccountId: prefillQuery.data.subAccountId ?? null,
         note: prefillQuery.data.note ?? null,
+        relations: prefillQuery.data.relations ?? null,
+        insuranceId: prefillQuery.data.insuranceId ?? null,
+        itemId: prefillQuery.data.itemId ?? null,
       }
     : undefined;
 

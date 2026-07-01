@@ -14,6 +14,8 @@ export const queryKeys = {
   recordSetting: (ledgerId: string) => ["ledger", ledgerId, "record-setting"] as const,
   quickTemplates: (ledgerId: string) => ["ledger", ledgerId, "quick-templates"] as const,
   insurances: (ledgerId: string) => ["ledger", ledgerId, "insurances"] as const,
+  insurance: (ledgerId: string, insuranceId: string) =>
+    ["ledger", ledgerId, "insurances", insuranceId] as const,
   items: (ledgerId: string) => ["ledger", ledgerId, "items"] as const,
   attachments: (ledgerId: string, ownerType: string, ownerId: string) =>
     ["ledger", ledgerId, "attachments", ownerType, ownerId] as const,

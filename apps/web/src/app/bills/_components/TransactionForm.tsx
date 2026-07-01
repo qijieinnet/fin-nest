@@ -6,11 +6,13 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccountSelectRow,
   AmountInput,
+  AssetLinkCard,
   AttachmentPicker,
   CategorySelectRow,
   DateWheelPicker,
   FieldCard,
   LoadingState,
+  PersonSelectField,
   RecoverablePayableEditor,
   ToggleCard,
   type AttachmentItem,
@@ -94,17 +96,17 @@ function relationAccountKind(type: TransactionType, bucket: RelationBucket): "re
 }
 
 function splitInitialRelations(
-  initial: TransactionDetail | undefined,
+  relations: Array<{ id?: string; accountId: string; relationKind: string; amountMicros: string }>,
   decimalPlaces: number,
 ): Record<RelationBucket, RecoverablePayableItem[]> {
   const buckets: Record<RelationBucket, RecoverablePayableItem[]> = { primary: [], linked: [] };
-  for (const relation of initial?.relations ?? []) {
+  for (const relation of relations) {
     const bucket =
       relation.relationKind === "receivable_from_expense" || relation.relationKind === "payable_from_income"
         ? "primary"
         : "linked";
     buckets[bucket].push({
-      id: relation.id,
+      id: relation.id ?? createClientId("relation"),
       accountId: relation.accountId,
       amount: microsToInput(relation.amountMicros, decimalPlaces),
     });
@@ -148,53 +150,6 @@ async function uploadAttachment(ledgerId: string, transactionId: string, item: P
   });
 }
 
-type AssetLinkCardProps = {
-  checked: boolean;
-  emptyText: string;
-  hint: string;
-  items: Array<{ id: string; icon: string; name: string }>;
-  label: string;
-  onCheckedChange: (checked: boolean) => void;
-  onSelect: (id: string) => void;
-  selectedId: string | null;
-};
-
-function AssetLinkCard({
-  checked,
-  emptyText,
-  hint,
-  items,
-  label,
-  onCheckedChange,
-  onSelect,
-  selectedId,
-}: AssetLinkCardProps) {
-  return (
-    <ToggleCard checked={checked} hint={hint} label={label} onCheckedChange={onCheckedChange}>
-      {items.length === 0 ? (
-        <p className="transaction-form__empty-text">{emptyText}</p>
-      ) : (
-        <div className="transaction-form__chip-row">
-          {items.map((item) => {
-            const selected = item.id === selectedId;
-            return (
-              <button
-                className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
-                key={item.id}
-                onClick={() => onSelect(item.id)}
-                type="button"
-              >
-                <span>{item.icon}</span>
-                {item.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </ToggleCard>
-  );
-}
-
 export type TransactionSeed = {
   type?: TransactionType;
   grossAmountMicros?: string | null;
@@ -204,6 +159,9 @@ export type TransactionSeed = {
   accountId?: string | null;
   subAccountId?: string | null;
   note?: string | null;
+  relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }> | null;
+  insuranceId?: string | null;
+  itemId?: string | null;
 };
 
 type TransactionFormProps = {
@@ -249,8 +207,8 @@ export function TransactionForm({
     initial?.subAccountId ?? seed?.subAccountId,
   );
   const initialBuckets = useMemo(
-    () => splitInitialRelations(initial, decimalPlaces),
-    [decimalPlaces, initial],
+    () => splitInitialRelations(initial?.relations ?? seed?.relations ?? [], decimalPlaces),
+    [decimalPlaces, initial, seed?.relations],
   );
 
   const [type, setType] = useState<TransactionType>(initial?.type ?? seed?.type ?? "expense");
@@ -280,8 +238,10 @@ export function TransactionForm({
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentsRef = useRef<PendingAttachment[]>([]);
   // 编辑模式下，回显已有的保险/物品关联（后端关联为 upsert 幂等，重新保存不会重复）。
-  const initialInsuranceId = initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ?? null;
-  const initialItemId = initial?.links?.find((link) => link.linkedType === "item")?.linkedId ?? null;
+  const initialInsuranceId =
+    initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ?? seed?.insuranceId ?? null;
+  const initialItemId =
+    initial?.links?.find((link) => link.linkedType === "item")?.linkedId ?? seed?.itemId ?? null;
   const [insuranceEnabled, setInsuranceEnabled] = useState(Boolean(initialInsuranceId));
   const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(initialInsuranceId);
   const [itemEnabled, setItemEnabled] = useState(Boolean(initialItemId));
@@ -653,7 +613,7 @@ export function TransactionForm({
       case "person":
         if (!showPersonCard) return null;
         return (
-          <ToggleCard
+          <PersonSelectField
             checked={personEnabled}
             disabled={personRequired}
             key="person"
@@ -662,23 +622,10 @@ export function TransactionForm({
               setPersonEnabled(checked);
               if (!checked) setPersonId(null);
             }}
-          >
-            <div className="transaction-form__people-row">
-              {peopleOpts.map((person) => {
-                const selected = person.id === personId;
-                return (
-                  <button
-                    className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
-                    key={person.id}
-                    onClick={() => setPersonId(person.id)}
-                    type="button"
-                  >
-                    {person.label}
-                  </button>
-                );
-              })}
-            </div>
-          </ToggleCard>
+            onValueChange={setPersonId}
+            options={peopleOpts}
+            value={personId}
+          />
         );
       case "date":
         return (

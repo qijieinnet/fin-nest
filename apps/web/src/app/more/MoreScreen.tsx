@@ -5,7 +5,14 @@ import { ChevronRight, LogOut, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MobileAppShell, MobileTabBar } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
-import { useAutoPending, useAutoRules, useCategories, usePeople } from "@/lib/data/records";
+import {
+  useAutoPending,
+  useAutoRules,
+  useCategories,
+  useInsurances,
+  usePeople,
+  useQuickTemplates,
+} from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger } from "@/providers";
 
@@ -18,6 +25,8 @@ export function MoreScreen() {
   const peopleQuery = usePeople(currentLedger?.id ?? null);
   const autoRulesQuery = useAutoRules(currentLedger?.id ?? null);
   const autoPendingQuery = useAutoPending(currentLedger?.id ?? null);
+  const quickTemplatesQuery = useQuickTemplates(currentLedger?.id ?? null);
+  const insurancesQuery = useInsurances(currentLedger?.id ?? null);
 
   const logout = useMutation({
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
@@ -46,6 +55,13 @@ export function MoreScreen() {
       : autoPendingCount > 0
         ? `${autoPendingCount} 条待确认`
         : `${autoRules.length} 条规则`;
+  const quickCountText = quickTemplatesQuery.isPending
+    ? "加载中"
+    : `${quickTemplatesQuery.data?.length ?? 0} 个模板`;
+  const insuranceActiveCount = (insurancesQuery.data ?? []).filter(
+    (insurance) => !insurance.terminatedAt,
+  ).length;
+  const insuranceCountText = insurancesQuery.isPending ? "加载中" : `${insuranceActiveCount} 份在保`;
 
   return (
     <MobileAppShell>
@@ -121,7 +137,7 @@ export function MoreScreen() {
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
           <button
-            className="flex w-full items-center px-[18px] py-[15px] text-left"
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
             onClick={() => router.push(routes.autoAccounting)}
             type="button"
           >
@@ -129,6 +145,37 @@ export function MoreScreen() {
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {autoCountText}
             </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+            onClick={() => router.push(routes.quickTemplates)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">快速记账</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {quickCountText}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+            onClick={() => router.push(routes.insurances)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">保险管理</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {insuranceCountText}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left"
+            onClick={() => router.push(routes.recordSettings)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">记账设置</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">字段展示与排序</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>

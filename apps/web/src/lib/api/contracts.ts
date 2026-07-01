@@ -306,12 +306,21 @@ export type QuickTemplate = {
   subAccountId: string | null;
   personId: string | null;
   note: string | null;
+  relationPayload: AutoRelation[] | null;
+  insuranceId: string | null;
+  itemId: string | null;
   directEnabled: boolean;
   sortOrder: number;
   archivedAt: string | null;
 };
 
 export type AutoRepeatRule = "daily" | "weekly" | "monthly" | "yearly" | "once";
+
+export type AutoRelation = {
+  accountId: string;
+  relationKind: string;
+  amountMicros: string;
+};
 
 export type AutoRule = {
   id: string;
@@ -329,6 +338,9 @@ export type AutoRule = {
   toSubAccountId: string | null;
   personId: string | null;
   note: string | null;
+  relationPayload: AutoRelation[] | null;
+  insuranceId: string | null;
+  itemId: string | null;
   repeatRule: AutoRepeatRule;
   startDate: string;
   nextRunOn: string | null;
@@ -386,6 +398,17 @@ export type Insurance = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+};
+
+export type InsuranceInsuredPerson = {
+  insuranceId: string;
+  personId: string;
+};
+
+export type InsuranceDetail = Insurance & {
+  insuredPeople: InsuranceInsuredPerson[];
+  linkedTransactions: Transaction[];
+  totalExpenseMicros: string;
 };
 
 export type ItemAsset = {

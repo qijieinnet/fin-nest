@@ -13,7 +13,15 @@ import {
   type AutoPendingTransaction,
   type AutoRule,
 } from "@/lib/api";
-import { useAccounts, useAutoPending, useAutoRules, useCategories, usePeople } from "@/lib/data/records";
+import {
+  useAccounts,
+  useAutoPending,
+  useAutoRules,
+  useCategories,
+  useInsurances,
+  useItems,
+  usePeople,
+} from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
@@ -50,10 +58,14 @@ export function AutoScreen() {
   const categoriesQuery = useCategories(ledgerId);
   const accountsQuery = useAccounts(ledgerId);
   const peopleQuery = usePeople(ledgerId);
+  const insurancesQuery = useInsurances(ledgerId);
+  const itemsQuery = useItems(ledgerId);
 
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
+  const insurances = insurancesQuery.data ?? [];
+  const items = itemsQuery.data ?? [];
   const rules = rulesQuery.data ?? [];
   const pending = pendingQuery.data ?? [];
   const activeRuleCount = rules.filter((rule) => rule.enabled).length;
@@ -166,6 +178,8 @@ export function AutoScreen() {
         <AutoRuleEditorSheet
           accounts={accounts}
           categories={categories}
+          insurances={insurances}
+          items={items}
           ledgerId={ledgerId}
           people={people}
           rule={rule}
@@ -198,6 +212,8 @@ export function AutoScreen() {
         <AutoRuleDetailSheet
           accounts={accounts}
           categories={categories}
+          insurances={insurances}
+          items={items}
           onDelete={() => setRulePendingDelete(rule)}
           onEdit={() => openEditor(rule)}
           onToggle={() => toggleRule.mutate(rule)}

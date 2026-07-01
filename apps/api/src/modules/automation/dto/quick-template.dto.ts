@@ -1,6 +1,19 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Min,
+  ValidateNested,
+} from "class-validator";
+import { TransactionAccountRelationDto } from "../../transactions/dto/create-transaction.dto";
 
 export class CreateQuickTemplateDto {
   @ApiProperty({ enum: ["expense", "income"] })
@@ -48,6 +61,24 @@ export class CreateQuickTemplateDto {
   @IsString()
   @Length(0, 240)
   note?: string;
+
+  @ApiPropertyOptional({ type: [TransactionAccountRelationDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => TransactionAccountRelationDto)
+  relations?: TransactionAccountRelationDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  insuranceId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemId?: string | null;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
