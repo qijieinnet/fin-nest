@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "个人与家庭记账 Web 应用",
     start_url: "/",
     display: "standalone",
-    background_color: "#f6f1ea",
-    theme_color: "#f6f1ea",
+    background_color: "#fefefe",
+    theme_color: "#fefefe",
     orientation: "portrait",
     icons: [
       {

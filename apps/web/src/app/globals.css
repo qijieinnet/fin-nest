@@ -56,11 +56,12 @@ body {
 }
 
 html {
-  background: #eef3fa;
+  background: var(--color-bg-app);
   min-height: 100%;
 }
 
 body {
+  background: var(--color-bg-app);
   min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
