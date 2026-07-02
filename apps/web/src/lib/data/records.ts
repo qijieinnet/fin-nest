@@ -16,6 +16,7 @@ import {
   type ItemDetail,
   type ItemType,
   ledgerApiPath,
+  type LedgerStats,
   type Person,
   type Plan,
   type PlanProgressResult,
@@ -194,6 +195,16 @@ export function useBudgetProgress(ledgerId: string | null, month: string) {
       apiRequest<BudgetProgress>(ledgerApiPath(ledgerId!, "/budgets/progress"), {
         query: { month },
       }),
+    enabled: Boolean(ledgerId),
+    staleTime: 15_000,
+  });
+}
+
+export function useLedgerStats(ledgerId: string | null, month: string) {
+  return useQuery({
+    queryKey: queryKeys.stats(ledgerId ?? "none", month),
+    queryFn: () =>
+      apiRequest<LedgerStats>(ledgerApiPath(ledgerId!, "/stats"), { query: { month } }),
     enabled: Boolean(ledgerId),
     staleTime: 15_000,
   });

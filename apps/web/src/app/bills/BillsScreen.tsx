@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Pencil, Plus, SlidersHorizontal, Trash2, Zap } from "lucide-react";
+import { ChartPie, ChevronDown, Pencil, Plus, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
@@ -139,17 +139,27 @@ export function BillsScreen() {
             <span className="text-base font-bold">{currentLedger?.name ?? "账本"}</span>
             <ChevronDown size={14} className="text-[var(--color-text-muted)]" />
           </button>
-          <label className="relative flex h-8 items-center gap-1.5 rounded-full bg-[var(--color-bg-surface)] px-3 text-[13px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
-            {monthLabel(month)}
-            <ChevronDown size={11} className="text-[var(--color-text-muted)]" />
-            <input
-              aria-label="选择月份"
-              className="absolute inset-0 cursor-pointer opacity-0"
-              onChange={(event) => event.target.value && setMonth(event.target.value)}
-              type="month"
-              value={month}
-            />
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="relative flex h-8 items-center gap-1.5 rounded-full bg-[var(--color-bg-surface)] px-3 text-[13px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
+              {monthLabel(month)}
+              <ChevronDown size={11} className="text-[var(--color-text-muted)]" />
+              <input
+                aria-label="选择月份"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(event) => event.target.value && setMonth(event.target.value)}
+                type="month"
+                value={month}
+              />
+            </label>
+            <button
+              aria-label="统计"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
+              onClick={() => router.push(routes.stats)}
+              type="button"
+            >
+              <ChartPie size={16} />
+            </button>
+          </div>
         </header>
 
         <section className="rounded-[24px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">

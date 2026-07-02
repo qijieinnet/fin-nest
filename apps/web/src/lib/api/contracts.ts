@@ -353,6 +353,37 @@ export type BudgetProgress = {
   categories: Array<BudgetProgressItem & { id: string; categoryId: string }>;
 };
 
+// ---- 统计契约 ----
+
+export type StatsSubcategoryEntry = {
+  subcategoryId: string | null;
+  name: string;
+  icon: string | null;
+  amountMicros: string;
+};
+
+export type StatsCategoryEntry = {
+  categoryId: string | null;
+  name: string;
+  icon: string | null;
+  amountMicros: string;
+  subcategories: StatsSubcategoryEntry[];
+};
+
+export type StatsTypeSummary = {
+  totalMicros: string;
+  trend: Array<{ month: string; totalMicros: string }>;
+  categories: StatsCategoryEntry[];
+};
+
+export type LedgerStats = {
+  month: string;
+  /** 趋势覆盖的月份（旧 → 新，最后一个即 month）。 */
+  months: string[];
+  expense: StatsTypeSummary;
+  income: StatsTypeSummary;
+};
+
 export type QuickTemplate = {
   id: string;
   ledgerId: string;

@@ -10,6 +10,7 @@ import { LedgersModule } from "./modules/ledgers/ledgers.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { RecordsModule } from "./modules/records/records.module";
 import { RemindersModule } from "./modules/reminders/reminders.module";
+import { StatsModule } from "./modules/stats/stats.module";
 import { TransactionsModule } from "./modules/transactions/transactions.module";
 
 /**
@@ -29,6 +30,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     RecordsModule,
     PlansModule,
     RemindersModule,
+    StatsModule,
   ],
   controllers: [HealthController],
 })

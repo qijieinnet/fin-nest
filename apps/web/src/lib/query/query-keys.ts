@@ -28,6 +28,7 @@ export const queryKeys = {
     ["ledger", ledgerId, "attachments", ownerType, ownerId] as const,
   budgetProgress: (ledgerId: string, month: string) =>
     ["ledger", ledgerId, "budget-progress", month] as const,
+  stats: (ledgerId: string, month: string) => ["ledger", ledgerId, "stats", month] as const,
   transactions: (ledgerId: string, filters?: unknown) =>
     ["ledger", ledgerId, "transactions", filters ?? null] as const,
   transaction: (ledgerId: string, transactionId: string) =>
