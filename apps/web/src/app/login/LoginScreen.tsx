@@ -41,46 +41,51 @@ export function LoginScreen() {
   const canSubmit = login.trim().length > 0 && password.length >= 8 && !mutation.isPending;
 
   return (
-    <AuthScreenShell subtitle="使用邮箱或账号登录你的记账本。" title="登录">
+    <AuthScreenShell
+      footer={
+        <>
+          还没有账号？{" "}
+          <Link href={routes.register}>注册</Link>
+        </>
+      }
+      subtitle="使用邮箱或账号登录你的记账本。"
+      title="欢迎回来"
+    >
       <form
-        className="flex flex-col gap-4"
+        className="auth-form"
         onSubmit={(event) => {
           event.preventDefault();
           if (canSubmit) mutation.mutate();
         }}
       >
-        <Input
-          autoComplete="username"
-          label="邮箱或账号"
-          name="login"
-          onChange={(event) => setLogin(event.target.value)}
-          placeholder="邮箱或账号"
-          value={login}
-        />
-        <Input
-          autoComplete="current-password"
-          label="密码"
-          name="password"
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="至少 8 位"
-          type="password"
-          value={password}
-        />
+        <div className="auth-fields">
+          <Input
+            autoComplete="username"
+            label="邮箱或账号"
+            name="login"
+            onChange={(event) => setLogin(event.target.value)}
+            placeholder="邮箱或账号"
+            value={login}
+          />
+          <Input
+            autoComplete="current-password"
+            label="密码"
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="至少 8 位"
+            type="password"
+            value={password}
+          />
+        </div>
         {mutation.isError ? (
-          <p className="text-sm text-[var(--color-accent-expense)]">
+          <p className="auth-error">
             {getApiErrorMessage(mutation.error, "登录失败，请检查账号或密码")}
           </p>
         ) : null}
-        <Button className="mt-2" disabled={!canSubmit} type="submit">
+        <Button className="auth-submit" disabled={!canSubmit} type="submit">
           {mutation.isPending ? "登录中…" : "登录"}
         </Button>
       </form>
-      <p className="mt-6 text-center text-sm text-[var(--color-text-secondary)]">
-        还没有账号？{" "}
-        <Link className="font-medium text-[var(--color-tint)]" href={routes.register}>
-          注册
-        </Link>
-      </p>
     </AuthScreenShell>
   );
 }

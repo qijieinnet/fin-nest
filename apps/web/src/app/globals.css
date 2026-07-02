@@ -236,6 +236,215 @@ select:focus-visible {
   font-size: 12px;
 }
 
+/* ==========================================================================
+   登录 / 注册（Auth）—— iOS 26 液态玻璃风格
+   ========================================================================== */
+
+.auth-main {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: calc(60px + env(safe-area-inset-top)) var(--space-page-x)
+    calc(40px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 14% 6%, rgba(10, 132, 255, 0.22), transparent 42%),
+    radial-gradient(circle at 88% 10%, rgba(128, 202, 255, 0.26), transparent 40%),
+    radial-gradient(circle at 82% 94%, rgba(47, 158, 119, 0.16), transparent 46%),
+    radial-gradient(circle at 16% 92%, rgba(240, 140, 90, 0.14), transparent 48%),
+    linear-gradient(180deg, #f7f9fc 0%, #eef3fb 52%, #f6f8fc 100%);
+}
+
+/* 漂浮光斑，营造景深 */
+.auth-main::before,
+.auth-main::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  filter: blur(46px);
+  pointer-events: none;
+}
+
+.auth-main::before {
+  top: -64px;
+  left: -44px;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(10, 132, 255, 0.34), transparent 70%);
+}
+
+.auth-main::after {
+  right: -52px;
+  bottom: -72px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(47, 158, 119, 0.26), transparent 70%);
+}
+
+.auth-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.auth-logo {
+  border-radius: 22px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 14px 30px rgba(76, 110, 170, 0.22);
+  display: inline-flex;
+  height: 78px;
+  width: 78px;
+}
+
+.auth-logo svg {
+  border-radius: 22px;
+  height: 100%;
+  width: 100%;
+}
+
+.auth-hero__heading {
+  display: grid;
+  gap: 5px;
+}
+
+.auth-hero__app {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.auth-hero__title {
+  color: var(--color-text-primary);
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.auth-hero__subtitle {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 300px;
+}
+
+.auth-card {
+  position: relative;
+  -webkit-backdrop-filter: blur(30px) saturate(1.4);
+  backdrop-filter: blur(30px) saturate(1.4);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.52));
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 28px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 24px 60px rgba(38, 50, 56, 0.16);
+  padding: 20px 18px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* iOS 分组内嵌表单 */
+.auth-fields {
+  background: rgba(255, 255, 255, 0.52);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  display: grid;
+  overflow: hidden;
+}
+
+.auth-fields .ui-field {
+  gap: 3px;
+  padding: 10px 16px 12px;
+  position: relative;
+}
+
+.auth-fields .ui-field + .ui-field::before {
+  background: var(--color-border-subtle);
+  content: "";
+  height: 1px;
+  left: 16px;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+.auth-fields .ui-field__label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.auth-fields .ui-input-shell,
+.auth-fields .ui-input-shell--error {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 28px;
+  padding: 0;
+}
+
+.auth-fields .ui-input {
+  font-size: 16px;
+}
+
+.auth-fields .ui-field__error {
+  margin-top: 2px;
+}
+
+.auth-submit {
+  border-radius: 16px;
+  margin-top: 2px;
+  min-height: 52px;
+  width: 100%;
+}
+
+.auth-submit.ui-button--primary:not(:disabled) {
+  background:
+    radial-gradient(circle at 30% 16%, rgba(255, 255, 255, 0.4), transparent 30%),
+    linear-gradient(180deg, #16a6ff, var(--color-tint-strong));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 14px 30px rgba(10, 132, 255, 0.32);
+  color: var(--color-tint-contrast);
+}
+
+.auth-error {
+  color: var(--color-accent-expense);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  text-align: center;
+}
+
+.auth-footer {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin: 0;
+  text-align: center;
+}
+
+.auth-footer a {
+  color: var(--color-tint-strong);
+  font-weight: 650;
+}
+
 .ui-switch {
   background: rgba(120, 120, 128, 0.24);
   border: 0;

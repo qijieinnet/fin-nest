@@ -1,8 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="28" fill="#F6F1EA"/>
-  <circle cx="36" cy="34" r="18" fill="#2F9E77" opacity="0.88"/>
-  <circle cx="91" cy="39" r="22" fill="#F08C5A" opacity="0.85"/>
-  <circle cx="67" cy="88" r="27" fill="#4C7BD9" opacity="0.82"/>
-  <path d="M34 73c0-8.284 6.716-15 15-15h30c8.284 0 15 6.716 15 15v17c0 8.284-6.716 15-15 15H49c-8.284 0-15-6.716-15-15V73Z" fill="#FFFFFF" fill-opacity="0.7"/>
-  <path d="M49 79h30M49 91h18" stroke="#263238" stroke-width="7" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="finNestBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFF4FD"/>
+      <stop offset="1" stop-color="#DBE8F8"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#finNestBg)"/>
+  <circle cx="64" cy="48" r="12" fill="#F1C877"/>
+  <path d="M26 58 Q64 90 102 58" fill="none" stroke="#7295D4" stroke-width="5" stroke-linecap="round"/>
+  <path d="M34 64 Q64 87 94 64" fill="none" stroke="#7295D4" stroke-width="3.4" stroke-linecap="round" opacity="0.6"/>
+  <path d="M43 69 Q64 82 85 69" fill="none" stroke="#7295D4" stroke-width="2.6" stroke-linecap="round" opacity="0.45"/>
 </svg>

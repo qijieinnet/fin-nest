@@ -130,7 +130,7 @@ export function PlansScreen() {
         }}
         plan={planPendingDelete}
       />
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(20px+env(safe-area-inset-top))]">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
         <header className="flex items-center justify-between px-1 pb-3">
           <h1 className="text-base font-bold text-[var(--color-text-primary)]">计划</h1>
           <button

@@ -70,7 +70,7 @@ export function MoreScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(28px+env(safe-area-inset-top))]">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
         {/* 用户信息卡片 */}
         <section className="flex items-center gap-3.5 rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
           <span

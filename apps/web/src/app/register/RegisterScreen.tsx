@@ -58,63 +58,68 @@ export function RegisterScreen() {
     !mutation.isPending;
 
   return (
-    <AuthScreenShell subtitle="创建账号开始记账，首位注册用户即为管理员。" title="注册">
+    <AuthScreenShell
+      footer={
+        <>
+          已有账号？{" "}
+          <Link href={routes.login}>去登录</Link>
+        </>
+      }
+      subtitle="创建账号开始记账，首位注册用户即为管理员。"
+      title="创建账号"
+    >
       <form
-        className="flex flex-col gap-4"
+        className="auth-form"
         onSubmit={(event) => {
           event.preventDefault();
           if (canSubmit) mutation.mutate();
         }}
       >
-        <Input
-          autoComplete="email"
-          label="邮箱"
-          name="email"
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="user@example.com"
-          type="email"
-          value={email}
-        />
-        <Input
-          autoComplete="username"
-          error={accountInvalid ? "仅支持字母、数字、下划线和连字符" : undefined}
-          label="账号"
-          name="account"
-          onChange={(event) => setAccount(event.target.value)}
-          placeholder="3-32 位，用于登录"
-          value={account}
-        />
-        <Input
-          label="昵称"
-          name="alias"
-          onChange={(event) => setAlias(event.target.value)}
-          placeholder="展示名称"
-          value={alias}
-        />
-        <Input
-          autoComplete="new-password"
-          label="密码"
-          name="password"
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="至少 8 位"
-          type="password"
-          value={password}
-        />
+        <div className="auth-fields">
+          <Input
+            autoComplete="email"
+            label="邮箱"
+            name="email"
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="user@example.com"
+            type="email"
+            value={email}
+          />
+          <Input
+            autoComplete="username"
+            error={accountInvalid ? "仅支持字母、数字、下划线和连字符" : undefined}
+            label="账号"
+            name="account"
+            onChange={(event) => setAccount(event.target.value)}
+            placeholder="3-32 位，用于登录"
+            value={account}
+          />
+          <Input
+            label="昵称"
+            name="alias"
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder="展示名称"
+            value={alias}
+          />
+          <Input
+            autoComplete="new-password"
+            label="密码"
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="至少 8 位"
+            type="password"
+            value={password}
+          />
+        </div>
         {mutation.isError ? (
-          <p className="text-sm text-[var(--color-accent-expense)]">
+          <p className="auth-error">
             {getApiErrorMessage(mutation.error, "注册失败，请稍后重试")}
           </p>
         ) : null}
-        <Button className="mt-2" disabled={!canSubmit} type="submit">
+        <Button className="auth-submit" disabled={!canSubmit} type="submit">
           {mutation.isPending ? "注册中…" : "注册"}
         </Button>
       </form>
-      <p className="mt-6 text-center text-sm text-[var(--color-text-secondary)]">
-        已有账号？{" "}
-        <Link className="font-medium text-[var(--color-tint)]" href={routes.login}>
-          去登录
-        </Link>
-      </p>
     </AuthScreenShell>
   );
 }

@@ -129,7 +129,7 @@ export function BillsScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(20px+env(safe-area-inset-top))]">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
         <header className="flex items-end justify-between gap-3 px-1 pb-3">
           <button
             className="flex items-center gap-1.5 text-[var(--color-text-primary)]"
