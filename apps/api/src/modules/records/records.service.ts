@@ -1,5 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { AppError, AuditLogService, DatabaseTransactionService, monthRange, PrismaService } from "@fin-nest/backend";
+import {
+  AppError,
+  AuditLogService,
+  currentMonthKey,
+  DatabaseTransactionService,
+  monthRange,
+  PrismaService,
+} from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { LedgersService } from "../ledgers/ledgers.service";
 import {
@@ -70,14 +77,40 @@ export class RecordsService {
     await this.assertCategory(ledgerId, categoryId);
     await this.txs.run(async (tx) => {
       const subcategories = await tx.subcategory.findMany({ where: { ledgerId, categoryId }, select: { id: true } });
-      const hasTransactions = await tx.transaction.count({
-        where: {
-          ledgerId,
-          deletedAt: null,
-          OR: [{ categoryId }, { subcategoryId: { in: subcategories.map((subcategory) => subcategory.id) } }],
-        },
-      });
-      if (hasTransactions > 0) {
+      const subcategoryIds = subcategories.map((subcategory) => subcategory.id);
+      // schema 无外键，硬删除被引用的分类会留下悬空引用，之后模板/规则执行时持续报错；
+      // 有任何引用（交易、快捷模板、自动规则、待确认）时归档而不是删除。
+      const [hasTransactions, templateRefs, ruleRefs, pendingRefs] = await Promise.all([
+        tx.transaction.count({
+          where: {
+            ledgerId,
+            deletedAt: null,
+            OR: [{ categoryId }, { subcategoryId: { in: subcategoryIds } }],
+          },
+        }),
+        tx.quickTemplate.count({
+          where: {
+            ledgerId,
+            archivedAt: null,
+            OR: [{ categoryId }, { subcategoryId: { in: subcategoryIds } }],
+          },
+        }),
+        tx.autoRule.count({
+          where: {
+            ledgerId,
+            archivedAt: null,
+            OR: [{ categoryId }, { subcategoryId: { in: subcategoryIds } }],
+          },
+        }),
+        tx.autoPendingTransaction.count({
+          where: {
+            ledgerId,
+            status: "pending",
+            OR: [{ categoryId }, { subcategoryId: { in: subcategoryIds } }],
+          },
+        }),
+      ]);
+      if (hasTransactions + templateRefs + ruleRefs + pendingRefs > 0) {
         await tx.category.update({ where: { id: categoryId }, data: { archivedAt: new Date(), updatedBy: userId } });
         await tx.subcategory.updateMany({
           where: { ledgerId, categoryId, archivedAt: null },
@@ -129,10 +162,13 @@ export class RecordsService {
   ): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertSubcategory(ledgerId, categoryId, subcategoryId);
-    const hasTransactions = await this.prisma.client.transaction.count({
-      where: { ledgerId, subcategoryId, deletedAt: null },
-    });
-    if (hasTransactions > 0) {
+    const [hasTransactions, templateRefs, ruleRefs, pendingRefs] = await Promise.all([
+      this.prisma.client.transaction.count({ where: { ledgerId, subcategoryId, deletedAt: null } }),
+      this.prisma.client.quickTemplate.count({ where: { ledgerId, subcategoryId, archivedAt: null } }),
+      this.prisma.client.autoRule.count({ where: { ledgerId, subcategoryId, archivedAt: null } }),
+      this.prisma.client.autoPendingTransaction.count({ where: { ledgerId, subcategoryId, status: "pending" } }),
+    ]);
+    if (hasTransactions + templateRefs + ruleRefs + pendingRefs > 0) {
       await this.prisma.client.subcategory.update({
         where: { id: subcategoryId },
         data: { archivedAt: new Date(), updatedBy: userId },
@@ -170,10 +206,14 @@ export class RecordsService {
     await this.ledgers.assertMember(ledgerId, userId);
     const person = await this.assertPerson(ledgerId, personId);
     if (person.isDefault) throw new AppError("DEFAULT_PERSON_CANNOT_BE_DELETED", "默认人员不能删除", 400);
-    const hasTransactions = await this.prisma.client.transaction.count({
-      where: { ledgerId, personId, deletedAt: null },
-    });
-    if (hasTransactions > 0) {
+    const [hasTransactions, templateRefs, ruleRefs, pendingRefs, insuredRefs] = await Promise.all([
+      this.prisma.client.transaction.count({ where: { ledgerId, personId, deletedAt: null } }),
+      this.prisma.client.quickTemplate.count({ where: { ledgerId, personId, archivedAt: null } }),
+      this.prisma.client.autoRule.count({ where: { ledgerId, personId, archivedAt: null } }),
+      this.prisma.client.autoPendingTransaction.count({ where: { ledgerId, personId, status: "pending" } }),
+      this.prisma.client.insuranceInsuredPerson.count({ where: { personId } }),
+    ]);
+    if (hasTransactions + templateRefs + ruleRefs + pendingRefs + insuredRefs > 0) {
       await this.prisma.client.person.update({
         where: { id: personId },
         data: { archivedAt: new Date(), updatedBy: userId },
@@ -220,7 +260,7 @@ export class RecordsService {
   async getStatistics(ledgerId: string, userId: string, query: StatisticsQueryDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     const type = query.type ?? "expense";
-    const month = query.month ?? currentMonth();
+    const month = query.month ?? currentMonthKey();
     const { start, end } = monthRange(month);
     const trendMonths = lastMonths(month, 6);
     const trendStart = monthRange(trendMonths[0]!).start;
@@ -363,10 +403,6 @@ export class RecordsService {
     if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
     return person;
   }
-}
-
-function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
 }
 
 function lastMonths(month: string, count: number): string[] {

@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString, Matches } from "class-validator";
+import { Type } from "class-transformer";
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from "class-validator";
 
 export class ListTransactionsQueryDto {
   @ApiPropertyOptional({ enum: ["expense", "income", "transfer"] })
@@ -60,4 +61,19 @@ export class ListTransactionsQueryDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({ description: "单页条数，默认 200，最大 500" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: "跳过条数，配合 limit 翻页" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
 }

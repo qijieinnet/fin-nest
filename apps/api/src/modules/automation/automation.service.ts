@@ -4,6 +4,7 @@ import {
   BackgroundJobsService,
   DatabaseTransactionService,
   dateKey,
+  IdempotencyService,
   parseDateOnly,
   PrismaService,
   PrismaTransactionClient,
@@ -55,6 +56,7 @@ export class AutomationService {
     private readonly jobs: BackgroundJobsService,
     private readonly ledgers: LedgersService,
     private readonly transactions: TransactionsService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   async listRules(ledgerId: string, userId: string) {
@@ -302,19 +304,23 @@ export class AutomationService {
 
   async confirmPending(ledgerId: string, pendingId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.txs.run((tx) => this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId));
+    // 确认会创建交易并写多条带账户行锁的分录，放宽默认 5s 事务超时。
+    return this.txs.run((tx) => this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId), {
+      timeout: 20_000,
+    });
   }
 
   async confirmPendingBatch(ledgerId: string, pendingIds: string[], userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     // All-or-nothing: a single failing pending rolls back the whole batch.
+    // 批量条数不定，放宽默认 5s 的 interactive transaction 超时。
     return this.txs.run(async (tx) => {
       const transactions = [];
       for (const pendingId of pendingIds) {
         transactions.push(await this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId));
       }
       return transactions;
-    });
+    }, { timeout: 60_000 });
   }
 
   private async confirmPendingInTransaction(
@@ -338,8 +344,10 @@ export class AutomationService {
       insuranceId: pending.insuranceId,
       itemId: pending.itemId,
     });
-    await tx.autoPendingTransaction.update({
-      where: { id: pending.id },
+    // 带 status 条件的原子更新：并发确认同一条时，后提交的事务在这里更新到 0 行并回滚，
+    // 避免同一条待确认生成两笔交易。
+    const claimed = await tx.autoPendingTransaction.updateMany({
+      where: { id: pending.id, status: "pending" },
       data: {
         status: "confirmed",
         confirmedTransactionId: transaction.id,
@@ -348,6 +356,9 @@ export class AutomationService {
         updatedBy: userId,
       },
     });
+    if (claimed.count === 0) {
+      throw new AppError("AUTO_PENDING_ALREADY_PROCESSED", "待确认记录已被处理", 409);
+    }
     return transaction;
   }
 
@@ -447,13 +458,24 @@ export class AutomationService {
     };
   }
 
-  async runTemplate(ledgerId: string, templateId: string, userId: string) {
+  async runTemplate(ledgerId: string, templateId: string, userId: string, idempotencyKey?: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     const template = await this.assertTemplate(ledgerId, templateId);
     if (!template.directEnabled)
       throw new AppError("QUICK_TEMPLATE_DIRECT_DISABLED", "模板未开启直接记账", 400);
     if (!template.amountMicros)
       throw new AppError("QUICK_TEMPLATE_AMOUNT_REQUIRED", "直接记账模板必须包含金额", 400);
+    // 直接记账是最容易被双击/重放的入口，与交易创建一样支持 Idempotency-Key。
+    return this.idempotency.run({ scope: `quick_template.run:${templateId}`, key: idempotencyKey, userId }, () =>
+      this.runTemplateInner(ledgerId, template, userId),
+    );
+  }
+
+  private async runTemplateInner(
+    ledgerId: string,
+    template: Prisma.QuickTemplateGetPayload<Record<string, never>>,
+    userId: string,
+  ) {
     return this.txs.run(async (tx) => {
       const transaction = await this.transactions.createInsideExistingTransaction(
         tx,
@@ -467,7 +489,7 @@ export class AutomationService {
         itemId: template.itemId,
       });
       return transaction;
-    });
+    }, { timeout: 20_000 });
   }
 
   private pendingToTransaction(

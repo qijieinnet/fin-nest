@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { Injectable } from "@nestjs/common";
 import { AppError, BackgroundJobsService, PrismaService } from "@fin-nest/backend";
 import { loadConfig } from "@fin-nest/config";
+import { Prisma } from "@fin-nest/db";
 import { Client } from "minio";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { BindAttachmentDto, CreateUploadUrlDto } from "./dto/file.dto";
@@ -60,31 +61,39 @@ export class FilesService {
     if (stat.size > MAX_FILE_SIZE_BYTES) {
       throw new AppError("FILE_TOO_LARGE", "文件大小超过限制", 400);
     }
-    return this.prisma.client.$transaction(async (tx) => {
-      const file = await tx.file.create({
-        data: {
-          ledgerId,
-          ownerUserId: userId,
-          bucket: this.bucket,
-          objectKey: input.objectKey,
-          originalName: input.originalName,
-          mime: input.mime,
-          sizeBytes: BigInt(stat.size),
-          checksum: input.checksum,
-          status: "attached",
-        },
+    try {
+      return await this.prisma.client.$transaction(async (tx) => {
+        const file = await tx.file.create({
+          data: {
+            ledgerId,
+            ownerUserId: userId,
+            bucket: this.bucket,
+            objectKey: input.objectKey,
+            originalName: input.originalName,
+            mime: input.mime,
+            sizeBytes: BigInt(stat.size),
+            checksum: input.checksum,
+            status: "attached",
+          },
+        });
+        const attachment = await tx.attachment.create({
+          data: {
+            ledgerId,
+            fileId: file.id,
+            ownerType: input.ownerType,
+            ownerId: input.ownerId,
+            createdBy: userId,
+          },
+        });
+        return { file, attachment };
       });
-      const attachment = await tx.attachment.create({
-        data: {
-          ledgerId,
-          fileId: file.id,
-          ownerType: input.ownerType,
-          ownerId: input.ownerId,
-          createdBy: userId,
-        },
-      });
-      return { file, attachment };
-    });
+    } catch (error) {
+      // object_key 全局唯一，重复绑定（双击/重放）给出明确的 409 而不是 500。
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new AppError("OBJECT_ALREADY_BOUND", "该上传对象已绑定过附件", 409);
+      }
+      throw error;
+    }
   }
 
   async listAttachments(ledgerId: string, ownerType: string, ownerId: string, userId: string) {

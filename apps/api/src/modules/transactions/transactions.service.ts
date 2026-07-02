@@ -71,7 +71,8 @@ export class TransactionsService {
     return this.prisma.client.transaction.findMany({
       where,
       orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
-      take: 200,
+      take: query.limit ?? 200,
+      skip: query.offset ?? 0,
     });
   }
 
@@ -89,6 +90,7 @@ export class TransactionsService {
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.idempotency.run({ scope: `transaction.create:${ledgerId}`, key: idempotencyKey, userId }, () =>
+      // 每条分录都会加账户行锁（多次往返），放宽默认 5s 事务超时。
       this.txs.run(async (tx) => {
         const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input, options);
         await this.audit.write(
@@ -103,7 +105,7 @@ export class TransactionsService {
           tx,
         );
         return this.getWithRelations(tx, ledgerId, transaction.id);
-      }),
+      }, { timeout: 20_000 }),
     );
   }
 
@@ -131,6 +133,7 @@ export class TransactionsService {
 
   async update(ledgerId: string, transactionId: string, userId: string, input: UpdateTransactionDto) {
     await this.ledgers.assertMember(ledgerId, userId);
+    // 更新会先冲正旧分录再写新分录，每条都加账户行锁，放宽默认 5s 事务超时。
     return this.txs.run(async (tx) => {
       const existing = await tx.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
       if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
@@ -177,11 +180,12 @@ export class TransactionsService {
         tx,
       );
       return this.getWithRelations(tx, ledgerId, updated.id);
-    });
+    }, { timeout: 20_000 });
   }
 
   async delete(ledgerId: string, transactionId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
+    // 删除会冲正每条分录（各自加账户行锁），放宽默认 5s 事务超时。
     await this.txs.run(async (tx) => {
       const existing = await tx.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
       if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
@@ -201,7 +205,7 @@ export class TransactionsService {
         },
         tx,
       );
-    });
+    }, { timeout: 20_000 });
     await this.files.deleteAttachmentsForOwner(ledgerId, "transaction", transactionId);
   }
 

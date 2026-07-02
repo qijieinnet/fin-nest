@@ -7,6 +7,7 @@ import {
   parseDateOnly,
   PrismaService,
   PrismaTransactionClient,
+  todayKey,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 
@@ -24,7 +25,8 @@ export class AutoSchedulerService {
   ) {}
 
   async generateDuePending(payload: AutoSchedulePayload = {}): Promise<{ created: number }> {
-    const until = payload.until ? parseDateOnly(payload.until) : new Date();
+    // “今天”按应用时区判定；nextRunOn 是 UTC-midnight date-only，直接与 now 比较会晚 8 小时才生成。
+    const until = payload.until ? parseDateOnly(payload.until) : parseDateOnly(todayKey());
     const rules = await this.prisma.client.autoRule.findMany({
       where: {
         ledgerId: payload.ledgerId,

@@ -14,6 +14,8 @@ export class WorkerRunnerService {
   async runOnce(): Promise<{ processed: number; created: number }> {
     let processed = 0;
     let created = 0;
+    // 回收 worker 崩溃遗留的 running 任务，否则它们会永远卡在 running 状态。
+    await this.jobs.requeueStale(10 * 60_000);
     while (true) {
       const job = await this.jobs.claimNext(`worker-${process.pid}`);
       if (!job) break;

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@fin-nest/db";
+import { AppError } from "../errors/app-error";
 import { PrismaService } from "../prisma/prisma.service";
 import { serializeBigInts } from "../serialization/bigint-serialize.interceptor";
 import { assertIdempotencyKey, hashIdempotencyKey } from "./idempotency";
@@ -12,11 +13,17 @@ export type IdempotencyContext = {
   userId?: string | null;
 };
 
+// 占位记录（response 为 null）超过该时长视为遗留（进程崩溃未清理），允许接管重跑。
+const STALE_RESERVATION_MS = 5 * 60 * 1000;
+
+type Reservation<T> = { kind: "reserved" } | { kind: "replay"; response: T };
+
 /**
- * Replay protection for money-mutating writes. The first request runs `fn` and stores its
- * (bigint-serialized) response keyed by hash(scope, key); retries with the same key return the
- * stored response instead of re-executing, so a double-submit cannot create duplicate ledger
- * entries. Concurrent duplicates are resolved by the unique constraint on `key_hash`.
+ * Replay protection for money-mutating writes. The key is RESERVED (inserted with a null
+ * response) before `fn` runs, so a concurrent duplicate hits the unique constraint before any
+ * side effect executes: it either replays the stored response or gets a 409 while the first
+ * request is still in flight. On failure the reservation is released so the client can retry
+ * with the same key.
  */
 @Injectable()
 export class IdempotencyService {
@@ -27,28 +34,57 @@ export class IdempotencyService {
     if (!normalized) return fn();
 
     const keyHash = hashIdempotencyKey(context.scope, normalized);
-    const existing = await this.prisma.client.idempotencyKey.findUnique({ where: { keyHash } });
-    if (existing) return existing.response as T;
+    const reservation = await this.reserve<T>(keyHash, context);
+    if (reservation.kind === "replay") return reservation.response;
 
-    const result = await fn();
+    try {
+      const result = await fn();
+      await this.prisma.client.idempotencyKey.update({
+        where: { keyHash },
+        data: { response: toJsonValue(result) },
+      });
+      return result;
+    } catch (error) {
+      // 失败时释放占位，让携带同一 key 的重试可以重新执行。
+      await this.prisma.client.idempotencyKey.delete({ where: { keyHash } }).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /** 尝试插入占位；已存在时：有响应→重放，执行中→409，遗留占位→接管后重试一次。 */
+  private async reserve<T>(
+    keyHash: string,
+    context: IdempotencyContext,
+    isRetry = false,
+  ): Promise<Reservation<T>> {
     try {
       await this.prisma.client.idempotencyKey.create({
         data: {
           keyHash,
           scope: context.scope,
           userId: context.userId ?? null,
-          response: toJsonValue(result),
+          response: Prisma.DbNull,
         },
       });
+      return { kind: "reserved" };
     } catch (error) {
-      // A concurrent request with the same key won the insert; return its stored response.
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        const stored = await this.prisma.client.idempotencyKey.findUnique({ where: { keyHash } });
-        if (stored) return stored.response as T;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+        throw error;
       }
-      throw error;
     }
-    return result;
+
+    const existing = await this.prisma.client.idempotencyKey.findUnique({ where: { keyHash } });
+    if (existing && existing.response !== null) {
+      return { kind: "replay", response: existing.response as T };
+    }
+    const staleBefore = new Date(Date.now() - STALE_RESERVATION_MS);
+    if (existing && existing.createdAt < staleBefore && !isRetry) {
+      await this.prisma.client.idempotencyKey
+        .deleteMany({ where: { keyHash, response: { equals: Prisma.DbNull } } })
+        .catch(() => undefined);
+      return this.reserve(keyHash, context, true);
+    }
+    throw new AppError("IDEMPOTENCY_KEY_IN_FLIGHT", "相同请求正在处理中，请稍后重试", 409);
   }
 }
 

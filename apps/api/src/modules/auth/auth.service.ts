@@ -23,6 +23,45 @@ export type AuthResult = {
   expiresAt: Date;
 };
 
+// 登录失败限速：同一 登录名+IP 在窗口期内最多失败 N 次。
+// 内存实现，适用于单实例自部署；多实例部署需换成共享存储。
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+class LoginRateLimiter {
+  private readonly failures = new Map<string, { count: number; resetAt: number }>();
+
+  assertAllowed(key: string): void {
+    this.prune();
+    const entry = this.failures.get(key);
+    if (entry && entry.count >= LOGIN_MAX_FAILURES && entry.resetAt > Date.now()) {
+      throw new AppError("TOO_MANY_LOGIN_ATTEMPTS", "登录失败次数过多，请 15 分钟后再试", 429);
+    }
+  }
+
+  recordFailure(key: string): void {
+    const now = Date.now();
+    const entry = this.failures.get(key);
+    if (!entry || entry.resetAt <= now) {
+      this.failures.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+      return;
+    }
+    entry.count += 1;
+  }
+
+  recordSuccess(key: string): void {
+    this.failures.delete(key);
+  }
+
+  private prune(): void {
+    if (this.failures.size < 1000) return;
+    const now = Date.now();
+    for (const [key, entry] of this.failures) {
+      if (entry.resetAt <= now) this.failures.delete(key);
+    }
+  }
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -92,19 +131,23 @@ export class AuthService {
     }, { timeout: 20000 });
   }
 
+  private readonly loginRateLimiter = new LoginRateLimiter();
+
   async login(input: LoginDto, request: RequestWithAuth): Promise<AuthResult> {
+    const rateKey = `${input.login.toLowerCase()}|${this.requestIp(request) ?? "unknown"}`;
+    this.loginRateLimiter.assertAllowed(rateKey);
+
     const user = await this.prisma.client.user.findFirst({
       where: {
         OR: [{ email: input.login }, { account: input.login }],
       },
     });
-    if (!user || user.disabledAt) {
-      throw new AppError("INVALID_CREDENTIALS", "账号或密码错误", 401);
-    }
-    if (!(await verifyPassword(input.password, user.passwordHash))) {
+    if (!user || user.disabledAt || !(await verifyPassword(input.password, user.passwordHash))) {
+      this.loginRateLimiter.recordFailure(rateKey);
       throw new AppError("INVALID_CREDENTIALS", "账号或密码错误", 401);
     }
 
+    this.loginRateLimiter.recordSuccess(rateKey);
     return this.createSessionForUser(user, input.deviceName, request);
   }
 
@@ -165,10 +208,13 @@ export class AuthService {
       throw new AppError("SESSION_INVALID", "登录已失效", 401);
     }
 
-    await this.prisma.client.session.update({
-      where: { id: session.id },
-      data: { lastSeenAt: now },
-    });
+    // lastSeenAt 只是活跃标记，按分钟级节流，避免每个请求都写一次 session 表。
+    if (!session.lastSeenAt || now.getTime() - session.lastSeenAt.getTime() > 60_000) {
+      await this.prisma.client.session.update({
+        where: { id: session.id },
+        data: { lastSeenAt: now },
+      });
+    }
 
     return { kind: "session", userId: user.id, sessionId: session.id, isAdmin: user.isAdmin };
   }
@@ -201,11 +247,15 @@ export class AuthService {
         tokenHash: hashOpaqueToken(token),
         deviceName,
         userAgent: this.getHeader(request, "user-agent"),
-        ip: normalizeIp(this.getHeader(request, "x-forwarded-for") ?? request.ip ?? request.socket?.remoteAddress),
+        ip: this.requestIp(request),
         expiresAt,
       },
     });
     return { user: this.toPublicUser(user), token, expiresAt };
+  }
+
+  private requestIp(request: RequestWithAuth): string | null {
+    return normalizeIp(this.getHeader(request, "x-forwarded-for") ?? request.ip ?? request.socket?.remoteAddress);
   }
 
   private extractSessionToken(request: RequestWithAuth): string | null {

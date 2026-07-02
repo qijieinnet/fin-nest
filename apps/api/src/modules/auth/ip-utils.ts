@@ -2,10 +2,12 @@ import { isIP } from "node:net";
 
 export function normalizeIp(value: string | undefined): string | null {
   if (!value) return null;
-  const first = value.split(",")[0]?.trim();
-  if (!first) return null;
-  if (first.startsWith("::ffff:")) return first.slice("::ffff:".length);
-  return first;
+  // x-forwarded-for 前部由客户端可控（可伪造），最后一跳才是最近的可信代理追加的地址。
+  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  const candidate = parts[parts.length - 1];
+  if (!candidate) return null;
+  if (candidate.startsWith("::ffff:")) return candidate.slice("::ffff:".length);
+  return candidate;
 }
 
 export function ipMatchesAllowedCidrs(ip: string | null, allowedCidrs: string[]): boolean {

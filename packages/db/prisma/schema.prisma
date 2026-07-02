@@ -617,7 +617,8 @@ model IdempotencyKey {
   keyHash   String   @unique @map("key_hash")
   scope     String
   userId    String?  @map("user_id") @db.Uuid
-  response  Json     @db.JsonB
+  // null = 占位中（请求执行中或崩溃遗留）；非 null = 已完成，存储可重放的响应。
+  response  Json?    @db.JsonB
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([createdAt])

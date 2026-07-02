@@ -252,6 +252,14 @@ export class LedgersService {
     if (!membership || membership.removedAt) {
       throw new AppError("LEDGER_ACCESS_DENIED", "无账本访问权限", 403);
     }
+    // 账本软删除后所有子资源接口都应失效，而不是仅从列表消失。
+    const ledger = await this.prisma.client.ledger.findFirst({
+      where: { id: ledgerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!ledger) {
+      throw new AppError("LEDGER_NOT_FOUND", "账本不存在", 404);
+    }
     return membership.role as LedgerRole;
   }
 

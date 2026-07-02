@@ -50,6 +50,19 @@ export class BackgroundJobsService {
     return row ? this.mapRawJob(row) : null;
   }
 
+  /**
+   * 回收遗留的 running 任务（worker 崩溃后锁不会自动释放）。
+   * attempts 在认领时已递增，达到 max_attempts 的任务回收后也不会再被认领。
+   */
+  async requeueStale(olderThanMs: number, now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - olderThanMs);
+    const result = await this.prisma.client.backgroundJob.updateMany({
+      where: { status: "running", lockedAt: { lt: cutoff } },
+      data: { status: "pending", lockedAt: null, lockedBy: null },
+    });
+    return result.count;
+  }
+
   async markSucceeded(jobId: string, tx: Prisma.TransactionClient = this.prisma.client): Promise<void> {
     await tx.backgroundJob.update({
       where: { id: jobId },

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
@@ -56,8 +56,14 @@ export class QuickTemplatesController {
     @CurrentAuth() auth: AuthContext,
     @Param("ledgerId") ledgerId: string,
     @Param("templateId") templateId: string,
+    @Headers("idempotency-key") idempotencyKey?: string,
   ) {
-    return this.automation.runTemplate(ledgerId, templateId, (auth as SessionAuthContext).userId);
+    return this.automation.runTemplate(
+      ledgerId,
+      templateId,
+      (auth as SessionAuthContext).userId,
+      idempotencyKey,
+    );
   }
 
   @Delete(":templateId")

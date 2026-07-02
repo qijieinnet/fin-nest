@@ -140,10 +140,20 @@ export class AccountsService {
 
   async archiveSubAccount(ledgerId: string, accountId: string, subAccountId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertActiveSubAccount(ledgerId, accountId, subAccountId);
-    await this.prisma.client.subAccount.update({
-      where: { id: subAccountId },
-      data: { archivedAt: new Date(), updatedBy: userId },
+    // 子账户余额已计入父账户，带余额归档会留下一笔“看不见的钱”；要求先清零。
+    await this.txs.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+      const subAccount = await tx.subAccount.findFirst({
+        where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
+      });
+      if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+      if (subAccount.balanceMicros !== 0n) {
+        throw new AppError("SUB_ACCOUNT_BALANCE_NOT_ZERO", "请先将子账户余额调整为 0 再归档", 400);
+      }
+      await tx.subAccount.update({
+        where: { id: subAccountId },
+        data: { archivedAt: new Date(), updatedBy: userId },
+      });
     });
   }
 
@@ -203,10 +213,25 @@ export class AccountsService {
 
   async archive(ledgerId: string, accountId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertAccountInLedger(ledgerId, accountId);
-    await this.prisma.client.account.update({
-      where: { id: accountId },
-      data: { archivedAt: new Date(), updatedBy: userId },
+    // 带余额归档会让“当前净资产”（不含归档）与“净资产趋势”（含归档）永久对不上，
+    // 且这笔钱从此在账户页不可见；要求先调整/转账清零。
+    await this.txs.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+      const account = await tx.account.findFirst({ where: { id: accountId, ledgerId } });
+      if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+      if (account.balanceMicros !== 0n) {
+        throw new AppError("ACCOUNT_BALANCE_NOT_ZERO", "请先将账户余额调整为 0 再归档", 400);
+      }
+      const subAccounts = await tx.subAccount.findMany({
+        where: { ledgerId, accountId, archivedAt: null },
+      });
+      if (subAccounts.some((subAccount) => subAccount.balanceMicros !== 0n)) {
+        throw new AppError("SUB_ACCOUNT_BALANCE_NOT_ZERO", "请先将子账户余额调整为 0 再归档", 400);
+      }
+      await tx.account.update({
+        where: { id: accountId },
+        data: { archivedAt: new Date(), updatedBy: userId },
+      });
     });
   }
 
@@ -226,7 +251,9 @@ export class AccountsService {
 
   private async adjustInner(ledgerId: string, accountId: string, userId: string, input: AdjustAccountDto) {
     return this.txs.run(async (tx) => {
-      const account = await tx.account.findFirst({ where: { id: accountId, ledgerId } });
+      // delta 由“当前余额”算出，读之前必须锁行，否则并发写会让 delta 基于过期余额。
+      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+      const account = await tx.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
       if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
       const subAccount = input.subAccountId
         ? await tx.subAccount.findFirst({
@@ -273,7 +300,7 @@ export class AccountsService {
         tx,
       );
       return adjustment;
-    });
+    }, { timeout: 20_000 });
   }
 
   async settle(
@@ -292,6 +319,8 @@ export class AccountsService {
 
   private async settleInner(ledgerId: string, accountId: string, userId: string, input: SettleAccountDto) {
     return this.txs.run(async (tx) => {
+      // settleAll/金额上限校验基于当前余额，读之前锁行，防止并发结算超额。
+      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
       const account = await tx.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
       if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
       if (!["receivable", "payable"].includes(account.type)) {
@@ -337,10 +366,13 @@ export class AccountsService {
         tx,
       );
       return entry;
-    });
+    }, { timeout: 20_000 });
   }
 
   async applyEntry(tx: PrismaTransactionClient, input: AccountEntryInput) {
+    // 事务默认 READ COMMITTED，“读余额再写绝对值”会在并发下丢失更新；
+    // 先锁账户行，让并发写同一账户的事务串行化，entry 的 before/after 才可信。
+    await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${input.accountId}::uuid FOR UPDATE`;
     const account = await tx.account.findFirst({
       where: {
         id: input.accountId,

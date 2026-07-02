@@ -58,6 +58,12 @@ const EnvSchema = z.object({
   MINIO_ACCESS_KEY: z.string().default("minioadmin"),
   MINIO_SECRET_KEY: z.string().default("minioadmin"),
   MINIO_BUCKET: z.string().default("fin-nest"),
+
+  // “今天/本月”按此时区计算（IANA 时区名），影响统计默认月份与自动记账生成时点。
+  APP_TIMEZONE: z.string().default("Asia/Shanghai"),
+
+  // worker 常驻轮询间隔；后台任务（自动记账生成、文件删除重试）依赖 worker 持续运行。
+  WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

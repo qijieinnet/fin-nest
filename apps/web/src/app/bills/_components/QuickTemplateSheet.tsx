@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useRef } from "react";
 import { EmptyState, LoadingState, MoneyText } from "@/components/business";
 import {
   apiRequest,
@@ -11,6 +12,7 @@ import {
   type QuickTemplate,
 } from "@/lib/api";
 import { useQuickTemplates } from "@/lib/data/records";
+import { createClientId } from "@/lib/id/client-id";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 
@@ -22,9 +24,14 @@ export function QuickTemplateSheet() {
   const { showToast } = useToast();
   const templatesQuery = useQuickTemplates(ledgerId);
 
+  // 直接记账成功后 sheet 会关闭，因此每次打开 sheet 用同一个幂等键即可挡住双击/重试造成的重复记账。
+  const idempotencyKey = useRef(createClientId("quick-run"));
   const runDirect = useMutation({
     mutationFn: (templateId: string) =>
-      apiRequest(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/run`), { method: "POST" }),
+      apiRequest(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/run`), {
+        method: "POST",
+        headers: { "idempotency-key": idempotencyKey.current },
+      }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),

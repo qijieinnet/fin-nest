@@ -20,9 +20,42 @@ export function dateKey(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-/** Today's date as a `YYYY-MM-DD` UTC date string. */
+// “今天/本月”按用户时区（APP_TIMEZONE，默认 Asia/Shanghai）计算，
+// 否则 0-8 点记账会落到 UTC 的“昨天”。存储仍统一为 UTC-midnight date-only。
+let cachedFormatter: { timeZone: string; format: Intl.DateTimeFormat } | null = null;
+
+function appDateFormatter(): Intl.DateTimeFormat {
+  const timeZone = process.env.APP_TIMEZONE || "Asia/Shanghai";
+  if (!cachedFormatter || cachedFormatter.timeZone !== timeZone) {
+    let format: Intl.DateTimeFormat;
+    try {
+      format = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    } catch {
+      format = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    }
+    cachedFormatter = { timeZone, format };
+  }
+  return cachedFormatter.format;
+}
+
+/** Today's date as a `YYYY-MM-DD` string in the app time zone. */
 export function todayKey(): string {
-  return dateKey(new Date());
+  return appDateFormatter().format(new Date());
+}
+
+/** Current month as a `YYYY-MM` string in the app time zone. */
+export function currentMonthKey(): string {
+  return todayKey().slice(0, 7);
 }
 
 /**
