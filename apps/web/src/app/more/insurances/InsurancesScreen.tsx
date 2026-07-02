@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { ActionButton, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Insurance } from "@/lib/api";
 import { useInsurances, usePeople } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -175,7 +175,7 @@ export function InsurancesScreen() {
       />
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="添加保单"
             onClick={() => openEditor()}
@@ -183,7 +183,7 @@ export function InsurancesScreen() {
         }
         description="集中管理家庭保单，记录保额、保费与到期日，并可上传保单附件。"
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

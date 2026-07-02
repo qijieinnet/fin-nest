@@ -5,7 +5,7 @@ import { ChevronDown, ChevronLeft, Edit3, Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { ActionButton, Button, MobileAppShell, MobilePage, SegmentedTabs } from "@/components/ui";
+import { Button, IconButton, MobileAppShell, MobilePage, Tabs } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Category, type Subcategory } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -59,7 +59,7 @@ function CategoryCard({
             {category.name}
           </span>
         </button>
-        <ActionButton
+        <IconButton
           className="!h-[34px] !w-[34px] !rounded-[10px]"
           icon={<Edit3 size={17} />}
           label={`编辑${category.name}`}
@@ -215,14 +215,14 @@ export function CategoriesScreen() {
     <MobileAppShell>
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新增一级分类"
             onClick={() => openPrimaryEditor()}
           />
         }
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}
@@ -231,7 +231,7 @@ export function CategoriesScreen() {
         title="分类管理"
       >
         <div className="flex flex-col gap-3 pb-6">
-          <SegmentedTabs
+          <Tabs
             items={SEGMENT_ITEMS}
             onValueChange={(value) => setKind(value as CategoryKind)}
             value={kind}

@@ -5,7 +5,7 @@ import { ChevronLeft, Edit3, Plus, Trash2, Check, X, Repeat2 } from "lucide-reac
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { ActionButton, Button, MobileAppShell, MobilePage, Switch } from "@/components/ui";
+import { IconButton, Button, MobileAppShell, MobilePage, Switch } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -259,27 +259,27 @@ export function AutoScreen() {
           {signedAmountText(item.type, item.amountMicros)}
         </span>
         <div className="flex shrink-0 items-center gap-1">
-          <ActionButton
+          <IconButton
             className="!h-8 !w-8 !rounded-full"
             disabled={busy}
             icon={<Edit3 size={15} />}
             label={`编辑${summary.name}`}
             onClick={() => openPendingEditor(item)}
           />
-          <ActionButton
+          <IconButton
             className="!h-8 !w-8 !rounded-full"
             disabled={busy}
             icon={<X size={15} />}
             label={`忽略${summary.name}`}
             onClick={() => deletePending.mutate(item.id)}
           />
-          <ActionButton
+          <IconButton
             className="!h-8 !w-8 !rounded-full"
             disabled={busy}
             icon={<Check size={16} />}
             label={`确认${summary.name}`}
             onClick={() => confirmPending.mutate(item.id)}
-            tone="primary"
+            variant="primary"
           />
         </div>
       </div>
@@ -373,7 +373,7 @@ export function AutoScreen() {
       />
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建自动记账"
             onClick={() => openEditor()}
@@ -381,7 +381,7 @@ export function AutoScreen() {
         }
         description="按设定周期生成待确认记录，确认后才会正式入账"
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

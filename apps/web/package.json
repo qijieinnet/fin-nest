@@ -16,7 +16,6 @@
     "@fin-nest/shared": "workspace:*",
     "@tanstack/react-query": "^5.101.1",
     "framer-motion": "^12.42.0",
-    "liquid-glass-react": "1.1.1",
     "lucide-react": "^1.21.0",
     "next": "^16.2.9",
     "react": "^19.2.7",

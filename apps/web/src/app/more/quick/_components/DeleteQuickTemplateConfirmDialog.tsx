@@ -3,7 +3,8 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { GlassButton, GlassSurface } from "@/components/glass";
+import { GlassSurface } from "@/components/glass";
+import { Button } from "@/components/ui";
 import type { QuickTemplate } from "@/lib/api";
 
 type DeleteQuickTemplateConfirmDialogProps = {
@@ -61,18 +62,19 @@ export function DeleteQuickTemplateConfirmDialog({
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
-            <GlassButton className="w-full justify-center" disabled={deleting} onClick={onCancel}>
+            <Button className="w-full justify-center" disabled={deleting} glass onClick={onCancel} variant="secondary">
               取消
-            </GlassButton>
-            <GlassButton
+            </Button>
+            <Button
               className="w-full justify-center"
               disabled={deleting}
+              glass
               icon={<Trash2 size={17} />}
               onClick={onConfirm}
-              tone="danger"
+              variant="danger"
             >
               {deleting ? "删除中…" : "删除"}
-            </GlassButton>
+            </Button>
           </div>
         </div>
       </GlassSurface>

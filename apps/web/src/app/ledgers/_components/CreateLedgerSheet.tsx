@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useState } from "react";
-import { ActionButton, EmojiPicker } from "@/components/ui";
+import { IconButton, EmojiPicker } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import {
   API_ENDPOINTS,
@@ -75,16 +75,16 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
     <>
       <div className="flex flex-col gap-4 pb-2">
         <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-          <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+          <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
           <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
             {isEditing ? "编辑账本" : "新建账本"}
           </h2>
-          <ActionButton
+          <IconButton
             disabled={!canSubmit}
             icon={<Check size={24} strokeWidth={2.6} />}
             label={isEditing ? "保存账本" : "创建账本"}
             onClick={submit}
-            tone="primary"
+            variant="primary"
           />
         </div>
 

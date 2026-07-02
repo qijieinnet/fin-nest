@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useState } from "react";
-import { ActionButton, Input } from "@/components/ui";
+import { IconButton, Input } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Person } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
@@ -55,14 +55,14 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>
-        <ActionButton
+        <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存人员"
           onClick={submit}
-          tone="primary"
+          variant="primary"
         />
       </div>
 

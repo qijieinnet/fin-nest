@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CategoryIcon, EmptyState, LoadingState, MoneyText, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { ActionButton, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -172,7 +172,7 @@ export function QuickTemplatesScreen() {
       />
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建快速记账"
             onClick={() => openEditor()}
@@ -180,7 +180,7 @@ export function QuickTemplatesScreen() {
         }
         description="预设常用的一笔，在账单页点闪电即可一键记账。未填金额的会在记账时补填。"
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

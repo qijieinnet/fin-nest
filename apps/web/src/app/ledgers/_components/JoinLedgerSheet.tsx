@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
-import { ActionButton, Button, Input } from "@/components/ui";
+import { IconButton, Button, Input } from "@/components/ui";
 import {
   API_ENDPOINTS,
   apiRequest,
@@ -85,7 +85,7 @@ export function JoinLedgerSheet() {
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           加入账本
         </h2>

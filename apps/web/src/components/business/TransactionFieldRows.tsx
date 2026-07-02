@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import { GlassBottomSheet } from "@/components/glass";
-import { ActionButton, Switch } from "@/components/ui";
+import { IconButton, Switch } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
 import { InlineHint } from "./InlineHint";
@@ -67,7 +67,7 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
         open={open}
       >
         <div className="transaction-form__sheet-header">
-          <ActionButton
+          <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
             label="关闭"
             onClick={() => setOpen(false)}

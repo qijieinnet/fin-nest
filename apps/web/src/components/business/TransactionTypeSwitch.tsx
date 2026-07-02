@@ -1,7 +1,7 @@
 "use client";
 
 import { BadgeDollarSign, CircleDollarSign, CreditCard } from "lucide-react";
-import { GlassSegmentedControl } from "@/components/glass";
+import { Tabs } from "@/components/ui";
 import type { TransactionType } from "./business-types";
 
 type TransactionTypeSwitchProps = {
@@ -17,7 +17,8 @@ const transactionTypeItems = [
 
 export function TransactionTypeSwitch({ onValueChange, value }: TransactionTypeSwitchProps) {
   return (
-    <GlassSegmentedControl
+    <Tabs
+      glass
       items={transactionTypeItems}
       onValueChange={(nextValue) => onValueChange(nextValue as TransactionType)}
       value={value}

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { ActionButton, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Person } from "@/lib/api";
 import { usePeople } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -82,7 +82,7 @@ export function PeopleScreen() {
       <MobilePage
         description="记账时可指定消费/收入归属的人员"
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

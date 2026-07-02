@@ -10,12 +10,13 @@ import {
   CategorySelectRow,
   DateWheelPicker,
   FieldCard,
+  OptionPicker,
   PersonSelectField,
   RecoverablePayableEditor,
   ToggleCard,
   type RecoverablePayableItem,
 } from "@/components/business";
-import { ActionButton, Input, SelectField, Switch, Tabs } from "@/components/ui";
+import { IconButton, Input, Switch, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -316,15 +317,15 @@ export function AutoRuleEditorSheet({
       }}
     >
       <div className="auto-transaction-sheet__header">
-        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {isEditing ? "编辑自动记账" : "新建自动记账"}
         </h2>
-        <ActionButton
+        <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存自动记账"
-          tone="primary"
+          variant="primary"
           type="submit"
         />
       </div>
@@ -482,11 +483,12 @@ export function AutoRuleEditorSheet({
 
           <div className="auto-transaction-sheet__settings">
             <FieldCard className="transaction-form__picker-card" label="自动设置">
-              <SelectField
+              <OptionPicker
                 label="重复周期"
-                menuWidth="trigger"
-                onValueChange={(value) => setRepeatRule(value as AutoRepeatRule)}
-                options={REPEAT_OPTIONS.map((option) => ({ label: option.label, value: option.value }))}
+                onValueChange={(value) => {
+                  if (value) setRepeatRule(value as AutoRepeatRule);
+                }}
+                options={REPEAT_OPTIONS.map((option) => ({ id: option.value, label: option.label }))}
                 value={repeatRule}
               />
             </FieldCard>

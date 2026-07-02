@@ -1,10 +1,11 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { Button, IconButton, SelectField, Switch } from "@/components/ui";
+import { Button, IconButton, Switch } from "@/components/ui";
 import { createClientId } from "@/lib/id/client-id";
 import type { BusinessOption } from "./business-types";
 import { InlineHint } from "./InlineHint";
+import { OptionPicker } from "./OptionPicker";
 
 export type RecoverablePayableItem = {
   accountId: string | null;
@@ -59,26 +60,27 @@ export function RecoverablePayableEditor({
           {items.map((item, index) => (
             <div className="biz-rp-editor__row" key={item.id}>
               <div className="biz-rp-editor__field">
-                <SelectField
+                <OptionPicker
                   className="biz-rp-editor__select"
                   clearLabel="清除账户"
                   clearable
-                  icon={null}
                   label={`项目 ${index + 1}`}
-                  menuWidth="trigger"
                   onValueChange={(accountId) =>
                     onChange(
                       items.map((current) =>
-                        current.id === item.id ? { ...current, accountId: accountId || null } : current,
+                        current.id === item.id ? { ...current, accountId } : current,
                       ),
                     )
                   }
                   options={accountOptions.map((option) => ({
-                    label: option.parentId ? `  ${option.label}` : option.label,
-                    value: option.id,
+                    description: option.parentId
+                      ? accountOptions.find((parent) => parent.id === option.parentId)?.label
+                      : option.description,
+                    id: option.id,
+                    label: option.label,
                   }))}
                   placeholder="选择账户"
-                  value={item.accountId ?? ""}
+                  value={item.accountId}
                 />
               </div>
               <label className="biz-rp-editor__field biz-rp-editor__field--amount">
@@ -99,6 +101,7 @@ export function RecoverablePayableEditor({
                 icon={<Trash2 size={17} />}
                 label="删除关联金额"
                 onClick={() => onChange(items.filter((current) => current.id !== item.id))}
+                variant="muted"
               />
             </div>
           ))}

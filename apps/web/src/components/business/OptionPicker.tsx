@@ -1,41 +1,49 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
-import { Button, Sheet } from "@/components/ui";
+import { GlassBottomSheet } from "@/components/glass";
+import { Button } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
 
 type OptionPickerProps = {
+  className?: string;
   clearLabel?: string;
+  clearable?: boolean;
   emptyText?: string;
   icon?: ReactNode;
   label: string;
-  onOpenChange: (open: boolean) => void;
   onValueChange: (value: string | null) => void;
-  open: boolean;
   options: BusinessOption[];
   placeholder?: string;
   value: string | null;
 };
 
+/** 通用"选一项"组件：触发行 + 底部弹层，所有单选场景统一走这里。 */
 export function OptionPicker({
+  className,
   clearLabel = "清空选择",
+  clearable = false,
   emptyText = "暂无可选项",
   icon,
   label,
-  onOpenChange,
   onValueChange,
-  open,
   options,
   placeholder = "请选择",
   value,
 }: OptionPickerProps) {
+  const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
 
   return (
     <>
-      <button className="biz-picker-trigger" onClick={() => onOpenChange(true)} type="button">
+      <button
+        className={cn("biz-picker-trigger", className)}
+        onClick={() => setOpen(true)}
+        type="button"
+      >
         {icon ? <span className="biz-picker-trigger__icon">{icon}</span> : null}
         <span className="biz-picker-trigger__copy">
           <span className="biz-picker-trigger__label">{label}</span>
@@ -44,14 +52,14 @@ export function OptionPicker({
         <ChevronRight size={18} />
       </button>
 
-      <Sheet onClose={() => onOpenChange(false)} open={open} title={label}>
+      <GlassBottomSheet onClose={() => setOpen(false)} open={open} title={label}>
         <div className="biz-option-list">
-          {value ? (
+          {clearable && value ? (
             <Button
               icon={<X size={16} />}
               onClick={() => {
                 onValueChange(null);
-                onOpenChange(false);
+                setOpen(false);
               }}
               variant="ghost"
             >
@@ -74,7 +82,7 @@ export function OptionPicker({
                 key={option.id}
                 onClick={() => {
                   onValueChange(option.id);
-                  onOpenChange(false);
+                  setOpen(false);
                 }}
                 type="button"
               >
@@ -90,8 +98,7 @@ export function OptionPicker({
             );
           })}
         </div>
-      </Sheet>
+      </GlassBottomSheet>
     </>
   );
 }
-

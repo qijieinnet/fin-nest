@@ -11,7 +11,7 @@ import {
   FieldCard,
   ToggleCard,
 } from "@/components/business";
-import { ActionButton, Input } from "@/components/ui";
+import { IconButton, Input } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -155,13 +155,13 @@ export function AutoPendingEditorSheet({
       }}
     >
       <div className="auto-transaction-sheet__header">
-        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">编辑待确认</h2>
-        <ActionButton
+        <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存待确认记录"
-          tone="primary"
+          variant="primary"
           type="submit"
         />
       </div>

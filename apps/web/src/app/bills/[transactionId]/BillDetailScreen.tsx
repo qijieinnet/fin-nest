@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { AttachmentPreview, CategoryIcon, LoadingState, MoneyText, type AttachmentItem } from "@/components/business";
-import { ActionButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
 import {
   apiRequest,
   type AttachmentRecord,
@@ -300,7 +300,7 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
       <MobilePage
         action={
           transaction ? (
-            <ActionButton
+            <IconButton
               icon={<Pencil size={20} strokeWidth={2.2} />}
               label="编辑记录"
               onClick={() => router.push(routes.billEdit(transaction.id))}
@@ -310,7 +310,7 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
           )
         }
         leading={
-          <ActionButton
+          <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={() => router.back()}

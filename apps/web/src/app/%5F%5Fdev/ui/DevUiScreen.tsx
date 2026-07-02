@@ -33,7 +33,7 @@ import {
   LoadingState,
   MoneyText,
   MonthWheelPicker,
-  PersonPicker,
+  OptionPicker,
   PlanLimitCard,
   RecoverablePayableEditor,
   SwipeActionRow,
@@ -48,14 +48,8 @@ import {
   type RecoverablePayableItem,
   type TransactionType,
 } from "@/components/business";
+import { GlassBottomSheet, GlassMenu } from "@/components/glass";
 import {
-  GlassBottomSheet,
-  GlassButton,
-  GlassMenu,
-  GlassSegmentedControl,
-} from "@/components/glass";
-import {
-  ActionButton,
   Button,
   EmojiPicker,
   IconButton,
@@ -63,7 +57,6 @@ import {
   MobileAppShell,
   MobilePage,
   NavigationBar,
-  SelectField,
   Sheet,
   Switch,
   TabBar,
@@ -194,17 +187,17 @@ export function DevUiScreen() {
           <section className="dev-section">
             <h2>按钮</h2>
             <div className="dev-row">
-              <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" />
-              <ActionButton
+              <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" />
+              <IconButton
                 icon={<Check size={24} strokeWidth={2.6} />}
                 label="确认"
-                tone="primary"
+                variant="primary"
               />
-              <ActionButton
+              <IconButton
                 disabled
                 icon={<Check size={24} strokeWidth={2.6} />}
                 label="确认不可用"
-                tone="primary"
+                variant="primary"
               />
             </div>
             <div className="dev-row">
@@ -215,8 +208,8 @@ export function DevUiScreen() {
               <Button disabled>禁用</Button>
             </div>
             <div className="dev-row">
-              <IconButton icon={<Bell size={18} />} label="提醒" />
-              <IconButton icon={<Settings size={18} />} label="设置" />
+              <IconButton icon={<Bell size={18} />} label="提醒" variant="muted" />
+              <IconButton icon={<Settings size={18} />} label="设置" variant="muted" />
               <Button
                 onClick={() =>
                   showToast({ title: "保存成功", message: "这是一条 Toast。", tone: "success" })
@@ -265,13 +258,13 @@ export function DevUiScreen() {
 
           <section className="dev-section">
             <h2>选择组件</h2>
-            <SelectField
+            <OptionPicker
               label="列表类型"
-              onValueChange={setListType}
+              onValueChange={(value) => setListType(value ?? "standard")}
               options={[
-                { label: "标准", value: "standard" },
-                { label: "日常采购", value: "shopping" },
-                { label: "智能列表", value: "smart" },
+                { id: "standard", label: "标准" },
+                { id: "shopping", label: "日常采购" },
+                { id: "smart", label: "智能列表" },
               ]}
               value={listType}
             />
@@ -282,7 +275,14 @@ export function DevUiScreen() {
               value={categoryId}
             />
             <AccountPicker onValueChange={setAccountId} options={accountOptions} value={accountId} />
-            <PersonPicker onValueChange={setPersonId} options={personOptions} value={personId} />
+            <OptionPicker
+              clearable
+              label="人员"
+              onValueChange={setPersonId}
+              options={personOptions}
+              placeholder="选择人员"
+              value={personId}
+            />
             <DateWheelPicker onValueChange={setDate} value={date} />
             <MonthWheelPicker onValueChange={setMonth} value={month} />
             <FilterBar
@@ -308,7 +308,7 @@ export function DevUiScreen() {
           <section className="dev-section">
             <h2>导航</h2>
             <NavigationBar
-              action={<IconButton icon={<Settings size={18} />} label="设置" />}
+              action={<IconButton icon={<Settings size={18} />} label="设置" variant="muted" />}
               title="账单"
               variant="inline"
             />
@@ -317,16 +317,19 @@ export function DevUiScreen() {
 
           <section className="dev-section">
             <h2>玻璃材质</h2>
-            <GlassSegmentedControl
+            <Tabs
+              glass
               items={typeItems}
               onValueChange={(nextValue) => setType(nextValue as TransactionType)}
               value={type}
             />
             <div className="dev-row">
-              <GlassButton icon={<Plus size={17} />} tone="primary">
+              <Button glass icon={<Plus size={17} />}>
                 记一笔
-              </GlassButton>
-              <GlassButton tone="neutral">筛选</GlassButton>
+              </Button>
+              <Button glass variant="secondary">
+                筛选
+              </Button>
             </div>
             <GlassMenu
               items={[
@@ -350,9 +353,9 @@ export function DevUiScreen() {
               <Button onClick={() => setPlainSheetOpen(true)} variant="secondary">
                 普通 Sheet
               </Button>
-              <GlassButton onClick={() => setGlassSheetOpen(true)} tone="neutral">
+              <Button glass onClick={() => setGlassSheetOpen(true)} variant="secondary">
                 玻璃 Sheet
-              </GlassButton>
+              </Button>
               <Button onClick={openStackLevelOne} variant="ghost">
                 Sheet 栈
               </Button>
@@ -559,8 +562,9 @@ export function DevUiScreen() {
         title="玻璃 Bottom Sheet"
       >
         <div className="dev-sheet-content">
-          <p>玻璃层在 Safari/Firefox 会自动降级为可读的 CSS fallback。</p>
-          <GlassSegmentedControl
+          <p>玻璃层在不支持 backdrop-filter 的浏览器会由 @supports 降级为实底。</p>
+          <Tabs
+            glass
             items={typeItems}
             onValueChange={(nextValue) => setType(nextValue as TransactionType)}
             value={type}

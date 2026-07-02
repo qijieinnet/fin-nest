@@ -25,7 +25,7 @@ export function MobileTabBar() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">
-      <div className="relative w-[min(100vw,430px)]">
+      <div className="relative w-[min(100vw,var(--space-app-width))]">
         <div className="pointer-events-auto absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))]">
           <TabBar
             items={TABS}

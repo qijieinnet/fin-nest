@@ -5,7 +5,7 @@ import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingState } from "@/components/business";
-import { ActionButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
+import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -122,7 +122,7 @@ export function RecordSettingsScreen() {
       <MobilePage
         description="调整记账页面展示哪些字段、以什么顺序展示，以及必填校验。"
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

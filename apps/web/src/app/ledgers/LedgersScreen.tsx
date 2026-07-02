@@ -3,7 +3,7 @@
 import { ChevronLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { ActionButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, useSheetStack } from "@/providers";
 import { CreateLedgerSheet } from "./_components/CreateLedgerSheet";
@@ -37,7 +37,7 @@ export function LedgersScreen() {
     <MobileAppShell>
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建账本"
             onClick={openCreate}
@@ -45,7 +45,7 @@ export function LedgersScreen() {
         }
         description={user ? `${user.alias} · ${user.account}` : undefined}
         leading={
-          <ActionButton
+          <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回"
             onClick={goBack}

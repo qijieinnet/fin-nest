@@ -15,7 +15,7 @@ export { FilterSheet } from "./FilterSheet";
 export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
-export { PersonPicker } from "./PersonPicker";
+export { OptionPicker } from "./OptionPicker";
 export { PersonSelectField } from "./PersonSelectField";
 export { PlanLimitCard } from "./PlanLimitCard";
 export { PlanProgress } from "./PlanProgress";

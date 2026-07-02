@@ -73,7 +73,7 @@ export function AttachmentPreview({ items, onOpen, onRemove, variant = "list" }:
               </span>
             </button>
             {onRemove ? (
-              <IconButton icon={<X size={16} />} label={`移除 ${item.name}`} onClick={() => onRemove(item.id)} />
+              <IconButton icon={<X size={16} />} label={`移除 ${item.name}`} onClick={() => onRemove(item.id)} variant="muted" />
             ) : null}
           </div>
         );

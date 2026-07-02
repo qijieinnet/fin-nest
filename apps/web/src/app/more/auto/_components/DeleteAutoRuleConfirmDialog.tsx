@@ -3,7 +3,8 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { GlassButton, GlassSurface } from "@/components/glass";
+import { GlassSurface } from "@/components/glass";
+import { Button } from "@/components/ui";
 import type { Account, AutoRule, Category } from "@/lib/api";
 import { categorySummary, transferAccountSummary } from "./auto-utils";
 
@@ -74,18 +75,19 @@ export function DeleteAutoRuleConfirmDialog({
             将停止并归档「{summary.name}」这条规则，已生成的待确认记录和历史账单不会自动删除。
           </p>
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
-            <GlassButton className="w-full justify-center" disabled={deleting} onClick={onCancel}>
+            <Button className="w-full justify-center" disabled={deleting} glass onClick={onCancel} variant="secondary">
               取消
-            </GlassButton>
-            <GlassButton
+            </Button>
+            <Button
               className="w-full justify-center"
               disabled={deleting}
+              glass
               icon={<Trash2 size={17} />}
               onClick={onConfirm}
-              tone="danger"
+              variant="danger"
             >
               {deleting ? "删除中…" : "删除"}
-            </GlassButton>
+            </Button>
           </div>
         </div>
       </GlassSurface>

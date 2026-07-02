@@ -14,7 +14,7 @@ import {
   ToggleCard,
   type RecoverablePayableItem,
 } from "@/components/business";
-import { ActionButton, Input, Switch, Tabs } from "@/components/ui";
+import { IconButton, Input, Switch, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -268,15 +268,15 @@ export function QuickTemplateEditorSheet({
       }}
     >
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <ActionButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {isEditing ? "编辑快速记账" : "新建快速记账"}
         </h2>
-        <ActionButton
+        <IconButton
           disabled={!canSubmit || save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存快速记账"
-          tone="primary"
+          variant="primary"
           type="submit"
         />
       </div>

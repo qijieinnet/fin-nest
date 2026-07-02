@@ -5,7 +5,7 @@ import { Check, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useId, useState } from "react";
 import { LoadingState } from "@/components/business";
-import { ActionButton, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, ledgerApiPath } from "@/lib/api";
 import { useLedger } from "@/providers";
 import { TransactionForm, type TransactionSeed } from "../_components/TransactionForm";
@@ -65,9 +65,9 @@ export function NewBillScreen() {
     <MobileAppShell>
       <MobilePage
         action={
-          <ActionButton
+          <IconButton
             aria-disabled={!canSubmit || !ledgerId || waitingForPrefill || saving}
-            className={!canSubmit && ledgerId && !waitingForPrefill && !saving ? "action-button--visual-disabled" : undefined}
+            className={!canSubmit && ledgerId && !waitingForPrefill && !saving ? "ui-icon-button--visual-disabled" : undefined}
             disabled={!ledgerId || waitingForPrefill || saving}
             form={formId}
             icon={<Check size={24} strokeWidth={2.6} />}
@@ -78,12 +78,12 @@ export function NewBillScreen() {
                 submitBlocked?.();
               }
             }}
-            tone="primary"
+            variant="primary"
             type="submit"
           />
         }
         leading={
-          <ActionButton
+          <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
             label="关闭"
             onClick={() => router.back()}
