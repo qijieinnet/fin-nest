@@ -491,6 +491,8 @@ select:focus-visible {
 
 .ui-sheet,
 .glass-bottom-sheet {
+  display: flex;
+  flex-direction: column;
   max-height: min(78dvh, 640px);
   padding: 8px var(--space-sheet-x) calc(18px + env(safe-area-inset-bottom));
 }
@@ -506,8 +508,6 @@ select:focus-visible {
 
 .glass-bottom-sheet--full-height .sheet-body {
   display: flex;
-  height: 100%;
-  min-height: 0;
   padding-top: 0;
 }
 
@@ -524,6 +524,7 @@ select:focus-visible {
 .sheet-header {
   align-items: center;
   display: flex;
+  flex: 0 0 auto;
   gap: 12px;
   justify-content: space-between;
   position: relative;
@@ -544,7 +545,13 @@ select:focus-visible {
   width: var(--space-control-height);
 }
 
+/* 面板整体 overflow:hidden（glass-surface），滚动统一发生在 sheet-body；
+   内容自带滚动区（如记账表单）时因内部 min-height 收缩，这里不会出现双重滚动。 */
 .sheet-body {
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: 14px;
   position: relative;
   z-index: 1;

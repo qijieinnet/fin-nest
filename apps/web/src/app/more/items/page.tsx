@@ -1,12 +1,12 @@
 import { AuthGate } from "@/components/auth/AuthGate";
 import { RequireLedger } from "@/components/auth/RequireLedger";
-import { AccountsScreen } from "./AccountsScreen";
+import { ItemsScreen } from "./ItemsScreen";
 
-export default function AccountsPage() {
+export default function ItemsPage() {
   return (
     <AuthGate mode="protected">
       <RequireLedger>
-        <AccountsScreen />
+        <ItemsScreen />
       </RequireLedger>
     </AuthGate>
   );

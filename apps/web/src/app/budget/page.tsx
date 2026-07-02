@@ -1,12 +1,12 @@
 import { AuthGate } from "@/components/auth/AuthGate";
 import { RequireLedger } from "@/components/auth/RequireLedger";
-import { ComingSoonScreen } from "@/components/app/ComingSoonScreen";
+import { PlansScreen } from "./PlansScreen";
 
-export default function Page() {
+export default function BudgetPage() {
   return (
     <AuthGate mode="protected">
       <RequireLedger>
-        <ComingSoonScreen subtitle="支出限额、收入目标、周期计划将在 F6 上线。" title="计划" />
+        <PlansScreen />
       </RequireLedger>
     </AuthGate>
   );

@@ -8,6 +8,11 @@ export const queryKeys = {
   categories: (ledgerId: string) => ["ledger", ledgerId, "categories"] as const,
   people: (ledgerId: string) => ["ledger", ledgerId, "people"] as const,
   accounts: (ledgerId: string) => ["ledger", ledgerId, "accounts"] as const,
+  accountEntries: (ledgerId: string, accountId: string) =>
+    ["ledger", ledgerId, "accounts", accountId, "entries"] as const,
+  plans: (ledgerId: string) => ["ledger", ledgerId, "plans"] as const,
+  planProgress: (ledgerId: string, planId: string) =>
+    ["ledger", ledgerId, "plans", planId, "progress"] as const,
   autoRules: (ledgerId: string) => ["ledger", ledgerId, "auto-rules"] as const,
   autoPending: (ledgerId: string, status = "pending") =>
     ["ledger", ledgerId, "auto-pending-transactions", status] as const,
@@ -17,6 +22,8 @@ export const queryKeys = {
   insurance: (ledgerId: string, insuranceId: string) =>
     ["ledger", ledgerId, "insurances", insuranceId] as const,
   items: (ledgerId: string) => ["ledger", ledgerId, "items"] as const,
+  item: (ledgerId: string, itemId: string) => ["ledger", ledgerId, "items", itemId] as const,
+  itemTypes: (ledgerId: string) => ["ledger", ledgerId, "item-types"] as const,
   attachments: (ledgerId: string, ownerType: string, ownerId: string) =>
     ["ledger", ledgerId, "attachments", ownerType, ownerId] as const,
   budgetProgress: (ledgerId: string, month: string) =>

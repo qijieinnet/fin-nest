@@ -3,7 +3,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo } from "react";
-import { API_ENDPOINTS, apiRequest, isApiClientError, type PublicUser } from "@/lib/api";
+import {
+  API_ENDPOINTS,
+  apiRequest,
+  clearSessionToken,
+  getSessionToken,
+  isApiClientError,
+  type PublicUser,
+} from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -19,10 +26,14 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function fetchCurrentUser(): Promise<PublicUser | null> {
+  // 本地没有 token 说明未登录，直接短路，省一次必然 401 的请求。
+  if (!getSessionToken()) return null;
+
   try {
     return await apiRequest<PublicUser>(API_ENDPOINTS.me);
   } catch (error) {
     if (isApiClientError(error) && error.status === 401) {
+      clearSessionToken();
       return null;
     }
     throw error;

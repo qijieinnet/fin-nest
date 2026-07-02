@@ -11,6 +11,7 @@ import {
   apiRequest,
   type AuthResult,
   getApiErrorMessage,
+  setSessionToken,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -41,6 +42,7 @@ export function RegisterScreen() {
         },
       }),
     onSuccess: async (result) => {
+      setSessionToken(result.token);
       setUser(result.user);
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
       router.replace(routes.bills);

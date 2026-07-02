@@ -26,6 +26,11 @@ export class ListTransactionsQueryDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  subAccountId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   personId?: string;
 
   @ApiPropertyOptional()

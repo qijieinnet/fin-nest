@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   apiRequest,
   type Account,
+  type AccountEntry,
   type AutoPendingTransaction,
   type AutoRule,
   type AttachmentRecord,
@@ -12,8 +13,12 @@ import {
   type Insurance,
   type InsuranceDetail,
   type ItemAsset,
+  type ItemDetail,
+  type ItemType,
   ledgerApiPath,
   type Person,
+  type Plan,
+  type PlanProgressResult,
   type QuickTemplate,
   type RecordSetting,
   type Transaction,
@@ -54,6 +59,34 @@ export function useAccounts(ledgerId: string | null) {
     queryFn: () => apiRequest<Account[]>(ledgerApiPath(ledgerId!, "/accounts")),
     enabled: Boolean(ledgerId),
     staleTime: 30_000,
+  });
+}
+
+export function useAccountEntries(ledgerId: string | null, accountId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.accountEntries(ledgerId ?? "none", accountId ?? "none"),
+    queryFn: () =>
+      apiRequest<AccountEntry[]>(ledgerApiPath(ledgerId!, `/accounts/${accountId}/entries`)),
+    enabled: Boolean(ledgerId) && Boolean(accountId),
+  });
+}
+
+export function usePlans(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.plans(ledgerId ?? "none"),
+    queryFn: () => apiRequest<Plan[]>(ledgerApiPath(ledgerId!, "/plans")),
+    enabled: Boolean(ledgerId),
+    staleTime: 30_000,
+  });
+}
+
+export function usePlanProgress(ledgerId: string | null, planId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.planProgress(ledgerId ?? "none", planId ?? "none"),
+    queryFn: () =>
+      apiRequest<PlanProgressResult>(ledgerApiPath(ledgerId!, `/plans/${planId}/progress`)),
+    enabled: Boolean(ledgerId) && Boolean(planId),
+    staleTime: 15_000,
   });
 }
 
@@ -119,6 +152,23 @@ export function useItems(ledgerId: string | null) {
     queryFn: () => apiRequest<ItemAsset[]>(ledgerApiPath(ledgerId!, "/items")),
     enabled: Boolean(ledgerId),
     staleTime: 30_000,
+  });
+}
+
+export function useItem(ledgerId: string | null, itemId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.item(ledgerId ?? "none", itemId ?? "none"),
+    queryFn: () => apiRequest<ItemDetail>(ledgerApiPath(ledgerId!, `/items/${itemId}`)),
+    enabled: Boolean(ledgerId) && Boolean(itemId),
+  });
+}
+
+export function useItemTypes(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.itemTypes(ledgerId ?? "none"),
+    queryFn: () => apiRequest<ItemType[]>(ledgerApiPath(ledgerId!, "/item-types")),
+    enabled: Boolean(ledgerId),
+    staleTime: 60_000,
   });
 }
 

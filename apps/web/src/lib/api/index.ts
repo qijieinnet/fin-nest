@@ -12,6 +12,7 @@ export {
   rejectJoinRequestPath,
 } from "./endpoints";
 export { ApiClientError, getApiErrorMessage, isApiClientError } from "./errors";
+export { clearSessionToken, getSessionToken, setSessionToken } from "./token-storage";
 export type { ApiErrorPayload } from "./errors";
 export type {
   Account,
@@ -33,6 +34,8 @@ export type {
   InsuranceDetail,
   InsuranceInsuredPerson,
   ItemAsset,
+  ItemDetail,
+  ItemType,
   JoinRequestStatus,
   Ledger,
   LedgerInvite,
@@ -41,6 +44,13 @@ export type {
   LedgerRole,
   Person,
   PersonSnapshot,
+  Plan,
+  PlanKind,
+  PlanMatchRule,
+  PlanMetric,
+  PlanPeriodProgress,
+  PlanProgressResult,
+  PlanRepeatRule,
   PublicUser,
   QuickTemplate,
   RecordSetting,

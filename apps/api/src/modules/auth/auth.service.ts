@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AppError, AuditLogService, DatabaseTransactionService, PrismaService } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
-import { SESSION_COOKIE_NAME, SESSION_TTL_DAYS } from "./auth.constants";
+import { SESSION_TTL_DAYS } from "./auth.constants";
 import { RequestWithAuth, SessionAuthContext } from "./auth.types";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
@@ -258,19 +258,13 @@ export class AuthService {
     return normalizeIp(this.getHeader(request, "x-forwarded-for") ?? request.ip ?? request.socket?.remoteAddress);
   }
 
+  // 会话凭证只从 Authorization 头读取，不再支持 cookie。
   private extractSessionToken(request: RequestWithAuth): string | null {
     const authorization = this.getHeader(request, "authorization");
     if (authorization?.startsWith("Bearer fn_sess_")) {
       return authorization.slice("Bearer ".length);
     }
-
-    const cookie = this.getHeader(request, "cookie");
-    if (!cookie) return null;
-    const match = cookie
-      .split(";")
-      .map((part) => part.trim())
-      .find((part) => part.startsWith(`${SESSION_COOKIE_NAME}=`));
-    return match ? decodeURIComponent(match.slice(SESSION_COOKIE_NAME.length + 1)) : null;
+    return null;
   }
 
   private getHeader(request: RequestWithAuth, name: string): string | undefined {

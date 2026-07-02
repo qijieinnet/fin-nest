@@ -25,6 +25,12 @@ function parseAllowedDevOrigins(): string[] {
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: parseAllowedDevOrigins(),
+  // 浏览器统一请求同源 /api 前缀：开发环境由 Next 转发到本机 API；
+  // 线上由前置 nginx 先行匹配 /api 转发到 API 服务，不会走到这条 rewrite。
+  async rewrites() {
+    const apiPort = process.env.API_PORT ?? "4000";
+    return [{ source: "/api/:path*", destination: `http://localhost:${apiPort}/:path*` }];
+  },
   reactStrictMode: true,
   // 关闭开发模式左下角的 Next.js Dev Tools 指示器（避免遮挡底部导航）。
   devIndicators: false,

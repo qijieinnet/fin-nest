@@ -76,7 +76,24 @@ export class AssetsService {
 
   async listItems(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.item.findMany({ where: { ledgerId, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    const items = await this.prisma.client.item.findMany({ where: { ledgerId, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    if (!items.length) return items;
+    const links = await this.prisma.client.transactionLink.findMany({ where: { ledgerId, linkedType: "item" } });
+    const transactions = links.length
+      ? await this.prisma.client.transaction.findMany({
+          where: { id: { in: links.map((link) => link.transactionId) }, deletedAt: null },
+        })
+      : [];
+    const transactionById = new Map(transactions.map((tx) => [tx.id, tx]));
+    // 耗材合计：关联支出累加、关联收入（如转卖回款）抵减。
+    const consumablesByItem = new Map<string, bigint>();
+    for (const link of links) {
+      const tx = transactionById.get(link.transactionId);
+      if (!tx) continue;
+      const delta = tx.type === "expense" ? tx.effectiveAmountMicros : tx.type === "income" ? -tx.effectiveAmountMicros : 0n;
+      consumablesByItem.set(link.linkedId, (consumablesByItem.get(link.linkedId) ?? 0n) + delta);
+    }
+    return items.map((item) => ({ ...item, consumablesMicros: (consumablesByItem.get(item.id) ?? 0n).toString() }));
   }
 
   async getItem(ledgerId: string, itemId: string, userId: string) {

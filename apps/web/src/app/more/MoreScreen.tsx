@@ -1,15 +1,16 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, LogOut, WalletCards } from "lucide-react";
+import { ChevronRight, LogOut, Package, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MobileAppShell, MobileTabBar } from "@/components/ui";
-import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
+import { API_ENDPOINTS, apiRequest, clearSessionToken, getApiErrorMessage } from "@/lib/api";
 import {
   useAutoPending,
   useAutoRules,
   useCategories,
   useInsurances,
+  useItems,
   usePeople,
   useQuickTemplates,
 } from "@/lib/data/records";
@@ -27,10 +28,12 @@ export function MoreScreen() {
   const autoPendingQuery = useAutoPending(currentLedger?.id ?? null);
   const quickTemplatesQuery = useQuickTemplates(currentLedger?.id ?? null);
   const insurancesQuery = useInsurances(currentLedger?.id ?? null);
+  const itemsQuery = useItems(currentLedger?.id ?? null);
 
   const logout = useMutation({
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
     onSettled: () => {
+      clearSessionToken();
       clearLedger();
       clearUser();
       queryClient.clear();
@@ -62,6 +65,8 @@ export function MoreScreen() {
     (insurance) => !insurance.terminatedAt,
   ).length;
   const insuranceCountText = insurancesQuery.isPending ? "加载中" : `${insuranceActiveCount} 份在保`;
+  const itemActiveCount = (itemsQuery.data ?? []).filter((item) => !item.scrappedAt).length;
+  const itemCountText = itemsQuery.isPending ? "加载中" : `${itemActiveCount} 件在用`;
 
   return (
     <MobileAppShell>
@@ -112,6 +117,58 @@ export function MoreScreen() {
           </button>
         </section>
 
+        {/* 保险管理入口 */}
+        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <button
+            className="flex w-full items-center gap-3 p-4 text-left"
+            onClick={() => router.push(routes.insurances)}
+            type="button"
+          >
+            <span
+              aria-hidden
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+            >
+              <ShieldCheck size={20} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base text-[var(--color-text-primary)]">保险管理</span>
+              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                保单与缴费管理
+              </span>
+            </span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {insuranceCountText}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+        </section>
+
+        {/* 物品管理入口 */}
+        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <button
+            className="flex w-full items-center gap-3 p-4 text-left"
+            onClick={() => router.push(routes.items)}
+            type="button"
+          >
+            <span
+              aria-hidden
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+            >
+              <Package size={20} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base text-[var(--color-text-primary)]">物品管理</span>
+              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                登记物品折算成本
+              </span>
+            </span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {itemCountText}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+        </section>
+
         {/* 分类 / 人员 / 自动记账入口 */}
         <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
           <button
@@ -155,17 +212,6 @@ export function MoreScreen() {
             <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">快速记账</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {quickCountText}
-            </span>
-            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
-          </button>
-          <button
-            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
-            onClick={() => router.push(routes.insurances)}
-            type="button"
-          >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">保险管理</span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {insuranceCountText}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>

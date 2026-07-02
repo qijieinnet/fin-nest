@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
-import { API_ENDPOINTS, apiRequest, type AuthResult, getApiErrorMessage } from "@/lib/api";
+import {
+  API_ENDPOINTS,
+  apiRequest,
+  type AuthResult,
+  getApiErrorMessage,
+  setSessionToken,
+} from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAuth } from "@/providers";
@@ -25,6 +31,7 @@ export function LoginScreen() {
         body: { login: login.trim(), password },
       }),
     onSuccess: async (result) => {
+      setSessionToken(result.token);
       setUser(result.user);
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
       router.replace(routes.bills);

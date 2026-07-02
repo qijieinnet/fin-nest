@@ -60,13 +60,27 @@ export class TransactionsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
+    // 账户 / 子账户各自是一组 OR（出入账任一侧命中），两者可叠加，用 AND 组合。
+    const sideFilters: Prisma.TransactionWhereInput[] = [];
     if (query.accountId) {
-      where.OR = [
-        { accountId: query.accountId },
-        { fromAccountId: query.accountId },
-        { toAccountId: query.accountId },
-      ];
+      sideFilters.push({
+        OR: [
+          { accountId: query.accountId },
+          { fromAccountId: query.accountId },
+          { toAccountId: query.accountId },
+        ],
+      });
     }
+    if (query.subAccountId) {
+      sideFilters.push({
+        OR: [
+          { subAccountId: query.subAccountId },
+          { fromSubAccountId: query.subAccountId },
+          { toSubAccountId: query.subAccountId },
+        ],
+      });
+    }
+    if (sideFilters.length) where.AND = sideFilters;
     if (query.note) where.note = { contains: query.note };
     return this.prisma.client.transaction.findMany({
       where,

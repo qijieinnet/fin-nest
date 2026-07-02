@@ -144,10 +144,16 @@ export type Account = {
   type: AccountType;
   name: string;
   icon: string | null;
+  /** 账户总余额（含子账户）。 */
   balanceMicros: string;
   includeInNetWorth: boolean;
   creditLimitMicros: string | null;
+  investmentCostMicros: string | null;
   counterparty: string | null;
+  dueDate: string | null;
+  billDay: number | null;
+  repayDay: number | null;
+  settledAt: string | null;
   archivedAt: string | null;
   subAccounts: SubAccount[];
 };
@@ -271,6 +277,7 @@ export type TransactionListQuery = {
   categoryId?: string;
   subcategoryId?: string;
   accountId?: string;
+  subAccountId?: string;
   personId?: string;
   createdBy?: string;
   dateFrom?: string;
@@ -285,6 +292,58 @@ export type BudgetProgressItem = {
   usedMicros: string;
   remainingMicros: string | null;
   percent: number;
+};
+
+// ---- 计划（支出限额 / 收入目标）契约 ----
+
+export type PlanKind = "expense" | "income";
+export type PlanMetric = "amount" | "count";
+export type PlanRepeatRule = "weekly" | "monthly" | "yearly" | "once";
+
+export type PlanMatchRule = {
+  categoryIds?: string[];
+  subcategoryIds?: string[];
+  accountIds?: string[];
+  personIds?: string[];
+  createdByIds?: string[];
+  noteContains?: string;
+};
+
+export type Plan = {
+  id: string;
+  ledgerId: string;
+  kind: PlanKind;
+  metric: PlanMetric;
+  name: string;
+  limitAmountMicros: string | null;
+  limitCount: number | null;
+  startDate: string;
+  repeatRule: PlanRepeatRule;
+  matchRule: PlanMatchRule | null;
+  foresightEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+};
+
+export type PlanPeriodProgress = {
+  start: string;
+  endExclusive: string;
+  actualAmountMicros: string;
+  foresightAmountMicros: string;
+  projectedAmountMicros: string;
+  actualCount: number;
+  foresightCount: number;
+  projectedCount: number;
+  targetAmountMicros: string | null;
+  targetCount: number | null;
+  percent: number;
+};
+
+export type PlanProgressResult = {
+  plan: Plan;
+  period: PlanPeriodProgress;
+  history: PlanPeriodProgress[];
 };
 
 export type BudgetProgress = {
@@ -423,9 +482,26 @@ export type ItemAsset = {
   scrappedAt: string | null;
   scrapDate: string | null;
   sellPriceMicros: string | null;
+  /** 关联记账的耗材合计（支出为正、收入抵减），列表接口返回。 */
+  consumablesMicros?: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+};
+
+export type ItemType = {
+  id: string;
+  ledgerId: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+export type ItemDetail = ItemAsset & {
+  transactionLinks: TransactionLink[];
+  linkedTransactions: Transaction[];
+  totalExpenseMicros: string;
+  usagePercent: number | null;
 };
 
 export type AttachmentRecord = {
