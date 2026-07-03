@@ -35,6 +35,26 @@ export function ledgerJoinRequestsPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/join-requests");
 }
 
+export function ledgerExportJsonPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/export/json");
+}
+
+export function ledgerExportExcelPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/export/excel");
+}
+
+export function ledgerExportExcelTemplatePath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/export/excel-template");
+}
+
+export function ledgerImportJsonPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/import/json");
+}
+
+export function ledgerImportExcelPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/import/excel");
+}
+
 export function approveJoinRequestPath(ledgerId: string, requestId: string): string {
   return ledgerApiPath(ledgerId, `/join-requests/${encodeURIComponent(requestId)}/approve`);
 }

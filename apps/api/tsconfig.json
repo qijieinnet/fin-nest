@@ -2,7 +2,7 @@
   "extends": "@fin-nest/tsconfig/nestjs.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "types": ["node"],
+    "types": ["node", "multer"],
     "outDir": "dist",
     "rootDir": "src"
   },

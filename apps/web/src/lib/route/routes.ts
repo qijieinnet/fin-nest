@@ -11,6 +11,7 @@ export const routes = {
   recordSettings: "/more/settings",
   insurances: "/more/insurances",
   items: "/more/items",
+  importExport: "/more/import-export",
   bills: "/bills",
   billNew: "/bills/new",
   bill: (transactionId: string) => `/bills/${transactionId}`,

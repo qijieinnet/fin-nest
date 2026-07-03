@@ -61,11 +61,10 @@ export function RegisterScreen() {
     <AuthScreenShell
       footer={
         <>
-          已有账号？{" "}
-          <Link href={routes.login}>去登录</Link>
+          已有账号？ <Link href={routes.login}>去登录</Link>
         </>
       }
-      subtitle="创建账号开始记账，首位注册用户即为管理员。"
+      subtitle="首位注册用户即为管理员。"
       title="创建账号"
     >
       <form
@@ -112,9 +111,7 @@ export function RegisterScreen() {
           />
         </div>
         {mutation.isError ? (
-          <p className="auth-error">
-            {getApiErrorMessage(mutation.error, "注册失败，请稍后重试")}
-          </p>
+          <p className="auth-error">{getApiErrorMessage(mutation.error, "注册失败，请稍后重试")}</p>
         ) : null}
         <Button className="auth-submit" disabled={!canSubmit} type="submit">
           {mutation.isPending ? "注册中…" : "注册"}

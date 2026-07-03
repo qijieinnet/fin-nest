@@ -2,48 +2,51 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
-import { GlassSurface } from "@/components/glass/GlassSurface";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "plain" | "muted";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  /** 玻璃材质外观（原 GlassButton），变体词汇与实底一致 */
+  block?: boolean;
+  /** Deprecated: buttons are always flat now. Kept temporarily for older call sites. */
   glass?: boolean;
   icon?: ReactNode;
+  label?: string;
   variant?: ButtonVariant;
 };
 
 export function Button({
+  block = false,
   children,
   className,
   disabled,
-  glass = false,
+  glass: _glass,
   icon,
+  label,
   type = "button",
   variant = "primary",
   ...props
 }: ButtonProps) {
-  const content = (
-    <>
-      {icon ? <span className="ui-button__icon">{icon}</span> : null}
-      <span>{children}</span>
-    </>
-  );
+  void _glass;
+  const iconOnly = Boolean(icon) && !children;
+  const accessibleLabel = iconOnly ? (label ?? props["aria-label"]) : props["aria-label"];
 
   return (
     <button
-      className={cn("ui-button", `ui-button--${variant}`, glass && "ui-button--glass", className)}
+      aria-label={accessibleLabel}
+      className={cn(
+        "ui-button",
+        `ui-button--${variant}`,
+        iconOnly && "ui-button--icon-only",
+        block && "ui-button--block",
+        className,
+      )}
       disabled={disabled}
+      title={iconOnly ? label : props.title}
       type={type}
       {...props}
     >
-      {glass ? (
-        <GlassSurface disabled={disabled} interactive variant="button">
-          <span className="ui-button__content">{content}</span>
-        </GlassSurface>
-      ) : (
-        content
-      )}
+      {icon ? <span className="ui-button__icon">{icon}</span> : null}
+      {children ? <span className="ui-button__label">{children}</span> : null}
     </button>
   );
 }

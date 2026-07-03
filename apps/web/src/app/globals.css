@@ -120,10 +120,21 @@ select:focus-visible {
   transition:
     transform var(--motion-duration-fast) ease,
     background var(--motion-duration-fast) ease,
-    box-shadow var(--motion-duration-fast) ease,
     color var(--motion-duration-fast) ease,
     opacity var(--motion-duration-fast) ease;
   white-space: nowrap;
+}
+
+.ui-button--block {
+  display: flex;
+  width: 100%;
+}
+
+.ui-button--icon-only {
+  aspect-ratio: 1;
+  min-width: var(--space-control-height);
+  padding: 0;
+  width: var(--space-control-height);
 }
 
 .ui-button:active {
@@ -138,36 +149,45 @@ select:focus-visible {
 
 .ui-button--primary {
   background: var(--color-tint);
-  box-shadow: none;
   color: var(--color-tint-contrast);
 }
 
 .ui-button--secondary {
   background: var(--color-control-fill-muted);
-  box-shadow: none;
+  color: var(--color-text-primary);
+}
+
+.ui-button--plain {
+  background: var(--color-bg-surface);
   color: var(--color-text-primary);
 }
 
 .ui-button--ghost {
   background: transparent;
-  box-shadow: none;
   color: var(--color-tint-strong);
 }
 
 .ui-button--danger {
   background: transparent;
-  box-shadow: none;
   color: var(--color-accent-expense);
+}
+
+.ui-button--muted {
+  background: var(--color-control-fill-muted);
+  color: var(--color-text-primary);
 }
 
 .ui-button:disabled {
   background: var(--color-control-fill-muted);
-  box-shadow: none;
   color: var(--color-disabled-text);
 }
 
 .ui-button__icon {
   display: inline-flex;
+}
+
+.ui-button__label {
+  min-width: 0;
 }
 
 .ui-field {
@@ -611,44 +631,6 @@ select:focus-visible {
   color: var(--color-disabled-text);
 }
 
-/* 玻璃材质按钮（Button glass）：外层按钮透明，材质由内层 GlassSurface 提供 */
-.ui-button--glass {
-  background: transparent;
-  box-shadow: none;
-  color: var(--color-text-primary);
-  padding: 0;
-}
-
-.ui-button--glass:disabled {
-  background: transparent;
-}
-
-.ui-button__content {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
-  min-height: var(--space-control-height);
-  padding: 0 16px;
-  position: relative;
-  z-index: 1;
-}
-
-.ui-button--glass.ui-button--primary .glass-surface {
-  background:
-    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.4), transparent 28%),
-    linear-gradient(180deg, #16a6ff, var(--color-tint-strong));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(0, 80, 180, 0.24),
-    0 12px 28px rgba(10, 132, 255, 0.26);
-  color: var(--color-tint-contrast);
-}
-
-.ui-button--glass.ui-button--danger .glass-surface {
-  background: rgba(233, 95, 77, 0.1);
-  color: var(--color-accent-expense);
-}
-
 .glass-menu {
   display: grid;
   padding: 8px;
@@ -996,90 +978,12 @@ select:focus-visible {
 }
 
 .ui-icon-button {
-  -webkit-tap-highlight-color: transparent;
-  -webkit-backdrop-filter: blur(18px) saturate(1.35);
-  align-items: center;
-  aspect-ratio: 1;
-  backdrop-filter: blur(18px) saturate(1.35);
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  display: inline-flex;
-  justify-content: center;
   justify-self: center;
-  min-height: var(--space-control-height);
-  padding: 0;
-  transition:
-    background var(--motion-duration-normal) ease,
-    box-shadow var(--motion-duration-normal) ease,
-    color var(--motion-duration-normal) ease,
-    opacity var(--motion-duration-normal) ease,
-    transform var(--motion-duration-fast) ease;
-  width: var(--space-control-height);
-}
-
-.ui-icon-button:active {
-  transform: scale(0.96);
-}
-
-.ui-icon-button--plain {
-  background:
-    radial-gradient(circle at 30% 16%, rgba(255, 255, 255, 0.96), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(246, 247, 250, 0.66)),
-    rgba(255, 255, 255, 0.56);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.34),
-    0 12px 26px rgba(31, 35, 42, 0.1);
-  color: #111214;
-}
-
-.ui-icon-button--primary {
-  background:
-    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.46), transparent 30%),
-    linear-gradient(180deg, #16a6ff, var(--color-tint-strong));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    inset 0 -1px 0 rgba(0, 77, 176, 0.24),
-    0 14px 30px rgba(10, 132, 255, 0.3);
-  color: var(--color-tint-contrast);
-}
-
-.ui-icon-button--primary:disabled {
-  background:
-    radial-gradient(circle at 30% 16%, rgba(255, 255, 255, 0.36), transparent 32%),
-    linear-gradient(180deg, rgba(220, 222, 224, 0.74), rgba(194, 198, 200, 0.68)),
-    rgba(205, 209, 211, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.46),
-    0 10px 22px rgba(31, 35, 42, 0.08);
-  color: rgba(255, 255, 255, 0.82);
-  cursor: not-allowed;
-  opacity: 1;
-}
-
-.ui-icon-button--muted {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: var(--color-control-fill-muted);
-  box-shadow: none;
-  color: var(--color-text-primary);
-}
-
-.ui-icon-button--muted:disabled {
-  background: var(--color-disabled-fill);
-  color: var(--color-disabled-text);
 }
 
 .ui-icon-button--visual-disabled {
-  background:
-    radial-gradient(circle at 30% 16%, rgba(255, 255, 255, 0.36), transparent 32%),
-    linear-gradient(180deg, rgba(220, 222, 224, 0.74), rgba(194, 198, 200, 0.68)),
-    rgba(205, 209, 211, 0.72);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.46),
-    0 10px 22px rgba(31, 35, 42, 0.08);
-  color: rgba(255, 255, 255, 0.82);
+  background: var(--color-control-fill-muted);
+  color: var(--color-disabled-text);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -1096,14 +1000,6 @@ select:focus-visible {
     background: rgba(255, 255, 255, 0.96);
   }
 
-  .ui-icon-button {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  .ui-icon-button--plain {
-    background: rgba(255, 255, 255, 0.96);
-  }
 }
 
 @media (prefers-contrast: more) {

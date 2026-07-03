@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
+import { Button, type ButtonVariant } from "./Button";
 
 type IconButtonVariant = "plain" | "primary" | "muted";
 
@@ -20,16 +21,18 @@ export function IconButton({
   variant = "plain",
   ...props
 }: IconButtonProps) {
+  const buttonVariant: ButtonVariant = variant === "muted" ? "secondary" : variant;
+
   return (
-    <button
-      aria-label={label}
+    <Button
       className={cn("ui-icon-button", `ui-icon-button--${variant}`, className)}
       disabled={disabled}
+      icon={icon}
+      label={label}
       title={label}
       type={type}
+      variant={buttonVariant}
       {...props}
-    >
-      {icon}
-    </button>
+    />
   );
 }

@@ -5,6 +5,7 @@ import { AccountsModule } from "./modules/accounts/accounts.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { AutomationModule } from "./modules/automation/automation.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { DataTransferModule } from "./modules/data-transfer/data-transfer.module";
 import { FilesModule } from "./modules/files/files.module";
 import { LedgersModule } from "./modules/ledgers/ledgers.module";
 import { PlansModule } from "./modules/plans/plans.module";
@@ -25,6 +26,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     AccountsModule,
     AssetsModule,
     AutomationModule,
+    DataTransferModule,
     FilesModule,
     TransactionsModule,
     RecordsModule,

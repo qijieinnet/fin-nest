@@ -216,12 +216,21 @@ export function MoreScreen() {
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
           <button
-            className="flex w-full items-center px-[18px] py-[15px] text-left"
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
             onClick={() => router.push(routes.recordSettings)}
             type="button"
           >
             <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">记账设置</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">字段展示与排序</span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left"
+            onClick={() => router.push(routes.importExport)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">导入导出</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">备份与 Excel 记账</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>
