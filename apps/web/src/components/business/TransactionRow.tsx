@@ -1,4 +1,4 @@
-import { ChevronRight, CreditCard, Heart } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
 import { CategoryIcon } from "./CategoryIcon";
@@ -23,23 +23,17 @@ type TransactionRowProps = {
 };
 
 export function TransactionRow({
-  accountName,
   amountMicros,
   categoryColor,
   categoryIcon,
-  categoryName,
   description,
   icon,
   meta,
   onClick,
   personName,
-  recordName,
-  time,
   title,
   type,
 }: TransactionRowProps) {
-  const secondary = description ?? accountName;
-  const tag = recordName ?? personName ?? time;
   const content = (
     <>
       <span className="biz-transaction-row__icon">
@@ -47,20 +41,16 @@ export function TransactionRow({
       </span>
       <span className="biz-transaction-row__main">
         <strong>{title}</strong>
-        {secondary ? <small>{secondary}</small> : null}
-        <em>{tag ? `#${tag}` : `#${categoryName}`}</em>
+        {personName ? <small>{personName}</small> : null}
+        {description ? <small>{description}</small> : null}
       </span>
       <span className="biz-transaction-row__side">
-        <MoneyText
-          amountMicros={amountMicros}
-          decimalPlaces={0}
-          showPositiveSign={type === "income"}
-          tone={type === "transfer" ? "transfer" : "auto"}
-          trimTrailingZeros
-        />
+        <MoneyText amountMicros={amountMicros} decimalPlaces={0} tone={type} trimTrailingZeros />
         {meta ? <small>{meta}</small> : null}
       </span>
-      {onClick ? <ChevronRight className="biz-transaction-row__chevron" size={16} strokeWidth={3} /> : null}
+      {onClick ? (
+        <ChevronRight className="biz-transaction-row__chevron" size={16} strokeWidth={3} />
+      ) : null}
     </>
   );
 
@@ -83,7 +73,13 @@ type TransactionGroupProps = {
   totalMicros?: bigint | number | string;
 };
 
-export function TransactionGroup({ children, className, dateLabel, incomeMicros, totalMicros }: TransactionGroupProps) {
+export function TransactionGroup({
+  children,
+  className,
+  dateLabel,
+  incomeMicros,
+  totalMicros,
+}: TransactionGroupProps) {
   return (
     <section className={cn("biz-transaction-group", className)}>
       <header className="biz-transaction-group__header">
@@ -91,15 +87,13 @@ export function TransactionGroup({ children, className, dateLabel, incomeMicros,
         {totalMicros !== undefined || incomeMicros !== undefined ? (
           <span className="biz-transaction-group__summary">
             {totalMicros !== undefined ? (
-              <span>
-                <CreditCard size={20} fill="currentColor" strokeWidth={0} />
+              <span className="biz-transaction-group__summary-item biz-transaction-group__summary-item--expense">
                 <MoneyText amountMicros={totalMicros} decimalPlaces={0} trimTrailingZeros />
               </span>
             ) : null}
             {incomeMicros !== undefined ? (
-              <span>
-                <Heart size={20} fill="currentColor" strokeWidth={0} />
-                <MoneyText amountMicros={incomeMicros} decimalPlaces={0} showPositiveSign trimTrailingZeros />
+              <span className="biz-transaction-group__summary-item biz-transaction-group__summary-item--income">
+                <MoneyText amountMicros={incomeMicros} decimalPlaces={0} trimTrailingZeros />
               </span>
             ) : null}
           </span>

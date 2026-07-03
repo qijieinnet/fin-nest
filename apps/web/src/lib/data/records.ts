@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   apiRequest,
   type Account,
@@ -25,6 +25,7 @@ import {
   type Transaction,
   type TransactionDetail,
   type TransactionListQuery,
+  type TransactionSummary,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 
@@ -215,6 +216,37 @@ export function useTransactions(ledgerId: string | null, filters: TransactionLis
     queryKey: queryKeys.transactions(ledgerId ?? "none", filters),
     queryFn: () =>
       apiRequest<Transaction[]>(ledgerApiPath(ledgerId!, "/transactions"), {
+        query: cleanQuery(filters),
+      }),
+    enabled: Boolean(ledgerId),
+  });
+}
+
+/** 分页拉取交易，配合滚动加载。每页 pageSize 条，返回不足一页即无更多。 */
+export function useInfiniteTransactions(
+  ledgerId: string | null,
+  filters: TransactionListQuery,
+  pageSize = 20,
+) {
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.transactions(ledgerId ?? "none", filters), "paged"],
+    queryFn: ({ pageParam }) =>
+      apiRequest<Transaction[]>(ledgerApiPath(ledgerId!, "/transactions"), {
+        query: { ...cleanQuery(filters), limit: pageSize, offset: pageParam },
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === pageSize ? allPages.length * pageSize : undefined,
+    enabled: Boolean(ledgerId),
+  });
+}
+
+/** 按相同筛选聚合的支出/收入合计（列表分页时汇总卡片用）。 */
+export function useTransactionSummary(ledgerId: string | null, filters: TransactionListQuery) {
+  return useQuery({
+    queryKey: [...queryKeys.transactions(ledgerId ?? "none", filters), "summary"],
+    queryFn: () =>
+      apiRequest<TransactionSummary>(ledgerApiPath(ledgerId!, "/transactions/summary"), {
         query: cleanQuery(filters),
       }),
     enabled: Boolean(ledgerId),

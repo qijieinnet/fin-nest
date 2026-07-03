@@ -16,6 +16,10 @@ type SheetShellProps = {
   renderPanel: (content: ReactNode) => ReactNode;
 };
 
+// 打开的 sheet 数量（支持嵌套/叠加），归零时才恢复页面滚动。
+let openSheetCount = 0;
+let restoreBodyOverflow = "";
+
 export function SheetShell({
   children,
   hideDefaultHeader = false,
@@ -29,6 +33,20 @@ export function SheetShell({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // 打开时锁定底层页面滚动，避免弹层滚动穿透到背景。
+  useEffect(() => {
+    if (!open) return;
+    if (openSheetCount === 0) {
+      restoreBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    openSheetCount += 1;
+    return () => {
+      openSheetCount -= 1;
+      if (openSheetCount === 0) document.body.style.overflow = restoreBodyOverflow;
+    };
+  }, [open]);
 
   const sheet = (
     <AnimatePresence>

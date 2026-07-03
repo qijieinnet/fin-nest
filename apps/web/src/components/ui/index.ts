@@ -1,5 +1,7 @@
 export { Button } from "./Button";
 export { BottomSheet } from "./BottomSheet";
+export { DotBadge } from "./DotBadge";
+export { EdgeFade } from "./EdgeFade";
 export { IconButton } from "./IconButton";
 export { EmojiPicker, EmojiPickerContent, EMOJI_CATEGORIES } from "./EmojiPicker";
 export type { EmojiCategory } from "./EmojiPicker";

@@ -3,7 +3,7 @@
 import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { MobileAppShell, MobileTabBar } from "@/components/ui";
+import { EdgeFade, MobileAppShell, MobileTabBar } from "@/components/ui";
 import type { Account } from "@/lib/api";
 import { useAccounts } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
@@ -171,6 +171,7 @@ export function AccountsScreen() {
         )}
       </main>
 
+      <EdgeFade />
       <MobileTabBar />
     </MobileAppShell>
   );

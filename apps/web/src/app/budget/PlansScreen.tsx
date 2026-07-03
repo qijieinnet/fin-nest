@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Eye, Plus } from "lucide-react";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
-import { MobileAppShell, MobileTabBar, Switch } from "@/components/ui";
+import { EdgeFade, MobileAppShell, MobileTabBar, Switch } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Plan, type PlanKind } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { usePlanProgress, usePlans } from "@/lib/data/records";
@@ -212,6 +212,7 @@ export function PlansScreen() {
         </p>
       </main>
 
+      <EdgeFade />
       <MobileTabBar />
     </MobileAppShell>
   );

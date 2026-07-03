@@ -40,8 +40,7 @@ export class TransactionsService {
     private readonly files: FilesService,
   ) {}
 
-  async list(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
-    await this.ledgers.assertMember(ledgerId, userId);
+  private buildListWhere(ledgerId: string, query: ListTransactionsQueryDto): Prisma.TransactionWhereInput {
     const where: Prisma.TransactionWhereInput = { ledgerId, deletedAt: null };
     if (query.type) where.type = query.type;
     if (query.categoryId) where.categoryId = query.categoryId;
@@ -82,12 +81,35 @@ export class TransactionsService {
     }
     if (sideFilters.length) where.AND = sideFilters;
     if (query.note) where.note = { contains: query.note };
+    return where;
+  }
+
+  async list(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
+    await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.transaction.findMany({
-      where,
+      where: this.buildListWhere(ledgerId, query),
       orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
       take: query.limit ?? 200,
       skip: query.offset ?? 0,
     });
+  }
+
+  /** 按相同筛选（忽略分页）聚合支出 / 收入合计，供列表分页时的汇总卡片使用。 */
+  async summary(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const grouped = await this.prisma.client.transaction.groupBy({
+      by: ["type"],
+      where: this.buildListWhere(ledgerId, query),
+      _sum: { effectiveAmountMicros: true },
+    });
+    let expenseMicros = 0n;
+    let incomeMicros = 0n;
+    for (const row of grouped) {
+      const sum = row._sum.effectiveAmountMicros ?? 0n;
+      if (row.type === "expense") expenseMicros = sum;
+      else if (row.type === "income") incomeMicros = sum;
+    }
+    return { expenseMicros, incomeMicros };
   }
 
   async get(ledgerId: string, transactionId: string, userId: string) {

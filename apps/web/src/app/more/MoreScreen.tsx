@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, LogOut, Package, Shield, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MobileAppShell, MobileTabBar } from "@/components/ui";
+import { EdgeFade, MobileAppShell, MobileTabBar } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, clearSessionToken, getApiErrorMessage } from "@/lib/api";
 import {
   useAutoPending,
@@ -250,6 +250,15 @@ export function MoreScreen() {
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
           <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+            onClick={() => router.push(routes.systemSettings)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">系统设置</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">账单页显示偏好</span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
             className="flex w-full items-center px-[18px] py-[15px] text-left"
             onClick={() => router.push(routes.importExport)}
             type="button"
@@ -277,6 +286,7 @@ export function MoreScreen() {
         ) : null}
       </main>
 
+      <EdgeFade />
       <MobileTabBar />
     </MobileAppShell>
   );

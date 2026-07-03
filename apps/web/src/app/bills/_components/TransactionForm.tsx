@@ -19,7 +19,6 @@ import {
   type RecoverablePayableItem,
 } from "@/components/business";
 import { Input, Tabs } from "@/components/ui";
-import { cn } from "@/lib/format/class-names";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -311,10 +310,12 @@ export function TransactionForm({
     return null;
   }, [accountSel, accounts, acctRequired, amount, decimalPlaces, fromSel, personId, personRequired, toSel, type]);
 
+  // 必填字段常开：转账时不适用；切回支出/收入时重新强制打开（转账切换会临时关闭它们）。
   useEffect(() => {
+    if (type === "transfer") return;
     if (acctRequired) setAccountEnabled(true);
     if (personRequired) setPersonEnabled(true);
-  }, [acctRequired, personRequired]);
+  }, [acctRequired, personRequired, type]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -594,7 +595,7 @@ export function TransactionForm({
             checked={accountEnabled}
             disabled={acctRequired}
             key="account"
-            label={acctRequired ? "账户（必填）" : "账户"}
+            label="账户"
             onCheckedChange={(checked) => {
               setAccountEnabled(checked);
               if (!checked) setAccountSel(null);
@@ -617,7 +618,7 @@ export function TransactionForm({
             checked={personEnabled}
             disabled={personRequired}
             key="person"
-            label={personRequired ? "人员（必填）" : "人员"}
+            label="人员"
             onCheckedChange={(checked) => {
               setPersonEnabled(checked);
               if (!checked) setPersonId(null);
@@ -644,7 +645,7 @@ export function TransactionForm({
                 label="备注"
                 maxLength={240}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder="选填…"
+                placeholder=""
                 value={note}
               />
             </div>
@@ -669,7 +670,7 @@ export function TransactionForm({
           value={type}
         />
         <AmountInput
-          className={cn("transaction-form__amount", type === "income" && "transaction-form__amount--income")}
+          className="transaction-form__amount"
           decimalPlaces={decimalPlaces}
           label="金额"
           onValueChange={setAmount}

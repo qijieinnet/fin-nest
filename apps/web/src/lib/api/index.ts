@@ -79,6 +79,7 @@ export type {
   TransactionListQuery,
   TransactionRelationInput,
   TransactionRelationKind,
+  TransactionSummary,
   TransactionType,
   UploadUrlResult,
 } from "./contracts";

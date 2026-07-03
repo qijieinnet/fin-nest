@@ -308,6 +308,14 @@ export type TransactionListQuery = {
   amountMinMicros?: string;
   amountMaxMicros?: string;
   note?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/** 按筛选聚合的支出/收入合计（列表分页时汇总卡片用）。 */
+export type TransactionSummary = {
+  expenseMicros: string;
+  incomeMicros: string;
 };
 
 export type BudgetProgressItem = {

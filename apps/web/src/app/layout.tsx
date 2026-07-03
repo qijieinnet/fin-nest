@@ -17,6 +17,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // 锁定缩放：避免 iOS Safari 聚焦输入框时自动放大页面。
+  maximumScale: 1,
+  userScalable: false,
   themeColor: "#fefefe",
   viewportFit: "cover",
 };

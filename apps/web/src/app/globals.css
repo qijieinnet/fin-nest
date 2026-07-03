@@ -10,11 +10,11 @@
   --color-text-secondary: #63706b;
   --color-text-muted: #8a9690;
   --color-border-subtle: rgba(50, 62, 58, 0.12);
-  --color-accent-expense: #e95f4d;
-  --color-accent-income: #2f9e77;
-  --color-accent-transfer: #0a84ff;
+  --color-accent-expense: #fe373c;
+  --color-accent-income: #35c758;
+  --color-accent-transfer: #ffcc00;
   --color-accent-warning: #d98b28;
-  --color-accent-success: #2f9e77;
+  --color-accent-success: #35c758;
   --color-tint: #0a84ff;
   --color-tint-strong: #007aff;
   --color-tint-contrast: #ffffff;
@@ -641,6 +641,11 @@ select:focus-visible {
   padding: 8px var(--space-sheet-x) calc(18px + env(safe-area-inset-bottom));
 }
 
+/* 底部弹层用不透明背景，避免透出下层页面内容。 */
+.ui-bottom-sheet {
+  background: #ffffff;
+}
+
 .ui-bottom-sheet--category-picker {
   min-height: min(72dvh, 620px);
 }
@@ -693,6 +698,8 @@ select:focus-visible {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* 滚动到边界时不向底层页面传递，避免穿透滚动。 */
+  overscroll-behavior: contain;
   padding-top: 14px;
   position: relative;
   z-index: 1;
@@ -748,7 +755,7 @@ select:focus-visible {
 }
 
 .ui-toast--info svg {
-  color: var(--color-accent-transfer);
+  color: var(--color-tint-strong);
 }
 
 .navigation-bar {
@@ -1275,10 +1282,6 @@ select:focus-visible {
 .transaction-form__amount .biz-amount__currency {
   color: var(--color-text-primary);
   font-size: 30px;
-}
-
-.transaction-form__amount--income .biz-amount__input {
-  color: var(--color-accent-income);
 }
 
 .transaction-form__amount .biz-amount__input {
@@ -2024,7 +2027,7 @@ select:focus-visible {
 .biz-date-popover {
   bottom: 0;
   left: 50%;
-  max-width: 390px;
+  max-width: 430px;
   pointer-events: auto;
   position: absolute;
   transform: translateX(-50%);
@@ -2075,10 +2078,10 @@ select:focus-visible {
 }
 
 .biz-date-wheel-sheet {
-  background:
-    radial-gradient(circle at 74% 0%, rgba(255, 255, 255, 0.72), transparent 34%),
-    rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: #ffffff;
+  border: 1px solid var(--color-border-subtle);
   border-radius: 28px 28px 0 0;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.96),
@@ -2208,6 +2211,8 @@ select:focus-visible {
 
 .ui-bottom-sheet--filter {
   height: min(84dvh, 720px);
+  /* 去掉右侧内边距，让内部滚动区域延伸到弹窗右缘，滚动条紧贴右侧。 */
+  padding-right: 0;
 }
 
 .ui-bottom-sheet--filter > .sheet-header {
@@ -2231,7 +2236,7 @@ select:focus-visible {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 64px;
   min-height: 46px;
-  padding: 0 4px 8px;
+  padding: 0 var(--space-sheet-x) 8px 4px;
 }
 
 .biz-filter-prototype__actions button {
@@ -2261,6 +2266,7 @@ select:focus-visible {
 
 .biz-filter-tabs {
   margin-bottom: 12px;
+  margin-right: var(--space-sheet-x);
 }
 
 .biz-filter-chip {
@@ -2285,7 +2291,16 @@ select:focus-visible {
 .biz-filter-prototype__body {
   min-height: 0;
   overflow-y: auto;
-  padding: 0 2px 16px;
+  /* 右侧留出内容边距，滚动条落在弹窗右缘。 */
+  padding: 0 var(--space-sheet-x) 16px 2px;
+}
+
+/* 过滤弹窗内的分类/账户列表不再自带滚动，交由外层 body 统一滚动，
+   这样滚动条始终紧贴弹窗右侧而不是浮在列表内部。 */
+.biz-filter-prototype__body .biz-category-picker-sheet {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
 }
 
 .biz-filter-label {
@@ -2347,6 +2362,37 @@ select:focus-visible {
   width: 100%;
 }
 
+/* 备注搜索 / 金额 / 日期输入获得焦点时不显示边框（覆盖全局 focus-ring）。 */
+.biz-filter-input:focus,
+.biz-filter-input:focus-visible,
+.biz-filter-date-range input:focus,
+.biz-filter-date-range input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+/* 自定义时间：为日期输入加上说明标签，iOS 上空值日期框也能明确提示选择日期。 */
+.biz-filter-date-range--custom {
+  align-items: end;
+}
+
+.biz-filter-date-cell {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.biz-filter-date-caption {
+  color: rgba(24, 24, 27, 0.45);
+  font-size: 12px;
+  padding-left: 2px;
+}
+
+.biz-filter-date-range--custom input:empty,
+.biz-filter-date-range--custom input[value=""] {
+  color: rgba(24, 24, 27, 0.4);
+}
+
 .bill-detail {
   display: flex;
   flex-direction: column;
@@ -2367,20 +2413,26 @@ select:focus-visible {
 
 .bill-detail__hero-icon {
   align-items: center;
-  background: #f1f0ed;
-  border-radius: 15px;
+  background: transparent;
   color: var(--color-text-primary);
   display: inline-flex;
-  font-size: 26px;
+  font-size: 30px;
   height: 52px;
   justify-content: center;
   width: 52px;
 }
 
+/* 详情页直接渲染图标，去掉分类图标自带的底色，避免出现两层背景。 */
 .bill-detail__hero-icon .biz-category-icon {
+  background: transparent;
   font-size: 28px;
-  height: 34px;
-  width: 34px;
+  height: 44px;
+  width: 44px;
+}
+
+.bill-detail__hero-icon .biz-category-icon svg {
+  height: 28px;
+  width: 28px;
 }
 
 .bill-detail__hero-copy {
@@ -2411,13 +2463,17 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.bill-detail__amount--expense,
-.bill-detail__amount--transfer {
-  color: var(--color-text-primary);
+/* 与账单列表各类型金额颜色保持一致：支出绿、收入红、转账黄。 */
+.bill-detail__amount--expense {
+  color: var(--color-accent-success);
 }
 
 .bill-detail__amount--income {
-  color: var(--color-accent-income);
+  color: var(--color-accent-expense);
+}
+
+.bill-detail__amount--transfer {
+  color: var(--color-accent-transfer);
 }
 
 .bill-detail__section {
@@ -2614,6 +2670,7 @@ select:focus-visible {
   display: grid;
   gap: 6px;
   justify-items: start;
+  margin-top: 12px;
 }
 
 .biz-transaction-group__header > strong {
@@ -2628,16 +2685,21 @@ select:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 22px;
+  justify-content: flex-start;
 }
 
-.biz-transaction-group__summary > span {
+.biz-transaction-group__summary-item {
   align-items: center;
-  color: var(--color-accent-income);
   display: inline-flex;
   gap: 9px;
 }
 
-.biz-transaction-group__summary > span:nth-child(2) {
+/* 支出汇总用绿色、收入汇总用红色，按语义固定，避免其一为 0 隐藏时错位。 */
+.biz-transaction-group__summary-item--expense {
+  color: var(--color-accent-success);
+}
+
+.biz-transaction-group__summary-item--income {
   color: var(--color-accent-expense);
 }
 
@@ -2660,7 +2722,7 @@ select:focus-visible {
   color: inherit;
   display: grid;
   gap: 6px;
-  grid-template-columns: 28px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 22px minmax(0, 1fr) auto 18px;
   padding: 10px 0 12px;
   position: relative;
   text-align: left;
@@ -2682,17 +2744,12 @@ select:focus-visible {
   right: 0;
 }
 
-.biz-transaction-group__rows > .biz-transaction-row:last-child::after,
-.biz-transaction-group__rows > .biz-swipe-row:last-child .biz-transaction-row::after {
-  display: none;
-}
-
 .biz-transaction-row__icon {
   align-items: center;
   color: var(--color-text-primary);
   display: inline-flex;
-  font-size: 24px;
-  height: 24px;
+  font-size: 16px;
+  height: 16px;
   justify-content: center;
   line-height: 1;
   overflow: hidden;
@@ -2703,8 +2760,8 @@ select:focus-visible {
   background: transparent;
   border-radius: 0;
   color: var(--biz-icon-color, var(--color-tint));
-  height: 24px;
-  width: 24px;
+  height: 16px;
+  width: 16px;
 }
 
 .biz-transaction-row__main {
@@ -2731,9 +2788,9 @@ select:focus-visible {
   color: #5d7fae;
   font-size: 14px;
   font-style: normal;
-  font-weight: 650;
+  /* font-weight: 650; */
   letter-spacing: 0;
-  line-height: 1.08;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -21,6 +21,19 @@ export function countActiveFilters(value: BusinessFilterValue): number {
   return count;
 }
 
+/** 是否存在「时间」以外的有效筛选项（用于时间标题旁的小圆点提示）。 */
+export function hasNonTimeFilters(value: BusinessFilterValue): boolean {
+  return (
+    (value.type !== undefined && value.type !== "all") ||
+    hasAny(value.categoryId, value.categoryIds, value.subcategoryIds) ||
+    hasAny(value.accountId, value.accountIds) ||
+    hasAny(value.personId, value.personIds) ||
+    hasAny(value.creatorId, value.creatorIds) ||
+    hasAny(value.keyword) ||
+    hasAny(value.amountMin, value.amountMax)
+  );
+}
+
 export function resetFilterValue(): BusinessFilterValue {
   return { timePreset: "month", type: "all" };
 }

@@ -41,13 +41,16 @@ export function AssetLinkCard({
             const selected = item.id === selectedId;
             return (
               <button
-                className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
+                className={cn(
+                  "biz-category-chip",
+                  "biz-category-chip--sub",
+                  selected && "biz-category-chip--selected",
+                )}
                 key={item.id}
                 onClick={() => onSelect(item.id)}
                 type="button"
               >
-                <span>{item.icon}</span>
-                {item.name}
+                <span>{item.name}</span>
               </button>
             );
           })}

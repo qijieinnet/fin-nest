@@ -109,6 +109,13 @@ export function FilterSheet({
     setDraft((current) => ({ ...current, ...next }));
   }
 
+  function toggleAccount(id: string) {
+    const next = toggleValue(accountIds, id);
+    patch({ accountId: next.at(-1) ?? null, accountIds: next });
+  }
+
+  const primaryAccountOptions = accountOptions.filter((account) => !account.parentId);
+
   const tabs = useMemo(() => {
     const next: FilterTab[] = [];
     if (hasField(fields, "type") || hasField(fields, "category")) next.push("分类");
@@ -242,18 +249,26 @@ export function FilterSheet({
                 ))}
               </div>
               {(draft.timePreset ?? "month") === "custom" ? (
-                <div className="biz-filter-date-range">
-                  <input
-                    onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
-                    type="date"
-                    value={draft.dateFrom ?? ""}
-                  />
+                <div className="biz-filter-date-range biz-filter-date-range--custom">
+                  <label className="biz-filter-date-cell">
+                    <span className="biz-filter-date-caption">开始日期</span>
+                    <input
+                      onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
+                      placeholder="选择日期"
+                      type="date"
+                      value={draft.dateFrom ?? ""}
+                    />
+                  </label>
                   <span>—</span>
-                  <input
-                    onChange={(event) => patch({ dateTo: event.currentTarget.value })}
-                    type="date"
-                    value={draft.dateTo ?? ""}
-                  />
+                  <label className="biz-filter-date-cell">
+                    <span className="biz-filter-date-caption">结束日期</span>
+                    <input
+                      onChange={(event) => patch({ dateTo: event.currentTarget.value })}
+                      placeholder="选择日期"
+                      type="date"
+                      value={draft.dateTo ?? ""}
+                    />
+                  </label>
                 </div>
               ) : null}
             </>
@@ -261,20 +276,47 @@ export function FilterSheet({
 
           {tab === "账户" ? (
             <>
-              <p className="biz-filter-label">账户（可多选）</p>
-              <div className="biz-filter-chip-row">
-                {accountOptions.map((account) => (
-                  <FilterChip
-                    icon={account.icon}
-                    key={account.id}
-                    label={account.label}
-                    onClick={() => {
-                      const next = toggleValue(accountIds, account.id);
-                      patch({ accountId: next.at(-1) ?? null, accountIds: next });
-                    }}
-                    selected={accountIds.includes(account.id)}
-                  />
-                ))}
+              <p className="biz-filter-label">账户（可选到子账户，多选）</p>
+              <div className="biz-category-picker-sheet">
+                {primaryAccountOptions.map((account) => {
+                  const subOptions = accountOptions.filter((option) => option.parentId === account.id);
+                  return (
+                    <section className="biz-category-group" key={account.id}>
+                      <button
+                        className={cn(
+                          "biz-category-chip",
+                          "biz-category-chip--primary",
+                          accountIds.includes(account.id) && "biz-category-chip--selected",
+                        )}
+                        onClick={() => toggleAccount(account.id)}
+                        type="button"
+                      >
+                        {account.icon ? <span className="biz-category-icon">{account.icon}</span> : null}
+                        <span>{account.label}</span>
+                      </button>
+
+                      {subOptions.length ? (
+                        <div className="biz-category-subchips">
+                          {subOptions.map((sub) => (
+                            <button
+                              className={cn(
+                                "biz-category-chip",
+                                "biz-category-chip--sub",
+                                accountIds.includes(sub.id) && "biz-category-chip--selected",
+                              )}
+                              key={sub.id}
+                              onClick={() => toggleAccount(sub.id)}
+                              type="button"
+                            >
+                              {sub.icon ? <span className="biz-category-icon">{sub.icon}</span> : null}
+                              <span>{sub.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })}
               </div>
             </>
           ) : null}

@@ -9,6 +9,7 @@ export const routes = {
   autoAccounting: "/more/auto",
   quickTemplates: "/more/quick",
   recordSettings: "/more/settings",
+  systemSettings: "/more/system",
   insurances: "/more/insurances",
   items: "/more/items",
   importExport: "/more/import-export",

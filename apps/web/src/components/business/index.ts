@@ -30,7 +30,7 @@ export {
   ToggleCard,
 } from "./TransactionFieldRows";
 export { TransactionTypeSwitch } from "./TransactionTypeSwitch";
-export { countActiveFilters, resetFilterValue } from "./filter-utils";
+export { countActiveFilters, hasNonTimeFilters, resetFilterValue } from "./filter-utils";
 export { defaultFilterValue } from "./filter-types";
 export type { AssetLinkOption } from "./AssetLinkCard";
 export type { AttachmentItem, BusinessOption, CategoryOption, TransactionType } from "./business-types";

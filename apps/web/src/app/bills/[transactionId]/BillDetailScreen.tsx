@@ -52,10 +52,10 @@ function formatDateOnly(value: string): string {
   return `${Number(month)}月${Number(day)}日`;
 }
 
-function formatDateTime(value: string): string {
+function formatDateFull(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 function signedAmount(detail: TransactionDetail, amountMicros = detail.effectiveAmountMicros): string {
@@ -218,7 +218,7 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
 
     detailRows.push({ label: "日期", value: formatDateOnly(detail.occurredOn) });
     detailRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
-    detailRows.push({ label: "记录时间", value: formatDateTime(detail.createdAt) });
+    detailRows.push({ label: "记录时间", value: formatDateFull(detail.createdAt) });
     if (detail.source !== "manual") detailRows.push({ label: "来源", value: SOURCE_LABELS[detail.source] ?? detail.source });
     if (gross !== effective) {
       detailRows.push({ label: "原始金额", value: signedAmount(detail, detail.grossAmountMicros) });

@@ -16,6 +16,60 @@ export function monthRange(month: string): { dateFrom: string; dateTo: string } 
   };
 }
 
+function ymd(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+const TIME_PRESET_LABELS: Record<NonNullable<BusinessFilterValue["timePreset"]>, string> = {
+  month: "本月",
+  lastmonth: "上月",
+  week: "本周",
+  lastweek: "上周",
+  "30d": "近30天",
+  year: "今年",
+  lastyear: "上年",
+  all: "全部",
+  custom: "自定义",
+};
+
+/** 汇总卡片的周期标题，如「本月」「近30天」。 */
+export function periodLabel(value: BusinessFilterValue): string {
+  return TIME_PRESET_LABELS[value.timePreset ?? "month"];
+}
+
+/** 把筛选弹层的时间选择（预设或自定义）解析成交易列表的日期范围。 */
+export function timeRangeFromFilter(value: BusinessFilterValue): { dateFrom?: string; dateTo?: string } {
+  const preset = value.timePreset ?? "month";
+  if (preset === "all") return {};
+  if (preset === "custom") {
+    return { dateFrom: value.dateFrom || undefined, dateTo: value.dateTo || undefined };
+  }
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  // 以周一为一周起点。
+  const mondayOffset = (now.getDay() + 6) % 7;
+  switch (preset) {
+    case "month":
+      return { dateFrom: ymd(new Date(y, m, 1)), dateTo: ymd(new Date(y, m + 1, 0)) };
+    case "lastmonth":
+      return { dateFrom: ymd(new Date(y, m - 1, 1)), dateTo: ymd(new Date(y, m, 0)) };
+    case "week":
+      return { dateFrom: ymd(new Date(y, m, d - mondayOffset)), dateTo: ymd(new Date(y, m, d - mondayOffset + 6)) };
+    case "lastweek":
+      return { dateFrom: ymd(new Date(y, m, d - mondayOffset - 7)), dateTo: ymd(new Date(y, m, d - mondayOffset - 1)) };
+    case "30d":
+      return { dateFrom: ymd(new Date(y, m, d - 29)), dateTo: ymd(now) };
+    case "year":
+      return { dateFrom: `${y}-01-01`, dateTo: `${y}-12-31` };
+    case "lastyear":
+      return { dateFrom: `${y - 1}-01-01`, dateTo: `${y - 1}-12-31` };
+    default:
+      return {};
+  }
+}
+
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 export function dayLabel(iso: string): string {

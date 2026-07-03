@@ -25,6 +25,16 @@ export class TransactionsController {
     return this.transactions.list(ledgerId, (auth as SessionAuthContext).userId, query);
   }
 
+  @Get("summary")
+  @ApiOkResponse({ description: "按相同筛选聚合支出/收入合计" })
+  summary(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Query() query: ListTransactionsQueryDto,
+  ) {
+    return this.transactions.summary(ledgerId, (auth as SessionAuthContext).userId, query);
+  }
+
   @Get(":transactionId")
   @ApiOkResponse()
   get(
