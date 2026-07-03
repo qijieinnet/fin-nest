@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
-import { GlassSurface } from "@/components/glass/GlassSurface";
 
 type TabItem = {
   icon?: ReactNode;
@@ -12,14 +11,12 @@ type TabItem = {
 
 type TabsProps = {
   className?: string;
-  /** 玻璃材质外观（原 GlassSegmentedControl） */
-  glass?: boolean;
   items: TabItem[];
   onValueChange: (value: string) => void;
   value: string;
 };
 
-export function Tabs({ className, glass = false, items, onValueChange, value }: TabsProps) {
+export function Tabs({ className, items, onValueChange, value }: TabsProps) {
   const buttons = items.map((item) => {
     const selected = item.value === value;
     return (
@@ -36,16 +33,6 @@ export function Tabs({ className, glass = false, items, onValueChange, value }: 
       </button>
     );
   });
-
-  if (glass) {
-    return (
-      <div role="tablist">
-        <GlassSurface className={cn("ui-tabs--glass", className)} variant="bar">
-          {buttons}
-        </GlassSurface>
-      </div>
-    );
-  }
 
   return (
     <div className={cn("ui-tabs", className)} role="tablist">

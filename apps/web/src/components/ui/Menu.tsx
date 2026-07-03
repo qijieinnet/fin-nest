@@ -1,20 +1,20 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { GlassSurface } from "./GlassSurface";
+import { Surface } from "./Surface";
 
-type GlassMenuItem = {
+type MenuItem = {
   icon?: ReactNode;
   label: string;
   onSelect: () => void;
 };
 
-export function GlassMenu({ items }: { items: GlassMenuItem[] }) {
+export function Menu({ items }: { items: MenuItem[] }) {
   return (
-    <GlassSurface className="glass-menu" variant="menu">
+    <Surface className="ui-menu" variant="menu">
       {items.map((item, index) => (
         <button
-          className="glass-menu__item"
+          className="ui-menu__item"
           key={`${item.label}-${index}`}
           onClick={item.onSelect}
           type="button"
@@ -23,6 +23,6 @@ export function GlassMenu({ items }: { items: GlassMenuItem[] }) {
           <span>{item.label}</span>
         </button>
       ))}
-    </GlassSurface>
+    </Surface>
   );
 }

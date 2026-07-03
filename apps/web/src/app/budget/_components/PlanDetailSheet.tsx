@@ -48,7 +48,7 @@ export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetP
 
   const openEditor = () => {
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <PlanEditorSheet ledgerId={ledgerId} plan={plan} />,
     });
@@ -59,7 +59,8 @@ export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetP
     const used = isCount ? BigInt(item.projectedCount) : BigInt(item.projectedAmountMicros);
     const remain = limit > used ? limit - used : 0n;
     const overLimit = used > limit;
-    const formatValue = (value: bigint) => (isCount ? `${value.toString()} 次` : formatMoney(value));
+    const formatValue = (value: bigint) =>
+      isCount ? `${value.toString()} 次` : formatMoney(value);
     return (
       <button
         className="w-full rounded-[20px] bg-[var(--color-bg-surface)] p-4 text-left shadow-[var(--shadow-soft)]"

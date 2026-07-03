@@ -29,7 +29,7 @@ export function AccountsScreen() {
   const openEditor = () => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <AccountEditorSheet ledgerId={ledgerId} />,
     });
@@ -72,7 +72,9 @@ export function AccountsScreen() {
             ) : null}
           </span>
           {subtitle ? (
-            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">{subtitle}</span>
+            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+              {subtitle}
+            </span>
           ) : null}
         </span>
         <span
@@ -151,7 +153,9 @@ export function AccountsScreen() {
               groups.map((group) => (
                 <section className="mt-5" key={group.key}>
                   <div className="flex items-baseline justify-between px-1 pb-2">
-                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{group.name}</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                      {group.name}
+                    </h2>
                     <span className="text-[13px] font-medium text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
                       {group.kind === "liability" && group.total !== 0n ? "−" : ""}
                       {formatMoney(group.total)}

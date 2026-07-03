@@ -1,14 +1,18 @@
 export { Button } from "./Button";
+export { BottomSheet } from "./BottomSheet";
 export { IconButton } from "./IconButton";
 export { EmojiPicker, EmojiPickerContent, EMOJI_CATEGORIES } from "./EmojiPicker";
 export type { EmojiCategory } from "./EmojiPicker";
 export { Input } from "./Input";
+export { Menu } from "./Menu";
 export { MobileAppShell } from "./MobileAppShell";
 export { MobilePage } from "./MobilePage";
 export { MobileTabBar } from "./MobileTabBar";
 export { NavigationBar } from "./NavigationBar";
 export { Sheet } from "./Sheet";
 export { SheetShell } from "./SheetShell";
+export { Surface } from "./Surface";
+export type { SurfaceVariant } from "./Surface";
 export { Switch } from "./Switch";
 export { TabBar } from "./TabBar";
 export { Tabs } from "./Tabs";

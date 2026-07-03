@@ -55,7 +55,9 @@ export function InsurancesScreen() {
 
   const terminate = useMutation({
     mutationFn: (insuranceId: string) =>
-      apiRequest(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}/terminate`), { method: "POST" }),
+      apiRequest(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}/terminate`), {
+        method: "POST",
+      }),
     onSuccess: async (_data, insuranceId) => {
       await Promise.all([
         invalidate(),
@@ -63,18 +65,22 @@ export function InsurancesScreen() {
       ]);
       showToast({ tone: "success", message: "已终止续保" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const remove = useMutation({
     mutationFn: (insuranceId: string) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}`), { method: "DELETE" }),
+      apiRequest<void>(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}`), {
+        method: "DELETE",
+      }),
     onSuccess: async () => {
       await invalidate();
       setInsurancePendingDelete(null);
       showToast({ tone: "success", message: "保单已删除" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const goBack = () => {
@@ -85,7 +91,7 @@ export function InsurancesScreen() {
   const openEditor = (insurance?: Insurance) => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <InsuranceEditorSheet insurance={insurance} ledgerId={ledgerId} people={people} />,
     });
@@ -145,11 +151,15 @@ export function InsurancesScreen() {
               <span className="truncate text-[15.5px] font-semibold text-[var(--color-text-primary)]">
                 {insurance.name}
               </span>
-              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_CLASS[status.tone]}`}>
+              <span
+                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_CLASS[status.tone]}`}
+              >
                 {status.label}
               </span>
             </span>
-            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">{metaText}</span>
+            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+              {metaText}
+            </span>
           </span>
           {insurance.premiumMicros ? (
             <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)]">

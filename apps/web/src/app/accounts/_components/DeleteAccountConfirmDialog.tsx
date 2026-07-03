@@ -3,8 +3,7 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { GlassSurface } from "@/components/glass";
-import { Button } from "@/components/ui";
+import { Button, Surface } from "@/components/ui";
 
 type DeleteAccountConfirmDialogProps = {
   deleting?: boolean;
@@ -51,7 +50,7 @@ export function DeleteAccountConfirmDialog({
         onClick={onCancel}
         type="button"
       />
-      <GlassSurface
+      <Surface
         className="w-full max-w-[340px] rounded-[28px] border-white/75 bg-white/70 p-5 shadow-[0_28px_80px_rgba(18,24,38,0.22)]"
         variant="panel"
       >
@@ -67,13 +66,17 @@ export function DeleteAccountConfirmDialog({
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
-            <Button className="w-full justify-center" disabled={deleting} glass onClick={onCancel} variant="secondary">
+            <Button
+              className="w-full justify-center"
+              disabled={deleting}
+              onClick={onCancel}
+              variant="secondary"
+            >
               取消
             </Button>
             <Button
               className="w-full justify-center"
               disabled={deleting}
-              glass
               icon={<Trash2 size={17} />}
               onClick={onConfirm}
               variant="danger"
@@ -82,7 +85,7 @@ export function DeleteAccountConfirmDialog({
             </Button>
           </div>
         </div>
-      </GlassSurface>
+      </Surface>
     </div>,
     document.body,
   );

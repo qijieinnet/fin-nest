@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Tags } from "lucide-react";
-import { GlassBottomSheet } from "@/components/glass";
+import { BottomSheet } from "@/components/ui";
 import type { CategoryOption } from "./business-types";
 import { CategorySelectionList } from "./CategorySelectionList";
 
@@ -13,7 +13,12 @@ type CategoryPickerProps = {
   value: string | null;
 };
 
-export function CategoryPicker({ label = "分类", onValueChange, options, value }: CategoryPickerProps) {
+export function CategoryPicker({
+  label = "分类",
+  onValueChange,
+  options,
+  value,
+}: CategoryPickerProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.id === value);
 
@@ -29,8 +34,8 @@ export function CategoryPicker({ label = "分类", onValueChange, options, value
         </span>
       </button>
 
-      <GlassBottomSheet
-        className="glass-bottom-sheet--category-picker"
+      <BottomSheet
+        className="ui-bottom-sheet--category-picker"
         onClose={() => setOpen(false)}
         open={open}
         title="选择分类"
@@ -44,7 +49,7 @@ export function CategoryPicker({ label = "分类", onValueChange, options, value
           options={options}
           selectedIds={value ? [value] : []}
         />
-      </GlassBottomSheet>
+      </BottomSheet>
     </>
   );
 }

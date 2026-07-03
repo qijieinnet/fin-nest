@@ -69,7 +69,8 @@ export function ItemsScreen() {
       await invalidate(itemId);
       showToast({ tone: "success", message: "已恢复在用" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const remove = useMutation({
@@ -82,7 +83,8 @@ export function ItemsScreen() {
       clear();
       showToast({ tone: "success", message: "物品已删除" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const goBack = () => {
@@ -93,7 +95,7 @@ export function ItemsScreen() {
   const openEditor = (item?: ItemAsset) => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <ItemEditorSheet item={item} itemTypes={itemTypes} ledgerId={ledgerId} />,
     });
@@ -133,7 +135,9 @@ export function ItemsScreen() {
       .filter(Boolean)
       .join(" · ");
     const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
-    const usedText = item.purchaseDate ? `用 ${formatFixed1(itemUsedYears(item))} 年` : "未填购买日";
+    const usedText = item.purchaseDate
+      ? `用 ${formatFixed1(itemUsedYears(item))} 年`
+      : "未填购买日";
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
@@ -164,11 +168,15 @@ export function ItemsScreen() {
               <span className="truncate text-[15.5px] font-semibold text-[var(--color-text-primary)]">
                 {item.name}
               </span>
-              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_CLASS[status.tone]}`}>
+              <span
+                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_CLASS[status.tone]}`}
+              >
                 {status.label}
               </span>
             </span>
-            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">{metaText}</span>
+            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+              {metaText}
+            </span>
           </span>
           <span className="flex shrink-0 flex-col items-end gap-0.5">
             <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">

@@ -3,8 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
-import { GlassBottomSheet } from "@/components/glass";
-import { Button } from "@/components/ui";
+import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
 
@@ -52,7 +51,7 @@ export function OptionPicker({
         <ChevronRight size={18} />
       </button>
 
-      <GlassBottomSheet onClose={() => setOpen(false)} open={open} title={label}>
+      <BottomSheet onClose={() => setOpen(false)} open={open} title={label}>
         <div className="biz-option-list">
           {clearable && value ? (
             <Button
@@ -98,7 +97,7 @@ export function OptionPicker({
             );
           })}
         </div>
-      </GlassBottomSheet>
+      </BottomSheet>
     </>
   );
 }

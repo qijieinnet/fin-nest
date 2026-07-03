@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { GlassBottomSheet } from "@/components/glass";
+import { BottomSheet } from "@/components/ui";
 import { createClientId } from "@/lib/id/client-id";
 
 type SheetStackEntry = {
@@ -21,8 +21,7 @@ type SheetStackEntry = {
   title?: string;
 };
 
-type SheetStackItem = Required<Pick<SheetStackEntry, "id">> &
-  Omit<SheetStackEntry, "id">;
+type SheetStackItem = Required<Pick<SheetStackEntry, "id">> & Omit<SheetStackEntry, "id">;
 
 type SheetStackContextValue = {
   clear: () => void;
@@ -52,7 +51,11 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
   const push = useCallback((sheet: SheetStackEntry) => {
     const id = sheet.id ?? makeSheetId();
     setStack((current) => [...current, { ...sheet, id }]);
-    window.history.pushState({ ...window.history.state, finNestSheetId: id }, "", window.location.href);
+    window.history.pushState(
+      { ...window.history.state, finNestSheetId: id },
+      "",
+      window.location.href,
+    );
     return id;
   }, []);
 
@@ -88,7 +91,7 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
   return (
     <SheetStackContext.Provider value={value}>
       {children}
-      <GlassBottomSheet
+      <BottomSheet
         className={activeSheet?.className}
         hideDefaultHeader={activeSheet?.hideDefaultHeader}
         onClose={pop}
@@ -96,7 +99,7 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
         title={activeSheet?.title}
       >
         {activeSheet?.content}
-      </GlassBottomSheet>
+      </BottomSheet>
     </SheetStackContext.Provider>
   );
 }

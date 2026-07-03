@@ -18,11 +18,9 @@ const transactionTypeItems = [
 export function TransactionTypeSwitch({ onValueChange, value }: TransactionTypeSwitchProps) {
   return (
     <Tabs
-      glass
       items={transactionTypeItems}
       onValueChange={(nextValue) => onValueChange(nextValue as TransactionType)}
       value={value}
     />
   );
 }
-

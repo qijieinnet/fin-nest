@@ -17,7 +17,7 @@ function activeTab(pathname: string): string {
   return match?.value ?? routes.bills;
 }
 
-/** 全局底部导航：与 /__dev/ui 一致的实底 TabBar（账单/账户/计划/更多），固定在 430px 容器底部居中。 */
+/** 全局底部导航：账单/账户/计划/更多，固定在 430px 容器底部居中。 */
 export function MobileTabBar() {
   const pathname = usePathname();
   const router = useRouter();

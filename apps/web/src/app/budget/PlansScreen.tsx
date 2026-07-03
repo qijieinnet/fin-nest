@@ -80,7 +80,8 @@ export function PlansScreen() {
       }
       showToast({ tone: "success", message: enabled ? "已开启预知能力" : "已关闭预知能力" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const removePlan = useMutation({
@@ -92,13 +93,14 @@ export function PlansScreen() {
       clear();
       showToast({ tone: "success", message: "计划已删除" });
     },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const openEditor = (plan?: Plan) => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <PlanEditorSheet defaultKind={tab} ledgerId={ledgerId} plan={plan} />,
     });

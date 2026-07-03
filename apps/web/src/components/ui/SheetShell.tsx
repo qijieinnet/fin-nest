@@ -12,7 +12,7 @@ type SheetShellProps = {
   onClose: () => void;
   open: boolean;
   title?: string;
-  /** Wraps the grabber/header/body content in the panel surface (plain or glass). */
+  /** Wraps the grabber/header/body content in the panel surface. */
   renderPanel: (content: ReactNode) => ReactNode;
 };
 
@@ -55,7 +55,12 @@ export function SheetShell({
                 {hideDefaultHeader ? null : (
                   <div className="sheet-header">
                     <h2>{title}</h2>
-                    <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
+                    <button
+                      aria-label="关闭"
+                      className="sheet-close"
+                      onClick={onClose}
+                      type="button"
+                    >
                       <X size={18} />
                     </button>
                   </div>

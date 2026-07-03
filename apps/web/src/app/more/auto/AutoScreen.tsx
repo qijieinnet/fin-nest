@@ -172,7 +172,7 @@ export function AutoScreen() {
   const openEditor = (rule?: AutoRule) => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: (
         <AutoRuleEditorSheet
@@ -191,7 +191,7 @@ export function AutoScreen() {
   const openPendingEditor = (item: AutoPendingTransaction) => {
     if (!ledgerId) return;
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: (
         <AutoPendingEditorSheet
@@ -240,8 +240,15 @@ export function AutoScreen() {
     const meta = item.type === "transfer" ? summary.fullName : account.name;
     const busy = confirmPending.isPending || deletePending.isPending || confirmBatch.isPending;
     return (
-      <div className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none" key={item.id}>
-        <button className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openPendingEditor(item)} type="button">
+      <div
+        className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
+        key={item.id}
+      >
+        <button
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          onClick={() => openPendingEditor(item)}
+          type="button"
+        >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)] text-xl">
             {summary.icon}
           </span>
@@ -318,7 +325,11 @@ export function AutoScreen() {
     return (
       <SwipeActionRow actions={actions} key={rule.id}>
         <div className="flex items-center gap-3 px-4 py-3">
-          <button className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => openDetail(rule)} type="button">
+          <button
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            onClick={() => openDetail(rule)}
+            type="button"
+          >
             <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)] text-[21px] opacity-[var(--auto-rule-dim,1)]">
               {summary.icon}
             </span>
@@ -401,14 +412,20 @@ export function AutoScreen() {
                       <Repeat2 size={20} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <strong className="block text-[15px] text-[var(--color-text-primary)]">待确认</strong>
+                      <strong className="block text-[15px] text-[var(--color-text-primary)]">
+                        待确认
+                      </strong>
                       <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
                         {pending.length} 条自动生成记录等待入账
                       </span>
                     </span>
                     <Button
                       className="!h-9 !px-3 !text-sm"
-                      disabled={confirmBatch.isPending || confirmPending.isPending || deletePending.isPending}
+                      disabled={
+                        confirmBatch.isPending ||
+                        confirmPending.isPending ||
+                        deletePending.isPending
+                      }
                       onClick={() => confirmBatch.mutate(pending.map((item) => item.id))}
                       variant="primary"
                     >
@@ -425,7 +442,9 @@ export function AutoScreen() {
                 </h2>
                 {rules.length > 0 ? (
                   <span className="text-xs text-[var(--color-text-muted)]">
-                    {rules.length - activeRuleCount > 0 ? `${rules.length - activeRuleCount} 条已暂停` : "全部启用"}
+                    {rules.length - activeRuleCount > 0
+                      ? `${rules.length - activeRuleCount} 条已暂停`
+                      : "全部启用"}
                   </span>
                 ) : null}
               </div>

@@ -3,8 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
-import { GlassBottomSheet } from "@/components/glass";
-import { IconButton, Switch } from "@/components/ui";
+import { BottomSheet, IconButton, Switch } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
 import { InlineHint } from "./InlineHint";
@@ -60,8 +59,8 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
         <strong>{displayValue}</strong>
         <ChevronRight size={18} />
       </button>
-      <GlassBottomSheet
-        className="glass-bottom-sheet--transaction-picker"
+      <BottomSheet
+        className="ui-bottom-sheet--transaction-picker"
         hideDefaultHeader
         onClose={() => setOpen(false)}
         open={open}
@@ -84,7 +83,7 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
           options={options}
           selectedIds={value ? [value] : []}
         />
-      </GlassBottomSheet>
+      </BottomSheet>
     </>
   );
 }
@@ -115,7 +114,10 @@ export function AccountSelectRow({
   return (
     <>
       <button
-        className={cn("transaction-form__select-row", hideLabel && "transaction-form__select-row--value-only")}
+        className={cn(
+          "transaction-form__select-row",
+          hideLabel && "transaction-form__select-row--value-only",
+        )}
         onClick={() => setOpen(true)}
         type="button"
       >
@@ -123,8 +125,8 @@ export function AccountSelectRow({
         <strong>{displayValue}</strong>
         <ChevronRight size={18} />
       </button>
-      <GlassBottomSheet
-        className="glass-bottom-sheet--transaction-picker"
+      <BottomSheet
+        className="ui-bottom-sheet--transaction-picker"
         onClose={() => setOpen(false)}
         open={open}
         title={label}
@@ -187,7 +189,7 @@ export function AccountSelectRow({
             </button>
           ) : null}
         </div>
-      </GlassBottomSheet>
+      </BottomSheet>
     </>
   );
 }
@@ -201,7 +203,14 @@ type ToggleCardProps = {
   onCheckedChange: (checked: boolean) => void;
 };
 
-export function ToggleCard({ children, checked, disabled, hint, label, onCheckedChange }: ToggleCardProps) {
+export function ToggleCard({
+  children,
+  checked,
+  disabled,
+  hint,
+  label,
+  onCheckedChange,
+}: ToggleCardProps) {
   return (
     <div className="transaction-form__card">
       <div className="transaction-form__toggle-head">
@@ -211,7 +220,12 @@ export function ToggleCard({ children, checked, disabled, hint, label, onChecked
             {hint ? <InlineHint text={hint} /> : null}
           </strong>
         </span>
-        <Switch checked={checked} disabled={disabled} label={label} onCheckedChange={onCheckedChange} />
+        <Switch
+          checked={checked}
+          disabled={disabled}
+          label={label}
+          onCheckedChange={onCheckedChange}
+        />
       </div>
       {checked ? <div className="transaction-form__toggle-body">{children}</div> : null}
     </div>

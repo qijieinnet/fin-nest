@@ -28,14 +28,6 @@
   --color-disabled-text: rgba(99, 112, 107, 0.48);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--color-tint) 20%, transparent);
 
-  --glass-tint: rgba(255, 255, 255, 0.56);
-  --glass-border: rgba(255, 255, 255, 0.72);
-  --glass-highlight: rgba(255, 255, 255, 0.95);
-  --glass-shadow: 0 18px 44px rgba(38, 50, 56, 0.14);
-  --glass-blur: 22px;
-  --glass-saturation: 1.35;
-  --glass-radius: 24px;
-
   --motion-duration-fast: 140ms;
   --motion-duration-normal: 220ms;
 
@@ -48,6 +40,7 @@
   --radius-panel: 22px;
   --shadow-app: 0 0 0 1px rgba(50, 62, 58, 0.08), 0 28px 72px rgba(38, 50, 56, 0.18);
   --shadow-soft: 0 16px 40px rgba(38, 50, 56, 0.08);
+  --shadow-floating: 0 18px 44px rgba(38, 50, 56, 0.12);
 }
 
 html,
@@ -98,7 +91,7 @@ select:focus-visible {
 
 .ui-button,
 .ui-icon-button,
-.glass-menu__item,
+.ui-menu__item,
 .ui-switch,
 .sheet-close {
   -webkit-tap-highlight-color: transparent;
@@ -545,71 +538,35 @@ select:focus-visible {
   color: var(--color-text-primary);
 }
 
-/* 玻璃材质选项卡（Tabs glass）：GlassSurface bar 上的分段控件 */
-.ui-tabs--glass {
-  display: flex;
-  gap: 0;
-  padding: 2px;
-}
-
-.ui-tabs--glass .ui-tabs__item {
-  font-weight: 700;
-  position: relative;
-  z-index: 1;
-}
-
-.ui-tabs--glass .ui-tabs__item--selected {
-  color: var(--color-tint-strong);
-}
-
-/* 实底降级放在基础规则里，backdrop-filter 可用时由 @supports 升级为玻璃 */
-.glass-surface {
-  background: rgba(235, 238, 236, 0.88);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
+.ui-surface {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-floating);
   overflow: hidden;
   position: relative;
 }
 
-.glass-surface::before {
-  background: linear-gradient(135deg, var(--glass-highlight), transparent 42%);
-  content: "";
-  inset: 0;
-  opacity: 0.62;
-  pointer-events: none;
-  position: absolute;
-}
-
-@supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
-  .glass-surface {
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 249, 248, 0.46)), var(--glass-tint);
-  }
-}
-
-.glass-surface--panel {
+.ui-surface--panel {
   border-radius: var(--radius-panel);
 }
 
-.glass-surface--bar {
+.ui-surface--bar {
   border-radius: 26px;
 }
 
-.glass-surface--sheet {
+.ui-surface--sheet {
   border-radius: 30px 30px 0 0;
 }
 
-.glass-surface--button {
+.ui-surface--button {
   border-radius: 18px;
 }
 
-.glass-surface--menu {
+.ui-surface--menu {
   border-radius: 22px;
 }
 
-.glass-surface--interactive {
+.ui-surface--interactive {
   transition:
     transform var(--motion-duration-fast) ease,
     background var(--motion-duration-fast) ease,
@@ -617,26 +574,22 @@ select:focus-visible {
     filter var(--motion-duration-fast) ease;
 }
 
-.glass-surface--pressed,
-.glass-surface--selected {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 249, 248, 0.54)),
-    var(--color-tint-soft);
+.ui-surface--pressed,
+.ui-surface--selected {
+  background: var(--color-tint-soft);
 }
 
-.glass-surface--disabled {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: rgba(235, 238, 236, 0.88);
+.ui-surface--disabled {
+  background: var(--color-disabled-fill);
   color: var(--color-disabled-text);
 }
 
-.glass-menu {
+.ui-menu {
   display: grid;
   padding: 8px;
 }
 
-.glass-menu__item {
+.ui-menu__item {
   background: transparent;
   border-radius: 14px;
   color: var(--color-text-primary);
@@ -650,7 +603,7 @@ select:focus-visible {
   z-index: 1;
 }
 
-.glass-menu__item:active {
+.ui-menu__item:active {
   background: var(--color-control-pressed);
 }
 
@@ -681,35 +634,32 @@ select:focus-visible {
 }
 
 .ui-sheet,
-.glass-bottom-sheet {
+.ui-bottom-sheet {
   display: flex;
   flex-direction: column;
   max-height: min(78dvh, 640px);
   padding: 8px var(--space-sheet-x) calc(18px + env(safe-area-inset-bottom));
 }
 
-.glass-bottom-sheet--category-picker {
+.ui-bottom-sheet--category-picker {
   min-height: min(72dvh, 620px);
 }
 
-.glass-bottom-sheet--full-height {
+.ui-bottom-sheet--full-height {
   height: calc(100dvh - env(safe-area-inset-top));
   max-height: calc(100dvh - env(safe-area-inset-top));
 }
 
-.glass-bottom-sheet--full-height .sheet-body {
+.ui-bottom-sheet--full-height .sheet-body {
   display: flex;
   padding-top: 0;
 }
 
 .ui-sheet {
-  -webkit-backdrop-filter: blur(24px) saturate(1.24);
-  backdrop-filter: blur(24px) saturate(1.24);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(247, 248, 247, 0.78)),
-    rgba(255, 255, 255, 0.76);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 30px 30px 0 0;
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--shadow-floating);
 }
 
 .sheet-header {
@@ -736,7 +686,7 @@ select:focus-visible {
   width: var(--space-control-height);
 }
 
-/* 面板整体 overflow:hidden（glass-surface），滚动统一发生在 sheet-body；
+/* 面板整体 overflow:hidden（ui-surface），滚动统一发生在 sheet-body；
    内容自带滚动区（如记账表单）时因内部 min-height 收缩，这里不会出现双重滚动。 */
 .sheet-body {
   -webkit-overflow-scrolling: touch;
@@ -763,14 +713,10 @@ select:focus-visible {
 
 .ui-toast {
   align-items: flex-start;
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  backdrop-filter: blur(18px) saturate(1.2);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(247, 248, 247, 0.68)),
-    rgba(255, 255, 255, 0.72);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-subtle);
   border-radius: 16px;
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--shadow-floating);
   color: var(--color-text-primary);
   display: flex;
   gap: 10px;
@@ -987,7 +933,7 @@ select:focus-visible {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass-surface,
+  .ui-surface,
   .ui-sheet,
   .ui-toast,
   .ui-input-shell,
@@ -999,11 +945,10 @@ select:focus-visible {
     backdrop-filter: none;
     background: rgba(255, 255, 255, 0.96);
   }
-
 }
 
 @media (prefers-contrast: more) {
-  .glass-surface,
+  .ui-surface,
   .ui-button,
   .ui-icon-button,
   .ui-input-shell,
@@ -1021,7 +966,7 @@ select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .ui-button,
   .ui-icon-button,
-  .glass-surface,
+  .ui-surface,
   .ui-tabs__item,
   .tab-bar__item,
   .ui-switch,
@@ -1698,13 +1643,13 @@ select:focus-visible {
   text-align: center;
 }
 
-.glass-bottom-sheet--transaction-picker {
+.ui-bottom-sheet--transaction-picker {
   box-sizing: border-box;
   max-width: 100%;
   overflow-x: hidden;
 }
 
-.glass-bottom-sheet--transaction-picker .sheet-body {
+.ui-bottom-sheet--transaction-picker .sheet-body {
   overflow-x: hidden;
 }
 
@@ -2253,15 +2198,15 @@ select:focus-visible {
   gap: 8px;
 }
 
-.glass-bottom-sheet--filter {
+.ui-bottom-sheet--filter {
   height: min(84dvh, 720px);
 }
 
-.glass-bottom-sheet--filter > .sheet-header {
+.ui-bottom-sheet--filter > .sheet-header {
   display: none;
 }
 
-.glass-bottom-sheet--filter > .sheet-body {
+.ui-bottom-sheet--filter > .sheet-body {
   height: calc(100% - 15px);
   min-height: 0;
 }

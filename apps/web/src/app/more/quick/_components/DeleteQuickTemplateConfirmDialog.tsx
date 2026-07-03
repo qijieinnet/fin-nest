@@ -3,8 +3,7 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { GlassSurface } from "@/components/glass";
-import { Button } from "@/components/ui";
+import { Button, Surface } from "@/components/ui";
 import type { QuickTemplate } from "@/lib/api";
 
 type DeleteQuickTemplateConfirmDialogProps = {
@@ -48,7 +47,7 @@ export function DeleteQuickTemplateConfirmDialog({
         onClick={onCancel}
         type="button"
       />
-      <GlassSurface
+      <Surface
         className="w-full max-w-[340px] rounded-[28px] border-white/75 bg-white/70 p-5 shadow-[0_28px_80px_rgba(18,24,38,0.22)]"
         variant="panel"
       >
@@ -56,19 +55,25 @@ export function DeleteQuickTemplateConfirmDialog({
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]">
             <AlertTriangle size={24} strokeWidth={2.2} />
           </span>
-          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">删除快速记账？</h2>
+          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+            删除快速记账？
+          </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
             确定删除「{name}」这个模板吗？已记录的账单不受影响。
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
-            <Button className="w-full justify-center" disabled={deleting} glass onClick={onCancel} variant="secondary">
+            <Button
+              className="w-full justify-center"
+              disabled={deleting}
+              onClick={onCancel}
+              variant="secondary"
+            >
               取消
             </Button>
             <Button
               className="w-full justify-center"
               disabled={deleting}
-              glass
               icon={<Trash2 size={17} />}
               onClick={onConfirm}
               variant="danger"
@@ -77,7 +82,7 @@ export function DeleteQuickTemplateConfirmDialog({
             </Button>
           </div>
         </div>
-      </GlassSurface>
+      </Surface>
     </div>,
     document.body,
   );

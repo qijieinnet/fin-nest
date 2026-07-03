@@ -7,8 +7,6 @@ export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "plai
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   block?: boolean;
-  /** Deprecated: buttons are always flat now. Kept temporarily for older call sites. */
-  glass?: boolean;
   icon?: ReactNode;
   label?: string;
   variant?: ButtonVariant;
@@ -19,14 +17,12 @@ export function Button({
   children,
   className,
   disabled,
-  glass: _glass,
   icon,
   label,
   type = "button",
   variant = "primary",
   ...props
 }: ButtonProps) {
-  void _glass;
   const iconOnly = Boolean(icon) && !children;
   const accessibleLabel = iconOnly ? (label ?? props["aria-label"]) : props["aria-label"];
 

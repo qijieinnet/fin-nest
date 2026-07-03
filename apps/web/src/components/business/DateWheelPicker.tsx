@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays } from "lucide-react";
-import { GlassSurface } from "@/components/glass";
+import { Surface } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 
 type DateWheelPickerProps = {
@@ -34,7 +34,10 @@ function daysInMonth(year: number, month: number): number {
 function isIOSLike(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return (
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
 }
 
 export function DateWheelPicker({ label = "日期", onValueChange, value }: DateWheelPickerProps) {
@@ -49,9 +52,15 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
     year: selectedDate.getFullYear(),
   }));
   const [nativePicker, setNativePicker] = useState(false);
-  const years = useMemo(() => Array.from({ length: 11 }, (_, index) => selectedDate.getFullYear() - 5 + index), [selectedDate]);
+  const years = useMemo(
+    () => Array.from({ length: 11 }, (_, index) => selectedDate.getFullYear() - 5 + index),
+    [selectedDate],
+  );
   const months = useMemo(() => Array.from({ length: 12 }, (_, index) => index + 1), []);
-  const days = useMemo(() => Array.from({ length: daysInMonth(draft.year, draft.month) }, (_, index) => index + 1), [draft.month, draft.year]);
+  const days = useMemo(
+    () => Array.from({ length: daysInMonth(draft.year, draft.month) }, (_, index) => index + 1),
+    [draft.month, draft.year],
+  );
 
   function openWheel() {
     setDraft({
@@ -89,12 +98,19 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
   const popover = open
     ? createPortal(
         <div className="biz-date-popover-root">
-          <button aria-label="关闭日期选择" className="biz-date-popover-backdrop" onClick={() => setOpen(false)} type="button" />
+          <button
+            aria-label="关闭日期选择"
+            className="biz-date-popover-backdrop"
+            onClick={() => setOpen(false)}
+            type="button"
+          />
           <div className="biz-date-popover">
-            <GlassSurface className="biz-date-wheel-sheet" variant="sheet">
-              <span className="glass-bottom-sheet__grabber" />
+            <Surface className="biz-date-wheel-sheet" variant="sheet">
+              <span className="ui-bottom-sheet__grabber" />
               <header className="biz-date-wheel-sheet__header">
-                <button onClick={() => setOpen(false)} type="button">取消</button>
+                <button onClick={() => setOpen(false)} type="button">
+                  取消
+                </button>
                 <strong>{formatDisplayDate(draftDate)}</strong>
                 <button
                   onClick={() => {
@@ -108,13 +124,22 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
               </header>
               <div className="biz-date-wheel">
                 <span aria-hidden="true" className="biz-date-wheel__selection" />
-                <span aria-hidden="true" className="biz-date-wheel__fade biz-date-wheel__fade--top" />
-                <span aria-hidden="true" className="biz-date-wheel__fade biz-date-wheel__fade--bottom" />
+                <span
+                  aria-hidden="true"
+                  className="biz-date-wheel__fade biz-date-wheel__fade--top"
+                />
+                <span
+                  aria-hidden="true"
+                  className="biz-date-wheel__fade biz-date-wheel__fade--bottom"
+                />
                 <div className="biz-date-wheel__columns">
                   <div className="biz-date-wheel__column" ref={yearRef}>
                     {years.map((year) => (
                       <button
-                        className={cn("biz-date-wheel__item", draft.year === year && "biz-date-wheel__item--selected")}
+                        className={cn(
+                          "biz-date-wheel__item",
+                          draft.year === year && "biz-date-wheel__item--selected",
+                        )}
                         key={year}
                         onClick={() => patchDraft({ year })}
                         type="button"
@@ -126,7 +151,10 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                   <div className="biz-date-wheel__column" ref={monthRef}>
                     {months.map((month) => (
                       <button
-                        className={cn("biz-date-wheel__item", draft.month === month && "biz-date-wheel__item--selected")}
+                        className={cn(
+                          "biz-date-wheel__item",
+                          draft.month === month && "biz-date-wheel__item--selected",
+                        )}
                         key={month}
                         onClick={() => patchDraft({ month })}
                         type="button"
@@ -138,7 +166,10 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                   <div className="biz-date-wheel__column" ref={dayRef}>
                     {days.map((day) => (
                       <button
-                        className={cn("biz-date-wheel__item", draft.day === day && "biz-date-wheel__item--selected")}
+                        className={cn(
+                          "biz-date-wheel__item",
+                          draft.day === day && "biz-date-wheel__item--selected",
+                        )}
                         key={day}
                         onClick={() => patchDraft({ day })}
                         type="button"
@@ -149,7 +180,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                   </div>
                 </div>
               </div>
-            </GlassSurface>
+            </Surface>
           </div>
         </div>,
         document.body,

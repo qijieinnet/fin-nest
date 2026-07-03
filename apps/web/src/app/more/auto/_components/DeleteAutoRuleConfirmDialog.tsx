@@ -3,8 +3,7 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { GlassSurface } from "@/components/glass";
-import { Button } from "@/components/ui";
+import { Button, Surface } from "@/components/ui";
 import type { Account, AutoRule, Category } from "@/lib/api";
 import { categorySummary, transferAccountSummary } from "./auto-utils";
 
@@ -62,7 +61,7 @@ export function DeleteAutoRuleConfirmDialog({
         onClick={onCancel}
         type="button"
       />
-      <GlassSurface
+      <Surface
         className="w-full max-w-[340px] rounded-[28px] border-white/75 bg-white/70 p-5 shadow-[0_28px_80px_rgba(18,24,38,0.22)]"
         variant="panel"
       >
@@ -70,18 +69,24 @@ export function DeleteAutoRuleConfirmDialog({
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]">
             <AlertTriangle size={24} strokeWidth={2.2} />
           </span>
-          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">删除自动记账？</h2>
+          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+            删除自动记账？
+          </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
             将停止并归档「{summary.name}」这条规则，已生成的待确认记录和历史账单不会自动删除。
           </p>
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
-            <Button className="w-full justify-center" disabled={deleting} glass onClick={onCancel} variant="secondary">
+            <Button
+              className="w-full justify-center"
+              disabled={deleting}
+              onClick={onCancel}
+              variant="secondary"
+            >
               取消
             </Button>
             <Button
               className="w-full justify-center"
               disabled={deleting}
-              glass
               icon={<Trash2 size={17} />}
               onClick={onConfirm}
               variant="danger"
@@ -90,7 +95,7 @@ export function DeleteAutoRuleConfirmDialog({
             </Button>
           </div>
         </div>
-      </GlassSurface>
+      </Surface>
     </div>,
     document.body,
   );

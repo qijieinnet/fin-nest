@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { GlassBottomSheet } from "@/components/glass";
-import { Tabs } from "@/components/ui";
+import { BottomSheet, Tabs } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption, CategoryOption, TransactionType } from "./business-types";
 import { CategorySelectionList } from "./CategorySelectionList";
@@ -70,7 +69,11 @@ function FilterChip({
   selected?: boolean;
 }) {
   return (
-    <button className={cn("biz-filter-chip", selected && "biz-filter-chip--selected")} onClick={onClick} type="button">
+    <button
+      className={cn("biz-filter-chip", selected && "biz-filter-chip--selected")}
+      onClick={onClick}
+      type="button"
+    >
       {icon ? <span>{icon}</span> : null}
       {label}
     </button>
@@ -111,14 +114,21 @@ export function FilterSheet({
     if (hasField(fields, "type") || hasField(fields, "category")) next.push("分类");
     if (hasField(fields, "dateRange")) next.push("时间");
     if (hasField(fields, "account")) next.push("账户");
-    if (hasField(fields, "keyword") || hasField(fields, "person") || hasField(fields, "creator") || hasField(fields, "amountRange")) next.push("其它");
+    if (
+      hasField(fields, "keyword") ||
+      hasField(fields, "person") ||
+      hasField(fields, "creator") ||
+      hasField(fields, "amountRange")
+    )
+      next.push("其它");
     return next.length ? next : (["分类"] as FilterTab[]);
   }, [fields]);
 
   const effectiveType = draft.type ?? "all";
   const categoriesForType = categoryOptions.filter((option) => {
     if (option.parentId) return false;
-    if (effectiveType === "income" || effectiveType === "expense") return option.kind === effectiveType || !option.kind;
+    if (effectiveType === "income" || effectiveType === "expense")
+      return option.kind === effectiveType || !option.kind;
     return true;
   });
   const visibleCategoryOptions = categoryOptions.filter((option) => {
@@ -127,8 +137,8 @@ export function FilterSheet({
   });
 
   return (
-    <GlassBottomSheet
-      className="glass-bottom-sheet--filter"
+    <BottomSheet
+      className="ui-bottom-sheet--filter"
       onClose={() => onOpenChange(false)}
       open={open}
       title="过滤条件"
@@ -212,7 +222,9 @@ export function FilterSheet({
                 </>
               ) : null}
 
-              {effectiveType === "transfer" ? <p className="biz-filter-hint">转账记录不区分分类，可在「账户」中筛选。</p> : null}
+              {effectiveType === "transfer" ? (
+                <p className="biz-filter-hint">转账记录不区分分类，可在「账户」中筛选。</p>
+              ) : null}
             </>
           ) : null}
 
@@ -231,9 +243,17 @@ export function FilterSheet({
               </div>
               {(draft.timePreset ?? "month") === "custom" ? (
                 <div className="biz-filter-date-range">
-                  <input onChange={(event) => patch({ dateFrom: event.currentTarget.value })} type="date" value={draft.dateFrom ?? ""} />
+                  <input
+                    onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
+                    type="date"
+                    value={draft.dateFrom ?? ""}
+                  />
                   <span>—</span>
-                  <input onChange={(event) => patch({ dateTo: event.currentTarget.value })} type="date" value={draft.dateTo ?? ""} />
+                  <input
+                    onChange={(event) => patch({ dateTo: event.currentTarget.value })}
+                    type="date"
+                    value={draft.dateTo ?? ""}
+                  />
                 </div>
               ) : null}
             </>
@@ -337,6 +357,6 @@ export function FilterSheet({
           ) : null}
         </div>
       </div>
-    </GlassBottomSheet>
+    </BottomSheet>
   );
 }

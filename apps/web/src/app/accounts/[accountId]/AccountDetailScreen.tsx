@@ -77,7 +77,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   };
 
   const removeAccount = useMutation({
-    mutationFn: () => apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), { method: "DELETE" }),
+    mutationFn: () =>
+      apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), { method: "DELETE" }),
     onSuccess: async () => {
       await invalidate();
       setPendingDelete(null);
@@ -93,9 +94,12 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const removeSub = useMutation({
     mutationFn: (subAccountId: string) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`), {
-        method: "DELETE",
-      }),
+      apiRequest<void>(
+        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`),
+        {
+          method: "DELETE",
+        },
+      ),
     onSuccess: async () => {
       await invalidate();
       setPendingDelete(null);
@@ -149,7 +153,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const openEditor = () => {
     push({
-      className: "glass-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height",
       hideDefaultHeader: true,
       content: <AccountEditorSheet account={account} ledgerId={ledgerId} />,
     });
@@ -161,7 +165,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       content: (
         <BalanceEditSheet
           accountId={account.id}
-          initialBalance={microsToInput(subAccount ? subAccount.balanceMicros : account.balanceMicros)}
+          initialBalance={microsToInput(
+            subAccount ? subAccount.balanceMicros : account.balanceMicros,
+          )}
           ledgerId={ledgerId}
           subAccountId={subAccount?.id}
           title={subAccount ? `修改余额 · ${subAccount.name}` : "修改余额"}
@@ -213,7 +219,10 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     }
   } else if (isLend) {
     stats.push({ label: "对方", value: account.counterparty ?? "—" });
-    stats.push({ label: "到期日", value: account.dueDate ? formatDateLabel(account.dueDate) : "未设置" });
+    stats.push({
+      label: "到期日",
+      value: account.dueDate ? formatDateLabel(account.dueDate) : "未设置",
+    });
     stats.push({
       label: "状态",
       value: settled ? "已结清" : "进行中",
@@ -235,7 +244,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       {
         icon: <Trash2 size={18} />,
         label: `删除${subAccount.name}`,
-        onClick: () => setPendingDelete({ kind: "sub", name: subAccount.name, subAccountId: subAccount.id }),
+        onClick: () =>
+          setPendingDelete({ kind: "sub", name: subAccount.name, subAccountId: subAccount.id }),
         tone: "danger",
       },
     ];
@@ -293,9 +303,13 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           <span className="mx-auto flex h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-[var(--color-bg-surface)] text-[30px] shadow-[var(--shadow-soft)]">
             {account.icon ?? "💼"}
           </span>
-          <h1 className="mt-2.5 text-[19px] font-bold text-[var(--color-text-primary)]">{account.name}</h1>
+          <h1 className="mt-2.5 text-[19px] font-bold text-[var(--color-text-primary)]">
+            {account.name}
+          </h1>
           <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)]">{meta.name}</p>
-          <p className="mt-4 text-[13px] text-[var(--color-text-muted)]">{balanceLabel(account.type)}</p>
+          <p className="mt-4 text-[13px] text-[var(--color-text-muted)]">
+            {balanceLabel(account.type)}
+          </p>
           <p
             className={`mt-0.5 text-[36px] font-bold leading-tight tracking-tight [font-variant-numeric:tabular-nums] ${
               settled
@@ -371,7 +385,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
         {isLend && entries.length > 0 ? (
           <section className="mt-6">
-            <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">资金变动记录</h2>
+            <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+              资金变动记录
+            </h2>
             <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
               {entries.map((entry) => {
                 const delta = BigInt(entry.amountDeltaMicros);
@@ -387,7 +403,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
                         {entry.note ?? entryTypeLabel(entry.entryType, account.type)}
                       </span>
                       <span className="mt-0.5 block text-[11.5px] text-[var(--color-text-muted)]">
-                        {entryTypeLabel(entry.entryType, account.type)} · {formatDateLabel(entry.occurredAt)}
+                        {entryTypeLabel(entry.entryType, account.type)} ·{" "}
+                        {formatDateLabel(entry.occurredAt)}
                       </span>
                     </span>
                     <span
@@ -406,7 +423,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         ) : null}
 
         <section className="mt-6">
-          <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">关联记录</h2>
+          <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+            关联记录
+          </h2>
           {transactions.length === 0 ? (
             <p className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-5 text-center text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
               还没有使用该账户的记账
