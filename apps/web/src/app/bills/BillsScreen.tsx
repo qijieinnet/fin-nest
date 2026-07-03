@@ -260,6 +260,14 @@ export function BillsScreen() {
         )}
       </main>
 
+      {/* 顶部 / 底部渐隐蒙层：内容滚动到边缘时柔和淡出 */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-20 flex justify-center">
+        <div className="h-[calc(env(safe-area-inset-top)+24px)] w-[min(100vw,var(--space-app-width))] bg-[linear-gradient(to_bottom,var(--color-bg-app),rgba(254,254,254,0))]" />
+      </div>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center">
+        <div className="h-[calc(var(--space-tab-bar-height)+56px+env(safe-area-inset-bottom))] w-[min(100vw,var(--space-app-width))] bg-[linear-gradient(to_top,var(--color-bg-app),rgba(254,254,254,0))]" />
+      </div>
+
       {/* 右侧浮动动作栈：筛选 / 闪电快捷 / 记一笔 */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
         <div className="relative w-[min(100vw,430px)]">

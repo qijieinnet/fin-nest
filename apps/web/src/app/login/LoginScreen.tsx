@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import {
   apiRequest,
   type AuthResult,
   getApiErrorMessage,
+  type RegistrationStatus,
   setSessionToken,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -23,6 +24,13 @@ export function LoginScreen() {
   const { setUser } = useAuth();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+
+  const registrationQuery = useQuery({
+    queryKey: queryKeys.registrationSetting,
+    queryFn: () => apiRequest<RegistrationStatus>(API_ENDPOINTS.registrationStatus),
+    staleTime: 60_000,
+  });
+  const registrationEnabled = registrationQuery.data?.registrationEnabled ?? false;
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -43,12 +51,13 @@ export function LoginScreen() {
   return (
     <AuthScreenShell
       footer={
-        <>
-          还没有账号？{" "}
-          <Link href={routes.register}>注册</Link>
-        </>
+        registrationEnabled ? (
+          <>
+            还没有账号？ <Link href={routes.register}>注册</Link>
+          </>
+        ) : undefined
       }
-      subtitle="使用邮箱或账号登录你的记账本。"
+      subtitle=""
       title="欢迎回来"
     >
       <form

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import {
   apiRequest,
   type AuthResult,
   getApiErrorMessage,
+  type RegistrationStatus,
   setSessionToken,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -27,6 +28,16 @@ export function RegisterScreen() {
   const [account, setAccount] = useState("");
   const [alias, setAlias] = useState("");
   const [password, setPassword] = useState("");
+
+  const registrationQuery = useQuery({
+    queryKey: queryKeys.registrationSetting,
+    queryFn: () => apiRequest<RegistrationStatus>(API_ENDPOINTS.registrationStatus),
+    staleTime: 60_000,
+  });
+  // 未加载完成前按允许处理，避免正常场景闪现“已关闭”。
+  const registrationEnabled = registrationQuery.data?.registrationEnabled ?? true;
+  // 仅当此次注册会成为管理员（系统首位用户）时才提示。
+  const willBeAdmin = registrationQuery.data?.willBeAdmin ?? false;
 
   const accountInvalid = account.length > 0 && !ACCOUNT_PATTERN.test(account);
 
@@ -50,12 +61,29 @@ export function RegisterScreen() {
   });
 
   const canSubmit =
+    registrationEnabled &&
     email.trim().length > 0 &&
     account.trim().length >= 3 &&
     !accountInvalid &&
     alias.trim().length > 0 &&
     password.length >= 8 &&
     !mutation.isPending;
+
+  if (!registrationEnabled) {
+    return (
+      <AuthScreenShell
+        footer={
+          <>
+            已有账号？ <Link href={routes.login}>去登录</Link>
+          </>
+        }
+        subtitle=""
+        title="创建账号"
+      >
+        <p className="auth-error">当前未开放注册，请联系管理员。</p>
+      </AuthScreenShell>
+    );
+  }
 
   return (
     <AuthScreenShell
@@ -64,7 +92,7 @@ export function RegisterScreen() {
           已有账号？ <Link href={routes.login}>去登录</Link>
         </>
       }
-      subtitle="首位注册用户即为管理员。"
+      subtitle={willBeAdmin ? "注册后你将成为管理员" : ""}
       title="创建账号"
     >
       <form

@@ -12,6 +12,8 @@ export const routes = {
   insurances: "/more/insurances",
   items: "/more/items",
   importExport: "/more/import-export",
+  admin: "/more/admin",
+  users: "/more/users",
   bills: "/bills",
   billNew: "/bills/new",
   bill: (transactionId: string) => `/bills/${transactionId}`,

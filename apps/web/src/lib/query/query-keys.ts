@@ -1,5 +1,8 @@
 export const queryKeys = {
   currentUser: ["auth", "me"] as const,
+  adminUsersRoot: ["auth", "admin", "users"] as const,
+  adminUsers: (search: string) => ["auth", "admin", "users", search] as const,
+  registrationSetting: ["auth", "admin", "registration"] as const,
   ledgers: ["ledgers"] as const,
   ledger: (ledgerId: string) => ["ledger", ledgerId] as const,
   ledgerMembers: (ledgerId: string) => ["ledger", ledgerId, "members"] as const,

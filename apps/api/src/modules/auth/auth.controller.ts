@@ -31,6 +31,12 @@ export class AuthController {
     return this.authService.login(body, request);
   }
 
+  @Get("registration")
+  @ApiOkResponse({ description: "公开读取是否允许注册，供登录/注册页控制注册入口显示" })
+  getRegistrationStatus() {
+    return this.authService.getPublicRegistrationStatus();
+  }
+
   @Post("logout")
   @ApiBearerAuth()
   @ApiNoContentResponse()

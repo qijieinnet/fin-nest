@@ -5,10 +5,24 @@ export const API_ENDPOINTS = {
   logout: "/auth/logout",
   me: "/auth/me",
   password: "/auth/password",
+  /** 公开：是否允许注册，供登录/注册页控制入口显示。 */
+  registrationStatus: "/auth/registration",
   ledgers: "/ledgers",
   /** 通过邀请码创建 pending 加入申请。 */
   joinRequests: "/ledger-join-requests",
+  /** 管理员：用户列表。 */
+  adminUsers: "/admin/users",
+  /** 管理员：开放注册开关。 */
+  adminRegistration: "/admin/app-settings/registration",
 } as const;
+
+export function adminUserStatusPath(userId: string): string {
+  return `/admin/users/${encodeURIComponent(userId)}/status`;
+}
+
+export function adminUserAdminPath(userId: string): string {
+  return `/admin/users/${encodeURIComponent(userId)}/admin`;
+}
 
 export function ledgerPath(ledgerId: string): string {
   return `/ledgers/${encodeURIComponent(ledgerId)}`;

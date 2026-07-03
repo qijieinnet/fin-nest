@@ -86,6 +86,29 @@ export type RegistrationSetting = {
   registrationEnabled: boolean;
 };
 
+/** 登录/注册页公开读取的注册状态。willBeAdmin 表示此刻注册者是否会成为管理员（首位用户）。 */
+export type RegistrationStatus = {
+  registrationEnabled: boolean;
+  willBeAdmin: boolean;
+};
+
+/** 管理员视角的用户条目，含禁用状态与创建时间。 */
+export type AdminUser = {
+  id: string;
+  email: string;
+  account: string;
+  alias: string;
+  isAdmin: boolean;
+  disabledAt: string | null;
+  createdAt: string;
+};
+
+/** 用户列表分页结果。nextOffset 为 null 表示没有更多。 */
+export type AdminUserPage = {
+  items: AdminUser[];
+  nextOffset: number | null;
+};
+
 // ---- 记账（F4）相关契约 ----
 // 注：所有 *Micros 金额字段经后端 BigInt 序列化拦截器转成字符串；日期字段为 ISO 字符串。
 

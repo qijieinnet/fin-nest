@@ -1,6 +1,8 @@
 export { apiRequest } from "./client";
 export type { ApiRequestOptions } from "./client";
 export {
+  adminUserAdminPath,
+  adminUserStatusPath,
   API_ENDPOINTS,
   approveJoinRequestPath,
   ledgerApiPath,
@@ -23,6 +25,8 @@ export type {
   Account,
   AccountEntry,
   AccountType,
+  AdminUser,
+  AdminUserPage,
   AutoPendingStatus,
   AutoPendingTransaction,
   AutoRelation,
@@ -60,6 +64,7 @@ export type {
   QuickTemplate,
   RecordSetting,
   RegistrationSetting,
+  RegistrationStatus,
   StatsCategoryEntry,
   StatsSubcategoryEntry,
   StatsTypeSummary,

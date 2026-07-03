@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, LogOut, Package, ShieldCheck, WalletCards } from "lucide-react";
+import { ChevronRight, LogOut, Package, Shield, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { MobileAppShell, MobileTabBar } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, clearSessionToken, getApiErrorMessage } from "@/lib/api";
@@ -168,6 +168,31 @@ export function MoreScreen() {
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>
+
+        {/* 管理员功能入口（仅管理员可见） */}
+        {user?.isAdmin ? (
+          <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            <button
+              className="flex w-full items-center gap-3 p-4 text-left"
+              onClick={() => router.push(routes.admin)}
+              type="button"
+            >
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+              >
+                <Shield size={20} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base text-[var(--color-text-primary)]">管理员功能</span>
+                <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                  开放注册与用户管理
+                </span>
+              </span>
+              <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+            </button>
+          </section>
+        ) : null}
 
         {/* 分类 / 人员 / 自动记账入口 */}
         <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">

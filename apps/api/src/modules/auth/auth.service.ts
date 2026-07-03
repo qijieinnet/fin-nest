@@ -23,6 +23,16 @@ export type AuthResult = {
   expiresAt: Date;
 };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  account: string;
+  alias: string;
+  isAdmin: boolean;
+  disabledAt: Date | null;
+  createdAt: Date;
+};
+
 // 登录失败限速：同一 登录名+IP 在窗口期内最多失败 N 次。
 // 内存实现，适用于单实例自部署；多实例部署需换成共享存储。
 const LOGIN_MAX_FAILURES = 5;
@@ -224,6 +234,14 @@ export class AuthService {
     return { registrationEnabled: settings?.registrationEnabled ?? true };
   }
 
+  // 登录/注册页（未登录）使用的公开状态：无用户时始终允许注册，且该用户将成为管理员。
+  async getPublicRegistrationStatus(): Promise<{ registrationEnabled: boolean; willBeAdmin: boolean }> {
+    const userCount = await this.prisma.client.user.count();
+    if (userCount === 0) return { registrationEnabled: true, willBeAdmin: true };
+    const { registrationEnabled } = await this.getRegistrationSetting();
+    return { registrationEnabled, willBeAdmin: false };
+  }
+
   async updateRegistrationSetting(enabled: boolean, admin: SessionAuthContext): Promise<{ registrationEnabled: boolean }> {
     const settings = await this.prisma.client.appSetting.upsert({
       where: { id: 1 },
@@ -231,6 +249,110 @@ export class AuthService {
       update: { registrationEnabled: enabled, updatedBy: admin.userId },
     });
     return { registrationEnabled: settings.registrationEnabled };
+  }
+
+  async listUsers(params: {
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ items: AdminUser[]; nextOffset: number | null }> {
+    const search = params.search?.trim();
+    const where: Prisma.UserWhereInput = search
+      ? {
+          OR: [
+            // account / email 是 citext，contains 天然大小写不敏感；alias 为普通文本需显式 insensitive。
+            { account: { contains: search } },
+            { email: { contains: search } },
+            { alias: { contains: search, mode: "insensitive" } },
+          ],
+        }
+      : {};
+    const items = await this.prisma.client.user.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      skip: params.offset,
+      take: params.limit,
+    });
+    const nextOffset = items.length === params.limit ? params.offset + params.limit : null;
+    return { items: items.map((user) => this.toAdminUser(user)), nextOffset };
+  }
+
+  async setUserDisabled(targetUserId: string, disabled: boolean, admin: SessionAuthContext): Promise<AdminUser> {
+    if (targetUserId === admin.userId) {
+      throw new AppError("CANNOT_DISABLE_SELF", "不能禁用自己的账号", 400);
+    }
+    return this.txs.run(async (tx) => {
+      const target = await tx.user.findUnique({ where: { id: targetUserId } });
+      if (!target) {
+        throw new AppError("USER_NOT_FOUND", "用户不存在", 404);
+      }
+      const updated = await tx.user.update({
+        where: { id: targetUserId },
+        data: { disabledAt: disabled ? new Date() : null },
+      });
+      if (disabled) {
+        // 禁用后立即吊销该用户所有有效会话，使其下次请求即失效。
+        await tx.session.updateMany({
+          where: { userId: targetUserId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: admin.userId,
+          action: disabled ? "admin.user.disable" : "admin.user.enable",
+          entityType: "user",
+          entityId: targetUserId,
+        },
+        tx,
+      );
+      return this.toAdminUser(updated);
+    });
+  }
+
+  async setUserAdmin(targetUserId: string, isAdmin: boolean, admin: SessionAuthContext): Promise<AdminUser> {
+    return this.txs.run(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(931733002)`;
+      const target = await tx.user.findUnique({ where: { id: targetUserId } });
+      if (!target) {
+        throw new AppError("USER_NOT_FOUND", "用户不存在", 404);
+      }
+      if (!isAdmin && target.isAdmin) {
+        // 不能取消最后一个管理员，避免系统失去管理入口。
+        const adminCount = await tx.user.count({ where: { isAdmin: true } });
+        if (adminCount <= 1) {
+          throw new AppError("LAST_ADMIN", "至少需要保留一个管理员", 400);
+        }
+      }
+      const updated = await tx.user.update({
+        where: { id: targetUserId },
+        data: { isAdmin },
+      });
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: admin.userId,
+          action: isAdmin ? "admin.user.grant_admin" : "admin.user.revoke_admin",
+          entityType: "user",
+          entityId: targetUserId,
+        },
+        tx,
+      );
+      return this.toAdminUser(updated);
+    });
+  }
+
+  private toAdminUser(user: Prisma.UserGetPayload<object>): AdminUser {
+    return {
+      id: user.id,
+      email: user.email,
+      account: user.account,
+      alias: user.alias,
+      isAdmin: user.isAdmin,
+      disabledAt: user.disabledAt,
+      createdAt: user.createdAt,
+    };
   }
 
   private async createSessionForUser(
