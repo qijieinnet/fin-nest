@@ -23,6 +23,7 @@ import {
   apiRequest,
   getApiErrorMessage,
   ledgerApiPath,
+  type AutoPendingTransaction,
   type TransactionDetail,
   type TransactionInput,
   type TransactionRelationInput,
@@ -49,9 +50,31 @@ import {
 } from "@/lib/data/records";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useToast } from "@/providers";
+import { useDecimalPlaces, useToast } from "@/providers";
 
 const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
+
+const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
+  { label: "支出", value: "expense" },
+  { label: "收入", value: "income" },
+  { label: "转账", value: "transfer" },
+];
+
+// 待确认确认接口的 PATCH body（对应后端 UpdateAutoPendingDto）。
+type PendingPatchBody = {
+  amountMicros: string;
+  scheduledFor: string;
+  categoryId: string | null;
+  subcategoryId: string | null;
+  accountId: string | null;
+  subAccountId: string | null;
+  fromAccountId: string | null;
+  fromSubAccountId: string | null;
+  toAccountId: string | null;
+  toSubAccountId: string | null;
+  personId: string | null;
+  note: string;
+};
 
 type RelationBucket = "primary" | "linked";
 
@@ -89,7 +112,10 @@ function resolveCategory(
   return {};
 }
 
-function relationAccountKind(type: TransactionType, bucket: RelationBucket): "receivable" | "payable" {
+function relationAccountKind(
+  type: TransactionType,
+  bucket: RelationBucket,
+): "receivable" | "payable" {
   if (type === "income") return bucket === "primary" ? "payable" : "receivable";
   return bucket === "primary" ? "receivable" : "payable";
 }
@@ -101,7 +127,8 @@ function splitInitialRelations(
   const buckets: Record<RelationBucket, RecoverablePayableItem[]> = { primary: [], linked: [] };
   for (const relation of relations) {
     const bucket =
-      relation.relationKind === "receivable_from_expense" || relation.relationKind === "payable_from_income"
+      relation.relationKind === "receivable_from_expense" ||
+      relation.relationKind === "payable_from_income"
         ? "primary"
         : "linked";
     buckets[bucket].push({
@@ -157,6 +184,10 @@ export type TransactionSeed = {
   personId?: string | null;
   accountId?: string | null;
   subAccountId?: string | null;
+  fromAccountId?: string | null;
+  fromSubAccountId?: string | null;
+  toAccountId?: string | null;
+  toSubAccountId?: string | null;
   note?: string | null;
   relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }> | null;
   insuranceId?: string | null;
@@ -170,6 +201,8 @@ type TransactionFormProps = {
   onCanSubmitChange?: (canSubmit: boolean) => void;
   onSubmitBlocked?: (submitBlocked: () => void) => void;
   onPendingChange?: (pending: boolean) => void;
+  /** 待确认模式：预填这条待确认，提交时保存修改并直接确认入账。 */
+  pending?: AutoPendingTransaction;
   seed?: TransactionSeed;
 };
 
@@ -180,12 +213,15 @@ export function TransactionForm({
   onCanSubmitChange,
   onPendingChange,
   onSubmitBlocked,
+  pending,
   seed,
 }: TransactionFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const isEdit = Boolean(initial);
+  // 待确认模式下不涉及关联/附件/资产（后端待确认更新接口不支持），提交=保存+确认。
+  const isPendingMode = Boolean(pending);
 
   const settingQuery = useRecordSetting(ledgerId);
   const categoriesQuery = useCategories(ledgerId);
@@ -197,48 +233,79 @@ export function TransactionForm({
   const setting = settingQuery.data;
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
-  const decimalPlaces = setting?.amountDecimalPlaces ?? 2;
+  const decimalPlaces = useDecimalPlaces();
   const idempotencyKey = useRef(createClientId("transaction"));
 
-  const seedAmountMicros = initial?.grossAmountMicros ?? seed?.grossAmountMicros ?? null;
+  const seedAmountMicros =
+    initial?.grossAmountMicros ?? pending?.amountMicros ?? seed?.grossAmountMicros ?? null;
   const seedAccountSelection = accountSelectionId(
-    initial?.accountId ?? seed?.accountId,
-    initial?.subAccountId ?? seed?.subAccountId,
+    initial?.accountId ?? pending?.accountId ?? seed?.accountId,
+    initial?.subAccountId ?? pending?.subAccountId ?? seed?.subAccountId,
   );
   const initialBuckets = useMemo(
     () => splitInitialRelations(initial?.relations ?? seed?.relations ?? [], decimalPlaces),
     [decimalPlaces, initial, seed?.relations],
   );
 
-  const [type, setType] = useState<TransactionType>(initial?.type ?? seed?.type ?? "expense");
+  const [type, setType] = useState<TransactionType>(
+    initial?.type ?? pending?.type ?? seed?.type ?? "expense",
+  );
   const [amount, setAmount] = useState(() =>
     seedAmountMicros ? microsToInput(seedAmountMicros, decimalPlaces) : "",
   );
-  const [occurredOn, setOccurredOn] = useState(initial?.occurredOn?.slice(0, 10) ?? todayKey());
-  const [categoryId, setCategoryId] = useState<string | null>(
-    initial?.subcategoryId ?? initial?.categoryId ?? seed?.subcategoryId ?? seed?.categoryId ?? null,
+  const [occurredOn, setOccurredOn] = useState(
+    initial?.occurredOn?.slice(0, 10) ?? pending?.scheduledFor?.slice(0, 10) ?? todayKey(),
   );
-  const [personId, setPersonId] = useState<string | null>(initial?.personId ?? seed?.personId ?? null);
+  const [categoryId, setCategoryId] = useState<string | null>(
+    initial?.subcategoryId ??
+      initial?.categoryId ??
+      pending?.subcategoryId ??
+      pending?.categoryId ??
+      seed?.subcategoryId ??
+      seed?.categoryId ??
+      null,
+  );
+  const [personId, setPersonId] = useState<string | null>(
+    initial?.personId ?? pending?.personId ?? seed?.personId ?? null,
+  );
   const [accountSel, setAccountSel] = useState<string | null>(seedAccountSelection);
   const [fromSel, setFromSel] = useState<string | null>(
-    accountSelectionId(initial?.fromAccountId, initial?.fromSubAccountId),
+    accountSelectionId(
+      initial?.fromAccountId ?? pending?.fromAccountId ?? seed?.fromAccountId,
+      initial?.fromSubAccountId ?? pending?.fromSubAccountId ?? seed?.fromSubAccountId,
+    ),
   );
   const [toSel, setToSel] = useState<string | null>(
-    accountSelectionId(initial?.toAccountId, initial?.toSubAccountId),
+    accountSelectionId(
+      initial?.toAccountId ?? pending?.toAccountId ?? seed?.toAccountId,
+      initial?.toSubAccountId ?? pending?.toSubAccountId ?? seed?.toSubAccountId,
+    ),
   );
-  const [note, setNote] = useState(initial?.note ?? seed?.note ?? "");
+  const [note, setNote] = useState(initial?.note ?? pending?.note ?? seed?.note ?? "");
   const [accountEnabled, setAccountEnabled] = useState(Boolean(seedAccountSelection));
-  const [personEnabled, setPersonEnabled] = useState(Boolean(initial?.personId ?? seed?.personId));
-  const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(initialBuckets.primary.length > 0);
-  const [linkedRelationsEnabled, setLinkedRelationsEnabled] = useState(initialBuckets.linked.length > 0);
-  const [primaryRelationItems, setPrimaryRelationItems] = useState<RecoverablePayableItem[]>(initialBuckets.primary);
-  const [linkedRelationItems, setLinkedRelationItems] = useState<RecoverablePayableItem[]>(initialBuckets.linked);
+  const [personEnabled, setPersonEnabled] = useState(
+    Boolean(initial?.personId ?? pending?.personId ?? seed?.personId),
+  );
+  const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(
+    initialBuckets.primary.length > 0,
+  );
+  const [linkedRelationsEnabled, setLinkedRelationsEnabled] = useState(
+    initialBuckets.linked.length > 0,
+  );
+  const [primaryRelationItems, setPrimaryRelationItems] = useState<RecoverablePayableItem[]>(
+    initialBuckets.primary,
+  );
+  const [linkedRelationItems, setLinkedRelationItems] = useState<RecoverablePayableItem[]>(
+    initialBuckets.linked,
+  );
   const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentsRef = useRef<PendingAttachment[]>([]);
   // 编辑模式下，回显已有的保险/物品关联（后端关联为 upsert 幂等，重新保存不会重复）。
   const initialInsuranceId =
-    initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ?? seed?.insuranceId ?? null;
+    initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ??
+    seed?.insuranceId ??
+    null;
   const initialItemId =
     initial?.links?.find((link) => link.linkedType === "item")?.linkedId ?? seed?.itemId ?? null;
   const [insuranceEnabled, setInsuranceEnabled] = useState(Boolean(initialInsuranceId));
@@ -296,10 +363,16 @@ export function TransactionForm({
       const from = resolveAccountSelection(accounts, fromSel);
       const to = resolveAccountSelection(accounts, toSel);
       if (!from.accountId || !to.accountId) return "请选择转出和转入账户";
-      if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
+      if (
+        from.accountId === to.accountId &&
+        (from.subAccountId ?? null) === (to.subAccountId ?? null)
+      ) {
         return "转出和转入不能是同一账户";
       }
       return null;
+    }
+    if (!resolveCategory(categories, categoryId).categoryId) {
+      return "请选择分类";
     }
     if (acctRequired && !resolveAccountSelection(accounts, accountSel).accountId) {
       return "当前账本要求绑定账户";
@@ -308,14 +381,30 @@ export function TransactionForm({
       return "当前账本要求选择人员";
     }
     return null;
-  }, [accountSel, accounts, acctRequired, amount, decimalPlaces, fromSel, personId, personRequired, toSel, type]);
+  }, [
+    accountSel,
+    accounts,
+    acctRequired,
+    amount,
+    categories,
+    categoryId,
+    decimalPlaces,
+    fromSel,
+    personId,
+    personRequired,
+    toSel,
+    type,
+  ]);
 
   // 必填字段常开：转账时不适用；切回支出/收入时重新强制打开（转账切换会临时关闭它们）。
   useEffect(() => {
     if (type === "transfer") return;
     if (acctRequired) setAccountEnabled(true);
-    if (personRequired) setPersonEnabled(true);
-  }, [acctRequired, personRequired, type]);
+    if (personRequired) {
+      setPersonEnabled(true);
+      if (!personId && peopleOpts[0]?.id) setPersonId(peopleOpts[0].id);
+    }
+  }, [acctRequired, peopleOpts, personId, personRequired, type]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -372,7 +461,11 @@ export function TransactionForm({
         showToast({ tone: "error", message: "当前交易类型不支持关联" });
         return null;
       }
-      relations.push({ accountId: item.accountId, relationKind, amountMicros: parsed.amountMicros });
+      relations.push({
+        accountId: item.accountId,
+        relationKind,
+        amountMicros: parsed.amountMicros,
+      });
     }
     return relations;
   }
@@ -391,7 +484,10 @@ export function TransactionForm({
         showToast({ tone: "error", message: "转账需要选择转出和转入账户" });
         return null;
       }
-      if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
+      if (
+        from.accountId === to.accountId &&
+        (from.subAccountId ?? null) === (to.subAccountId ?? null)
+      ) {
         showToast({ tone: "error", message: "转出和转入不能是同一账户" });
         return null;
       }
@@ -417,12 +513,21 @@ export function TransactionForm({
       return null;
     }
 
-    const primaryRelations = buildRelations("primary", primaryRelationsEnabled, primaryRelationItems);
+    const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
+    if (!catId) {
+      showToast({ tone: "error", message: "请选择分类" });
+      return null;
+    }
+
+    const primaryRelations = buildRelations(
+      "primary",
+      primaryRelationsEnabled,
+      primaryRelationItems,
+    );
     if (!primaryRelations) return null;
     const linkedRelations = buildRelations("linked", linkedRelationsEnabled, linkedRelationItems);
     if (!linkedRelations) return null;
 
-    const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
     const relations = [...primaryRelations, ...linkedRelations];
     return {
       type,
@@ -435,6 +540,72 @@ export function TransactionForm({
       subAccountId: account.subAccountId,
       note: note.trim() || undefined,
       relations: relations.length > 0 ? relations : undefined,
+    };
+  }
+
+  function buildPendingPatch(): PendingPatchBody | null {
+    const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
+    if (!parsedAmount.ok || !parsedAmount.amountMicros || BigInt(parsedAmount.amountMicros) <= 0n) {
+      showToast({ tone: "error", message: "请输入有效金额" });
+      return null;
+    }
+    const base = {
+      amountMicros: parsedAmount.amountMicros,
+      scheduledFor: occurredOn,
+      note: note.trim(),
+    };
+    if (type === "transfer") {
+      const from = resolveAccountSelection(accounts, fromSel);
+      const to = resolveAccountSelection(accounts, toSel);
+      if (!from.accountId || !to.accountId) {
+        showToast({ tone: "error", message: "转账需要选择转出和转入账户" });
+        return null;
+      }
+      if (
+        from.accountId === to.accountId &&
+        (from.subAccountId ?? null) === (to.subAccountId ?? null)
+      ) {
+        showToast({ tone: "error", message: "转出和转入不能是同一账户" });
+        return null;
+      }
+      return {
+        ...base,
+        categoryId: null,
+        subcategoryId: null,
+        accountId: null,
+        subAccountId: null,
+        fromAccountId: from.accountId,
+        fromSubAccountId: from.subAccountId ?? null,
+        toAccountId: to.accountId,
+        toSubAccountId: to.subAccountId ?? null,
+        personId: null,
+      };
+    }
+    const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
+    if (!catId) {
+      showToast({ tone: "error", message: "请选择分类" });
+      return null;
+    }
+    const account = accountEnabled ? resolveAccountSelection(accounts, accountSel) : {};
+    if (acctRequired && !account.accountId) {
+      showToast({ tone: "error", message: "当前账本要求绑定账户" });
+      return null;
+    }
+    if (personRequired && !personId) {
+      showToast({ tone: "error", message: "当前账本要求选择人员" });
+      return null;
+    }
+    return {
+      ...base,
+      categoryId: catId,
+      subcategoryId: subcategoryId ?? null,
+      accountId: account.accountId ?? null,
+      subAccountId: account.subAccountId ?? null,
+      fromAccountId: null,
+      fromSubAccountId: null,
+      toAccountId: null,
+      toSubAccountId: null,
+      personId: personEnabled ? (personId ?? null) : null,
     };
   }
 
@@ -457,14 +628,27 @@ export function TransactionForm({
       );
     }
     if (attachmentsEnabled) {
-      tasks.push(...attachments.map((attachment) => uploadAttachment(ledgerId, transaction.id, attachment)));
+      tasks.push(
+        ...attachments.map((attachment) => uploadAttachment(ledgerId, transaction.id, attachment)),
+      );
     }
     if (tasks.length > 0) await Promise.all(tasks);
   }
 
   const mutation = useMutation({
-    mutationFn: (payload: TransactionInput) =>
-      isEdit
+    mutationFn: async (payload: TransactionInput | PendingPatchBody) => {
+      if (isPendingMode) {
+        // 先保存修改到待确认，再调确认接口生成正式交易。
+        await apiRequest(ledgerApiPath(ledgerId, `/auto-pending-transactions/${pending!.id}`), {
+          method: "PATCH",
+          body: payload,
+        });
+        return apiRequest<TransactionDetail>(
+          ledgerApiPath(ledgerId, `/auto-pending-transactions/${pending!.id}/confirm`),
+          { method: "POST" },
+        );
+      }
+      return isEdit
         ? apiRequest<TransactionDetail>(ledgerApiPath(ledgerId, `/transactions/${initial!.id}`), {
             method: "PATCH",
             body: payload,
@@ -473,14 +657,32 @@ export function TransactionForm({
             method: "POST",
             body: payload,
             headers: { "idempotency-key": idempotencyKey.current },
-          }),
+          });
+    },
     onSuccess: async (transaction) => {
+      if (isPendingMode) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.autoPending(ledgerId) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.reminderSummary(ledgerId) }),
+          queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
+          queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
+          queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+        ]);
+        showToast({ tone: "success", message: "已确认入账" });
+        // 编辑页在历史里紧邻待确认列表（详情进编辑用 replace 取代了详情），
+        // 用 back 直接回到列表，避免残留失效的详情页。
+        router.back();
+        return;
+      }
       let postSaveFailed = false;
       try {
         await postSave(transaction);
       } catch (error) {
         postSaveFailed = true;
-        showToast({ tone: "error", message: getApiErrorMessage(error, "记录已保存，部分关联失败") });
+        showToast({
+          tone: "error",
+          message: getApiErrorMessage(error, "记录已保存，部分关联失败"),
+        });
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
@@ -489,7 +691,9 @@ export function TransactionForm({
         queryClient.invalidateQueries({ queryKey: queryKeys.insurances(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
         isEdit
-          ? queryClient.invalidateQueries({ queryKey: queryKeys.transaction(ledgerId, initial!.id) })
+          ? queryClient.invalidateQueries({
+              queryKey: queryKeys.transaction(ledgerId, initial!.id),
+            })
           : Promise.resolve(),
       ]);
       if (!postSaveFailed) {
@@ -517,7 +721,7 @@ export function TransactionForm({
       showToast({ tone: "error", message: validationMessage });
       return;
     }
-    const payload = buildPayload();
+    const payload = isPendingMode ? buildPendingPatch() : buildPayload();
     if (payload) mutation.mutate(payload);
   }
 
@@ -550,9 +754,7 @@ export function TransactionForm({
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
   const primaryRelationHint =
-    type === "income"
-      ? "这笔收入中需要归还他人的部分"
-      : "这笔支出中可向他人收回的部分";
+    type === "income" ? "这笔收入中需要归还他人的部分" : "这笔支出中可向他人收回的部分";
   const linkedRelationHint =
     type === "income"
       ? "这笔收入将自动计入选中的可收回项目并参与计算"
@@ -564,7 +766,11 @@ export function TransactionForm({
         if (type === "transfer") return null;
         return (
           <FieldCard className="transaction-form__picker-card" key="category" label="分类">
-            <CategorySelectRow onValueChange={setCategoryId} options={catOptions} value={categoryId} />
+            <CategorySelectRow
+              onValueChange={setCategoryId}
+              options={catOptions}
+              value={categoryId}
+            />
           </FieldCard>
         );
       case "account":
@@ -630,7 +836,12 @@ export function TransactionForm({
         );
       case "date":
         return (
-          <FieldCard className="transaction-form__date-card" key="date" label="日期" value={formatDateLabel(occurredOn)}>
+          <FieldCard
+            className="transaction-form__date-card"
+            key="date"
+            label="日期"
+            value={formatDateLabel(occurredOn)}
+          >
             <DateWheelPicker onValueChange={setOccurredOn} value={occurredOn} />
           </FieldCard>
         );
@@ -661,11 +872,10 @@ export function TransactionForm({
       <div className="transaction-form__top">
         <Tabs
           className="transaction-form__type-tabs"
-          items={[
-            { label: "支出", value: "expense" },
-            { label: "收入", value: "income" },
-            { label: "转账", value: "transfer" },
-          ]}
+          // 待确认模式类型固定（后端确认接口不支持改类型），只显示当前类型页签。
+          items={
+            isPendingMode ? TYPE_TAB_ITEMS.filter((item) => item.value === type) : TYPE_TAB_ITEMS
+          }
           onValueChange={(nextType) => handleTypeChange(nextType as TransactionType)}
           value={type}
         />
@@ -681,7 +891,7 @@ export function TransactionForm({
       <div className="transaction-form__cards">
         {order.filter((field) => field !== "type" && field !== "amount").map(renderOrderedField)}
 
-        {type !== "transfer" ? (
+        {!isPendingMode && type !== "transfer" ? (
           <>
             <RecoverablePayableEditor
               accountOptions={primaryRelationOpts}
@@ -723,7 +933,11 @@ export function TransactionForm({
             <AssetLinkCard
               checked={insuranceEnabled}
               emptyText="还没有保单，可到「我的 · 保险管理」中先添加保单"
-              hint={type === "income" ? "把这笔收入（如理赔款）关联到一份保单" : "把这笔支出（如保费）关联到一份保单"}
+              hint={
+                type === "income"
+                  ? "把这笔收入（如理赔款）关联到一份保单"
+                  : "把这笔支出（如保费）关联到一份保单"
+              }
               items={insuranceOptions}
               label="保险"
               onCheckedChange={(checked) => {
@@ -737,7 +951,11 @@ export function TransactionForm({
             <AssetLinkCard
               checked={itemEnabled}
               emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
-              hint={type === "income" ? "把这笔收入（如转卖回款）关联到一件物品" : "把这笔支出（如耗材、维修）关联到一件物品"}
+              hint={
+                type === "income"
+                  ? "把这笔收入（如转卖回款）关联到一件物品"
+                  : "把这笔支出（如耗材、维修）关联到一件物品"
+              }
               items={itemOptions}
               label="关联物品"
               onCheckedChange={(checked) => {
@@ -750,7 +968,6 @@ export function TransactionForm({
           </>
         ) : null}
       </div>
-
     </form>
   );
 }

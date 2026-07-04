@@ -41,11 +41,11 @@ export function LedgerCard({ isCurrent, isOwner, ledger, onOpenDetail }: LedgerC
       </button>
       <button
         aria-label="账本详情"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-bg-app)] text-[var(--color-text-muted)]"
+        className="flex h-8 w-5 shrink-0 items-center justify-center text-[rgba(60,60,67,0.3)]"
         onClick={onOpenDetail}
         type="button"
       >
-        <ChevronRight size={17} />
+        <ChevronRight size={16} strokeWidth={3} />
       </button>
     </div>
   );

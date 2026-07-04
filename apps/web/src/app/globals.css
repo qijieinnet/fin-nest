@@ -3,7 +3,7 @@
 :root {
   color-scheme: light;
 
-  --color-bg-app: #fefefe;
+  --color-bg-app: #ededec;
   --color-bg-surface: rgba(255, 255, 255, 0.78);
   --color-bg-elevated: rgba(255, 255, 255, 0.9);
   --color-text-primary: #1d2523;
@@ -81,12 +81,15 @@ select:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
+.ledger-sheet__name-input:focus,
+.ledger-sheet__name-input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: var(--shadow-soft);
+}
+
 .app-background {
-  background:
-    radial-gradient(circle at 16% 10%, rgba(10, 132, 255, 0.18), transparent 30%),
-    radial-gradient(circle at 86% 20%, rgba(128, 202, 255, 0.22), transparent 29%),
-    radial-gradient(circle at 58% 84%, rgba(255, 255, 255, 0.7), transparent 34%),
-    linear-gradient(135deg, #f4f6fb 0%, #eef3fa 48%, #f8f9fc 100%);
+  background: var(--color-bg-app);
 }
 
 .ui-button,
@@ -130,8 +133,18 @@ select:focus-visible {
   width: var(--space-control-height);
 }
 
+.ui-button__spinner {
+  animation: ui-button-spin 0.85s linear infinite;
+}
+
 .ui-button:active {
   transform: scale(0.97);
+}
+
+@keyframes ui-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ui-button:disabled,
@@ -585,26 +598,129 @@ select:focus-visible {
 }
 
 .ui-menu {
+  display: block;
+  min-width: 236px;
+  padding: 0;
+}
+
+.ui-menu__group {
   display: grid;
-  padding: 8px;
+}
+
+/* 组间粗分隔条（同 iOS 上下文菜单）。 */
+.ui-menu__group + .ui-menu__group {
+  border-top: 6px solid rgba(0, 0, 0, 0.06);
 }
 
 .ui-menu__item {
   background: transparent;
-  border-radius: 14px;
   color: var(--color-text-primary);
-  font-size: 14px;
-  font-weight: 650;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-start;
-  min-height: var(--space-control-height);
-  padding: 0 10px;
+  min-height: 46px;
+  padding: 8px 16px;
   position: relative;
+  text-align: left;
   z-index: 1;
+}
+
+/* 组内条目之间的细分隔线。 */
+.ui-menu__item + .ui-menu__item {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.05);
 }
 
 .ui-menu__item:active {
   background: var(--color-control-pressed);
+}
+
+.ui-menu__item:disabled {
+  color: var(--color-disabled-text);
+  cursor: default;
+}
+
+.ui-menu__item--danger {
+  color: var(--color-accent-expense);
+}
+
+.ui-menu__item--back {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.ui-menu__icon {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  width: 22px;
+}
+
+.ui-menu__copy {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ui-menu__label {
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-menu__description {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.ui-menu__trailing {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.ui-menu__trailing--check {
+  color: var(--color-tint);
+}
+
+.ui-popover-menu__backdrop {
+  background: transparent;
+  border: 0;
+  cursor: default;
+  inset: 0;
+  position: fixed;
+  z-index: 40;
+}
+
+.ui-popover-menu {
+  animation: ui-popover-menu-pop var(--motion-duration-fast) ease;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 50;
+}
+
+.ui-popover-menu--end {
+  right: 0;
+  transform-origin: top right;
+}
+
+.ui-popover-menu--start {
+  left: 0;
+  transform-origin: top left;
+}
+
+@keyframes ui-popover-menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .sheet-root {
@@ -643,7 +759,7 @@ select:focus-visible {
 
 /* 底部弹层用不透明背景，避免透出下层页面内容。 */
 .ui-bottom-sheet {
-  background: #ffffff;
+  background: #ededec;
 }
 
 .ui-bottom-sheet--category-picker {
@@ -660,8 +776,12 @@ select:focus-visible {
   padding-top: 0;
 }
 
+.ui-bottom-sheet--quick-template .sheet-body {
+  overflow: hidden;
+}
+
 .ui-sheet {
-  background: var(--color-bg-elevated);
+  background: #ededec;
   border: 1px solid var(--color-border-subtle);
   border-radius: 30px 30px 0 0;
   box-shadow: var(--shadow-floating);
@@ -712,7 +832,7 @@ select:focus-visible {
   max-width: 390px;
   pointer-events: none;
   position: fixed;
-  top: calc(14px + env(safe-area-inset-top));
+  top: 56px;
   transform: translateX(-50%);
   width: calc(100vw - 32px);
   z-index: 80;
@@ -773,10 +893,16 @@ select:focus-visible {
   content: "";
   height: 18px;
   left: 0;
+  opacity: 0;
   pointer-events: none;
   position: absolute;
   right: 0;
   top: 100%;
+  transition: opacity 180ms ease;
+}
+
+.navigation-bar--scrolled::after {
+  opacity: 1;
 }
 
 .navigation-bar__row {
@@ -1238,6 +1364,29 @@ select:focus-visible {
   display: none;
 }
 
+.quick-template-sheet .auto-transaction-sheet__body {
+  box-sizing: border-box;
+  margin-right: calc(var(--space-sheet-x) * -1);
+  padding-right: var(--space-sheet-x);
+  scrollbar-color: rgba(60, 60, 67, 0.24) transparent;
+  scrollbar-width: thin;
+  width: calc(100% + var(--space-sheet-x));
+}
+
+.quick-template-sheet .auto-transaction-sheet__body::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+
+.quick-template-sheet .auto-transaction-sheet__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quick-template-sheet .auto-transaction-sheet__body::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 67, 0.24);
+  border-radius: 999px;
+}
+
 .auto-transaction-sheet__settings {
   display: grid;
   gap: 12px;
@@ -1254,8 +1403,7 @@ select:focus-visible {
 
 .transaction-form__type-tabs {
   box-sizing: border-box;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
 }
 
 .transaction-form__type-tabs .ui-tabs__item {
@@ -1379,6 +1527,7 @@ select:focus-visible {
 .transaction-form__select-row > span {
   color: var(--color-text-primary);
   font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -1549,7 +1698,7 @@ select:focus-visible {
 .transaction-form__date-card .biz-date-popover__summary span {
   color: var(--color-text-primary);
   font-size: 15px;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .transaction-form__date-card .biz-date-popover__summary strong {
@@ -1586,6 +1735,7 @@ select:focus-visible {
 .transaction-form__note-row > span {
   color: var(--color-text-primary);
   font-size: 15px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -2601,12 +2751,21 @@ select:focus-visible {
   bottom: 0;
   display: flex;
   gap: 10px;
-  justify-content: flex-end;
-  padding: 0 12px 0 10px;
   position: absolute;
-  right: 0;
   top: 0;
   z-index: 1;
+}
+
+.biz-swipe-row__actions--trailing {
+  justify-content: flex-end;
+  padding: 0 12px 0 10px;
+  right: 0;
+}
+
+.biz-swipe-row__actions--leading {
+  justify-content: flex-start;
+  left: 0;
+  padding: 0 10px 0 12px;
 }
 
 .biz-swipe-action {
@@ -2653,10 +2812,32 @@ select:focus-visible {
 .biz-swipe-row__scrim {
   background: transparent;
   border: 0;
-  inset: 0;
+  bottom: 0;
   position: absolute;
-  width: calc(100% - 152px);
+  top: 0;
   z-index: 3;
+}
+
+.bill-list-shell {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.bill-list-shell .biz-transaction-group:first-child .biz-transaction-group__header {
+  margin-top: 8px;
+}
+
+.bill-list-shell
+  .biz-transaction-group:last-child
+  .biz-transaction-group__rows
+  > :last-child
+  .biz-transaction-row::after,
+.bill-list-shell
+  .biz-transaction-group:last-child
+  .biz-transaction-group__rows
+  > .biz-transaction-row:last-child::after {
+  display: none;
 }
 
 .biz-transaction-group {
@@ -2930,13 +3111,12 @@ select:focus-visible {
   color: #ffffff;
   font-size: 12px;
   font-weight: 500;
-  left: 50%;
+  left: 0;
   line-height: 1.45;
-  max-width: min(240px, 72vw);
+  max-width: min(240px, calc(100vw - 48px));
   padding: 8px 10px;
   position: absolute;
   top: calc(100% + 8px);
-  transform: translateX(-50%);
   width: max-content;
   z-index: 260;
 }

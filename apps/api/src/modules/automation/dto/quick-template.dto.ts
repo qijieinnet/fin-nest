@@ -16,8 +16,8 @@ import {
 import { TransactionAccountRelationDto } from "../../transactions/dto/create-transaction.dto";
 
 export class CreateQuickTemplateDto {
-  @ApiProperty({ enum: ["expense", "income"] })
-  @IsIn(["expense", "income"])
+  @ApiProperty({ enum: ["expense", "income", "transfer"] })
+  @IsIn(["expense", "income", "transfer"])
   type!: string;
 
   @ApiPropertyOptional()
@@ -32,9 +32,10 @@ export class CreateQuickTemplateDto {
   @Matches(/^(0|[1-9]\d*)$/)
   amountMicros?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  categoryId!: string;
+  categoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -50,6 +51,26 @@ export class CreateQuickTemplateDto {
   @IsOptional()
   @IsString()
   subAccountId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromSubAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toAccountId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toSubAccountId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

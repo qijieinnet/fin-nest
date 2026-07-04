@@ -44,6 +44,7 @@ export class LedgersService {
           name: input.name,
           icon: input.icon,
           currency: input.currency ?? "CNY",
+          amountDecimalPlaces: input.amountDecimalPlaces ?? 2,
           ownerUserId: userId,
           createdBy: userId,
         },
@@ -75,6 +76,7 @@ export class LedgersService {
         name: input.name,
         icon: input.icon,
         currency: input.currency,
+        amountDecimalPlaces: input.amountDecimalPlaces,
         updatedBy: userId,
       },
     });

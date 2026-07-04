@@ -6,11 +6,11 @@ import { useState } from "react";
 import { CategoryIcon, EmptyState, LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell } from "@/components/ui";
 import type { StatsCategoryEntry } from "@/lib/api";
-import { useLedgerStats, useRecordSetting } from "@/lib/data/records";
+import { useLedgerStats } from "@/lib/data/records";
 import { cn } from "@/lib/format/class-names";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
-import { useLedger } from "@/providers";
+import { useDecimalPlaces, useLedger } from "@/providers";
 
 type StatsType = "expense" | "income";
 
@@ -66,8 +66,7 @@ export function StatsScreen() {
   const [type, setType] = useState<StatsType>("expense");
   const [drillId, setDrillId] = useState<string | null>(null);
 
-  const settingQuery = useRecordSetting(ledgerId);
-  const decimalPlaces = settingQuery.data?.amountDecimalPlaces ?? 2;
+  const decimalPlaces = useDecimalPlaces();
   const statsQuery = useLedgerStats(ledgerId, month);
 
   const summary = statsQuery.data?.[type];
@@ -94,7 +93,10 @@ export function StatsScreen() {
       }));
 
   const totalMicros = drilled ? BigInt(drilled.amountMicros) : BigInt(summary?.totalMicros ?? "0");
-  const maxMicros = entries.reduce((max, entry) => (entry.amountMicros > max ? entry.amountMicros : max), 0n);
+  const maxMicros = entries.reduce(
+    (max, entry) => (entry.amountMicros > max ? entry.amountMicros : max),
+    0n,
+  );
   const colors = rankColors(entries.length);
 
   let cursor = 0;
@@ -247,7 +249,10 @@ export function StatsScreen() {
                 <section className="mt-4 rounded-[24px] bg-[var(--color-bg-surface)] px-1 py-2 shadow-[var(--shadow-soft)]">
                   {entries.map((entry, index) => (
                     <button
-                      className={cn("w-full px-4 py-3 text-left", !entry.drillable && "cursor-default")}
+                      className={cn(
+                        "w-full px-4 py-3 text-left",
+                        !entry.drillable && "cursor-default",
+                      )}
                       disabled={!entry.drillable}
                       key={entry.key}
                       onClick={() => setDrillId(entry.categoryId)}
@@ -265,7 +270,10 @@ export function StatsScreen() {
                                 {formatMicros(entry.amountMicros, { decimalPlaces })}
                               </span>
                               {entry.drillable ? (
-                                <ChevronRight className="text-[var(--color-text-muted)]" size={15} />
+                                <ChevronRight
+                                  className="text-[var(--color-text-muted)]"
+                                  size={15}
+                                />
                               ) : null}
                             </span>
                           </div>
@@ -291,15 +299,14 @@ export function StatsScreen() {
               </>
             )}
 
-            <section className="mt-4 rounded-[24px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
+            <section className="mt-4 rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
               <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
                 近 6 个月{type === "expense" ? "支出" : "收入"}
               </p>
               <div className="mt-4 flex h-[120px] items-end justify-between gap-2.5">
                 {trend.map((point, index) => {
                   const value = BigInt(point.totalMicros);
-                  const height =
-                    maxTrendMicros > 0n ? Number((value * 72n) / maxTrendMicros) : 0;
+                  const height = maxTrendMicros > 0n ? Number((value * 72n) / maxTrendMicros) : 0;
                   const isCurrent = index === trend.length - 1;
                   return (
                     <div

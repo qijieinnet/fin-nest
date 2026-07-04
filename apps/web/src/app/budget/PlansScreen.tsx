@@ -28,7 +28,7 @@ function PlanCardWithProgress({
   const progress = progressQuery.data?.period;
   if (!progress) {
     return (
-      <div className="rounded-[24px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
+      <div className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
         <p className="text-[20px] font-bold text-[var(--color-text-primary)]">{plan.name}</p>
         <p className="mt-2 text-sm text-[var(--color-text-muted)]">
           {progressQuery.isError ? "进度加载失败" : "加载进度…"}

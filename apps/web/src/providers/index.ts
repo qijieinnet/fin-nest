@@ -1,5 +1,6 @@
 export { AppProviders } from "./AppProviders";
 export { AuthProvider, useAuth } from "./AuthProvider";
+export { DecimalPlacesProvider, useDecimalPlaces } from "./DecimalPlacesProvider";
 export { LedgerProvider, useLedger } from "./LedgerProvider";
 export { PreferencesProvider, usePreferences } from "./PreferencesProvider";
 export type { Preferences } from "./PreferencesProvider";

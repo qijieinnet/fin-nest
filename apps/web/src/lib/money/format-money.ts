@@ -9,6 +9,15 @@ export type FormatMoneyOptions = {
   trimTrailingZeros?: boolean;
 };
 
+// 当前账本的默认金额小数位数。由 DecimalPlacesProvider 在账本加载/切换时设置，
+// 使未显式传 decimalPlaces 的 formatMicros 调用（各类 *-utils）也跟随账本设置。
+let ambientDecimalPlaces = 2;
+
+/** 设置环境默认小数位数（客户端全局，随当前账本变化）。 */
+export function setAmbientDecimalPlaces(value: number): void {
+  ambientDecimalPlaces = value;
+}
+
 function groupInteger(value: string): string {
   return value.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -17,7 +26,7 @@ export function formatMicros(
   amount: bigint | number | string,
   {
     currencySymbol = "¥",
-    decimalPlaces = 2,
+    decimalPlaces = ambientDecimalPlaces,
     showPositiveSign = false,
     trimTrailingZeros = false,
   }: FormatMoneyOptions = {},
@@ -32,7 +41,8 @@ export function formatMicros(
     (absolute * fractionScale * 2n + MONEY_MICROS_PER_UNIT) / (MONEY_MICROS_PER_UNIT * 2n);
   const units = scaled / fractionScale;
   const fractionValue = scaled % fractionScale;
-  let fraction = fractionValue.toString().padStart(decimalPlaces, "0");
+  // decimalPlaces=0 时没有小数部分（padStart(0) 不会截断 "0"，需显式置空）。
+  let fraction = decimalPlaces > 0 ? fractionValue.toString().padStart(decimalPlaces, "0") : "";
 
   if (trimTrailingZeros) {
     fraction = fraction.replace(/0+$/, "");

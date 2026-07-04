@@ -8,12 +8,7 @@
 
 export type LedgerRole = "owner" | "member";
 
-export type JoinRequestStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "cancelled"
-  | "expired";
+export type JoinRequestStatus = "pending" | "approved" | "rejected" | "cancelled" | "expired";
 
 export type PublicUser = {
   id: string;
@@ -34,6 +29,7 @@ export type Ledger = {
   name: string;
   icon: string | null;
   currency: string;
+  amountDecimalPlaces: number;
   ownerUserId: string;
   createdBy: string;
   createdAt: string;
@@ -418,13 +414,17 @@ export type LedgerStats = {
 export type QuickTemplate = {
   id: string;
   ledgerId: string;
-  type: "expense" | "income";
+  type: TransactionType;
   name: string | null;
   amountMicros: string | null;
-  categoryId: string;
+  categoryId: string | null;
   subcategoryId: string | null;
   accountId: string | null;
   subAccountId: string | null;
+  fromAccountId: string | null;
+  fromSubAccountId: string | null;
+  toAccountId: string | null;
+  toSubAccountId: string | null;
   personId: string | null;
   note: string | null;
   relationPayload: AutoRelation[] | null;

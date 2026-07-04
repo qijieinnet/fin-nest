@@ -77,7 +77,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
       <header className="flex items-center gap-3">
         <span
           aria-hidden
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-tint-soft)] text-xl font-semibold text-[var(--color-tint)]"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-control-fill-muted)] text-xl font-semibold text-[var(--color-text-primary)]"
         >
           {iconText}
         </span>
@@ -87,6 +87,9 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
           </p>
           <p className="text-xs text-[var(--color-text-secondary)]">
             {isOwner ? "所有者" : "成员"} · {ledger.currency}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+            金额小数位数 · {ledger.amountDecimalPlaces}
           </p>
         </div>
       </header>

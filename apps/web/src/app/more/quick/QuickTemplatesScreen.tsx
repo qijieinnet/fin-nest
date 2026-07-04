@@ -4,7 +4,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Edit3, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CategoryIcon, EmptyState, LoadingState, MoneyText, SwipeActionRow } from "@/components/business";
+import {
+  CategoryIcon,
+  EmptyState,
+  LoadingState,
+  MoneyText,
+  SwipeActionRow,
+} from "@/components/business";
 import type { SwipeAction } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import {
@@ -29,7 +35,11 @@ import { useLedger, useSheetStack, useToast } from "@/providers";
 import { DeleteQuickTemplateConfirmDialog } from "./_components/DeleteQuickTemplateConfirmDialog";
 import { QuickTemplateEditorSheet } from "./_components/QuickTemplateEditorSheet";
 
-function categoryDisplay(categories: Category[], categoryId: string, subcategoryId: string | null) {
+function categoryDisplay(
+  categories: Category[],
+  categoryId: string | null,
+  subcategoryId: string | null,
+) {
   const category = categories.find((item) => item.id === categoryId);
   const sub = category?.subcategories.find((item) => item.id === subcategoryId);
   return {
@@ -38,7 +48,23 @@ function categoryDisplay(categories: Category[], categoryId: string, subcategory
   };
 }
 
-function accountDisplay(accounts: Account[], accountId: string | null, subAccountId: string | null) {
+function transferAccountDisplay(
+  accounts: Account[],
+  fromAccountId: string | null,
+  fromSubAccountId: string | null,
+  toAccountId: string | null,
+  toSubAccountId: string | null,
+) {
+  const from = accountDisplay(accounts, fromAccountId, fromSubAccountId) ?? "未选择转出";
+  const to = accountDisplay(accounts, toAccountId, toSubAccountId) ?? "未选择转入";
+  return `${from} → ${to}`;
+}
+
+function accountDisplay(
+  accounts: Account[],
+  accountId: string | null,
+  subAccountId: string | null,
+) {
   const account = accounts.find((item) => item.id === accountId);
   if (!account) return null;
   const sub = account.subAccounts.find((item) => item.id === subAccountId);
@@ -69,7 +95,9 @@ export function QuickTemplatesScreen() {
 
   const deleteTemplate = useMutation({
     mutationFn: (templateId: string) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}`), { method: "DELETE" }),
+      apiRequest<void>(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}`), {
+        method: "DELETE",
+      }),
     onSuccess: async () => {
       if (ledgerId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.quickTemplates(ledgerId) });
@@ -90,6 +118,7 @@ export function QuickTemplatesScreen() {
   const openEditor = (template?: QuickTemplate) => {
     if (!ledgerId) return;
     push({
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--quick-template",
       hideDefaultHeader: true,
       content: (
         <QuickTemplateEditorSheet
@@ -106,11 +135,30 @@ export function QuickTemplatesScreen() {
   };
 
   const renderRow = (template: QuickTemplate) => {
-    const display = categoryDisplay(categories, template.categoryId, template.subcategoryId);
+    const isTransfer = template.type === "transfer";
+    const display = isTransfer
+      ? { icon: "↔", name: "转账" }
+      : categoryDisplay(categories, template.categoryId, template.subcategoryId);
     const account = accountDisplay(accounts, template.accountId, template.subAccountId);
-    const name = template.name ?? (template.type === "income" ? "收入模板" : "支出模板");
-    const typeLabel = template.type === "income" ? "收入" : "支出";
-    const meta = [typeLabel, display.name, account].filter(Boolean).join(" · ");
+    const transferAccount = transferAccountDisplay(
+      accounts,
+      template.fromAccountId,
+      template.fromSubAccountId,
+      template.toAccountId,
+      template.toSubAccountId,
+    );
+    const name =
+      template.name ??
+      (template.type === "income"
+        ? "收入模板"
+        : template.type === "transfer"
+          ? "转账模板"
+          : "支出模板");
+    const typeLabel =
+      template.type === "income" ? "收入" : template.type === "transfer" ? "转账" : "支出";
+    const meta = isTransfer
+      ? [typeLabel, transferAccount].filter(Boolean).join(" · ")
+      : [typeLabel, display.name, account].filter(Boolean).join(" · ");
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
@@ -140,13 +188,21 @@ export function QuickTemplatesScreen() {
             <span className="block truncate text-[15.5px] font-semibold text-[var(--color-text-primary)]">
               {name}
             </span>
-            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">{meta}</span>
+            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+              {meta}
+            </span>
           </span>
           {template.amountMicros ? (
             <MoneyText
               amountMicros={template.amountMicros}
               className="shrink-0 text-[15px] font-semibold"
-              tone={template.type === "income" ? "income" : "expense"}
+              tone={
+                template.type === "income"
+                  ? "income"
+                  : template.type === "transfer"
+                    ? "transfer"
+                    : "expense"
+              }
             />
           ) : (
             <span className="shrink-0 text-xs text-[var(--color-text-muted)]">点按预填</span>

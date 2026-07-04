@@ -9,6 +9,7 @@ type IconButtonVariant = "plain" | "primary" | "muted";
 type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   icon: ReactNode;
   label: string;
+  loading?: boolean;
   variant?: IconButtonVariant;
 };
 
@@ -17,6 +18,7 @@ export function IconButton({
   disabled,
   icon,
   label,
+  loading = false,
   type = "button",
   variant = "plain",
   ...props
@@ -29,6 +31,7 @@ export function IconButton({
       disabled={disabled}
       icon={icon}
       label={label}
+      loading={loading}
       title={label}
       type={type}
       variant={buttonVariant}

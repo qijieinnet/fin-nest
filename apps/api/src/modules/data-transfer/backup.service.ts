@@ -19,7 +19,13 @@ export type BackupEnvelope = {
   kind: "ledger-backup";
   formatVersion: 1;
   exportedAt: string;
-  ledger: { id: string; name: string; icon: string | null; currency: string };
+  ledger: {
+    id: string;
+    name: string;
+    icon: string | null;
+    currency: string;
+    amountDecimalPlaces: number;
+  };
   data: Record<string, unknown>;
 };
 
@@ -92,7 +98,9 @@ export class BackupService {
     ]);
     const insuranceIds = insurances.map((row) => row.id);
     const insuranceInsuredPeople = insuranceIds.length
-      ? await client.insuranceInsuredPerson.findMany({ where: { insuranceId: { in: insuranceIds } } })
+      ? await client.insuranceInsuredPerson.findMany({
+          where: { insuranceId: { in: insuranceIds } },
+        })
       : [];
 
     return {
@@ -100,7 +108,13 @@ export class BackupService {
       kind: "ledger-backup",
       formatVersion: 1,
       exportedAt: new Date().toISOString(),
-      ledger: { id: ledger.id, name: ledger.name, icon: ledger.icon, currency: ledger.currency },
+      ledger: {
+        id: ledger.id,
+        name: ledger.name,
+        icon: ledger.icon,
+        currency: ledger.currency,
+        amountDecimalPlaces: ledger.amountDecimalPlaces,
+      },
       data: serializeBigInts({
         recordSetting,
         budgetSetting,
@@ -112,7 +126,10 @@ export class BackupService {
         accountAdjustments,
         itemTypes,
         // Decimal 实例会被 serializeBigInts 当普通对象展开成 {s,e,d}，先转字符串。
-        items: items.map((row) => ({ ...row, expectedYears: row.expectedYears?.toString() ?? null })),
+        items: items.map((row) => ({
+          ...row,
+          expectedYears: row.expectedYears?.toString() ?? null,
+        })),
         insurances,
         insuranceInsuredPeople,
         transactions,
@@ -153,7 +170,8 @@ export class BackupService {
     const rows = (key: string): Row[] => {
       const value = data[key];
       if (value == null) return [];
-      if (!Array.isArray(value)) throw new AppError("BACKUP_INVALID_FORMAT", `备份字段 ${key} 格式无效`, 400);
+      if (!Array.isArray(value))
+        throw new AppError("BACKUP_INVALID_FORMAT", `备份字段 ${key} 格式无效`, 400);
       return value;
     };
 
@@ -182,11 +200,18 @@ export class BackupService {
    * FK 安全的清空顺序（外键在 migration.sql 中，Prisma schema 看不到）：
    * 先删所有引用者，再删被引用者。不动 Ledger 行本身/成员/邀请/审计。
    */
-  private async wipeLedgerData(tx: PrismaTransactionClient, ledgerId: string, userId: string): Promise<void> {
+  private async wipeLedgerData(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    userId: string,
+  ): Promise<void> {
     const where = { ledgerId };
     await tx.attachment.deleteMany({ where });
     // MinIO 对象暂不回收（缺按账本清理的 GC 任务），文件行软删避免悬空附件。
-    await tx.file.updateMany({ where: { ledgerId, deletedAt: null }, data: { deletedAt: new Date() } });
+    await tx.file.updateMany({
+      where: { ledgerId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     await tx.autoPendingTransaction.deleteMany({ where });
     await tx.autoRule.deleteMany({ where });
     await tx.quickTemplate.deleteMany({ where });
@@ -195,7 +220,13 @@ export class BackupService {
     await tx.transactionLink.deleteMany({ where });
     await tx.transaction.deleteMany({ where });
     await tx.accountAdjustment.deleteMany({ where });
-    await tx.insuranceInsuredPerson.deleteMany({ where: { insuranceId: { in: (await tx.insurance.findMany({ where, select: { id: true } })).map((row) => row.id) } } });
+    await tx.insuranceInsuredPerson.deleteMany({
+      where: {
+        insuranceId: {
+          in: (await tx.insurance.findMany({ where, select: { id: true } })).map((row) => row.id),
+        },
+      },
+    });
     await tx.insurance.deleteMany({ where });
     await tx.item.deleteMany({ where });
     await tx.itemType.deleteMany({ where });
@@ -235,7 +266,8 @@ export class BackupService {
     const ref = (map: Map<string, string>, oldId: unknown): string | null => {
       if (oldId == null) return null;
       const mapped = map.get(String(oldId));
-      if (!mapped) throw new AppError("BACKUP_INVALID_FORMAT", "备份内部引用缺失，文件可能被修改过", 400);
+      if (!mapped)
+        throw new AppError("BACKUP_INVALID_FORMAT", "备份内部引用缺失，文件可能被修改过", 400);
       return mapped;
     };
     const refLoose = (map: Map<string, string>, oldId: unknown): string | null =>
@@ -293,18 +325,22 @@ export class BackupService {
       createdAt: dt(row.createdAt) ?? undefined,
     }));
 
-    counts.subcategories = await createManyChunked(tx.subcategory, rows("subcategories"), (row) => ({
-      id: maps.subcategory.get(row.id)!,
-      ledgerId,
-      categoryId: ref(maps.category, row.categoryId)!,
-      name: row.name,
-      icon: row.icon ?? null,
-      sortOrder: Number(row.sortOrder ?? 0),
-      archivedAt: dt(row.archivedAt),
-      createdBy: userId,
-      updatedBy: userId,
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.subcategories = await createManyChunked(
+      tx.subcategory,
+      rows("subcategories"),
+      (row) => ({
+        id: maps.subcategory.get(row.id)!,
+        ledgerId,
+        categoryId: ref(maps.category, row.categoryId)!,
+        name: row.name,
+        icon: row.icon ?? null,
+        sortOrder: Number(row.sortOrder ?? 0),
+        archivedAt: dt(row.archivedAt),
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     counts.people = await createManyChunked(tx.person, rows("people"), (row) => ({
       id: maps.person.get(row.id)!,
@@ -366,7 +402,8 @@ export class BackupService {
       typeId: ref(maps.itemType, row.typeId),
       purchasePriceMicros: bi(row.purchasePriceMicros),
       purchaseDate: dt(row.purchaseDate),
-      expectedYears: row.expectedYears == null ? null : new Prisma.Decimal(String(row.expectedYears)),
+      expectedYears:
+        row.expectedYears == null ? null : new Prisma.Decimal(String(row.expectedYears)),
       note: row.note ?? null,
       scrappedAt: dt(row.scrappedAt),
       scrapDate: dt(row.scrapDate),
@@ -410,18 +447,22 @@ export class BackupService {
       }),
     );
 
-    counts.accountAdjustments = await createManyChunked(tx.accountAdjustment, rows("accountAdjustments"), (row) => ({
-      id: maps.adjustment.get(row.id)!,
-      ledgerId,
-      accountId: ref(maps.account, row.accountId)!,
-      subAccountId: ref(maps.subAccount, row.subAccountId),
-      balanceBeforeMicros: bi(row.balanceBeforeMicros) ?? 0n,
-      balanceAfterMicros: bi(row.balanceAfterMicros) ?? 0n,
-      deltaMicros: bi(row.deltaMicros) ?? 0n,
-      note: row.note ?? null,
-      createdBy: userId,
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.accountAdjustments = await createManyChunked(
+      tx.accountAdjustment,
+      rows("accountAdjustments"),
+      (row) => ({
+        id: maps.adjustment.get(row.id)!,
+        ledgerId,
+        accountId: ref(maps.account, row.accountId)!,
+        subAccountId: ref(maps.subAccount, row.subAccountId),
+        balanceBeforeMicros: bi(row.balanceBeforeMicros) ?? 0n,
+        balanceAfterMicros: bi(row.balanceAfterMicros) ?? 0n,
+        deltaMicros: bi(row.deltaMicros) ?? 0n,
+        note: row.note ?? null,
+        createdBy: userId,
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     counts.transactions = await createManyChunked(tx.transaction, rows("transactions"), (row) => ({
       id: maps.transaction.get(row.id)!,
@@ -457,23 +498,27 @@ export class BackupService {
       createdAt: dt(row.createdAt) ?? undefined,
     }));
 
-    counts.accountEntries = await createManyChunked(tx.accountEntry, rows("accountEntries"), (row) => ({
-      id: randomUUID(),
-      ledgerId,
-      accountId: ref(maps.account, row.accountId)!,
-      subAccountId: ref(maps.subAccount, row.subAccountId),
-      entryType: row.entryType,
-      amountDeltaMicros: bi(row.amountDeltaMicros) ?? 0n,
-      balanceBeforeMicros: bi(row.balanceBeforeMicros) ?? 0n,
-      balanceAfterMicros: bi(row.balanceAfterMicros) ?? 0n,
-      transactionId: ref(maps.transaction, row.transactionId),
-      adjustmentId: ref(maps.adjustment, row.adjustmentId),
-      relatedAccountId: ref(maps.account, row.relatedAccountId),
-      note: row.note ?? null,
-      occurredAt: dt(row.occurredAt)!,
-      createdBy: userId,
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.accountEntries = await createManyChunked(
+      tx.accountEntry,
+      rows("accountEntries"),
+      (row) => ({
+        id: randomUUID(),
+        ledgerId,
+        accountId: ref(maps.account, row.accountId)!,
+        subAccountId: ref(maps.subAccount, row.subAccountId),
+        entryType: row.entryType,
+        amountDeltaMicros: bi(row.amountDeltaMicros) ?? 0n,
+        balanceBeforeMicros: bi(row.balanceBeforeMicros) ?? 0n,
+        balanceAfterMicros: bi(row.balanceAfterMicros) ?? 0n,
+        transactionId: ref(maps.transaction, row.transactionId),
+        adjustmentId: ref(maps.adjustment, row.adjustmentId),
+        relatedAccountId: ref(maps.account, row.relatedAccountId),
+        note: row.note ?? null,
+        occurredAt: dt(row.occurredAt)!,
+        createdBy: userId,
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     counts.transactionAccountRelations = await createManyChunked(
       tx.transactionAccountRelation,
@@ -489,14 +534,20 @@ export class BackupService {
       }),
     );
 
-    counts.transactionLinks = await createManyChunked(tx.transactionLink, rows("transactionLinks"), (row) => ({
-      id: randomUUID(),
-      ledgerId,
-      transactionId: ref(maps.transaction, row.transactionId)!,
-      linkedType: row.linkedType,
-      linkedId: (row.linkedType === "insurance" ? ref(maps.insurance, row.linkedId) : ref(maps.item, row.linkedId))!,
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.transactionLinks = await createManyChunked(
+      tx.transactionLink,
+      rows("transactionLinks"),
+      (row) => ({
+        id: randomUUID(),
+        ledgerId,
+        transactionId: ref(maps.transaction, row.transactionId)!,
+        linkedType: row.linkedType,
+        linkedId: (row.linkedType === "insurance"
+          ? ref(maps.insurance, row.linkedId)
+          : ref(maps.item, row.linkedId))!,
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     counts.plans = await createManyChunked(tx.plan, rows("plans"), (row) => ({
       id: randomUUID(),
@@ -516,15 +567,19 @@ export class BackupService {
       createdAt: dt(row.createdAt) ?? undefined,
     }));
 
-    counts.categoryBudgets = await createManyChunked(tx.categoryBudget, rows("categoryBudgets"), (row) => ({
-      id: randomUUID(),
-      ledgerId,
-      categoryId: ref(maps.category, row.categoryId)!,
-      amountMicros: bi(row.amountMicros) ?? 0n,
-      createdBy: userId,
-      updatedBy: userId,
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.categoryBudgets = await createManyChunked(
+      tx.categoryBudget,
+      rows("categoryBudgets"),
+      (row) => ({
+        id: randomUUID(),
+        ledgerId,
+        categoryId: ref(maps.category, row.categoryId)!,
+        amountMicros: bi(row.amountMicros) ?? 0n,
+        createdBy: userId,
+        updatedBy: userId,
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     counts.autoRules = await createManyChunked(tx.autoRule, rows("autoRules"), (row) => ({
       id: maps.autoRule.get(row.id)!,
@@ -589,28 +644,36 @@ export class BackupService {
       }),
     );
 
-    counts.quickTemplates = await createManyChunked(tx.quickTemplate, rows("quickTemplates"), (row) => ({
-      id: maps.quickTemplate.get(row.id)!,
-      ledgerId,
-      type: row.type,
-      name: row.name ?? null,
-      amountMicros: bi(row.amountMicros),
-      categoryId: ref(maps.category, row.categoryId)!,
-      subcategoryId: ref(maps.subcategory, row.subcategoryId),
-      accountId: ref(maps.account, row.accountId),
-      subAccountId: ref(maps.subAccount, row.subAccountId),
-      personId: ref(maps.person, row.personId),
-      note: row.note ?? null,
-      relationPayload: remapRelationPayload(row.relationPayload, maps),
-      insuranceId: ref(maps.insurance, row.insuranceId),
-      itemId: ref(maps.item, row.itemId),
-      directEnabled: Boolean(row.directEnabled),
-      sortOrder: Number(row.sortOrder ?? 0),
-      createdBy: userId,
-      updatedBy: userId,
-      archivedAt: dt(row.archivedAt),
-      createdAt: dt(row.createdAt) ?? undefined,
-    }));
+    counts.quickTemplates = await createManyChunked(
+      tx.quickTemplate,
+      rows("quickTemplates"),
+      (row) => ({
+        id: maps.quickTemplate.get(row.id)!,
+        ledgerId,
+        type: row.type,
+        name: row.name ?? null,
+        amountMicros: bi(row.amountMicros),
+        categoryId: ref(maps.category, row.categoryId),
+        subcategoryId: ref(maps.subcategory, row.subcategoryId),
+        accountId: ref(maps.account, row.accountId),
+        subAccountId: ref(maps.subAccount, row.subAccountId),
+        fromAccountId: ref(maps.account, row.fromAccountId),
+        fromSubAccountId: ref(maps.subAccount, row.fromSubAccountId),
+        toAccountId: ref(maps.account, row.toAccountId),
+        toSubAccountId: ref(maps.subAccount, row.toSubAccountId),
+        personId: ref(maps.person, row.personId),
+        note: row.note ?? null,
+        relationPayload: remapRelationPayload(row.relationPayload, maps),
+        insuranceId: ref(maps.insurance, row.insuranceId),
+        itemId: ref(maps.item, row.itemId),
+        directEnabled: Boolean(row.directEnabled),
+        sortOrder: Number(row.sortOrder ?? 0),
+        createdBy: userId,
+        updatedBy: userId,
+        archivedAt: dt(row.archivedAt),
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
 
     return counts;
   }
@@ -638,7 +701,8 @@ function bi(value: unknown): bigint | null {
 function dt(value: unknown): Date | null {
   if (value == null || value === "") return null;
   const date = new Date(String(value));
-  if (Number.isNaN(date.getTime())) throw new AppError("BACKUP_INVALID_FORMAT", "备份内日期格式无效", 400);
+  if (Number.isNaN(date.getTime()))
+    throw new AppError("BACKUP_INVALID_FORMAT", "备份内日期格式无效", 400);
   return date;
 }
 
@@ -647,7 +711,8 @@ function remapCategorySnapshot(snapshot: unknown, maps: Pick<IdMaps, "category" 
   if (snapshot == null || typeof snapshot !== "object") return Prisma.JsonNull;
   const copy = { ...(snapshot as Row) };
   if (typeof copy.id === "string") copy.id = maps.category.get(copy.id) ?? copy.id;
-  if (typeof copy.subcategoryId === "string") copy.subcategoryId = maps.subcategory.get(copy.subcategoryId) ?? copy.subcategoryId;
+  if (typeof copy.subcategoryId === "string")
+    copy.subcategoryId = maps.subcategory.get(copy.subcategoryId) ?? copy.subcategoryId;
   return copy as Prisma.InputJsonValue;
 }
 
@@ -664,13 +729,17 @@ function remapRelationPayload(payload: unknown, maps: Pick<IdMaps, "account">) {
   return payload.map((entry) => {
     if (entry == null || typeof entry !== "object") return entry;
     const copy = { ...(entry as Row) };
-    if (typeof copy.accountId === "string") copy.accountId = maps.account.get(copy.accountId) ?? copy.accountId;
+    if (typeof copy.accountId === "string")
+      copy.accountId = maps.account.get(copy.accountId) ?? copy.accountId;
     return copy;
   }) as Prisma.InputJsonValue;
 }
 
 /** plan.match_rule 可能引用分类/账户/成员 id，尽力重映射（结构未知字段原样保留）。 */
-function remapMatchRule(matchRule: unknown, maps: Pick<IdMaps, "category" | "subcategory" | "person" | "account">) {
+function remapMatchRule(
+  matchRule: unknown,
+  maps: Pick<IdMaps, "category" | "subcategory" | "person" | "account">,
+) {
   if (matchRule == null || typeof matchRule !== "object") return Prisma.JsonNull;
   const remapValue = (value: unknown): unknown => {
     if (typeof value === "string") {
@@ -684,7 +753,9 @@ function remapMatchRule(matchRule: unknown, maps: Pick<IdMaps, "category" | "sub
     }
     if (Array.isArray(value)) return value.map(remapValue);
     if (value != null && typeof value === "object") {
-      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remapValue(item)]));
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, remapValue(item)]),
+      );
     }
     return value;
   };

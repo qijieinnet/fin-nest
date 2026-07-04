@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useId, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
-import { useTransaction } from "@/lib/data/records";
+import { useAutoPending } from "@/lib/data/records";
 import { useLedger } from "@/providers";
-import { TransactionForm } from "../../_components/TransactionForm";
+import { TransactionForm } from "../../../_components/TransactionForm";
 
-export function EditBillScreen({ transactionId }: { transactionId: string }) {
+export function EditPendingScreen({ pendingId }: { pendingId: string }) {
   const router = useRouter();
   const { ledgerId } = useLedger();
   const formId = useId();
@@ -19,25 +19,26 @@ export function EditBillScreen({ transactionId }: { transactionId: string }) {
   const handleSubmitBlockedChange = useCallback((handler: () => void) => {
     setSubmitBlocked(() => handler);
   }, []);
-  const transactionQuery = useTransaction(ledgerId, transactionId);
-  const waitingForTransaction = transactionQuery.isPending;
-  const hasTransaction = Boolean(transactionQuery.data);
+
+  const pendingQuery = useAutoPending(ledgerId);
+  const pending = pendingQuery.data?.find((item) => item.id === pendingId);
+  const waiting = pendingQuery.isPending;
 
   return (
     <MobileAppShell>
       <MobilePage
         action={
           <IconButton
-            aria-disabled={!canSubmit || !ledgerId || waitingForTransaction || saving || !hasTransaction}
+            aria-disabled={!canSubmit || !ledgerId || waiting || saving || !pending}
             className={
-              !canSubmit && ledgerId && !waitingForTransaction && !saving && hasTransaction
+              !canSubmit && ledgerId && !waiting && !saving && pending
                 ? "ui-icon-button--visual-disabled"
                 : undefined
             }
-            disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
+            disabled={!ledgerId || waiting || saving || !pending}
             form={formId}
             icon={<Check size={24} strokeWidth={2.6} />}
-            label="保存"
+            label="确认入账"
             loading={saving}
             onClick={(event) => {
               if (!canSubmit) {
@@ -49,6 +50,7 @@ export function EditBillScreen({ transactionId }: { transactionId: string }) {
             type="submit"
           />
         }
+        description="保存修改后将直接确认入账"
         leading={
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
@@ -56,21 +58,23 @@ export function EditBillScreen({ transactionId }: { transactionId: string }) {
             onClick={() => router.back()}
           />
         }
-        title="编辑交易"
+        title="编辑并确认"
       >
-        {!ledgerId || waitingForTransaction ? (
-          <LoadingState rows={5} title="加载交易" />
-        ) : transactionQuery.data ? (
+        {!ledgerId || waiting ? (
+          <LoadingState rows={5} title="加载待确认记录" />
+        ) : pending ? (
           <TransactionForm
             formId={formId}
-            initial={transactionQuery.data}
             ledgerId={ledgerId}
             onCanSubmitChange={setCanSubmit}
             onPendingChange={setSaving}
             onSubmitBlocked={handleSubmitBlockedChange}
+            pending={pending}
           />
         ) : (
-          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">交易不存在或已删除。</p>
+          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
+            待确认记录不存在或已处理。
+          </p>
         )}
       </MobilePage>
     </MobileAppShell>

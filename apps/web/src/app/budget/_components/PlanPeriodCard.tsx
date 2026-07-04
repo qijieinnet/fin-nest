@@ -2,6 +2,7 @@
 
 import type { Plan, PlanPeriodProgress } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { useDecimalPlaces } from "@/providers";
 import {
   daysBetweenKeys,
   periodEndInclusive,
@@ -20,8 +21,8 @@ type PlanPeriodCardProps = {
   showMatchedFooter?: boolean;
 };
 
-function statMoney(micros: bigint): string {
-  return formatMicros(micros, { currencySymbol: "", trimTrailingZeros: true });
+function statMoney(micros: bigint, decimalPlaces: number): string {
+  return formatMicros(micros, { currencySymbol: "", decimalPlaces, trimTrailingZeros: true });
 }
 
 export function PlanPeriodCard({
@@ -31,6 +32,7 @@ export function PlanPeriodCard({
   showMatchedFooter = false,
   title,
 }: PlanPeriodCardProps) {
+  const decimalPlaces = useDecimalPlaces();
   const isIncome = plan.kind === "income";
   const isCount = plan.metric === "count";
   const today = todayKey();
@@ -51,7 +53,7 @@ export function PlanPeriodCard({
   );
   const daysLeft = isCurrent ? Math.max(0, daysBetweenKeys(today, endInclusive)) : 0;
 
-  const formatValue = (value: bigint) => (isCount ? `${value.toString()} 次` : statMoney(value));
+  const formatValue = (value: bigint) => (isCount ? `${value.toString()} 次` : statMoney(value, decimalPlaces));
   const daily = isCount
     ? (progress.projectedCount / elapsedDays).toFixed(2)
     : (Number(used) / 1_000_000 / elapsedDays).toFixed(2);

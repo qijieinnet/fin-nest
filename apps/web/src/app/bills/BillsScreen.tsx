@@ -1,7 +1,16 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChartPie, ChevronDown, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import {
+  ChartPie,
+  ChevronDown,
+  ClipboardCheck,
+  Ellipsis,
+  Pencil,
+  Plus,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,7 +25,14 @@ import {
   TransactionGroup,
   TransactionRow,
 } from "@/components/business";
-import { DotBadge, EdgeFade, IconButton, MobileAppShell, MobileTabBar } from "@/components/ui";
+import {
+  DotBadge,
+  EdgeFade,
+  IconButtonGroup,
+  MobileAppShell,
+  MobileTabBar,
+  PopoverMenu,
+} from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -32,16 +48,16 @@ import {
 } from "@/lib/data/options";
 import {
   useAccounts,
+  useAutoPending,
   useBudgetProgress,
   useCategories,
   useInfiniteTransactions,
   usePeople,
-  useRecordSetting,
   useTransactionSummary,
 } from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
-import { useLedger, usePreferences, useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useLedger, usePreferences, useSheetStack, useToast } from "@/providers";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
 import { QuickTemplateSheet } from "./_components/QuickTemplateSheet";
 import {
@@ -102,15 +118,17 @@ export function BillsScreen() {
     () => (ledgerId ? billsFilterCache.get(ledgerId) : undefined) ?? defaultFilterValue,
   );
   const [filterOpen, setFilterOpen] = useState(false);
-  const [transactionPendingDelete, setTransactionPendingDelete] = useState<Transaction | null>(null);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [transactionPendingDelete, setTransactionPendingDelete] = useState<Transaction | null>(
+    null,
+  );
 
   // 记住当前筛选，返回详情页后恢复。
   useEffect(() => {
     if (ledgerId) billsFilterCache.set(ledgerId, filterValue);
   }, [ledgerId, filterValue]);
 
-  const settingQuery = useRecordSetting(ledgerId);
-  const decimalPlaces = settingQuery.data?.amountDecimalPlaces ?? 2;
+  const decimalPlaces = useDecimalPlaces();
 
   const query = useMemo(
     () => ({ ...filterToQuery(filterValue, decimalPlaces), ...timeRangeFromFilter(filterValue) }),
@@ -123,6 +141,8 @@ export function BillsScreen() {
   const categoriesQuery = useCategories(ledgerId);
   const accountsQuery = useAccounts(ledgerId);
   const peopleQuery = usePeople(ledgerId);
+  const autoPendingQuery = useAutoPending(ledgerId);
+  const pendingCount = autoPendingQuery.data?.length ?? 0;
 
   const accounts = accountsQuery.data ?? [];
   const transactions = useMemo(
@@ -226,18 +246,49 @@ export function BillsScreen() {
               <ChevronDown size={16} className="mt-1 text-[var(--color-text-muted)]" />
             </button>
           </DotBadge>
-          <div className="flex justify-end">
-            <IconButton
-              className="!min-h-0 !min-w-0 shadow-[var(--shadow-soft)]"
-              icon={<ChartPie size={24} />}
-              label="统计"
-              onClick={() => router.push(routes.stats)}
-              variant="plain"
+          <div className="relative flex justify-end">
+            <IconButtonGroup
+              items={[
+                {
+                  icon: <ChartPie size={22} />,
+                  label: "统计",
+                  onClick: () => router.push(routes.stats),
+                },
+                // 仅在有待确认记录时显示「更多」入口。
+                ...(pendingCount > 0
+                  ? [
+                      {
+                        dot: true,
+                        icon: <Ellipsis size={22} />,
+                        label: "更多",
+                        onClick: () => setMoreMenuOpen((open) => !open),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+            <PopoverMenu
+              groups={[
+                [
+                  {
+                    description: pendingCount > 0 ? `${pendingCount} 条待入账` : undefined,
+                    icon: (
+                      <DotBadge show={pendingCount > 0}>
+                        <ClipboardCheck size={18} />
+                      </DotBadge>
+                    ),
+                    label: "待确认",
+                    onSelect: () => router.push(routes.billsPending),
+                  },
+                ],
+              ]}
+              onOpenChange={setMoreMenuOpen}
+              open={moreMenuOpen}
             />
           </div>
         </header>
 
-        <section className="rounded-[24px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
+        <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
           <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
             {periodLabel(filterValue)}支出
           </p>
@@ -312,49 +363,55 @@ export function BillsScreen() {
             <EmptyState title="暂无数据" />
           </div>
         ) : (
-          <div className="mt-5 flex flex-col gap-5">
-            {groups.map((group) => (
-              <TransactionGroup
-                dateLabel={dayLabel(group.date)}
-                incomeMicros={group.incomeMicros > 0n ? group.incomeMicros : undefined}
-                key={group.date}
-                totalMicros={group.expenseMicros > 0n ? group.expenseMicros : undefined}
-              >
-                {group.items.map((transaction) => (
-                  <SwipeActionRow
-                    actions={[
-                      {
-                        icon: <Pencil size={20} />,
-                        label: "编辑",
-                        onClick: () => router.push(routes.billEdit(transaction.id)),
-                      },
-                      {
-                        icon: <Trash2 size={20} />,
-                        label: "删除",
-                        onClick: () => {
-                          if (deleteMutation.isPending) return;
-                          setTransactionPendingDelete(transaction);
+          <div className="mt-5">
+            <div className="bill-list-shell flex flex-col gap-5">
+              {groups.map((group) => (
+                <TransactionGroup
+                  dateLabel={dayLabel(group.date)}
+                  incomeMicros={group.incomeMicros > 0n ? group.incomeMicros : undefined}
+                  key={group.date}
+                  totalMicros={group.expenseMicros > 0n ? group.expenseMicros : undefined}
+                >
+                  {group.items.map((transaction) => (
+                    <SwipeActionRow
+                      actions={[
+                        {
+                          icon: <Pencil size={20} />,
+                          label: "编辑",
+                          onClick: () => router.push(routes.billEdit(transaction.id)),
                         },
-                        tone: "danger",
-                      },
-                    ]}
-                    key={transaction.id}
-                  >
-                    <TransactionRow
-                      onClick={() => router.push(routes.bill(transaction.id))}
-                      {...rowProps(transaction, accounts)}
-                    />
-                  </SwipeActionRow>
-                ))}
-              </TransactionGroup>
-            ))}
+                        {
+                          icon: <Trash2 size={20} />,
+                          label: "删除",
+                          onClick: () => {
+                            if (deleteMutation.isPending) return;
+                            setTransactionPendingDelete(transaction);
+                          },
+                          tone: "danger",
+                        },
+                      ]}
+                      key={transaction.id}
+                    >
+                      <TransactionRow
+                        onClick={() => router.push(routes.bill(transaction.id))}
+                        {...rowProps(transaction, accounts)}
+                      />
+                    </SwipeActionRow>
+                  ))}
+                </TransactionGroup>
+              ))}
+            </div>
 
             {/* 滚动加载哨兵 + 状态提示 */}
             <div ref={sentinelRef} />
             {isFetchingNextPage ? (
-              <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">加载中…</p>
+              <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
+                加载中…
+              </p>
             ) : !hasNextPage ? (
-              <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">没有更多了</p>
+              <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
+                没有更多了
+              </p>
             ) : null}
           </div>
         )}

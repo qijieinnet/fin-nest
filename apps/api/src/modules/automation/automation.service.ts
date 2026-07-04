@@ -125,11 +125,12 @@ export class AutomationService {
     );
     await this.assertAutoPayload(ledgerId, type, {
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
-      subcategoryId: input.categoryId !== undefined && input.subcategoryId === undefined
-        ? null
-        : input.subcategoryId === undefined
-          ? existing.subcategoryId
-          : input.subcategoryId,
+      subcategoryId:
+        input.categoryId !== undefined && input.subcategoryId === undefined
+          ? null
+          : input.subcategoryId === undefined
+            ? existing.subcategoryId
+            : input.subcategoryId,
       accountId: account.accountId,
       subAccountId: account.subAccountId,
       fromAccountId: fromAccount.accountId,
@@ -137,7 +138,10 @@ export class AutomationService {
       toAccountId: toAccount.accountId,
       toSubAccountId: toAccount.subAccountId,
       personId: input.personId === undefined ? existing.personId : input.personId,
-      relations: input.relations === undefined ? this.parseRelations(existing.relationPayload) : input.relations,
+      relations:
+        input.relations === undefined
+          ? this.parseRelations(existing.relationPayload)
+          : input.relations,
       insuranceId: input.insuranceId === undefined ? existing.insuranceId : input.insuranceId,
       itemId: input.itemId === undefined ? existing.itemId : input.itemId,
     });
@@ -314,13 +318,18 @@ export class AutomationService {
     await this.ledgers.assertMember(ledgerId, userId);
     // All-or-nothing: a single failing pending rolls back the whole batch.
     // 批量条数不定，放宽默认 5s 的 interactive transaction 超时。
-    return this.txs.run(async (tx) => {
-      const transactions = [];
-      for (const pendingId of pendingIds) {
-        transactions.push(await this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId));
-      }
-      return transactions;
-    }, { timeout: 60_000 });
+    return this.txs.run(
+      async (tx) => {
+        const transactions = [];
+        for (const pendingId of pendingIds) {
+          transactions.push(
+            await this.confirmPendingInTransaction(tx, ledgerId, pendingId, userId),
+          );
+        }
+        return transactions;
+      },
+      { timeout: 60_000 },
+    );
   }
 
   private async confirmPendingInTransaction(
@@ -381,10 +390,7 @@ export class AutomationService {
 
   async createTemplate(ledgerId: string, userId: string, input: CreateQuickTemplateDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertCategory(ledgerId, input.type, input.categoryId, input.subcategoryId);
-    await this.assertRelations(ledgerId, input.type, input.relations ?? []);
-    if (input.insuranceId) await this.assertInsurance(ledgerId, input.insuranceId);
-    if (input.itemId) await this.assertItem(ledgerId, input.itemId);
+    await this.assertAutoPayload(ledgerId, input.type, input);
     return this.prisma.client.quickTemplate.create({
       data: this.templateData(ledgerId, userId, input),
     });
@@ -399,39 +405,84 @@ export class AutomationService {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertTemplate(ledgerId, templateId);
     const type = input.type ?? existing.type;
-    const categoryId = input.categoryId ?? existing.categoryId;
-    const subcategoryId =
-      input.subcategoryId === undefined
-        ? (existing.subcategoryId ?? undefined)
-        : input.subcategoryId;
-    await this.assertCategory(ledgerId, type, categoryId, subcategoryId);
-    if (input.accountId || input.subAccountId !== undefined) {
-      await this.assertAccount(
-        ledgerId,
-        input.accountId ?? existing.accountId ?? "",
-        input.subAccountId ?? existing.subAccountId ?? undefined,
-      );
-    }
-    if (input.personId) await this.assertPerson(ledgerId, input.personId);
-    if (input.relations !== undefined) await this.assertRelations(ledgerId, type, input.relations);
-    if (input.insuranceId) await this.assertInsurance(ledgerId, input.insuranceId);
-    if (input.itemId) await this.assertItem(ledgerId, input.itemId);
+    const account = this.mergeAccountPair(
+      { accountId: existing.accountId, subAccountId: existing.subAccountId },
+      { accountId: input.accountId, subAccountId: input.subAccountId },
+    );
+    const fromAccount = this.mergeAccountPair(
+      { accountId: existing.fromAccountId, subAccountId: existing.fromSubAccountId },
+      { accountId: input.fromAccountId, subAccountId: input.fromSubAccountId },
+    );
+    const toAccount = this.mergeAccountPair(
+      { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
+      { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
+    );
+    await this.assertAutoPayload(ledgerId, type, {
+      categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
+      subcategoryId:
+        input.categoryId !== undefined && input.subcategoryId === undefined
+          ? null
+          : input.subcategoryId === undefined
+            ? existing.subcategoryId
+            : input.subcategoryId,
+      accountId: account.accountId,
+      subAccountId: account.subAccountId,
+      fromAccountId: fromAccount.accountId,
+      fromSubAccountId: fromAccount.subAccountId,
+      toAccountId: toAccount.accountId,
+      toSubAccountId: toAccount.subAccountId,
+      personId: input.personId === undefined ? existing.personId : input.personId,
+      relations:
+        input.relations === undefined
+          ? this.parseRelations(existing.relationPayload)
+          : input.relations,
+      insuranceId: input.insuranceId === undefined ? existing.insuranceId : input.insuranceId,
+      itemId: input.itemId === undefined ? existing.itemId : input.itemId,
+    });
     return this.prisma.client.quickTemplate.update({
       where: { id: templateId },
       data: {
         type: input.type,
         name: input.name,
         amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
-        categoryId: input.categoryId,
-        subcategoryId: input.subcategoryId,
-        accountId: input.accountId,
-        subAccountId: input.subAccountId,
-        personId: input.personId,
+        categoryId: type === "transfer" ? null : input.categoryId,
+        subcategoryId:
+          type === "transfer"
+            ? null
+            : input.categoryId !== undefined && input.subcategoryId === undefined
+              ? null
+              : input.subcategoryId,
+        accountId: type === "transfer" ? null : input.accountId,
+        subAccountId:
+          type === "transfer"
+            ? null
+            : input.accountId !== undefined && input.subAccountId === undefined
+              ? null
+              : input.subAccountId,
+        fromAccountId: type === "transfer" ? input.fromAccountId : null,
+        fromSubAccountId:
+          type === "transfer"
+            ? input.fromAccountId !== undefined && input.fromSubAccountId === undefined
+              ? null
+              : input.fromSubAccountId
+            : null,
+        toAccountId: type === "transfer" ? input.toAccountId : null,
+        toSubAccountId:
+          type === "transfer"
+            ? input.toAccountId !== undefined && input.toSubAccountId === undefined
+              ? null
+              : input.toSubAccountId
+            : null,
+        personId: type === "transfer" ? null : input.personId,
         note: input.note,
         relationPayload:
-          input.relations === undefined ? undefined : this.relationJson(input.relations),
-        insuranceId: input.insuranceId,
-        itemId: input.itemId,
+          type === "transfer"
+            ? Prisma.JsonNull
+            : input.relations === undefined
+              ? undefined
+              : this.relationJson(input.relations),
+        insuranceId: type === "transfer" ? null : input.insuranceId,
+        itemId: type === "transfer" ? null : input.itemId,
         directEnabled: input.directEnabled,
         sortOrder: input.sortOrder,
         updatedBy: userId,
@@ -466,8 +517,9 @@ export class AutomationService {
     if (!template.amountMicros)
       throw new AppError("QUICK_TEMPLATE_AMOUNT_REQUIRED", "直接记账模板必须包含金额", 400);
     // 直接记账是最容易被双击/重放的入口，与交易创建一样支持 Idempotency-Key。
-    return this.idempotency.run({ scope: `quick_template.run:${templateId}`, key: idempotencyKey, userId }, () =>
-      this.runTemplateInner(ledgerId, template, userId),
+    return this.idempotency.run(
+      { scope: `quick_template.run:${templateId}`, key: idempotencyKey, userId },
+      () => this.runTemplateInner(ledgerId, template, userId),
     );
   }
 
@@ -476,20 +528,23 @@ export class AutomationService {
     template: Prisma.QuickTemplateGetPayload<Record<string, never>>,
     userId: string,
   ) {
-    return this.txs.run(async (tx) => {
-      const transaction = await this.transactions.createInsideExistingTransaction(
-        tx,
-        ledgerId,
-        userId,
-        this.templateToTransaction(template, todayKey()),
-        { source: "quick", sourceId: template.id, auditAction: "quick_template.run" },
-      );
-      await this.linkAssets(tx, ledgerId, transaction.id, {
-        insuranceId: template.insuranceId,
-        itemId: template.itemId,
-      });
-      return transaction;
-    }, { timeout: 20_000 });
+    return this.txs.run(
+      async (tx) => {
+        const transaction = await this.transactions.createInsideExistingTransaction(
+          tx,
+          ledgerId,
+          userId,
+          this.templateToTransaction(template, todayKey()),
+          { source: "quick", sourceId: template.id, auditAction: "quick_template.run" },
+        );
+        await this.linkAssets(tx, ledgerId, transaction.id, {
+          insuranceId: template.insuranceId,
+          itemId: template.itemId,
+        });
+        return transaction;
+      },
+      { timeout: 20_000 },
+    );
   }
 
   private pendingToTransaction(
@@ -526,12 +581,24 @@ export class AutomationService {
     template: Prisma.QuickTemplateGetPayload<Record<string, never>>,
     occurredOn: string,
   ): CreateTransactionDto {
+    if (template.type === "transfer") {
+      return {
+        type: template.type,
+        grossAmountMicros: template.amountMicros?.toString() ?? "",
+        occurredOn,
+        fromAccountId: template.fromAccountId ?? undefined,
+        fromSubAccountId: template.fromSubAccountId ?? undefined,
+        toAccountId: template.toAccountId ?? undefined,
+        toSubAccountId: template.toSubAccountId ?? undefined,
+        note: template.note ?? undefined,
+      };
+    }
     const relations = this.parseRelations(template.relationPayload);
     return {
       type: template.type,
       grossAmountMicros: template.amountMicros?.toString() ?? "",
       occurredOn,
-      categoryId: template.categoryId,
+      categoryId: template.categoryId ?? undefined,
       subcategoryId: template.subcategoryId ?? undefined,
       accountId: template.accountId ?? undefined,
       subAccountId: template.subAccountId ?? undefined,
@@ -546,20 +613,25 @@ export class AutomationService {
     userId: string,
     input: CreateQuickTemplateDto,
   ): Prisma.QuickTemplateUncheckedCreateInput {
+    const isTransfer = input.type === "transfer";
     return {
       ledgerId,
       type: input.type,
       name: input.name,
       amountMicros: input.amountMicros ? BigInt(input.amountMicros) : null,
-      categoryId: input.categoryId,
-      subcategoryId: input.subcategoryId ?? null,
-      accountId: input.accountId ?? null,
-      subAccountId: input.subAccountId ?? null,
-      personId: input.personId ?? null,
+      categoryId: isTransfer ? null : input.categoryId!,
+      subcategoryId: isTransfer ? null : (input.subcategoryId ?? null),
+      accountId: isTransfer ? null : (input.accountId ?? null),
+      subAccountId: isTransfer ? null : (input.subAccountId ?? null),
+      fromAccountId: isTransfer ? input.fromAccountId! : null,
+      fromSubAccountId: isTransfer ? (input.fromSubAccountId ?? null) : null,
+      toAccountId: isTransfer ? input.toAccountId! : null,
+      toSubAccountId: isTransfer ? (input.toSubAccountId ?? null) : null,
+      personId: isTransfer ? null : (input.personId ?? null),
       note: input.note ?? null,
-      relationPayload: this.relationJson(input.relations),
-      insuranceId: input.insuranceId ?? null,
-      itemId: input.itemId ?? null,
+      relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
+      insuranceId: isTransfer ? null : (input.insuranceId ?? null),
+      itemId: isTransfer ? null : (input.itemId ?? null),
       directEnabled: input.directEnabled ?? false,
       sortOrder: input.sortOrder ?? 0,
       createdBy: userId,
@@ -607,7 +679,11 @@ export class AutomationService {
       if (!payload.fromAccountId || !payload.toAccountId) {
         throw new AppError("TRANSFER_ACCOUNTS_REQUIRED", "转账必须选择转出和转入账户", 400);
       }
-      await this.assertAccount(ledgerId, payload.fromAccountId, payload.fromSubAccountId ?? undefined);
+      await this.assertAccount(
+        ledgerId,
+        payload.fromAccountId,
+        payload.fromSubAccountId ?? undefined,
+      );
       await this.assertAccount(ledgerId, payload.toAccountId, payload.toSubAccountId ?? undefined);
       if (
         payload.fromAccountId === payload.toAccountId &&
@@ -619,7 +695,12 @@ export class AutomationService {
     }
 
     if (!payload.categoryId) throw new AppError("CATEGORY_REQUIRED", "请选择分类", 400);
-    await this.assertCategory(ledgerId, type, payload.categoryId, payload.subcategoryId ?? undefined);
+    await this.assertCategory(
+      ledgerId,
+      type,
+      payload.categoryId,
+      payload.subcategoryId ?? undefined,
+    );
     if (payload.subAccountId && !payload.accountId) {
       throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
     }
@@ -635,14 +716,24 @@ export class AutomationService {
   private async assertRelations(ledgerId: string, type: string, relations: StoredRelation[]) {
     if (relations.length === 0) return;
     const accounts = await this.prisma.client.account.findMany({
-      where: { id: { in: relations.map((relation) => relation.accountId) }, ledgerId, archivedAt: null },
+      where: {
+        id: { in: relations.map((relation) => relation.accountId) },
+        ledgerId,
+        archivedAt: null,
+      },
     });
     const accountById = new Map(accounts.map((account) => [account.id, account]));
     for (const relation of relations) {
-      if (type === "expense" && !["receivable_from_expense", "payable_from_expense"].includes(relation.relationKind)) {
+      if (
+        type === "expense" &&
+        !["receivable_from_expense", "payable_from_expense"].includes(relation.relationKind)
+      ) {
         throw new AppError("RELATION_KIND_MISMATCH", "关联类型与交易类型不匹配", 400);
       }
-      if (type === "income" && !["payable_from_income", "receivable_from_income"].includes(relation.relationKind)) {
+      if (
+        type === "income" &&
+        !["payable_from_income", "receivable_from_income"].includes(relation.relationKind)
+      ) {
         throw new AppError("RELATION_KIND_MISMATCH", "关联类型与交易类型不匹配", 400);
       }
       if (BigInt(relation.amountMicros) <= 0n) {
@@ -650,7 +741,9 @@ export class AutomationService {
       }
       const account = accountById.get(relation.accountId);
       if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-      const expectedType = relation.relationKind.startsWith("receivable") ? "receivable" : "payable";
+      const expectedType = relation.relationKind.startsWith("receivable")
+        ? "receivable"
+        : "payable";
       if (account.type !== expectedType) {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
       }
@@ -672,7 +765,9 @@ export class AutomationService {
   }
 
   /** 把关联数组转成可存入 JSONB 的值（空数组存 null，便于清空）。 */
-  private relationJson(relations: TransactionAccountRelationDto[] | undefined): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  private relationJson(
+    relations: TransactionAccountRelationDto[] | undefined,
+  ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
     if (!relations || relations.length === 0) return Prisma.JsonNull;
     return relations.map((relation) => ({
       accountId: relation.accountId,
@@ -688,7 +783,11 @@ export class AutomationService {
       if (!entry || typeof entry !== "object") return [];
       const record = entry as Record<string, unknown>;
       const { accountId, relationKind, amountMicros } = record;
-      if (typeof accountId !== "string" || typeof relationKind !== "string" || typeof amountMicros !== "string") {
+      if (
+        typeof accountId !== "string" ||
+        typeof relationKind !== "string" ||
+        typeof amountMicros !== "string"
+      ) {
         return [];
       }
       return [{ accountId, relationKind, amountMicros }];
@@ -713,7 +812,12 @@ export class AutomationService {
             linkedId: target.linkedId,
           },
         },
-        create: { ledgerId, transactionId, linkedType: target.linkedType, linkedId: target.linkedId },
+        create: {
+          ledgerId,
+          transactionId,
+          linkedType: target.linkedType,
+          linkedId: target.linkedId,
+        },
         update: {},
       });
     }

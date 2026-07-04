@@ -1,377 +1,213 @@
 # Fin Nest 前端工程规范
 
-版本：v0.2  
-状态：前端编码基线，开始写 Next.js 项目前必须先遵守  
+版本：v0.3
+状态：前端编码基线，改前端代码前必须先遵守
 依据：`FRONTEND_DESIGN.md`、`ARCHITECTURE.md`、`FUNCTION_BOUNDARIES.md`
+
+> v0.3 变更：项目已移除 Liquid Glass（“去掉玻璃”提交），`components/glass` / `liquid-glass-react` 不再存在；页面组织从设想的 `features/*` 改为 Next.js App Router 的 `app/<域>/` 就近组织；`/__dev/ui` 样板页尚未落地。本版按当前真实代码结构重写，删除了已不适用的规则。
 
 ## 1. 目标
 
-这份文档用于约束 AI agent 和开发者写前端代码的方式，重点解决：
+约束 AI agent 和开发者写前端代码的方式，重点解决：
 
 - 不重复造相似组件。
-- 不把业务规则写散到页面。
-- 不让页面直接 fetch、直接拼 UI、直接处理财务一致性。
-- 不因为 Liquid Glass 视觉效果破坏性能和可读性。
-- 不让开发样板页、调试入口进入生产环境。
+- 不把业务规则、数据请求写散到页面。
+- 不让页面直接 `fetch`、直接拼 API URL、直接算金额 micros。
+- 关键信息（金额、日期、分类、账户）始终清晰可读，视觉效果不压过可读性。
 
-## 2. 目录结构
+## 2. 目录结构（当前真实结构）
 
 ```txt
-apps/web/
-  src/
-    app/
-      (auth)/
-      (app)/
-      __dev/
-    components/
-      ui/
-      glass/
-      business/
-    features/
-      bills/
-      accounts/
-      plans/
-      more/
-      stats/
-      auto-rules/
-      quick-templates/
-      insurances/
-      items/
-      settings/
-    lib/
-      api/
-      auth/
-      config/
-      format/
-      money/
-      query/
-      route/
-      generated/
-    providers/
-    styles/
-    types/
+apps/web/src/
+  app/                      # Next.js App Router：路由 + 页面装配
+    bills/
+      page.tsx              # 极薄 route 包装
+      BillsScreen.tsx       # 页面组合
+      [transactionId]/      # 动态路由段
+      _components/          # 该域私有组件、工具（下划线前缀不进路由）
+    accounts/ budget/ stats/ ledgers/ more/ login/ register/
+    layout.tsx  globals.css  manifest.ts
+  components/
+    ui/                     # 无业务语义的基础组件
+    business/               # 跨模块复用的业务组件
+    app/                    # 应用级壳/占位（如 ComingSoonScreen）
+    auth/                   # 鉴权门禁（AuthGate、RequireLedger）
+  lib/
+    api/                    # client、endpoints、错误、契约类型
+    data/                   # records.ts：所有查询 hooks；options.ts：选项映射
+    query/                  # query-keys.ts：统一查询 key
+    money/ format/ route/ config/ id/ generated/
+  providers/                # 全局 provider（Query/Auth/Ledger/Toast/SheetStack/Preferences）
 ```
+
+共享代码在 monorepo 的 `packages/`：`backend`、`db`、`shared`、`config`、`eslint-config`、`tsconfig`。
 
 目录职责：
 
-- `app`：Next.js 路由、layout、page，只做页面装配。
-- `components/ui`：无业务语义的基础组件。
-- `components/glass`：Liquid Glass 封装和降级。
-- `components/business`：跨模块复用的业务组件。
-- `features/*`：模块页面组合、模块 hooks、模块 adapter。
-- `lib/api`：API client、请求封装、错误处理。
+- `app`：路由、layout、page，以及就近的 `XxxScreen.tsx` 页面组合与 `_components/` 私有件。
+- `components/ui`：无业务语义的基础组件（Button、IconButton、Input、Sheet、Menu、PopoverMenu、Switch、Tabs…）。
+- `components/business`：知道业务语义、但不拥有业务事实的组件（FilterSheet、AmountInput、CategoryPicker、AccountPicker、TransactionRow、SwipeActionRow…）。
+- `lib/api`：请求封装、路径拼接、错误结构、后端契约类型。
+- `lib/data/records.ts`：集中定义 `useXxx` 查询 hooks。
+- `lib/query/query-keys.ts`：集中定义查询 key。
 - `lib/money`：金额解析、格式化、micros 转换。
-- `lib/format`：日期、数字、文本展示。
-- `lib/generated`：从 OpenAPI 生成的类型或 API client。
-- `providers`：QueryClient、Auth、Ledger、Toast、SheetStack 等全局 provider。
+- `providers`：QueryClient、Auth、Ledger、Toast、SheetStack、Preferences。
 
-## 3. 开发顺序
+## 3. 路由与页面职责
 
-开始业务页面前，必须先完成：
-
-1. 项目基础结构、路径别名、Lint、格式化。
-2. `components/ui` 基础组件。
-3. `components/glass` 玻璃组件封装。
-4. `providers`：Query、Auth、Ledger、Toast、SheetStack。
-5. 仅开发环境可访问的 UI 样板页 `/__dev/ui`。
-6. `components/business` 第一批业务通用组件。
-7. 再开始账单、账户、计划、更多等业务页面。
-
-这一步很重要。没有基础组件和样板页时，不允许直接开写业务页面。
-
-## 4. 路由与页面职责
-
-页面文件只负责：
-
-- 读取路由参数。
-- 调用 feature hooks 获取数据。
-- 组合布局和组件。
-- 处理页面级 loading、empty、error。
-- 把用户操作转发给 mutation 或导航函数。
-
-页面文件禁止：
-
-- 直接写复杂表单控件。
-- 直接 `fetch`。
-- 直接拼接 API URL。
-- 直接计算金额 micros。
-- 直接实现筛选、日期选择、分类选择、账户选择。
-- 直接 import `liquid-glass-react`。
-
-页面结构：
+`app/<域>/page.tsx` 只做极薄包装（读路由参数、套鉴权门禁、渲染 Screen）：
 
 ```tsx
 export default function BillsPage() {
-  return <BillsScreen />
+  return (
+    <AuthGate mode="protected">
+      <RequireLedger>
+        <BillsScreen />
+      </RequireLedger>
+    </AuthGate>
+  );
 }
 ```
 
-真正的页面组合放在 feature 内：
+`XxxScreen.tsx` 负责页面组合：
 
-```txt
-features/bills/screens/BillsScreen.tsx
-```
+- 调用 `lib/data` 的查询 hooks 取数据。
+- 组合布局和组件。
+- 处理页面级 loading / empty / error。
+- 用 `useMutation` + `lib/api` 的 `apiRequest` 发起写操作，成功后失效相关查询。
 
-## 5. 组件分层规则
+页面/Screen 禁止：
 
-基础 UI：
+- 直接 `fetch` 或手拼 API URL（用 `apiRequest` + `ledgerApiPath` 等）。
+- 直接算金额 micros。
+- 直接手写复杂表单控件、筛选、日期选择、分类/账户选择（用 business 组件）。
+- 手写 backdrop + 绝对定位的下拉菜单（用 `PopoverMenu`，见 §11）。
 
-- 不知道账本、交易、账户这些业务概念。
-- 例如 `Button`、`IconButton`、`Input`、`Sheet`、`Toast`、`Tabs`。
+## 4. 组件分层
 
-Glass 组件：
+- **基础 UI（`components/ui`）**：不知道账本、交易、账户等概念。
+- **业务组件（`components/business`）**：知道业务语义，接收 `data / value / onChange / loading / disabled`，不直接决定权限和财务规则。
+- **域内组件（`app/<域>/_components`）**：组合业务组件、hooks、mutation，可有域专属 UI，但不得复制已有通用组件。
 
-- 只封装视觉材质和交互反馈。
-- 只允许在 `components/glass` 里依赖 `liquid-glass-react`。
-- 对外暴露稳定 API，例如 `GlassSurface`、`GlassButton`、`GlassBottomSheet`。
+新增通用交互优先做成 `components/ui` 或 `components/business` 组件，不在页面内私有实现。
 
-Business 组件：
-
-- 知道业务语义，但不直接拥有业务事实。
-- 例如 `FilterSheet`、`AmountInput`、`CategoryPicker`、`AccountPicker`、`PersonPicker`、`TransactionRow`。
-- 接收数据、value、onChange、loading、disabled。
-- 不直接决定最终权限和财务规则。
-
-Feature 组件：
-
-- 组合业务组件、hooks、API mutation。
-- 允许有模块专属 UI，但不能复制已有通用组件。
-
-## 6. 命名规范
-
-文件命名：
+## 5. 命名规范
 
 - React 组件：`PascalCase.tsx`。
-- hooks：`useSomething.ts`。
-- 工具函数：`kebab-case.ts` 或按目录既有风格统一。
-- 类型：靠近使用方，跨模块共享类型放 `types` 或 `packages/shared`。
-- schema：`something.schema.ts`。
-- API：`something.api.ts`。
-- query hooks：`something.queries.ts`。
-- mutations：`something.mutations.ts`。
+- hooks：`useSomething`（查询 hooks 集中写在 `lib/data/records.ts`）。
+- 工具函数文件：`kebab-case.ts`（如 `bill-utils.ts`）。
+- `Page` 只用于 route 文件的极薄包装；`Screen` 用于完整页面组合；`Sheet` 用于底部弹层；`Picker` 用于选择器；`Row` 用于列表行；`Card` 只用于真正独立卡片。
+- 不使用 `CommonPanel2`、`NewCard`、`NiceButton` 这类无语义名字。
 
-命名原则：
+## 6. API Client 与请求
 
-- 组件名表达业务语义，不使用 `CommonPanel2`、`NewCard`、`NiceButton` 这类名字。
-- `Page` 只用于 Next.js route 文件或极薄包装。
-- `Screen` 用于完整页面组合。
-- `Sheet` 用于底部弹层。
-- `Picker` 用于选择器。
-- `Row` 用于列表行。
-- `Card` 只用于真正的独立卡片，不把页面 section 都叫 card。
+统一通过 `lib/api` 访问后端，页面和组件不得直接 `fetch`。
 
-## 7. API Client 与请求
+- 请求走 `apiRequest`，路径用 `ledgerApiPath(ledgerId, path)` / `ledgerMembersPath` 等拼接，不手写字符串 URL。
+- session 走 HttpOnly Cookie，请求需带 `credentials`。
+- API 错误转成统一错误类型，用 `getApiErrorMessage` 取文案，配合 Toast 或字段错误展示。
+- 文件上传先向 API 取签名 URL / 上传凭证，再传对象存储，不直接暴露 object key。
+- **契约类型**：当前手写在 `lib/api/contracts.ts`（镜像后端 service 返回结构）。OpenAPI 生成管线（`lib/generated/api-types.ts`）尚为占位，可用后再迁移；在此之前改接口字段要同步 `contracts.ts`。
 
-统一通过 `lib/api` 访问后端。
+## 7. Query 与缓存
 
-要求：
+Server State 用 TanStack Query，查询 key 集中在 `lib/query/query-keys.ts`。
 
-- 后端接口契约是 REST + OpenAPI。
-- 前端类型从 OpenAPI 生成；`packages/shared` 只放跨端常量和通用 schema。
-- 页面和组件不能直接 `fetch`。
-- API client 统一处理 base URL、credentials、JSON、错误结构。
-- session 使用 HttpOnly Cookie 时，客户端请求必须带 `credentials`。
-- API 错误必须转换成统一错误类型，便于 Toast 和表单错误展示。
-- 文件上传必须先向 API 请求签名 URL 或上传凭证，再上传到 MinIO。
-
-结构：
-
-```txt
-lib/api/
-  client.ts
-  errors.ts
-  endpoints.ts
-
-features/bills/api/
-  bills.api.ts
-  bills.queries.ts
-  bills.mutations.ts
-```
-
-## 8. Query 与缓存
-
-Server State 使用统一请求缓存层。
-
-规则：
-
-- 查询 key 必须包含 `ledgerId`。
-- 当前账本切换时，不得复用上个账本的查询结果。
-- 创建、编辑、删除交易后，必须失效交易列表、账户、统计、计划相关查询。
-- 编辑账户余额后，必须失效账户列表、账户详情、账户流水、净资产相关查询。
-- 上传或删除附件后，必须失效对应业务对象详情。
-- 乐观更新只用于 UI 体验，最终以后端返回为准。
-
-query key：
-
-```ts
-['ledger', ledgerId, 'transactions', filter]
-['ledger', ledgerId, 'accounts']
-['ledger', ledgerId, 'account', accountId]
-['ledger', ledgerId, 'plans']
-['ledger', ledgerId, 'stats', filter]
-['ledger', ledgerId, 'reminder-summary']
-```
+- 查询 key 必须包含 `ledgerId`，账本切换后不得复用上个账本的结果。
+- 查询 hooks 集中写在 `lib/data/records.ts`；mutation 就近写在 Screen / Sheet 组件里。
+- 创建/编辑/删除交易后，必须失效交易列表、账户、预算、统计等相关查询。
+- 编辑账户余额后，失效账户列表、详情、流水、净资产相关查询。
+- 上传/删除附件后，失效对应业务对象详情。
+- 待确认（定时记账）确认/删除后，失效 `autoPending`、`reminder-summary`，确认还要失效交易/账户/预算。
 
 红点提醒：
 
-- v1 不做站内提醒中心。
-- 主 Tab “更多”显示所有提醒数量合计。
-- 更多页二级入口显示各自提醒数量。
-- 数字为 0 不显示红点，过大可显示 `99+`。
 - 提醒计数只来自 `GET /ledgers/:ledgerId/reminder-summary`。
+- 主 Tab“更多”显示提醒合计，二级入口显示各自数量；为 0 不显示，过大显示 `99+`。
 
-## 9. 表单规范
+## 8. 表单规范
 
-表单统一使用 schema 校验。
+- 新增/编辑交易表单必须读取 `record_settings`（字段排序、显隐、账户/人员必填、金额小数位来自账本设置）。
+- 支出、收入、转账共用同一套表单框架，用配置控制字段差异。
+- 表单错误显示在字段附近；Toast 只作辅助，不替代字段错误。
+- 保存中禁用重复提交；复杂表单未保存离开应提示。
+- 表单内的枚举/选项选择用 `PopoverMenu`（见 §11），不另造 Picker 弹层。
 
-规则：
-
-- 表单字段默认由 schema 和后端 DTO 对齐。
-- 新增/编辑交易表单必须读取 `record_settings`。
-- 支出、收入、转账使用同一套表单框架，通过配置控制字段差异。
-- 字段排序、字段显隐、账户必填、人员必填、金额小数位来自账本设置。
-- 表单错误必须显示在字段附近。
-- Toast 只能作为辅助提醒，不能替代字段错误。
-- 保存中要禁用重复提交。
-- 未保存离开时，复杂表单应提示用户。
-
-## 10. 金额规范
+## 9. 金额规范
 
 前端不得用 `number` 做精确金额计算。
 
-规则：
+- 输入态存字符串，提交用 `amountMicros` 字符串。
+- 展示统一用 `MoneyText`；micros 转换统一放 `lib/money`。
+- 交易列表展示 `effectiveAmountMicros`；账户余额以后端返回为准。
 
-- 输入态保存字符串。
-- 提交 API 使用 `amountMicros` 字符串或 bigint 可序列化形式。
-- 展示统一使用 `MoneyText`。
-- micros 转换统一放 `lib/money`。
-- 交易列表展示 `effectiveAmountMicros`。
-- 账户余额展示以后端返回为准。
+## 10. Sheet 栈与返回
 
-工具：
+多级弹出统一用 `SheetStackProvider`（`useSheetStack` 的 `push` / `pop` / `stack`）。
 
-```txt
-lib/money/
-  parse-money.ts
-  format-money.ts
-  micros.ts
-```
+- 打开选择器 push，关闭当前 pop，关闭整个流程 clear。
+- 系统/浏览器返回映射到 pop 当前可见弹层。
+- 不允许每个页面各写一套多级弹出返回。
 
-## 11. Sheet 栈与返回
+## 11. 弹出菜单与选值组件
 
-多级弹出必须统一使用 Sheet 栈。
+弹出式菜单和表单选值统一用两个基础组件，不在页面内手写 backdrop + 绝对定位下拉：
 
-要求：
+- `components/ui/PopoverMenu.tsx`：锚定弹层，透明背板点击关闭，锚点下方弹出。放在 `position: relative` 父容器内，`align="start" | "end"` 控制对齐。
+- `components/ui/Menu.tsx`：iOS 上下文菜单风格列表面板。
 
-- `SheetStackProvider` 管理当前弹层层级。
-- 打开新选择器时 push。
-- 关闭当前选择器时 pop，回到上一层。
-- 关闭整个流程时 clear。
-- 浏览器返回键或系统返回映射到 pop 当前可见弹层。
-- 不允许每个页面私有实现一套多级弹出返回。
-
-典型流程：
-
-```txt
-记账表单 -> 分类选择 -> 二级分类选择 -> 返回分类选择 -> 返回记账表单
-记账详情 -> 附件预览 -> 返回记账详情
-```
+`MenuItem` 能力：`icon` + `label`、`description`（副标题）、`danger`（红色危险项）、`disabled`、`selected`（右侧对勾，表单选值）、`items`（二级菜单，自带返回行）、`groups`（二维数组分组，组间粗分隔条）。样式集中在 `globals.css` 的 `.ui-menu*` / `.ui-popover-menu*`，面板复用 `Surface` 的 menu 变体。参考实现：`app/bills/BillsScreen.tsx` 头部“更多”菜单。
 
 ## 12. 附件与预览
 
-附件组件统一放在 `components/business/attachment`。
-
-规则：
-
-- 图片和 PDF 支持点击预览。
-- 预览使用统一 `AttachmentPreview`。
-- 预览 URL 必须来自后端授权。
-- 不直接暴露 MinIO object key 给用户操作。
+- 图片、PDF 用统一 `AttachmentPreview` 点击预览。
+- 预览 URL 必须来自后端授权，不暴露对象存储 key。
 - 上传中、失败、重试、删除要有明确状态。
-- 删除业务对象后附件清理由后端处理，前端只负责发起业务删除。
+- 删除业务对象后附件清理由后端处理，前端只发起业务删除。
 
-## 13. UI 样板页
+## 13. 样式规范
 
-`/__dev/ui` 是开发环境组件样板页。
+用 Tailwind + 设计 token。
 
-规则：
+- 颜色必须来自 token，页面不写随机颜色值。
+- 高频的复杂阴影 / blur / border 抽成组件或 token，不散落在页面。
+- 弹层、菜单、浮层用实心 `Surface`（`.ui-surface--*`）+ 柔和阴影（`--shadow-soft`），**不恢复玻璃效果**。
+- 文本不用 viewport 单位缩放；按钮最小点击区域 44px；safe area 由统一 layout 处理。
 
-- 只允许开发环境访问。
-- 生产环境必须返回 404 或不打包入口。
-- 不进入正式导航。
-- 不依赖真实用户数据，使用本地 mock。
-- 每新增一个基础组件或业务通用组件，都必须补充样板。
+## 14. 图标规范
 
-样板页至少展示：
+图标用 `lucide-react`。
 
-- 基础按钮、图标按钮、输入框、开关、分段控件。
-- 玻璃 Tab Bar、玻璃按钮、玻璃 Bottom Sheet。
-- 金额输入、日期选择、月份选择。
-- 筛选面板。
-- 交易列表行和左滑操作。
-- 空状态、加载状态、错误状态。
-- 附件图片/PDF 预览入口。
-
-## 14. 样式规范
-
-使用 Tailwind 和设计 token。
-
-规则：
-
-- 页面不写随机颜色值，颜色必须来自 token。
-- 不在页面里散落复杂阴影、blur、border，高频样式抽成组件或 token。
-- 不使用大面积单一蓝紫渐变。
-- 文本不能用 viewport 单位缩放。
-- 按钮最小点击区域 44px。
-- safe area 通过统一 layout 处理。
-- 交易列表行不使用重玻璃效果。
-
-## 15. 图标规范
-
-图标使用 `lucide-react`。
-
-规则：
-
-- 工具按钮使用图标表达。
-- 不为常见动作手写 SVG。
-- 分类图标通过统一 `CategoryIcon` 渲染，v1 不引入第二套图标系统。
+- 工具按钮用图标表达，不为常见动作手写 SVG。
+- 分类图标通过统一 `CategoryIcon` 渲染，不引入第二套图标系统。
 - 图标尺寸、线宽、颜色通过组件统一控制。
 
-## 16. 环境变量
+## 15. 环境变量
 
-前端环境变量必须分清服务端和客户端。
+- 只有明确可公开的信息用 `NEXT_PUBLIC_`（如 API base URL）。
+- service token、模型 key、对象存储 secret、数据库连接串绝不进前端环境变量。
 
-规则：
+## 16. 禁止事项
 
-- 只有明确可公开的信息使用 `NEXT_PUBLIC_`。
-- API base URL 是公开客户端配置。
-- service token、模型 key、MinIO secret、数据库连接串绝不能进入前端环境变量。
-- 开发样板页开关使用明确配置，例如 `NEXT_PUBLIC_ENABLE_DEV_UI`，生产构建必须关闭。
-
-## 17. 禁止事项
-
-- 禁止页面直接 import `liquid-glass-react`。
-- 禁止页面直接 `fetch` 业务 API。
+- 禁止页面直接 `fetch` 业务 API 或手拼 API URL。
 - 禁止复制已有组件后改名。
-- 禁止每个页面各写一套筛选条件。
+- 禁止每个页面各写一套筛选条件 / 多级弹出返回 / 下拉菜单。
 - 禁止在前端实现账户余额最终计算。
-- 禁止前端直接访问 MinIO 私有对象。
+- 禁止前端直接访问对象存储私有对象。
 - 禁止把 AI API key 写入浏览器代码。
-- 禁止为了视觉效果让金额、日期、分类等关键信息难以阅读。
-- 禁止开发环境样板页进入正式导航或生产环境。
+- 禁止为视觉效果让金额、日期、分类等关键信息难以阅读。
+- 禁止恢复 Liquid Glass / 新增玻璃组件。
 
-## 18. Agent 开发检查清单
+## 17. Agent 开发检查清单
 
-每次让 AI agent 写前端代码前，必须检查：
+每次写前端代码前检查：
 
 - 已读 `FRONTEND_DESIGN.md` 和本文档。
-- 已先搜索已有组件。
-- iOS 风格、Liquid Glass 风格或类系统控件已先查 Apple 官方资料，并记录参考页面、采用的交互依据和尺寸依据。
-- 新增通用组件优先于页面内实现。
-- 已确认对主 Tab、更多页入口或 Sheet 栈的影响。
-- 已使用统一 API client 和 query hooks。
-- 已处理 loading、empty、error、disabled、saving 状态。
-- 已遵守金额 micros 规则。
-- 已遵守附件授权和预览规则。
-- 已同步处理红点提醒计数。
-- 已同步更新 `/__dev/ui` 样板页。
+- 已先搜索已有组件（ui / business / 域内 `_components`），优先复用。
+- 新增通用交互做成组件，而非页面内私有实现。
+- 数据走 `lib/data` 的查询 hooks + `lib/api` 的 `apiRequest`；未直接 `fetch`。
+- 写操作后已失效相关查询，并处理红点提醒计数。
+- 已处理 loading / empty / error / disabled / saving 状态。
+- 已遵守金额 micros、附件授权、Sheet 栈规则。
+- 弹出菜单 / 表单选值用了 `PopoverMenu`。
+- 未引入玻璃效果。

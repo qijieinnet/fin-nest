@@ -17,8 +17,9 @@ import { useLedger, useSheetStack, useToast } from "@/providers";
 
 const DEFAULT_ICON = "📒";
 
-/** 原型新建账本快捷图标。 */
-const LEDGER_ICON_PRESETS = ["📒", "🏠", "✈️", "🛋️", "💼", "🎓", "🍽️", "🚗", "🎁", "💍", "🐱", "⚽"];
+/** 金额小数位数可选项（后端允许 0–6，这里给常用范围）。 */
+const DECIMAL_OPTIONS = [0, 1, 2, 3, 4];
+const DEFAULT_DECIMALS = 2;
 
 type CreateLedgerSheetProps = {
   ledger?: Ledger;
@@ -32,11 +33,12 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
   const isEditing = Boolean(ledger);
   const [name, setName] = useState(ledger?.name ?? "");
   const [icon, setIcon] = useState(ledger?.icon?.trim() || DEFAULT_ICON);
+  const [decimals, setDecimals] = useState(ledger?.amountDecimalPlaces ?? DEFAULT_DECIMALS);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => {
-      const body = { name: name.trim(), icon };
+      const body = { name: name.trim(), icon, amountDecimalPlaces: decimals };
       if (ledger) {
         return apiRequest<Ledger>(ledgerPath(ledger.id), {
           method: "PATCH",
@@ -65,7 +67,10 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
   const canSubmit =
     trimmedName.length > 0 &&
     !mutation.isPending &&
-    (!ledger || trimmedName !== ledger.name || icon !== (ledger.icon?.trim() || DEFAULT_ICON));
+    (!ledger ||
+      trimmedName !== ledger.name ||
+      icon !== (ledger.icon?.trim() || DEFAULT_ICON) ||
+      decimals !== (ledger.amountDecimalPlaces ?? DEFAULT_DECIMALS));
 
   const submit = () => {
     if (canSubmit) mutation.mutate();
@@ -83,6 +88,7 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
             disabled={!canSubmit}
             icon={<Check size={24} strokeWidth={2.6} />}
             label={isEditing ? "保存账本" : "创建账本"}
+            loading={mutation.isPending}
             onClick={submit}
             variant="primary"
           />
@@ -91,7 +97,7 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
         <div className="flex items-center gap-3.5">
           <button
             aria-label="选择账本图标"
-            className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl bg-[var(--color-bg-surface)] text-[30px] leading-none shadow-[var(--shadow-soft)]"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-bg-surface)] text-[26px] leading-none shadow-[var(--shadow-soft)]"
             onClick={() => setEmojiPickerOpen(true)}
             type="button"
           >
@@ -99,7 +105,7 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
           </button>
           <input
             autoFocus
-            className="h-12 min-w-0 flex-1 rounded-[13px] border-0 bg-[var(--color-bg-surface)] px-4 text-[17px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)] outline-none placeholder:text-[var(--color-text-muted)] focus-visible:shadow-[var(--shadow-soft)]"
+            className="ledger-sheet__name-input h-12 min-w-0 flex-1 rounded-[13px] border-0 bg-[var(--color-bg-surface)] px-4 text-[17px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)] outline-none placeholder:text-[var(--color-text-muted)]"
             name="name"
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
@@ -113,23 +119,32 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
           />
         </div>
 
-        <div className="grid grid-cols-6 gap-2 px-0.5">
-          {LEDGER_ICON_PRESETS.map((preset) => (
-            <button
-              aria-label={`选择图标 ${preset}`}
-              className={cn(
-                "flex h-[46px] items-center justify-center rounded-xl text-[23px] leading-none transition-colors",
-                icon === preset
-                  ? "bg-[var(--color-tint-soft)]"
-                  : "bg-[var(--color-control-fill-muted)] active:bg-[var(--color-control-pressed)]",
-              )}
-              key={preset}
-              onClick={() => setIcon(preset)}
-              type="button"
-            >
-              {preset}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 rounded-[13px] bg-[var(--color-bg-surface)] px-4 py-3 shadow-[var(--shadow-soft)]">
+          <span className="flex-1 text-[15px] font-medium text-[var(--color-text-primary)]">
+            金额小数位数
+          </span>
+          <div className="flex items-center gap-1 rounded-full bg-[var(--color-control-fill-muted)] p-1">
+            {DECIMAL_OPTIONS.map((value) => {
+              const selected = decimals === value;
+              return (
+                <button
+                  aria-label={`${value} 位小数`}
+                  aria-pressed={selected}
+                  className={cn(
+                    "h-8 w-9 rounded-full text-[15px] font-medium transition-colors",
+                    selected
+                      ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
+                      : "text-[var(--color-text-secondary)]",
+                  )}
+                  key={value}
+                  onClick={() => setDecimals(value)}
+                  type="button"
+                >
+                  {value}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {mutation.isError ? (

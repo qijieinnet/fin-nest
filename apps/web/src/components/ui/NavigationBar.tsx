@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
+import { usePageScrolled } from "./usePageScrolled";
 
 type NavigationBarProps = {
   action?: ReactNode;
@@ -16,8 +19,16 @@ export function NavigationBar({
   title,
   variant = "large",
 }: NavigationBarProps) {
+  const scrolled = usePageScrolled();
+
   return (
-    <header className={cn("navigation-bar", `navigation-bar--${variant}`)}>
+    <header
+      className={cn(
+        "navigation-bar",
+        `navigation-bar--${variant}`,
+        scrolled && "navigation-bar--scrolled",
+      )}
+    >
       <div className="navigation-bar__row">
         <div className="navigation-bar__leading">{leading}</div>
         <div className="navigation-bar__title-group">

@@ -295,6 +295,9 @@ export class TransactionsService {
     if (input.type !== "transfer" && settings?.personRequired && !input.personId) {
       throw new AppError("PERSON_REQUIRED", "当前账本要求交易绑定人员", 400);
     }
+    if (input.type !== "transfer" && !input.categoryId) {
+      throw new AppError("CATEGORY_REQUIRED", "请选择分类", 400);
+    }
     if (input.type === "transfer" && (!input.fromAccountId || !input.toAccountId)) {
       throw new AppError("TRANSFER_ACCOUNTS_REQUIRED", "转账必须选择转出和转入账户", 400);
     }

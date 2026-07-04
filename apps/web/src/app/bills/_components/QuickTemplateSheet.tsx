@@ -5,12 +5,7 @@ import { Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { EmptyState, LoadingState, MoneyText } from "@/components/business";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type QuickTemplate,
-} from "@/lib/api";
+import { apiRequest, getApiErrorMessage, ledgerApiPath, type QuickTemplate } from "@/lib/api";
 import { useQuickTemplates } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { routes } from "@/lib/route/routes";
@@ -56,7 +51,10 @@ export function QuickTemplateSheet() {
       {templatesQuery.isPending ? (
         <LoadingState rows={3} title="加载快捷模板" />
       ) : templates.length === 0 ? (
-        <EmptyState message="在「更多 · 快捷记账」里添加常用模板后，可在这里一键记账。" title="还没有快捷模板" />
+        <EmptyState
+          message="在「更多 · 快捷记账」里添加常用模板后，可在这里一键记账。"
+          title="还没有快捷模板"
+        />
       ) : (
         <ul className="flex flex-col gap-2">
           {templates.map((template) => (
@@ -70,13 +68,24 @@ export function QuickTemplateSheet() {
                 type="button"
               >
                 <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
-                  {template.name ?? (template.type === "income" ? "收入模板" : "支出模板")}
+                  {template.name ??
+                    (template.type === "income"
+                      ? "收入模板"
+                      : template.type === "transfer"
+                        ? "转账模板"
+                        : "支出模板")}
                 </span>
                 {template.amountMicros ? (
                   <MoneyText
                     amountMicros={template.amountMicros}
                     className="text-xs"
-                    tone={template.type === "income" ? "income" : "expense"}
+                    tone={
+                      template.type === "income"
+                        ? "income"
+                        : template.type === "transfer"
+                          ? "transfer"
+                          : "expense"
+                    }
                   />
                 ) : (
                   <span className="text-xs text-[var(--color-text-muted)]">点按预填金额</span>

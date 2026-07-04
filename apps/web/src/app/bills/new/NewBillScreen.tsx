@@ -11,12 +11,16 @@ import { useLedger } from "@/providers";
 import { TransactionForm, type TransactionSeed } from "../_components/TransactionForm";
 
 type PrefillResponse = {
-  type?: "expense" | "income";
+  type?: TransactionSeed["type"];
   grossAmountMicros?: string;
   categoryId?: string;
   subcategoryId?: string;
   accountId?: string;
   subAccountId?: string;
+  fromAccountId?: string;
+  fromSubAccountId?: string;
+  toAccountId?: string;
+  toSubAccountId?: string;
   personId?: string;
   note?: string;
   relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }>;
@@ -39,7 +43,9 @@ export function NewBillScreen() {
   const prefillQuery = useQuery({
     queryKey: ["ledger", ledgerId, "quick-template-prefill", templateId],
     queryFn: () =>
-      apiRequest<PrefillResponse>(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/prefill`)),
+      apiRequest<PrefillResponse>(
+        ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/prefill`),
+      ),
     enabled: Boolean(ledgerId) && Boolean(templateId),
   });
 
@@ -52,6 +58,10 @@ export function NewBillScreen() {
         personId: prefillQuery.data.personId ?? null,
         accountId: prefillQuery.data.accountId ?? null,
         subAccountId: prefillQuery.data.subAccountId ?? null,
+        fromAccountId: prefillQuery.data.fromAccountId ?? null,
+        fromSubAccountId: prefillQuery.data.fromSubAccountId ?? null,
+        toAccountId: prefillQuery.data.toAccountId ?? null,
+        toSubAccountId: prefillQuery.data.toSubAccountId ?? null,
         note: prefillQuery.data.note ?? null,
         relations: prefillQuery.data.relations ?? null,
         insuranceId: prefillQuery.data.insuranceId ?? null,
@@ -67,11 +77,16 @@ export function NewBillScreen() {
         action={
           <IconButton
             aria-disabled={!canSubmit || !ledgerId || waitingForPrefill || saving}
-            className={!canSubmit && ledgerId && !waitingForPrefill && !saving ? "ui-icon-button--visual-disabled" : undefined}
+            className={
+              !canSubmit && ledgerId && !waitingForPrefill && !saving
+                ? "ui-icon-button--visual-disabled"
+                : undefined
+            }
             disabled={!ledgerId || waitingForPrefill || saving}
             form={formId}
             icon={<Check size={24} strokeWidth={2.6} />}
             label="保存"
+            loading={saving}
             onClick={(event) => {
               if (!canSubmit) {
                 event.preventDefault();

@@ -45,7 +45,7 @@ export function TransactionRow({
         {description ? <small>{description}</small> : null}
       </span>
       <span className="biz-transaction-row__side">
-        <MoneyText amountMicros={amountMicros} decimalPlaces={0} tone={type} trimTrailingZeros />
+        <MoneyText amountMicros={amountMicros} tone={type} trimTrailingZeros />
         {meta ? <small>{meta}</small> : null}
       </span>
       {onClick ? (
@@ -88,12 +88,12 @@ export function TransactionGroup({
           <span className="biz-transaction-group__summary">
             {totalMicros !== undefined ? (
               <span className="biz-transaction-group__summary-item biz-transaction-group__summary-item--expense">
-                <MoneyText amountMicros={totalMicros} decimalPlaces={0} trimTrailingZeros />
+                <MoneyText amountMicros={totalMicros} trimTrailingZeros />
               </span>
             ) : null}
             {incomeMicros !== undefined ? (
               <span className="biz-transaction-group__summary-item biz-transaction-group__summary-item--income">
-                <MoneyText amountMicros={incomeMicros} decimalPlaces={0} trimTrailingZeros />
+                <MoneyText amountMicros={incomeMicros} trimTrailingZeros />
               </span>
             ) : null}
           </span>

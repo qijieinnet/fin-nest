@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, Length, Matches } from "class-validator";
+import { IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
 
 export class UpdateLedgerDto {
   @ApiPropertyOptional({ example: "家庭账本" })
@@ -19,4 +19,11 @@ export class UpdateLedgerDto {
   @IsString()
   @Matches(/^[A-Z]{3}$/)
   currency?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 6, description: "金额展示小数位数" })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  amountDecimalPlaces?: number;
 }

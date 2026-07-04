@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
@@ -18,11 +18,20 @@ import {
   type TransactionDetail,
 } from "@/lib/api";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/data/options";
-import { useAccounts, useAttachments, useInsurances, useItems, useTransaction } from "@/lib/data/records";
+import {
+  useAccounts,
+  useAttachments,
+  useAutoPending,
+  useCategories,
+  useInsurances,
+  useItems,
+  usePeople,
+  useTransaction,
+} from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useToast } from "@/providers";
+import { useDecimalPlaces, useLedger, useToast } from "@/providers";
 
 const TYPE_LABELS: Record<string, string> = { expense: "支出", income: "收入", transfer: "转账" };
 
@@ -58,11 +67,16 @@ function formatDateFull(value: string): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function signedAmount(detail: TransactionDetail, amountMicros = detail.effectiveAmountMicros): string {
+function signedAmount(
+  detail: TransactionDetail,
+  amountMicros = detail.effectiveAmountMicros,
+  decimalPlaces?: number,
+): string {
   const amount = BigInt(amountMicros);
-  if (detail.type === "expense") return formatMicros(-amount, { trimTrailingZeros: true });
-  if (detail.type === "income") return formatMicros(amount, { showPositiveSign: true, trimTrailingZeros: true });
-  return formatMicros(amount, { trimTrailingZeros: true });
+  if (detail.type === "expense") return formatMicros(-amount, { decimalPlaces, trimTrailingZeros: true });
+  if (detail.type === "income")
+    return formatMicros(amount, { decimalPlaces, showPositiveSign: true, trimTrailingZeros: true });
+  return formatMicros(amount, { decimalPlaces, trimTrailingZeros: true });
 }
 
 function accountLabel(
@@ -113,22 +127,34 @@ function DetailSection({ rows, title }: { rows: DetailRow[]; title: string }) {
   );
 }
 
-export function BillDetailScreen({ transactionId }: { transactionId: string }) {
+export function BillDetailScreen({
+  transactionId,
+  pendingId,
+}: {
+  transactionId?: string;
+  pendingId?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // 待确认模式：展示定时记账生成的 AutoPendingTransaction，确认后才生成正式交易。
+  const isPendingMode = Boolean(pendingId);
 
-  const transactionQuery = useTransaction(ledgerId, transactionId);
+  const transactionQuery = useTransaction(ledgerId, transactionId ?? "");
   const accountsQuery = useAccounts(ledgerId);
-  const attachmentsQuery = useAttachments(ledgerId, "transaction", transactionId);
+  const attachmentsQuery = useAttachments(ledgerId, "transaction", transactionId ?? null);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
+  const pendingQuery = useAutoPending(isPendingMode ? ledgerId : null);
+  const categoriesQuery = useCategories(isPendingMode ? ledgerId : null);
+  const peopleQuery = usePeople(isPendingMode ? ledgerId : null);
   const membersQuery = useQuery({
     queryKey: queryKeys.ledgerMembers(ledgerId ?? "none"),
     queryFn: () => apiRequest<LedgerMember[]>(ledgerMembersPath(ledgerId!)),
-    enabled: Boolean(ledgerId),
+    enabled: Boolean(ledgerId) && !isPendingMode,
     staleTime: 30_000,
   });
 
@@ -145,7 +171,55 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
 
   const accounts = accountsQuery.data ?? [];
   const members = membersQuery.data ?? [];
-  const transaction = transactionQuery.data;
+  const categories = categoriesQuery.data ?? [];
+  const people = peopleQuery.data ?? [];
+  const pendingItem = isPendingMode
+    ? pendingQuery.data?.find((item) => item.id === pendingId)
+    : undefined;
+  // 把待确认记录映射成 TransactionDetail 形状，复用同一套详情渲染。
+  const pendingDetail = useMemo<TransactionDetail | null>(() => {
+    if (!pendingItem) return null;
+    const category = categories.find((item) => item.id === pendingItem.categoryId);
+    const subcategory = category?.subcategories.find(
+      (item) => item.id === pendingItem.subcategoryId,
+    );
+    const person = people.find((item) => item.id === pendingItem.personId);
+    return {
+      id: pendingItem.id,
+      ledgerId: pendingItem.ledgerId,
+      type: pendingItem.type,
+      grossAmountMicros: pendingItem.amountMicros,
+      effectiveAmountMicros: pendingItem.amountMicros,
+      currency: "CNY",
+      occurredOn: pendingItem.scheduledFor,
+      categoryId: pendingItem.categoryId,
+      subcategoryId: pendingItem.subcategoryId,
+      categorySnapshot: category
+        ? {
+            id: category.id,
+            name: category.name,
+            icon: category.icon,
+            subcategoryId: subcategory?.id,
+            subcategoryName: subcategory?.name,
+            subcategoryIcon: subcategory?.icon,
+          }
+        : null,
+      personId: pendingItem.personId,
+      personSnapshot: person ? { id: person.id, name: person.name, icon: person.icon } : null,
+      accountId: pendingItem.accountId,
+      subAccountId: pendingItem.subAccountId,
+      fromAccountId: pendingItem.fromAccountId,
+      fromSubAccountId: pendingItem.fromSubAccountId,
+      toAccountId: pendingItem.toAccountId,
+      toSubAccountId: pendingItem.toSubAccountId,
+      note: pendingItem.note,
+      source: "auto",
+      createdBy: "",
+      createdAt: pendingItem.createdAt,
+      relations: [],
+    };
+  }, [pendingItem, categories, people]);
+  const transaction = isPendingMode ? pendingDetail : transactionQuery.data;
   const attachmentItems = useMemo(
     () =>
       attachmentRecords.map((attachment, index) =>
@@ -162,13 +236,60 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.attachments(ledgerId ?? "none", "transaction", transactionId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.attachments(ledgerId ?? "none", "transaction", transactionId ?? "none") }),
       ]);
       showToast({ tone: "success", message: "已删除" });
       router.replace(routes.bills);
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });
+
+  const invalidatePending = async () => {
+    if (!ledgerId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.autoPending(ledgerId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.reminderSummary(ledgerId) }),
+    ]);
+  };
+
+  const confirmPendingMutation = useMutation({
+    mutationFn: () =>
+      apiRequest(ledgerApiPath(ledgerId!, `/auto-pending-transactions/${pendingId}/confirm`), {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        invalidatePending(),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+      ]);
+      showToast({ tone: "success", message: "已确认入账" });
+      router.replace(routes.billsPending);
+    },
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "确认失败，请稍后重试") }),
+  });
+
+  const deletePendingMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<void>(ledgerApiPath(ledgerId!, `/auto-pending-transactions/${pendingId}`), {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await invalidatePending();
+      showToast({ tone: "success", message: "已删除这条待确认" });
+      router.replace(routes.billsPending);
+    },
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
+  });
+
+  const openPendingEditor = () => {
+    if (!pendingItem) return;
+    // 用 replace 让编辑页取代详情页：确认后详情已失效，避免它残留在返回栈里。
+    router.replace(routes.billPendingEdit(pendingItem.id));
+  };
 
   function openAttachment(item: AttachmentItem) {
     if (item.url) {
@@ -216,13 +337,18 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
       if (itemNames.length > 0) detailRows.push({ label: "关联物品", value: itemNames.join("、") });
     }
 
-    detailRows.push({ label: "日期", value: formatDateOnly(detail.occurredOn) });
-    detailRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
-    detailRows.push({ label: "记录时间", value: formatDateFull(detail.createdAt) });
+    detailRows.push({ label: isPendingMode ? "计划入账日期" : "日期", value: formatDateOnly(detail.occurredOn) });
+    if (isPendingMode) {
+      detailRows.push({ label: "生成时间", value: formatDateFull(detail.createdAt) });
+      detailRows.push({ label: "状态", value: "待确认" });
+    } else {
+      detailRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
+      detailRows.push({ label: "记录时间", value: formatDateFull(detail.createdAt) });
+    }
     if (detail.source !== "manual") detailRows.push({ label: "来源", value: SOURCE_LABELS[detail.source] ?? detail.source });
     if (gross !== effective) {
-      detailRows.push({ label: "原始金额", value: signedAmount(detail, detail.grossAmountMicros) });
-      detailRows.push({ label: "有效金额", value: signedAmount(detail, detail.effectiveAmountMicros) });
+      detailRows.push({ label: "原始金额", value: signedAmount(detail, detail.grossAmountMicros, decimalPlaces) });
+      detailRows.push({ label: "有效金额", value: signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces) });
     }
 
     const relationRows = detail.relations.map((relation) => ({
@@ -242,7 +368,9 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
             <strong>{title}</strong>
             <small>{typeText}</small>
           </span>
-          <span className={`bill-detail__amount bill-detail__amount--${detail.type}`}>{signedAmount(detail)}</span>
+          <span className={`bill-detail__amount bill-detail__amount--${detail.type}`}>
+            {signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces)}
+          </span>
         </section>
 
         <DetailSection rows={detailRows} title="明细" />
@@ -262,6 +390,46 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
           </section>
         ) : null}
 
+        {isPendingMode ? (
+          <section className="bill-detail__delete">
+            <Button
+              icon={<Check size={18} />}
+              loading={confirmPendingMutation.isPending}
+              onClick={() => confirmPendingMutation.mutate()}
+              variant="primary"
+            >
+              确认入账
+            </Button>
+            {confirmingDelete ? (
+              <>
+                <p>删除后这条待确认将不再入账（不影响下一周期继续生成），确定删除吗？</p>
+                <div className="bill-detail__confirm-actions">
+                  <Button
+                    className="flex-1"
+                    disabled={deletePendingMutation.isPending || confirmPendingMutation.isPending}
+                    onClick={() => deletePendingMutation.mutate()}
+                    variant="danger"
+                  >
+                    {deletePendingMutation.isPending ? "删除中…" : "确认删除"}
+                  </Button>
+                  <Button className="flex-1" onClick={() => setConfirmingDelete(false)} variant="ghost">
+                    取消
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button
+                className="bill-detail__delete-button"
+                disabled={confirmPendingMutation.isPending}
+                icon={<Trash2 size={18} />}
+                onClick={() => setConfirmingDelete(true)}
+                variant="danger"
+              >
+                删除待确认
+              </Button>
+            )}
+          </section>
+        ) : (
         <section className="bill-detail__delete">
           {confirmingDelete ? (
             <>
@@ -291,6 +459,7 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
             </Button>
           )}
         </section>
+        )}
       </div>
     );
   };
@@ -302,8 +471,10 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
           transaction ? (
             <IconButton
               icon={<Pencil size={20} strokeWidth={2.2} />}
-              label="编辑记录"
-              onClick={() => router.push(routes.billEdit(transaction.id))}
+              label={isPendingMode ? "编辑待确认" : "编辑记录"}
+              onClick={() =>
+                isPendingMode ? openPendingEditor() : router.push(routes.billEdit(transaction.id))
+              }
             />
           ) : (
             <span aria-hidden />
@@ -316,14 +487,16 @@ export function BillDetailScreen({ transactionId }: { transactionId: string }) {
             onClick={() => router.back()}
           />
         }
-        title="记录详情"
+        title={isPendingMode ? "待确认详情" : "记录详情"}
       >
-        {transactionQuery.isPending ? (
-          <LoadingState rows={5} title="加载交易" />
+        {(isPendingMode ? pendingQuery.isPending || categoriesQuery.isPending : transactionQuery.isPending) ? (
+          <LoadingState rows={5} title={isPendingMode ? "加载待确认记录" : "加载交易"} />
         ) : transaction ? (
           renderBody(transaction)
         ) : (
-          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">交易不存在或已删除。</p>
+          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
+            {isPendingMode ? "待确认记录不存在或已处理。" : "交易不存在或已删除。"}
+          </p>
         )}
       </MobilePage>
     </MobileAppShell>
