@@ -6,16 +6,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { IconButton, MobileAppShell } from "@/components/ui";
+import { IconButton, IconButtonGroup, MobileAppShell } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type SubAccount } from "@/lib/api";
-import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
+import { useAccountEntries, useAccounts } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
 import { BalanceEditSheet } from "../_components/BalanceEditSheet";
 import { DeleteAccountConfirmDialog } from "../_components/DeleteAccountConfirmDialog";
-import { RelatedTransactionRow } from "../_components/RelatedTransactionRow";
+import {
+  DEFAULT_SUB_ACCOUNT_ID,
+  RelatedTransactionList,
+} from "../_components/RelatedTransactionList";
 import { SettleSheet } from "../_components/SettleSheet";
 import { SubAccountAddSheet } from "../_components/SubAccountAddSheet";
 import {
@@ -61,7 +64,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const accountsQuery = useAccounts(ledgerId);
-  const transactionsQuery = useTransactions(ledgerId, { accountId });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
@@ -148,7 +150,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const total = accountTotalMicros(account);
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
-  const transactions = transactionsQuery.data ?? [];
+  const hasSplitSubAccounts = account.subAccounts.length > 0;
   const entries = (entriesQuery.data ?? []).filter((entry) => entry.entryType !== "reversal");
 
   const openEditor = () => {
@@ -290,13 +292,16 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             label="返回账户"
             onClick={goBack}
           />
-          <button
-            className="px-2 text-[15px] font-medium text-[var(--color-tint)]"
-            onClick={openEditor}
-            type="button"
-          >
-            编辑
-          </button>
+          <IconButtonGroup
+            items={[
+              { icon: <Pencil size={20} />, label: "编辑账户", onClick: openEditor },
+              {
+                icon: <Trash2 size={20} />,
+                label: "删除账户",
+                onClick: () => setPendingDelete({ kind: "account", name: account.name }),
+              },
+            ]}
+          />
         </header>
 
         <section className="pt-1 text-center">
@@ -332,7 +337,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
-        {moneyAccount ? (
+        {moneyAccount && !hasSplitSubAccounts ? (
           <button
             className="mt-3 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
             onClick={() => openBalanceEdit()}
@@ -346,23 +351,27 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           <section className="mt-6">
             <div className="flex items-center justify-between px-1 pb-2">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
-              <button
-                className="flex h-7 items-center gap-0.5 rounded-full bg-[var(--color-bg-surface)] px-2.5 text-[12.5px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
+              <IconButton
+                className="h-8 w-8"
+                icon={<Plus size={18} />}
+                label="添加子账户"
                 onClick={openSubAdd}
-                type="button"
-              >
-                <Plus size={13} />
-                添加
-              </button>
+                variant="muted"
+              />
             </div>
             {account.subAccounts.length > 0 ? (
               <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-                <div className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]">
+                <button
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+                  onClick={() => router.push(routes.subAccount(account.id, DEFAULT_SUB_ACCOUNT_ID))}
+                  type="button"
+                >
                   <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">默认</span>
                   <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                     {formatMoney(defaultBucketMicros(account))}
                   </span>
-                </div>
+                  <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
+                </button>
                 <div className="divide-y divide-black/[0.06]">{subRows}</div>
               </div>
             ) : (
@@ -422,30 +431,18 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
-        <section className="mt-6">
-          <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
-            关联记录
-          </h2>
-          {transactions.length === 0 ? (
-            <p className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-5 text-center text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-              还没有使用该账户的记账
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-              {transactions.slice(0, 30).map((transaction) => (
-                <RelatedTransactionRow key={transaction.id} transaction={transaction} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <button
-          className="mt-6 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
-          onClick={() => setPendingDelete({ kind: "account", name: account.name })}
-          type="button"
-        >
-          删除账户
-        </button>
+        {!hasSplitSubAccounts ? (
+          <section className="mt-6">
+            <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+              关联记录
+            </h2>
+            <RelatedTransactionList
+              accountId={account.id}
+              emptyText="还没有使用该账户的记账"
+              ledgerId={ledgerId}
+            />
+          </section>
+        ) : null}
       </main>
     </MobileAppShell>
   );

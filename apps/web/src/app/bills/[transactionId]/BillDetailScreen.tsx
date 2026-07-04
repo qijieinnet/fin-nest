@@ -36,7 +36,9 @@ import {
 import { formatMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useDecimalPlaces, useLedger, useToast } from "@/providers";
+import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
+import { DeleteBillConfirmDialog } from "../_components/DeleteBillConfirmDialog";
+import { EditBillScreen } from "./edit/EditBillScreen";
 
 const TYPE_LABELS: Record<string, string> = { expense: "支出", income: "收入", transfer: "转账" };
 
@@ -210,13 +212,19 @@ function RelationBlock({
 export function BillDetailScreen({
   transactionId,
   pendingId,
+  embedded = false,
+  onClose,
 }: {
   transactionId?: string;
   pendingId?: string;
+  // 作为二级弹层内容渲染：去掉整页外壳，关闭沿用弹层的历史返回。
+  embedded?: boolean;
+  onClose?: () => void;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
+  const { push: pushSheet, pop: popSheet } = useSheetStack();
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -314,6 +322,7 @@ export function BillDetailScreen({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.attachments(
             ledgerId ?? "none",
@@ -323,7 +332,9 @@ export function BillDetailScreen({
         }),
       ]);
       showToast({ tone: "success", message: "已删除" });
-      router.replace(routes.bills);
+      // 弹层模式下关闭详情回到列表（列表查询已失效会自动刷新）；整页模式回账单页。
+      if (embedded) onClose?.();
+      else router.replace(routes.bills);
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });
@@ -451,7 +462,7 @@ export function BillDetailScreen({
             </ReadonlyCard>
           );
         case "person":
-          if (!showPersonCard || isTransfer || !detail.personSnapshot) return null;
+          if (!showPersonCard || !detail.personSnapshot) return null;
           return (
             <ReadonlyCard key="person">
               <ReadonlyRow label="人员" value={detail.personSnapshot.name} />
@@ -614,59 +625,94 @@ export function BillDetailScreen({
           </section>
         ) : (
           <section className="bill-detail__delete">
-            {confirmingDelete ? (
-              <>
-                <p>删除后这笔记录及相关附件将无法访问，确定删除吗？</p>
-                <div className="bill-detail__confirm-actions">
-                  <Button
-                    className="flex-1"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => deleteMutation.mutate()}
-                    variant="danger"
-                  >
-                    {deleteMutation.isPending ? "删除中…" : "确认删除"}
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={() => setConfirmingDelete(false)}
-                    variant="ghost"
-                  >
-                    取消
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <Button
-                className="bill-detail__delete-button"
-                icon={<Trash2 size={18} />}
-                onClick={() => setConfirmingDelete(true)}
-                variant="danger"
-              >
-                删除记录
-              </Button>
-            )}
+            <Button
+              className="bill-detail__delete-button"
+              disabled={deleteMutation.isPending}
+              icon={<Trash2 size={18} />}
+              onClick={() => setConfirmingDelete(true)}
+              variant="danger"
+            >
+              删除记录
+            </Button>
           </section>
         )}
       </div>
     );
   };
 
+  const pageTitle = isPendingMode ? "待确认详情" : "记录详情";
+  const closeDetail = () => (onClose ? onClose() : router.back());
+  const editAction = transaction ? (
+    <IconButton
+      icon={<Pencil size={20} strokeWidth={2.2} />}
+      label={isPendingMode ? "编辑待确认" : "编辑记录"}
+      onClick={() => {
+        if (isPendingMode) {
+          openPendingEditor();
+          return;
+        }
+        // 弹层模式下编辑也叠加为弹层：保存/关闭后回到上层详情（数据链路会一并刷新）。
+        if (embedded) {
+          pushSheet({
+            className: "ui-bottom-sheet--sheet-form",
+            hideDefaultHeader: true,
+            content: (
+              <EditBillScreen embedded onClose={popSheet} transactionId={transaction.id} />
+            ),
+          });
+          return;
+        }
+        router.push(routes.billEdit(transaction.id));
+      }}
+    />
+  ) : (
+    <span aria-hidden />
+  );
+  const pageContent = (
+    isPendingMode
+      ? pendingQuery.isPending || categoriesQuery.isPending
+      : transactionQuery.isPending
+  ) || settingQuery.isPending ? (
+    <LoadingState rows={5} title={isPendingMode ? "加载待确认记录" : "加载交易"} />
+  ) : transaction ? (
+    renderBody(transaction)
+  ) : (
+    <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
+      {isPendingMode ? "待确认记录不存在或已处理。" : "交易不存在或已删除。"}
+    </p>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-2 px-1 pb-2">
+          <IconButton
+            icon={<X size={22} strokeWidth={2.3} />}
+            label="返回"
+            onClick={closeDetail}
+          />
+          <h2 className="text-base font-bold text-[var(--color-text-primary)]">{pageTitle}</h2>
+          {editAction}
+        </header>
+        <div className="sheet-form-scroll flex-1">{pageContent}</div>
+        <DeleteBillConfirmDialog
+          deleting={deleteMutation.isPending}
+          onCancel={() => {
+            if (!deleteMutation.isPending) setConfirmingDelete(false);
+          }}
+          onConfirm={() => {
+            if (!deleteMutation.isPending) deleteMutation.mutate();
+          }}
+          transaction={!isPendingMode && confirmingDelete && transaction ? transaction : null}
+        />
+      </div>
+    );
+  }
+
   return (
     <MobileAppShell>
       <MobilePage
-        action={
-          transaction ? (
-            <IconButton
-              icon={<Pencil size={20} strokeWidth={2.2} />}
-              label={isPendingMode ? "编辑待确认" : "编辑记录"}
-              onClick={() =>
-                isPendingMode ? openPendingEditor() : router.push(routes.billEdit(transaction.id))
-              }
-            />
-          ) : (
-            <span aria-hidden />
-          )
-        }
+        action={editAction}
         leading={
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
@@ -674,20 +720,20 @@ export function BillDetailScreen({
             onClick={() => router.back()}
           />
         }
-        title={isPendingMode ? "待确认详情" : "记录详情"}
+        title={pageTitle}
       >
-        {(isPendingMode
-          ? pendingQuery.isPending || categoriesQuery.isPending
-          : transactionQuery.isPending) || settingQuery.isPending ? (
-          <LoadingState rows={5} title={isPendingMode ? "加载待确认记录" : "加载交易"} />
-        ) : transaction ? (
-          renderBody(transaction)
-        ) : (
-          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
-            {isPendingMode ? "待确认记录不存在或已处理。" : "交易不存在或已删除。"}
-          </p>
-        )}
+        {pageContent}
       </MobilePage>
+      <DeleteBillConfirmDialog
+        deleting={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) setConfirmingDelete(false);
+        }}
+        onConfirm={() => {
+          if (!deleteMutation.isPending) deleteMutation.mutate();
+        }}
+        transaction={!isPendingMode && confirmingDelete && transaction ? transaction : null}
+      />
     </MobileAppShell>
   );
 }

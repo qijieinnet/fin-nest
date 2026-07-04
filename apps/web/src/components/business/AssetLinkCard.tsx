@@ -1,7 +1,8 @@
 "use client";
 
-import { cn } from "@/lib/format/class-names";
+import { useMemo } from "react";
 import { ToggleCard } from "./TransactionFieldRows";
+import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 
 export type AssetLinkOption = {
   id: string;
@@ -16,7 +17,7 @@ type AssetLinkCardProps = {
   items: AssetLinkOption[];
   label: string;
   onCheckedChange: (checked: boolean) => void;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   selectedId: string | null;
 };
 
@@ -31,30 +32,31 @@ export function AssetLinkCard({
   onSelect,
   selectedId,
 }: AssetLinkCardProps) {
+  const options = useMemo(
+    () =>
+      items.map((item) => ({
+        id: item.id,
+        icon: item.icon,
+        label: item.name,
+      })),
+    [items],
+  );
+
   return (
     <ToggleCard checked={checked} hint={hint} label={label} onCheckedChange={onCheckedChange}>
       {items.length === 0 ? (
         <p className="transaction-form__empty-text">{emptyText}</p>
       ) : (
-        <div className="transaction-form__chip-row">
-          {items.map((item) => {
-            const selected = item.id === selectedId;
-            return (
-              <button
-                className={cn(
-                  "biz-category-chip",
-                  "biz-category-chip--sub",
-                  selected && "biz-category-chip--selected",
-                )}
-                key={item.id}
-                onClick={() => onSelect(item.id)}
-                type="button"
-              >
-                <span>{item.name}</span>
-              </button>
-            );
-          })}
-        </div>
+        <SearchableOptionSelectRow
+          emptyText={emptyText}
+          hideLabel
+          label={label}
+          onValueChange={onSelect}
+          options={options}
+          placeholder={`选择${label}`}
+          searchPlaceholder={`搜索${label}`}
+          value={selectedId}
+        />
       )}
     </ToggleCard>
   );

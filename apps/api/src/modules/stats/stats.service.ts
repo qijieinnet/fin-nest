@@ -1,10 +1,14 @@
 import { Injectable } from "@nestjs/common";
-import { currentMonthKey, dateKey, monthRange, PrismaService } from "@fin-nest/backend";
+import { Prisma } from "@fin-nest/db";
+import { currentMonthKey, dateKey, monthRange, parseDateOnly, PrismaService } from "@fin-nest/backend";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { StatsQueryDto } from "./dto/stats-query.dto";
 
 const TREND_MONTHS = 6;
 const UNCATEGORIZED_KEY = "__uncategorized__";
+// 「全部」时间预设不传日期范围，用一个足够宽的窗口覆盖所有历史交易。
+const EPOCH = new Date(Date.UTC(1970, 0, 1));
+const FAR_FUTURE = new Date(Date.UTC(9999, 0, 1));
 
 type StatsType = "expense" | "income";
 
@@ -30,6 +34,13 @@ type CategoryBucket = {
   subcategories: Map<string, SubBucket>;
 };
 
+/** 在 UTC 下把日期推后 `days` 天（用于把「含结束日」的闭区间转成半开区间）。 */
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
 /** 以 `month` 结尾、共 `count` 个的连续月份 key（旧 → 新）。 */
 function trailingMonths(month: string, count: number): string[] {
   const [year, mon] = month.split("-").map(Number);
@@ -49,15 +60,80 @@ export class StatsService {
   ) {}
 
   /**
-   * 月度统计：选中月按分类/二级分类的收支拆分 + 近 6 个月收支趋势。
+   * 与账单列表一致的筛选条件（分类 / 账户 / 人员 / 金额 / 备注），叠加到统计查询上。
+   * 时间范围与类型另行处理，这里不涉及。
+   */
+  private buildFilterWhere(query: StatsQueryDto): Prisma.TransactionWhereInput {
+    const where: Prisma.TransactionWhereInput = {};
+    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.subcategoryId) where.subcategoryId = query.subcategoryId;
+    if (query.personId) where.personId = query.personId;
+    if (query.amountMinMicros || query.amountMaxMicros) {
+      where.effectiveAmountMicros = {
+        gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,
+        lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
+      };
+    }
+    // 账户 / 子账户各自是一组 OR（出入账任一侧命中），可叠加，用 AND 组合。
+    const sideFilters: Prisma.TransactionWhereInput[] = [];
+    if (query.accountId) {
+      sideFilters.push({
+        OR: [
+          { accountId: query.accountId },
+          { fromAccountId: query.accountId },
+          { toAccountId: query.accountId },
+        ],
+      });
+    }
+    if (query.subAccountId) {
+      sideFilters.push({
+        OR: [
+          { subAccountId: query.subAccountId },
+          { fromSubAccountId: query.subAccountId },
+          { toSubAccountId: query.subAccountId },
+        ],
+      });
+    }
+    if (sideFilters.length) where.AND = sideFilters;
+    if (query.note) where.note = { contains: query.note };
+    return where;
+  }
+
+  /**
+   * 时间范围统计：选中范围按分类/二级分类的收支拆分 + 近 6 个月收支趋势。
+   * 拆分窗口跟随账单筛选（dateFrom/dateTo，含起止两端）；未传范围时回退到 `month`（默认当月）。
+   * 趋势始终为以选中范围末月（或当月）结尾的近 6 个月。
    * 支出、收入一次性都返回，前端切换类型或下钻时无需再请求。
    */
   async monthly(ledgerId: string, userId: string, query: StatsQueryDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const month = query.month ?? currentMonthKey();
-    const months = trailingMonths(month, TREND_MONTHS);
-    const windowStart = monthRange(months[0]!).start;
-    const windowEnd = monthRange(month).end;
+
+    // 拆分窗口：优先自定义日期范围（半开区间 [start, end)），否则按月份，否则「全部」。
+    const hasRange = Boolean(query.dateFrom || query.dateTo);
+    const breakdownStart = hasRange
+      ? query.dateFrom
+        ? parseDateOnly(query.dateFrom)
+        : EPOCH
+      : query.month
+        ? monthRange(query.month).start
+        : EPOCH;
+    const breakdownEnd = hasRange
+      ? query.dateTo
+        ? addUtcDays(parseDateOnly(query.dateTo), 1)
+        : FAR_FUTURE
+      : query.month
+        ? monthRange(query.month).end
+        : FAR_FUTURE;
+
+    // 趋势锚点月：范围末月 → 月份参数 → 当月。
+    const anchorMonth = query.dateTo?.slice(0, 7) ?? query.month ?? currentMonthKey();
+    const months = trailingMonths(anchorMonth, TREND_MONTHS);
+    const trendStart = monthRange(months[0]!).start;
+    const trendEnd = monthRange(anchorMonth).end;
+
+    // 一次拉取覆盖拆分窗口与趋势窗口的并集。
+    const windowStart = breakdownStart < trendStart ? breakdownStart : trendStart;
+    const windowEnd = breakdownEnd > trendEnd ? breakdownEnd : trendEnd;
 
     const [transactions, categories, subcategories] = await Promise.all([
       this.prisma.client.transaction.findMany({
@@ -66,6 +142,7 @@ export class StatsService {
           deletedAt: null,
           type: { in: ["expense", "income"] },
           occurredOn: { gte: windowStart, lt: windowEnd },
+          ...this.buildFilterWhere(query),
         },
         select: {
           type: true,
@@ -96,8 +173,10 @@ export class StatsService {
       const type = transaction.type as StatsType;
       const amount = transaction.effectiveAmountMicros;
       const txMonth = dateKey(transaction.occurredOn).slice(0, 7);
-      trend[type].set(txMonth, (trend[type].get(txMonth) ?? 0n) + amount);
-      if (txMonth !== month) continue;
+      // 趋势只累加落在 6 个月窗口内的月份。
+      if (trend[type].has(txMonth)) trend[type].set(txMonth, (trend[type].get(txMonth) ?? 0n) + amount);
+      // 分类拆分只累加落在选中时间范围内的交易。
+      if (transaction.occurredOn < breakdownStart || transaction.occurredOn >= breakdownEnd) continue;
 
       // 分类名称/图标优先取当前分类表（跟随改名），分类已删除时退回交易快照。
       const snapshot = transaction.categorySnapshot as SnapshotShape;
@@ -134,7 +213,7 @@ export class StatsService {
     }
 
     return {
-      month,
+      month: anchorMonth,
       months,
       expense: this.packType(months, trend.expense, buckets.expense),
       income: this.packType(months, trend.income, buckets.income),

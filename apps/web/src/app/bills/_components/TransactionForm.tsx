@@ -21,6 +21,8 @@ import {
 import { Input, Tabs } from "@/components/ui";
 import {
   apiRequest,
+  type AttachmentRecord,
+  createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
   uploadAttachmentFile,
@@ -42,6 +44,7 @@ import {
 import { createClientId } from "@/lib/id/client-id";
 import {
   useAccounts,
+  useAttachments,
   useCategories,
   useInsurances,
   useItems,
@@ -143,11 +146,38 @@ function splitInitialRelations(
 function formatDateLabel(value: string): string {
   const today = todayKey();
   if (value === today) return "今天";
-  return value.replaceAll("-", ".");
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value.replaceAll("-", ".");
+  if (year === new Date().getFullYear()) return `${month}.${day}`;
+  return `${year}.${String(month).padStart(2, "0")}.${String(day).padStart(2, "0")}`;
+}
+
+function orderedFieldsForType(order: string[], type: TransactionType): string[] {
+  const fields = order.filter((field) => field !== "type" && field !== "amount");
+  if (type !== "transfer") return fields;
+
+  const withoutAccount = fields.filter((field) => field !== "account");
+  const dateIndex = withoutAccount.indexOf("date");
+  if (dateIndex === -1) return [...withoutAccount, "account"];
+  return [
+    ...withoutAccount.slice(0, dateIndex + 1),
+    "account",
+    ...withoutAccount.slice(dateIndex + 1),
+  ];
 }
 
 async function uploadAttachment(ledgerId: string, transactionId: string, item: PendingAttachment) {
   await uploadAttachmentFile(ledgerId, "transaction", transactionId, item.file);
+}
+
+/** 把服务端附件记录映射成选择器展示用的项（无本地 File，靠 onOpen 拉取内容）。 */
+function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
+  return {
+    contentType: record.file?.mime,
+    id: record.id,
+    name: record.file?.originalName ?? `附件 ${record.id.slice(0, 6)}`,
+    sizeBytes: record.file?.sizeBytes ? Number(record.file.sizeBytes) : undefined,
+  };
 }
 
 export type TransactionSeed = {
@@ -275,6 +305,15 @@ export function TransactionForm({
   const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentsRef = useRef<PendingAttachment[]>([]);
+  // 编辑模式回显已有附件：既有附件（无本地 File）单独存一份，删除时记下 id 到保存时再删。
+  const [existingAttachments, setExistingAttachments] = useState<AttachmentItem[]>([]);
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const attachmentsHydrated = useRef(false);
+  const existingAttachmentsQuery = useAttachments(
+    ledgerId,
+    "transaction",
+    isEdit && !isPendingMode && initial ? initial.id : null,
+  );
   // 编辑模式下，回显已有的保险/物品关联（后端关联为 upsert 幂等，重新保存不会重复）。
   const initialInsuranceId =
     initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ??
@@ -325,7 +364,7 @@ export function TransactionForm({
   const acctRequired = setting?.acctRequired ?? false;
   const personRequired = setting?.personRequired ?? false;
   const showAccountCard = type !== "transfer" && visibleFields.account !== false;
-  const showPersonCard = type !== "transfer" && visibleFields.person !== false;
+  const showPersonCard = visibleFields.person !== false;
   const showNoteCard = visibleFields.note !== false;
   const showAttachmentCard = type !== "transfer" && visibleFields.attachments !== false;
   const validationMessage = useMemo(() => {
@@ -342,6 +381,9 @@ export function TransactionForm({
         (from.subAccountId ?? null) === (to.subAccountId ?? null)
       ) {
         return "转出和转入不能是同一账户";
+      }
+      if (personRequired && !personId) {
+        return "当前账本要求选择人员";
       }
       return null;
     }
@@ -370,10 +412,9 @@ export function TransactionForm({
     type,
   ]);
 
-  // 必填字段常开：转账时不适用；切回支出/收入时重新强制打开（转账切换会临时关闭它们）。
+  // 必填字段常开：账户必填仅适用于收支；人员必填同样适用于转账。
   useEffect(() => {
-    if (type === "transfer") return;
-    if (acctRequired) setAccountEnabled(true);
+    if (type !== "transfer" && acctRequired) setAccountEnabled(true);
     if (personRequired) {
       setPersonEnabled(true);
       if (!personId && peopleOpts[0]?.id) setPersonId(peopleOpts[0].id);
@@ -383,6 +424,17 @@ export function TransactionForm({
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
+
+  // 附件加载完成后回显一次：填充既有附件并默认打开附件区域。
+  useEffect(() => {
+    if (attachmentsHydrated.current) return;
+    const records = existingAttachmentsQuery.data;
+    if (!records) return;
+    attachmentsHydrated.current = true;
+    if (records.length === 0) return;
+    setExistingAttachments(records.map(recordToAttachmentItem));
+    setAttachmentsEnabled(true);
+  }, [existingAttachmentsQuery.data]);
 
   useEffect(
     () => () => {
@@ -403,7 +455,6 @@ export function TransactionForm({
     setLinkedRelationsEnabled(false);
     if (nextType === "transfer") {
       setAccountEnabled(false);
-      setPersonEnabled(false);
       setInsuranceEnabled(false);
       setItemEnabled(false);
       setAttachmentsEnabled(false);
@@ -465,6 +516,10 @@ export function TransactionForm({
         showToast({ tone: "error", message: "转出和转入不能是同一账户" });
         return null;
       }
+      if (personRequired && !personId) {
+        showToast({ tone: "error", message: "当前账本要求选择人员" });
+        return null;
+      }
       return {
         type,
         grossAmountMicros: parsedAmount.amountMicros,
@@ -473,6 +528,7 @@ export function TransactionForm({
         fromSubAccountId: from.subAccountId,
         toAccountId: to.accountId,
         toSubAccountId: to.subAccountId,
+        personId: personEnabled ? (personId ?? undefined) : undefined,
         note: note.trim() || undefined,
       };
     }
@@ -552,7 +608,7 @@ export function TransactionForm({
         fromSubAccountId: from.subAccountId ?? null,
         toAccountId: to.accountId,
         toSubAccountId: to.subAccountId ?? null,
-        personId: null,
+        personId: personEnabled ? (personId ?? null) : null,
       };
     }
     const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
@@ -601,6 +657,12 @@ export function TransactionForm({
         }),
       );
     }
+    // 先删除被移除的既有附件（无论附件开关状态，删除都是显式操作）。
+    for (const attachmentId of removedAttachmentIds) {
+      tasks.push(
+        apiRequest(ledgerApiPath(ledgerId, `/attachments/${attachmentId}`), { method: "DELETE" }),
+      );
+    }
     if (attachmentsEnabled) {
       tasks.push(
         ...attachments.map((attachment) => uploadAttachment(ledgerId, transaction.id, attachment)),
@@ -641,6 +703,7 @@ export function TransactionForm({
           queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
           queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
           queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+          queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
         ]);
         showToast({ tone: "success", message: "已确认入账" });
         // 编辑页在历史里紧邻待确认列表（详情进编辑用 replace 取代了详情），
@@ -662,6 +725,8 @@ export function TransactionForm({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "attachments"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.insurances(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
         isEdit
@@ -714,6 +779,12 @@ export function TransactionForm({
   }
 
   function removeAttachment(id: string) {
+    // 既有附件：从展示列表移除并记录待删除 id，保存时再调删除接口。
+    if (existingAttachments.some((attachment) => attachment.id === id)) {
+      setExistingAttachments((current) => current.filter((attachment) => attachment.id !== id));
+      setRemovedAttachmentIds((current) => [...current, id]);
+      return;
+    }
     setAttachments((current) => {
       const item = current.find((attachment) => attachment.id === id);
       if (item?.url) URL.revokeObjectURL(item.url);
@@ -782,7 +853,6 @@ export function TransactionForm({
             }}
           >
             <AccountSelectRow
-              allowClear
               hideLabel
               label="选择账户"
               onValueChange={setAccountSel}
@@ -863,7 +933,7 @@ export function TransactionForm({
       </div>
 
       <div className="transaction-form__cards">
-        {order.filter((field) => field !== "type" && field !== "amount").map(renderOrderedField)}
+        {orderedFieldsForType(order, type).map(renderOrderedField)}
 
         {!isPendingMode && type !== "transfer" ? (
           <>
@@ -894,11 +964,15 @@ export function TransactionForm({
             {showAttachmentCard ? (
               <AttachmentPicker
                 enabled={attachmentsEnabled}
-                items={attachments}
+                items={[...existingAttachments, ...attachments]}
                 onEnabledChange={setAttachmentsEnabled}
                 onFilesSelected={addAttachments}
                 onOpen={(item) => {
-                  return item.url;
+                  // 新增附件（本地）直接用 blob URL；既有附件按需拉取内容。
+                  if (item.url) return item.url;
+                  return createAuthorizedObjectUrl(
+                    ledgerApiPath(ledgerId, `/attachments/${item.id}/content`),
+                  );
                 }}
                 onRemove={removeAttachment}
               />

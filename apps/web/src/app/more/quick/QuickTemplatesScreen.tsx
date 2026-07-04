@@ -19,6 +19,7 @@ import {
   ledgerApiPath,
   type Account,
   type Category,
+  type Person,
   type QuickTemplate,
 } from "@/lib/api";
 import {
@@ -69,6 +70,11 @@ function accountDisplay(
   if (!account) return null;
   const sub = account.subAccounts.find((item) => item.id === subAccountId);
   return sub ? `${account.name} · ${sub.name}` : account.name;
+}
+
+function personDisplay(people: Person[], personId: string | null) {
+  if (!personId) return null;
+  return people.find((person) => person.id === personId)?.name ?? "未知人员";
 }
 
 export function QuickTemplatesScreen() {
@@ -156,9 +162,10 @@ export function QuickTemplatesScreen() {
           : "支出模板");
     const typeLabel =
       template.type === "income" ? "收入" : template.type === "transfer" ? "转账" : "支出";
+    const person = personDisplay(people, template.personId);
     const meta = isTransfer
-      ? [typeLabel, transferAccount].filter(Boolean).join(" · ")
-      : [typeLabel, display.name, account].filter(Boolean).join(" · ");
+      ? [typeLabel, transferAccount, person].filter(Boolean).join(" · ")
+      : [typeLabel, display.name, account, person].filter(Boolean).join(" · ");
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,

@@ -9,7 +9,16 @@ import { useTransaction } from "@/lib/data/records";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../_components/TransactionForm";
 
-export function EditBillScreen({ transactionId }: { transactionId: string }) {
+export function EditBillScreen({
+  transactionId,
+  embedded = false,
+  onClose,
+}: {
+  transactionId: string;
+  // 作为二级弹层内容渲染：去掉整页外壳，关闭沿用弹层的历史返回。
+  embedded?: boolean;
+  onClose?: () => void;
+}) {
   const router = useRouter();
   const { ledgerId } = useLedger();
   const formId = useId();
@@ -23,55 +32,71 @@ export function EditBillScreen({ transactionId }: { transactionId: string }) {
   const waitingForTransaction = transactionQuery.isPending;
   const hasTransaction = Boolean(transactionQuery.data);
 
+  const saveAction = (
+    <IconButton
+      aria-disabled={!canSubmit || !ledgerId || waitingForTransaction || saving || !hasTransaction}
+      className={
+        !canSubmit && ledgerId && !waitingForTransaction && !saving && hasTransaction
+          ? "ui-icon-button--visual-disabled"
+          : undefined
+      }
+      disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
+      form={formId}
+      icon={<Check size={24} strokeWidth={2.6} />}
+      label="保存"
+      loading={saving}
+      onClick={(event) => {
+        if (!canSubmit) {
+          event.preventDefault();
+          submitBlocked?.();
+        }
+      }}
+      variant="primary"
+      type="submit"
+    />
+  );
+
+  const closeButton = (
+    <IconButton
+      icon={<X size={24} strokeWidth={2.3} />}
+      label="关闭"
+      onClick={() => (onClose ? onClose() : router.back())}
+    />
+  );
+
+  const body =
+    !ledgerId || waitingForTransaction ? (
+      <LoadingState rows={5} title="加载交易" />
+    ) : transactionQuery.data ? (
+      <TransactionForm
+        formId={formId}
+        initial={transactionQuery.data}
+        ledgerId={ledgerId}
+        onCanSubmitChange={setCanSubmit}
+        onPendingChange={setSaving}
+        onSubmitBlocked={handleSubmitBlockedChange}
+      />
+    ) : (
+      <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">交易不存在或已删除。</p>
+    );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-2 px-1 pb-2">
+          {closeButton}
+          <h2 className="text-base font-bold text-[var(--color-text-primary)]">编辑交易</h2>
+          {saveAction}
+        </header>
+        <div className="sheet-form-scroll flex-1">{body}</div>
+      </div>
+    );
+  }
+
   return (
     <MobileAppShell>
-      <MobilePage
-        action={
-          <IconButton
-            aria-disabled={!canSubmit || !ledgerId || waitingForTransaction || saving || !hasTransaction}
-            className={
-              !canSubmit && ledgerId && !waitingForTransaction && !saving && hasTransaction
-                ? "ui-icon-button--visual-disabled"
-                : undefined
-            }
-            disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
-            form={formId}
-            icon={<Check size={24} strokeWidth={2.6} />}
-            label="保存"
-            loading={saving}
-            onClick={(event) => {
-              if (!canSubmit) {
-                event.preventDefault();
-                submitBlocked?.();
-              }
-            }}
-            variant="primary"
-            type="submit"
-          />
-        }
-        leading={
-          <IconButton
-            icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
-            onClick={() => router.back()}
-          />
-        }
-        title="编辑交易"
-      >
-        {!ledgerId || waitingForTransaction ? (
-          <LoadingState rows={5} title="加载交易" />
-        ) : transactionQuery.data ? (
-          <TransactionForm
-            formId={formId}
-            initial={transactionQuery.data}
-            ledgerId={ledgerId}
-            onCanSubmitChange={setCanSubmit}
-            onPendingChange={setSaving}
-            onSubmitBlocked={handleSubmitBlockedChange}
-          />
-        ) : (
-          <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">交易不存在或已删除。</p>
-        )}
+      <MobilePage action={saveAction} leading={closeButton} title="编辑交易">
+        {body}
       </MobilePage>
     </MobileAppShell>
   );

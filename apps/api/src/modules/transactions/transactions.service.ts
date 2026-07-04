@@ -292,7 +292,7 @@ export class TransactionsService {
     if (input.type !== "transfer" && settings?.acctRequired && !input.accountId) {
       throw new AppError("ACCOUNT_REQUIRED", "当前账本要求交易绑定账户", 400);
     }
-    if (input.type !== "transfer" && settings?.personRequired && !input.personId) {
+    if (settings?.personRequired && !input.personId) {
       throw new AppError("PERSON_REQUIRED", "当前账本要求交易绑定人员", 400);
     }
     if (input.type !== "transfer" && !input.categoryId) {

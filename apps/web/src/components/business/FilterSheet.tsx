@@ -131,6 +131,9 @@ export function FilterSheet({
     return next.length ? next : (["分类"] as FilterTab[]);
   }, [fields]);
 
+  // 选中的页签可能不在当前字段生成的页签列表里（如只启用「时间」时默认的「分类」缺失），回退到首个可用页签。
+  const activeTab = tabs.includes(tab) ? tab : (tabs[0] ?? "分类");
+
   const effectiveType = draft.type ?? "all";
   const categoriesForType = categoryOptions.filter((option) => {
     if (option.parentId) return false;
@@ -179,11 +182,11 @@ export function FilterSheet({
           className="biz-filter-tabs"
           items={tabs.map((item) => ({ label: item, value: item }))}
           onValueChange={(nextTab) => setTab(nextTab as FilterTab)}
-          value={tab}
+          value={activeTab}
         />
 
         <div className="biz-filter-prototype__body">
-          {tab === "分类" ? (
+          {activeTab === "分类" ? (
             <>
               {hasField(fields, "type") ? (
                 <>
@@ -235,7 +238,7 @@ export function FilterSheet({
             </>
           ) : null}
 
-          {tab === "时间" ? (
+          {activeTab === "时间" ? (
             <>
               <p className="biz-filter-label">时间范围</p>
               <div className="biz-filter-chip-row">
@@ -274,7 +277,7 @@ export function FilterSheet({
             </>
           ) : null}
 
-          {tab === "账户" ? (
+          {activeTab === "账户" ? (
             <>
               <p className="biz-filter-label">账户（可选到子账户，多选）</p>
               <div className="biz-category-picker-sheet">
@@ -321,7 +324,7 @@ export function FilterSheet({
             </>
           ) : null}
 
-          {tab === "其它" ? (
+          {activeTab === "其它" ? (
             <>
               {hasField(fields, "keyword") ? (
                 <>

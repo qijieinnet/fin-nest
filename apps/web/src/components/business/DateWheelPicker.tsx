@@ -24,7 +24,9 @@ function parseIsoDate(value: string): Date {
 
 function formatDisplayDate(value: string): string {
   const date = parseIsoDate(value);
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  const year = date.getFullYear();
+  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+  return year === new Date().getFullYear() ? monthDay : `${year}年${monthDay}`;
 }
 
 function daysInMonth(year: number, month: number): number {

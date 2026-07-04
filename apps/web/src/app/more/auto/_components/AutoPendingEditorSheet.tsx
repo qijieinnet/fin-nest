@@ -111,7 +111,7 @@ export function AutoPendingEditorSheet({
             fromSubAccountId: isTransfer ? (fromAccount.subAccountId ?? null) : null,
             toAccountId: isTransfer ? toAccount.accountId : null,
             toSubAccountId: isTransfer ? (toAccount.subAccountId ?? null) : null,
-            personId: isTransfer || !personEnabled ? null : (personId ?? null),
+            personId: personEnabled ? (personId ?? null) : null,
             note: note.trim(),
           },
         },
@@ -208,7 +208,6 @@ export function AutoPendingEditorSheet({
               }}
             >
               <AccountSelectRow
-                allowClear
                 hideLabel
                 label="选择账户"
                 onValueChange={setAccountId}
@@ -223,36 +222,34 @@ export function AutoPendingEditorSheet({
             <DateWheelPicker label="记账日期" onValueChange={setScheduledFor} value={scheduledFor} />
           </FieldCard>
 
-          {pending.type !== "transfer" ? (
-            <ToggleCard
-              checked={personEnabled}
-              label="人员"
-              onCheckedChange={(checked) => {
-                setPersonEnabled(checked);
-                if (!checked) setPersonId(null);
-              }}
-            >
-              {peopleOptions.length > 0 ? (
-                <div className="transaction-form__people-row">
-                  {peopleOptions.map((person) => {
-                    const selected = person.id === personId;
-                    return (
-                      <button
-                        className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
-                        key={person.id}
-                        onClick={() => setPersonId(person.id)}
-                        type="button"
-                      >
-                        {person.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="transaction-form__empty-text">还没有人员，可到人员管理中添加</p>
-              )}
-            </ToggleCard>
-          ) : null}
+          <ToggleCard
+            checked={personEnabled}
+            label="人员"
+            onCheckedChange={(checked) => {
+              setPersonEnabled(checked);
+              if (!checked) setPersonId(null);
+            }}
+          >
+            {peopleOptions.length > 0 ? (
+              <div className="transaction-form__people-row">
+                {peopleOptions.map((person) => {
+                  const selected = person.id === personId;
+                  return (
+                    <button
+                      className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
+                      key={person.id}
+                      onClick={() => setPersonId(person.id)}
+                      type="button"
+                    >
+                      {person.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="transaction-form__empty-text">还没有人员，可到人员管理中添加</p>
+            )}
+          </ToggleCard>
 
           <FieldCard className="transaction-form__note-card" label="备注">
             <div className="transaction-form__note-row">

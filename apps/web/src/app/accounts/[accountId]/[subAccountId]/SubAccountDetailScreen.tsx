@@ -1,20 +1,28 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
-import { IconButton, MobileAppShell } from "@/components/ui";
+import { IconButton, IconButtonGroup, MobileAppShell } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
-import { useAccounts, useTransactions } from "@/lib/data/records";
+import { useAccounts } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
-import { accountGroupMeta, formatMoney, microsToInput } from "../../_components/account-utils";
+import {
+  accountGroupMeta,
+  defaultBucketMicros,
+  formatMoney,
+  microsToInput,
+} from "../../_components/account-utils";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
 import { DeleteAccountConfirmDialog } from "../../_components/DeleteAccountConfirmDialog";
-import { RelatedTransactionRow } from "../../_components/RelatedTransactionRow";
+import {
+  DEFAULT_SUB_ACCOUNT_ID,
+  RelatedTransactionList,
+} from "../../_components/RelatedTransactionList";
 import { SubAccountRenameSheet } from "../../_components/SubAccountRenameSheet";
 
 type SubAccountDetailScreenProps = {
@@ -29,12 +37,12 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const accountsQuery = useAccounts(ledgerId);
-  const transactionsQuery = useTransactions(ledgerId, { accountId, subAccountId });
   const [pendingDelete, setPendingDelete] = useState(false);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
+  const isDefaultSubAccount = subAccountId === DEFAULT_SUB_ACCOUNT_ID;
   const subAccount = account?.subAccounts.find((item) => item.id === subAccountId) ?? null;
-  const transactions = transactionsQuery.data ?? [];
+  const hasSubAccount = isDefaultSubAccount || Boolean(subAccount);
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
@@ -43,9 +51,12 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
   const removeSub = useMutation({
     mutationFn: () =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`), {
-        method: "DELETE",
-      }),
+      apiRequest<void>(
+        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`),
+        {
+          method: "DELETE",
+        },
+      ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
       setPendingDelete(false);
@@ -69,7 +80,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     );
   }
 
-  if (!account || !subAccount) {
+  if (!account || !hasSubAccount) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
@@ -87,6 +98,10 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   }
 
   const meta = accountGroupMeta(account.type);
+  const subAccountName = isDefaultSubAccount ? "默认" : subAccount!.name;
+  const subAccountBalance = isDefaultSubAccount
+    ? defaultBucketMicros(account)
+    : BigInt(subAccount!.balanceMicros);
 
   const openBalanceEdit = () => {
     push({
@@ -94,10 +109,10 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
       content: (
         <BalanceEditSheet
           accountId={account.id}
-          initialBalance={microsToInput(subAccount.balanceMicros)}
+          initialBalance={microsToInput(subAccountBalance.toString())}
           ledgerId={ledgerId}
-          subAccountId={subAccount.id}
-          title={`修改余额 · ${subAccount.name}`}
+          subAccountId={isDefaultSubAccount ? undefined : subAccount!.id}
+          title={`修改余额 · ${subAccountName}`}
         />
       ),
     });
@@ -106,7 +121,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const openRename = () => {
     push({
       hideDefaultHeader: true,
-      content: <SubAccountRenameSheet ledgerId={ledgerId} subAccount={subAccount} />,
+      content: <SubAccountRenameSheet ledgerId={ledgerId} subAccount={subAccount!} />,
     });
   };
 
@@ -114,7 +129,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     <MobileAppShell>
       <DeleteAccountConfirmDialog
         deleting={removeSub.isPending}
-        name={pendingDelete ? subAccount.name : null}
+        name={pendingDelete && subAccount ? subAccount.name : null}
         onCancel={() => {
           if (!removeSub.isPending) setPendingDelete(false);
         }}
@@ -130,13 +145,18 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
             label={`返回${account.name}`}
             onClick={goBack}
           />
-          <button
-            className="px-2 text-[15px] font-medium text-[var(--color-tint)]"
-            onClick={openRename}
-            type="button"
-          >
-            编辑
-          </button>
+          {!isDefaultSubAccount ? (
+            <IconButtonGroup
+              items={[
+                { icon: <Pencil size={20} />, label: "编辑子账户", onClick: openRename },
+                {
+                  icon: <Trash2 size={20} />,
+                  label: "删除子账户",
+                  onClick: () => setPendingDelete(true),
+                },
+              ]}
+            />
+          ) : null}
         </header>
 
         <section className="pt-1 text-center">
@@ -144,12 +164,14 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
             {account.icon ?? "💼"}
           </span>
           <h1 className="mt-2.5 text-[19px] font-bold text-[var(--color-text-primary)]">
-            {account.name} · {subAccount.name}
+            {account.name} · {subAccountName}
           </h1>
-          <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)]">子账户 · {meta.name}</p>
+          <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)]">
+            子账户 · {meta.name}
+          </p>
           <p className="mt-4 text-[13px] text-[var(--color-text-muted)]">子账户余额</p>
           <p className="mt-0.5 text-[36px] font-bold leading-tight tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-            {formatMoney(subAccount.balanceMicros)}
+            {formatMoney(subAccountBalance)}
           </p>
         </section>
 
@@ -162,32 +184,22 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         </button>
 
         <section className="mt-6">
-          <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">关联记录</h2>
-          {transactionsQuery.isPending ? (
-            <LoadingState rows={3} title="加载记录" />
-          ) : transactions.length === 0 ? (
-            <p className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-5 text-center text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-              还没有使用该子账户的记账
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-              {transactions.slice(0, 30).map((transaction) => (
-                <RelatedTransactionRow key={transaction.id} transaction={transaction} />
-              ))}
-            </div>
-          )}
+          <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
+            关联记录
+          </h2>
+          <RelatedTransactionList
+            accountId={account.id}
+            emptyText="还没有使用该子账户的记账"
+            ledgerId={ledgerId}
+            subAccountId={isDefaultSubAccount ? DEFAULT_SUB_ACCOUNT_ID : subAccount!.id}
+          />
         </section>
 
-        <button
-          className="mt-6 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
-          onClick={() => setPendingDelete(true)}
-          type="button"
-        >
-          删除子账户
-        </button>
-        <p className="mt-2 px-2 text-center text-xs leading-5 text-[var(--color-text-muted)]">
-          删除前需先将子账户余额调整为 0
-        </p>
+        {!isDefaultSubAccount ? (
+          <p className="mt-2 px-2 text-center text-xs leading-5 text-[var(--color-text-muted)]">
+            删除前需先将子账户余额调整为 0
+          </p>
+        ) : null}
       </main>
     </MobileAppShell>
   );

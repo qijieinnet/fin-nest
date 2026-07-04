@@ -7,6 +7,7 @@ import { BottomSheet, IconButton, Switch } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
 import { InlineHint } from "./InlineHint";
+import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 import type { BusinessOption, CategoryOption } from "./business-types";
 
 export function nestedOptionLabel(
@@ -89,7 +90,7 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
 }
 
 type AccountSelectRowProps = {
-  allowClear?: boolean;
+  className?: string;
   hideLabel?: boolean;
   label: string;
   onValueChange: (value: string | null) => void;
@@ -99,7 +100,7 @@ type AccountSelectRowProps = {
 };
 
 export function AccountSelectRow({
-  allowClear = false,
+  className,
   hideLabel = false,
   label,
   onValueChange,
@@ -107,88 +108,18 @@ export function AccountSelectRow({
   placeholder = "选择账户",
   value,
 }: AccountSelectRowProps) {
-  const [open, setOpen] = useState(false);
-  const displayValue = nestedOptionLabel(options, value, placeholder);
-  const primaryOptions = options.filter((option) => !option.parentId);
-
   return (
-    <>
-      <button
-        className={cn(
-          "transaction-form__select-row",
-          hideLabel && "transaction-form__select-row--value-only",
-        )}
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        {hideLabel ? null : <span>{label}</span>}
-        <strong>{displayValue}</strong>
-        <ChevronRight size={18} />
-      </button>
-      <BottomSheet
-        className="ui-bottom-sheet--transaction-picker"
-        onClose={() => setOpen(false)}
-        open={open}
-        title={label}
-      >
-        <div className="transaction-form__option-list">
-          {primaryOptions.map((option) => {
-            const children = options.filter((child) => child.parentId === option.id);
-            const selected = option.id === value;
-            return (
-              <section className="transaction-form__option-group" key={option.id}>
-                <button
-                  aria-selected={selected}
-                  className="transaction-form__option-row"
-                  disabled={option.disabled}
-                  onClick={() => {
-                    onValueChange(option.id);
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  <span>{option.label}</span>
-                </button>
-                {children.length > 0 ? (
-                  <div className="transaction-form__suboption-list">
-                    {children.map((child) => {
-                      const childSelected = child.id === value;
-                      return (
-                        <button
-                          aria-selected={childSelected}
-                          className="transaction-form__option-row transaction-form__option-row--sub"
-                          disabled={child.disabled}
-                          key={child.id}
-                          onClick={() => {
-                            onValueChange(child.id);
-                            setOpen(false);
-                          }}
-                          type="button"
-                        >
-                          <span>{child.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-          {allowClear && value ? (
-            <button
-              className="transaction-form__option-row transaction-form__option-row--clear"
-              onClick={() => {
-                onValueChange(null);
-                setOpen(false);
-              }}
-              type="button"
-            >
-              <span>清除选项</span>
-            </button>
-          ) : null}
-        </div>
-      </BottomSheet>
-    </>
+    <SearchableOptionSelectRow
+      className={className}
+      emptyText="暂无可选账户"
+      hideLabel={hideLabel}
+      label={label}
+      onValueChange={onValueChange}
+      options={options}
+      placeholder={placeholder}
+      searchPlaceholder="搜索账户"
+      value={value}
+    />
   );
 }
 

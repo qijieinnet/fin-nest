@@ -87,7 +87,7 @@ export class AutomationService {
           fromSubAccountId: isTransfer ? (input.fromSubAccountId ?? null) : null,
           toAccountId: isTransfer ? input.toAccountId! : null,
           toSubAccountId: isTransfer ? (input.toSubAccountId ?? null) : null,
-          personId: isTransfer ? null : (input.personId ?? null),
+          personId: input.personId ?? null,
           note: input.note ?? null,
           relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
           insuranceId: isTransfer ? null : (input.insuranceId ?? null),
@@ -188,7 +188,7 @@ export class AutomationService {
                 ? null
                 : input.toSubAccountId
               : null,
-          personId: type === "transfer" ? null : input.personId,
+          personId: input.personId,
           note: input.note,
           relationPayload:
             type === "transfer"
@@ -299,7 +299,7 @@ export class AutomationService {
               ? null
               : input.toSubAccountId
             : null,
-        personId: existing.type === "transfer" ? null : input.personId,
+        personId: input.personId,
         note: input.note,
         updatedBy: userId,
       },
@@ -473,7 +473,7 @@ export class AutomationService {
               ? null
               : input.toSubAccountId
             : null,
-        personId: type === "transfer" ? null : input.personId,
+        personId: input.personId,
         note: input.note,
         relationPayload:
           type === "transfer"
@@ -559,6 +559,7 @@ export class AutomationService {
         fromSubAccountId: pending.fromSubAccountId ?? undefined,
         toAccountId: pending.toAccountId ?? undefined,
         toSubAccountId: pending.toSubAccountId ?? undefined,
+        personId: pending.personId ?? undefined,
         note: pending.note ?? undefined,
       };
     }
@@ -590,6 +591,7 @@ export class AutomationService {
         fromSubAccountId: template.fromSubAccountId ?? undefined,
         toAccountId: template.toAccountId ?? undefined,
         toSubAccountId: template.toSubAccountId ?? undefined,
+        personId: template.personId ?? undefined,
         note: template.note ?? undefined,
       };
     }
@@ -627,7 +629,7 @@ export class AutomationService {
       fromSubAccountId: isTransfer ? (input.fromSubAccountId ?? null) : null,
       toAccountId: isTransfer ? input.toAccountId! : null,
       toSubAccountId: isTransfer ? (input.toSubAccountId ?? null) : null,
-      personId: isTransfer ? null : (input.personId ?? null),
+      personId: input.personId ?? null,
       note: input.note ?? null,
       relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
       insuranceId: isTransfer ? null : (input.insuranceId ?? null),
@@ -691,6 +693,7 @@ export class AutomationService {
       ) {
         throw new AppError("TRANSFER_SAME_ACCOUNT", "转出和转入账户不能相同", 400);
       }
+      if (payload.personId) await this.assertPerson(ledgerId, payload.personId);
       return;
     }
 

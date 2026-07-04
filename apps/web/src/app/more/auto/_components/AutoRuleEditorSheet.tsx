@@ -195,8 +195,6 @@ export function AutoRuleEditorSheet({
     // 关联类型随收支方向变化，切换类型时需要清空，避免残留不匹配的关联。
     resetRelations();
     if (nextType === "transfer") {
-      setPersonEnabled(false);
-      setPersonId(null);
       setInsuranceEnabled(false);
       setSelectedInsuranceId(null);
       setItemEnabled(false);
@@ -261,7 +259,7 @@ export function AutoRuleEditorSheet({
         fromSubAccountId: isTransfer ? (fromAccount.subAccountId ?? null) : null,
         toAccountId: isTransfer ? toAccount.accountId : null,
         toSubAccountId: isTransfer ? (toAccount.subAccountId ?? null) : null,
-        personId: isTransfer || !personEnabled ? null : (personId ?? null),
+        personId: personEnabled ? (personId ?? null) : null,
         note: note.trim(),
         relations,
         insuranceId: isTransfer || !insuranceEnabled ? null : (selectedInsuranceId ?? null),
@@ -378,7 +376,6 @@ export function AutoRuleEditorSheet({
               }}
             >
               <AccountSelectRow
-                allowClear
                 hideLabel
                 label="选择账户"
                 onValueChange={setAccountId}
@@ -393,19 +390,17 @@ export function AutoRuleEditorSheet({
             <DateWheelPicker label="起始日期" onValueChange={setStartDate} value={startDate} />
           </FieldCard>
 
-          {type !== "transfer" ? (
-            <PersonSelectField
-              checked={personEnabled}
-              label="人员"
-              onCheckedChange={(checked) => {
-                setPersonEnabled(checked);
-                if (!checked) setPersonId(null);
-              }}
-              onValueChange={setPersonId}
-              options={peopleOptions}
-              value={personId}
-            />
-          ) : null}
+          <PersonSelectField
+            checked={personEnabled}
+            label="人员"
+            onCheckedChange={(checked) => {
+              setPersonEnabled(checked);
+              if (!checked) setPersonId(null);
+            }}
+            onValueChange={setPersonId}
+            options={peopleOptions}
+            value={personId}
+          />
 
           <FieldCard className="transaction-form__note-card" label="备注">
             <div className="transaction-form__note-row">

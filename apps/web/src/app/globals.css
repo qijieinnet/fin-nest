@@ -780,6 +780,24 @@ select:focus-visible {
   overflow: hidden;
 }
 
+/* 表单类弹层（编辑）：外层不滚动，改由内层滚动区承担，
+   滚动区向右溢出抵消面板内边距，让滚动条紧贴弹窗最右侧。 */
+.ui-bottom-sheet--sheet-form > .sheet-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sheet-form-scroll {
+  box-sizing: border-box;
+  margin-right: calc(var(--space-sheet-x) * -1);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-sheet-x);
+  width: calc(100% + var(--space-sheet-x));
+}
+
 .ui-sheet {
   background: #ededec;
   border: 1px solid var(--color-border-subtle);
@@ -1838,6 +1856,39 @@ select:focus-visible {
   overflow-x: hidden;
 }
 
+.transaction-form__searchable-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.transaction-form__search-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 16px;
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  min-height: 46px;
+  padding: 0 12px;
+}
+
+.transaction-form__search-row .ui-field {
+  min-width: 0;
+}
+
+.transaction-form__search-row .ui-field__label {
+  display: none;
+}
+
+.transaction-form__search-row .ui-input-shell {
+  background: transparent;
+  border: 0;
+  min-height: 44px;
+  padding: 0;
+}
+
 .transaction-form__option-group {
   display: grid;
   gap: 4px;
@@ -1862,6 +1913,41 @@ select:focus-visible {
 .transaction-form__option-row[aria-selected="true"] {
   background: var(--color-tint-soft);
   color: var(--color-tint-strong);
+}
+
+.transaction-form__option-row--with-icon {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.transaction-form__option-icon {
+  align-items: center;
+  background: var(--color-control-fill-muted);
+  border-radius: 10px;
+  display: inline-flex;
+  font-size: 17px;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.transaction-form__option-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.transaction-form__option-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-form__option-copy small {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transaction-form__option-row > span {
@@ -3466,6 +3552,20 @@ select:focus-visible {
   gap: 6px;
   min-height: 38px;
   padding: 0 10px;
+}
+
+.transaction-form__select-row.biz-rp-editor__select {
+  background: #fefeff;
+  border-radius: 12px;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.transaction-form__select-row.biz-rp-editor__select > strong {
+  font-size: 14px;
+  font-weight: 650;
+  text-align: left;
 }
 
 .biz-picker-trigger.biz-rp-editor__select .biz-picker-trigger__label {

@@ -750,7 +750,7 @@ export class ExcelImportService {
           const person = registry.personByName.get(personName);
           if (!person) throw new Error(`成员「${personName}」不存在（可先在成员表新增）`);
           planned.personRef = person;
-        } else if (type !== "transfer" && settings?.personRequired) {
+        } else if (settings?.personRequired) {
           throw new Error("当前账本要求流水必须填写成员");
         }
 

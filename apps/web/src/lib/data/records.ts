@@ -201,11 +201,24 @@ export function useBudgetProgress(ledgerId: string | null, month: string) {
   });
 }
 
-export function useLedgerStats(ledgerId: string | null, month: string) {
+export type StatsQuery = Pick<
+  TransactionListQuery,
+  | "dateFrom"
+  | "dateTo"
+  | "categoryId"
+  | "subcategoryId"
+  | "accountId"
+  | "subAccountId"
+  | "personId"
+  | "amountMinMicros"
+  | "amountMaxMicros"
+  | "note"
+>;
+
+export function useLedgerStats(ledgerId: string | null, query: StatsQuery) {
   return useQuery({
-    queryKey: queryKeys.stats(ledgerId ?? "none", month),
-    queryFn: () =>
-      apiRequest<LedgerStats>(ledgerApiPath(ledgerId!, "/stats"), { query: { month } }),
+    queryKey: queryKeys.stats(ledgerId ?? "none", query),
+    queryFn: () => apiRequest<LedgerStats>(ledgerApiPath(ledgerId!, "/stats"), { query }),
     enabled: Boolean(ledgerId),
     staleTime: 15_000,
   });

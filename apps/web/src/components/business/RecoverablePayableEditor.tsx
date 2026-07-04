@@ -4,8 +4,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button, IconButton, Switch } from "@/components/ui";
 import { createClientId } from "@/lib/id/client-id";
 import type { BusinessOption } from "./business-types";
+import { AccountSelectRow } from "./TransactionFieldRows";
 import { InlineHint } from "./InlineHint";
-import { OptionPicker } from "./OptionPicker";
 
 export type RecoverablePayableItem = {
   accountId: string | null;
@@ -60,10 +60,9 @@ export function RecoverablePayableEditor({
           {items.map((item, index) => (
             <div className="biz-rp-editor__row" key={item.id}>
               <div className="biz-rp-editor__field">
-                <OptionPicker
+                <AccountSelectRow
                   className="biz-rp-editor__select"
-                  clearLabel="清除账户"
-                  clearable
+                  hideLabel
                   label={`项目 ${index + 1}`}
                   onValueChange={(accountId) =>
                     onChange(
@@ -72,13 +71,7 @@ export function RecoverablePayableEditor({
                       ),
                     )
                   }
-                  options={accountOptions.map((option) => ({
-                    description: option.parentId
-                      ? accountOptions.find((parent) => parent.id === option.parentId)?.label
-                      : option.description,
-                    id: option.id,
-                    label: option.label,
-                  }))}
+                  options={accountOptions}
                   placeholder="选择账户"
                   value={item.accountId}
                 />

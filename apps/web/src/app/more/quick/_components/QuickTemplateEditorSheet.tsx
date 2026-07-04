@@ -217,8 +217,6 @@ export function QuickTemplateEditorSheet({
       setCategoryId(null);
       setAccountEnabled(false);
       setAccountId(null);
-      setPersonEnabled(false);
-      setPersonId(null);
       setInsuranceEnabled(false);
       setSelectedInsuranceId(null);
       setItemEnabled(false);
@@ -300,7 +298,7 @@ export function QuickTemplateEditorSheet({
         fromSubAccountId: isTransfer ? (fromAccount.subAccountId ?? null) : null,
         toAccountId: isTransfer ? toAccount.accountId : null,
         toSubAccountId: isTransfer ? (toAccount.subAccountId ?? null) : null,
-        personId: isTransfer || !personEnabled ? null : (personId ?? undefined),
+        personId: personEnabled ? (personId ?? undefined) : null,
         note: note.trim() || undefined,
         relations,
         insuranceId: isTransfer || !insuranceEnabled ? null : (selectedInsuranceId ?? null),
@@ -426,7 +424,6 @@ export function QuickTemplateEditorSheet({
               }}
             >
               <AccountSelectRow
-                allowClear
                 hideLabel
                 label="选择账户"
                 onValueChange={setAccountId}
@@ -437,19 +434,17 @@ export function QuickTemplateEditorSheet({
             </ToggleCard>
           )}
 
-          {type !== "transfer" ? (
-            <PersonSelectField
-              checked={personEnabled}
-              label="人员"
-              onCheckedChange={(checked) => {
-                setPersonEnabled(checked);
-                if (!checked) setPersonId(null);
-              }}
-              onValueChange={setPersonId}
-              options={peopleOptions}
-              value={personId}
-            />
-          ) : null}
+          <PersonSelectField
+            checked={personEnabled}
+            label="人员"
+            onCheckedChange={(checked) => {
+              setPersonEnabled(checked);
+              if (!checked) setPersonId(null);
+            }}
+            onValueChange={setPersonId}
+            options={peopleOptions}
+            value={personId}
+          />
 
           {type !== "transfer" ? (
             <>

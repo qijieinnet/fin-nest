@@ -2,12 +2,13 @@
 
 import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { EmptyState, LoadingState } from "@/components/business";
-import { EdgeFade, MobileAppShell, MobileTabBar } from "@/components/ui";
+import { EmptyState, LoadingState, MoneyText } from "@/components/business";
+import { EdgeFade, IconButton, MobileAppShell, MobileTabBar } from "@/components/ui";
 import type { Account } from "@/lib/api";
 import { useAccounts } from "@/lib/data/records";
+import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack } from "@/providers";
+import { useDecimalPlaces, useLedger, useSheetStack } from "@/providers";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
 import {
   ACCOUNT_GROUPS,
@@ -22,6 +23,7 @@ export function AccountsScreen() {
   const router = useRouter();
   const { ledgerId } = useLedger();
   const { push } = useSheetStack();
+  const decimalPlaces = useDecimalPlaces();
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
   const netWorth = netWorthSummary(accounts);
@@ -97,40 +99,48 @@ export function AccountsScreen() {
   return (
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
-        <header className="flex items-center justify-between px-1 pb-3">
-          <h1 className="text-base font-bold text-[var(--color-text-primary)]">账户</h1>
-          <button
-            className="flex h-8 items-center gap-1 rounded-full bg-[var(--color-bg-surface)] pl-2.5 pr-3.5 text-[13px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
+        <header className="flex items-center justify-end px-1 pb-3">
+          <IconButton
+            icon={<Plus size={24} strokeWidth={2.3} />}
+            label="新建账户"
             onClick={openEditor}
-            type="button"
-          >
-            <Plus size={15} />
-            新建
-          </button>
+          />
         </header>
 
         {accountsQuery.isPending ? (
           <LoadingState rows={5} title="加载账户" />
         ) : (
           <>
-            <section className="rounded-[20px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
-              <p className="text-[13px] text-[var(--color-text-muted)]">净资产</p>
-              <p className="mt-0.5 text-[34px] font-bold leading-tight tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-                {formatMoney(netWorth.netMicros)}
+            <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
+              <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                净资产
               </p>
-              <div className="mt-1.5 flex gap-4 text-[12.5px] text-[var(--color-text-muted)]">
-                <span>
-                  总资产{" "}
-                  <strong className="font-semibold text-[var(--color-text-primary)]">
-                    {formatMoney(netWorth.assetsMicros)}
-                  </strong>
+              <p className="mt-1.5 flex items-baseline gap-0.5">
+                <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
+                  ¥
                 </span>
-                <span>
-                  总负债{" "}
-                  <strong className="font-semibold text-[var(--color-accent-expense)]">
-                    {formatMoney(netWorth.liabilitiesMicros)}
-                  </strong>
+                <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+                  {formatMicros(netWorth.netMicros, { currencySymbol: "", decimalPlaces })}
                 </span>
+              </p>
+              <div className="mt-3.5 flex gap-7">
+                <div>
+                  <p className="text-[11px] text-[var(--color-text-muted)]">总资产</p>
+                  <MoneyText
+                    amountMicros={netWorth.assetsMicros}
+                    className="mt-0.5 block text-[15px] font-semibold"
+                    tone="neutral"
+                  />
+                </div>
+                <div>
+                  <p className="text-[11px] text-[var(--color-text-muted)]">总负债</p>
+                  <MoneyText
+                    amountMicros={netWorth.liabilitiesMicros}
+                    className="mt-0.5 block text-[15px] font-semibold"
+                    style={{ color: "var(--color-accent-expense)" }}
+                    tone="expense"
+                  />
+                </div>
               </div>
             </section>
 

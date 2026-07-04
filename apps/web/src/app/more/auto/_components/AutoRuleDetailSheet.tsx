@@ -104,6 +104,7 @@ export function AutoRuleDetailSheet({
             <>
               <DetailRow label="转出账户" value={fromAccount.name} />
               <DetailRow label="转入账户" value={toAccount.name} />
+              <DetailRow label="人员" value={personName(people, rule.personId)} />
             </>
           ) : (
             <>
