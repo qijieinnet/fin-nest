@@ -3,20 +3,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AttachmentPicker,
-  DateWheelPicker,
-  type AttachmentItem,
-} from "@/components/business";
+import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
 import { IconButton, Input } from "@/components/ui";
 import {
   apiRequest,
+  createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
-  type DownloadUrlResult,
   type Insurance,
   type Person,
-  type UploadUrlResult,
+  uploadAttachmentFile,
 } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { useAttachments, useInsurance } from "@/lib/data/records";
@@ -72,34 +68,19 @@ function Section({ children, title }: { children: React.ReactNode; title: string
   return (
     <section className="flex flex-col gap-2">
       <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{title}</h3>
-      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">{children}</div>
+      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+        {children}
+      </div>
     </section>
   );
 }
 
-async function uploadInsuranceAttachment(ledgerId: string, insuranceId: string, item: PendingAttachment) {
-  const mime = item.file.type || "application/octet-stream";
-  const upload = await apiRequest<UploadUrlResult>(ledgerApiPath(ledgerId, "/files/upload-url"), {
-    method: "POST",
-    body: { ownerType: "insurance", ownerId: insuranceId, originalName: item.file.name, mime },
-  });
-  const uploaded = await fetch(upload.uploadUrl, {
-    method: "PUT",
-    body: item.file,
-    headers: { "content-type": mime },
-  });
-  if (!uploaded.ok) throw new Error("附件上传失败");
-  await apiRequest(ledgerApiPath(ledgerId, "/attachments"), {
-    method: "POST",
-    body: {
-      ownerType: "insurance",
-      ownerId: insuranceId,
-      originalName: item.file.name,
-      mime,
-      objectKey: upload.objectKey,
-      sizeBytes: String(item.file.size),
-    },
-  });
+async function uploadInsuranceAttachment(
+  ledgerId: string,
+  insuranceId: string,
+  item: PendingAttachment,
+) {
+  await uploadAttachmentFile(ledgerId, "insurance", insuranceId, item.file);
 }
 
 export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceEditorSheetProps) {
@@ -202,10 +183,15 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             method: "PATCH",
             body,
           })
-        : await apiRequest<Insurance>(ledgerApiPath(ledgerId, "/insurances"), { method: "POST", body });
+        : await apiRequest<Insurance>(ledgerApiPath(ledgerId, "/insurances"), {
+            method: "POST",
+            body,
+          });
 
       for (const attachmentId of removedAttachmentIds) {
-        await apiRequest(ledgerApiPath(ledgerId, `/attachments/${attachmentId}`), { method: "DELETE" });
+        await apiRequest(ledgerApiPath(ledgerId, `/attachments/${attachmentId}`), {
+          method: "DELETE",
+        });
       }
       for (const attachment of pendingAttachments) {
         await uploadInsuranceAttachment(ledgerId, saved.id, attachment);
@@ -216,7 +202,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.insurances(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId, saved.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.attachments(ledgerId, "insurance", saved.id) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.attachments(ledgerId, "insurance", saved.id),
+        }),
       ]);
       showToast({ tone: "success", message: isEditing ? "保单已更新" : "保单已添加" });
       pop();
@@ -253,14 +241,12 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   async function openAttachment(item: AttachmentItem) {
     const pending = pendingAttachments.find((entry) => entry.id === item.id);
     if (pending?.url) {
-      window.open(pending.url, "_blank", "noopener,noreferrer");
-      return;
+      return pending.url;
     }
     try {
-      const result = await apiRequest<DownloadUrlResult>(
-        ledgerApiPath(ledgerId, `/attachments/${item.id}/download-url`),
+      return await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId, `/attachments/${item.id}/content`),
       );
-      window.open(result.downloadUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
     }
@@ -340,7 +326,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
       <Section title="被保人 · 可多选">
         {people.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">还没有人员，可到「人员管理」中添加</p>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            还没有人员，可到「人员管理」中添加
+          </p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {people.map((person) => (
@@ -419,7 +407,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       </Section>
 
       <AttachmentPicker
-        accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+        accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
         enabled
         items={attachmentItems}
         onFilesSelected={addFiles}

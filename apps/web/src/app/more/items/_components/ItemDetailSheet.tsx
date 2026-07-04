@@ -4,10 +4,9 @@ import { Archive, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { LoadingState } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
-  apiRequest,
+  createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
-  type DownloadUrlResult,
   type ItemType,
 } from "@/lib/api";
 import { useAttachments, useItem } from "@/lib/data/records";
@@ -94,10 +93,10 @@ export function ItemDetailSheet({
 
   async function openAttachment(attachmentId: string) {
     try {
-      const result = await apiRequest<DownloadUrlResult>(
-        ledgerApiPath(ledgerId, `/attachments/${attachmentId}/download-url`),
+      const url = await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId, `/attachments/${attachmentId}/content`),
       );
-      window.open(result.downloadUrl, "_blank", "noopener,noreferrer");
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
       showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
     }

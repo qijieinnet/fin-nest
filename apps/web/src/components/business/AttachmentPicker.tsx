@@ -12,12 +12,12 @@ type AttachmentPickerProps = {
   items: AttachmentItem[];
   onEnabledChange?: (enabled: boolean) => void;
   onFilesSelected: (files: File[]) => void;
-  onOpen?: (item: AttachmentItem) => void;
+  onOpen?: (item: AttachmentItem) => Promise<string | void> | string | void;
   onRemove?: (id: string) => void;
 };
 
 export function AttachmentPicker({
-  accept = "image/*,application/pdf",
+  accept = "image/*,application/pdf,video/*",
   enabled,
   items,
   onEnabledChange,
@@ -37,28 +37,33 @@ export function AttachmentPicker({
             <InlineHint text={hint} />
           </strong>
         </span>
-        <Switch checked={active} disabled={!onEnabledChange} label="附件" onCheckedChange={onEnabledChange} />
+        <Switch
+          checked={active}
+          disabled={!onEnabledChange}
+          label="附件"
+          onCheckedChange={onEnabledChange}
+        />
       </div>
       {active ? (
         <div className="biz-attachment-card__body">
           <AttachmentPreview items={items} onOpen={onOpen} onRemove={onRemove} variant="grid" />
-        <label className="biz-file-button">
-          <input
-            accept={accept}
-            multiple
-            onChange={(event) => {
-              onFilesSelected(Array.from(event.currentTarget.files ?? []));
-              event.currentTarget.value = "";
-            }}
-            type="file"
-          />
-          <span className="ui-button ui-button--secondary">
-            <span className="ui-button__icon">
-              <Plus size={16} />
+          <label className="biz-file-button">
+            <input
+              accept={accept}
+              multiple
+              onChange={(event) => {
+                onFilesSelected(Array.from(event.currentTarget.files ?? []));
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
+            <span className="ui-button ui-button--secondary">
+              <span className="ui-button__icon">
+                <Plus size={16} />
+              </span>
+              添加
             </span>
-            添加
-          </span>
-        </label>
+          </label>
         </div>
       ) : null}
     </div>

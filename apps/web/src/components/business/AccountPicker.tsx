@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, WalletCards, X } from "lucide-react";
+import { ChevronDown, ChevronRight, WalletCards } from "lucide-react";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
 
@@ -95,9 +95,6 @@ export function AccountPicker({ label = "账户", onValueChange, options, value 
                   role="option"
                   type="button"
                 >
-                  <span className="select-field__check">
-                    {selected ? <Check size={16} strokeWidth={3} /> : null}
-                  </span>
                   <span>{option.label}</span>
                   {hasChildren ? <ChevronRight className={cn(expanded && "account-select-menu__chevron--open")} size={16} /> : null}
                 </button>
@@ -118,9 +115,6 @@ export function AccountPicker({ label = "账户", onValueChange, options, value 
                           role="option"
                           type="button"
                         >
-                          <span className="select-field__check">
-                            {childSelected ? <Check size={16} strokeWidth={3} /> : null}
-                          </span>
                           <span>{child.label}</span>
                         </button>
                       );
@@ -141,9 +135,6 @@ export function AccountPicker({ label = "账户", onValueChange, options, value 
                 }}
                 type="button"
               >
-                <span className="select-field__check">
-                  <X size={16} strokeWidth={2.6} />
-                </span>
                 <span>清除选项</span>
               </button>
             </>

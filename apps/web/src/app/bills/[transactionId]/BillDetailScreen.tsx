@@ -1,23 +1,27 @@
 "use client";
 
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { AttachmentPreview, CategoryIcon, LoadingState, MoneyText, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPreview,
+  LoadingState,
+  MoneyText,
+  type AttachmentItem,
+} from "@/components/business";
 import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
 import {
   apiRequest,
   type AttachmentRecord,
-  type DownloadUrlResult,
+  createAuthorizedObjectUrl,
   getApiErrorMessage,
   type LedgerMember,
   ledgerApiPath,
   ledgerMembersPath,
   type TransactionDetail,
 } from "@/lib/api";
-import { ACCOUNT_TYPE_LABELS } from "@/lib/data/options";
 import {
   useAccounts,
   useAttachments,
@@ -26,6 +30,7 @@ import {
   useInsurances,
   useItems,
   usePeople,
+  useRecordSetting,
   useTransaction,
 } from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
@@ -35,13 +40,6 @@ import { useDecimalPlaces, useLedger, useToast } from "@/providers";
 
 const TYPE_LABELS: Record<string, string> = { expense: "支出", income: "收入", transfer: "转账" };
 
-const RELATION_LABELS: Record<string, string> = {
-  receivable_from_expense: "支出计入可收回",
-  payable_from_expense: "支出关联需归还",
-  receivable_from_income: "收入关联可收回",
-  payable_from_income: "收入产生需归还",
-};
-
 const SOURCE_LABELS: Record<string, string> = {
   ai: "AI 识别",
   auto: "自动记账",
@@ -50,10 +48,15 @@ const SOURCE_LABELS: Record<string, string> = {
   quick: "快捷记账",
 };
 
+const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
+
 type DetailRow = {
+  className?: string;
   label: string;
   value: ReactNode;
 };
+
+type RelationBucket = "primary" | "linked";
 
 function formatDateOnly(value: string): string {
   const [year, month, day] = value.slice(0, 10).split("-");
@@ -67,13 +70,23 @@ function formatDateFull(value: string): string {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
+function formatRecordTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+  return date.getFullYear() === new Date().getFullYear()
+    ? monthDay
+    : `${date.getFullYear()}年${monthDay}`;
+}
+
 function signedAmount(
   detail: TransactionDetail,
   amountMicros = detail.effectiveAmountMicros,
   decimalPlaces?: number,
 ): string {
   const amount = BigInt(amountMicros);
-  if (detail.type === "expense") return formatMicros(-amount, { decimalPlaces, trimTrailingZeros: true });
+  if (detail.type === "expense")
+    return formatMicros(-amount, { decimalPlaces, trimTrailingZeros: true });
   if (detail.type === "income")
     return formatMicros(amount, { decimalPlaces, showPositiveSign: true, trimTrailingZeros: true });
   return formatMicros(amount, { decimalPlaces, trimTrailingZeros: true });
@@ -96,34 +109,101 @@ function creatorName(members: LedgerMember[], createdBy: string): string {
   return member?.alias || member?.account || "未知记录人";
 }
 
+function relationBucket(relationKind: string): RelationBucket {
+  return relationKind === "receivable_from_expense" || relationKind === "payable_from_income"
+    ? "primary"
+    : "linked";
+}
+
+function relationLabels(type: TransactionDetail["type"]) {
+  return {
+    linked: type === "income" ? "关联可收回项目" : "关联需归还项目",
+    primary: type === "income" ? "需归还" : "可收回",
+  };
+}
+
 function fileName(attachment: AttachmentRecord): string {
   return attachment.file?.originalName ?? `附件 ${attachment.id.slice(0, 6)}`;
 }
 
-function toAttachmentItem(attachment: AttachmentRecord, url?: string): AttachmentItem {
+function toAttachmentItem(attachment: AttachmentRecord): AttachmentItem {
   return {
     contentType: attachment.file?.mime,
     id: attachment.id,
     name: fileName(attachment),
     sizeBytes: attachment.file?.sizeBytes ? Number(attachment.file.sizeBytes) : undefined,
-    url,
   };
 }
 
-function DetailSection({ rows, title }: { rows: DetailRow[]; title: string }) {
-  if (rows.length === 0) return null;
+function RawCategoryIcon({ icon }: { icon?: string | null }) {
+  if (!icon?.trim()) return null;
+  return <span className="bill-detail__category-icon">{icon.trim()}</span>;
+}
+
+function CategoryValue({ category }: { category: TransactionDetail["categorySnapshot"] }) {
+  if (!category) return "未选择";
   return (
-    <section className="bill-detail__section">
-      <h2>{title}</h2>
-      <div className="bill-detail__panel">
-        {rows.map((row) => (
-          <div className="bill-detail__row" key={row.label}>
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
-          </div>
-        ))}
+    <span className="bill-detail__category-value">
+      <span>
+        <RawCategoryIcon icon={category.icon} />
+        <span>{category.name}</span>
+      </span>
+      {category.subcategoryName ? (
+        <>
+          <span className="bill-detail__category-separator">/</span>
+          <span>
+            <RawCategoryIcon icon={category.subcategoryIcon} />
+            <span>{category.subcategoryName}</span>
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function ReadonlyRow({ className, label, value }: DetailRow) {
+  return (
+    <div className={["bill-detail__readonly-row", className].filter(Boolean).join(" ")}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ReadonlyCard({ children }: { children: ReactNode }) {
+  return <div className="transaction-form__card bill-detail__readonly-card">{children}</div>;
+}
+
+function ReadonlyBlock({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="transaction-form__card bill-detail__readonly-card bill-detail__block-card">
+      <div className="bill-detail__block-title">
+        <strong>{label}</strong>
       </div>
-    </section>
+      <div className="bill-detail__block-body">{children}</div>
+    </div>
+  );
+}
+
+function RelationBlock({
+  accounts,
+  label,
+  relations,
+}: {
+  accounts: Array<{ id: string; name: string; subAccounts: Array<{ id: string; name: string }> }>;
+  label: string;
+  relations: TransactionDetail["relations"];
+}) {
+  if (relations.length === 0) return null;
+  return (
+    <ReadonlyBlock label={label}>
+      {relations.map((relation) => (
+        <div className="bill-detail__relation-row" key={relation.id}>
+          <span>{accountLabel(accounts, relation.accountId) ?? "未知账户"}</span>
+          <MoneyText amountMicros={relation.amountMicros} tone="muted" />
+        </div>
+      ))}
+    </ReadonlyBlock>
   );
 }
 
@@ -151,6 +231,7 @@ export function BillDetailScreen({
   const pendingQuery = useAutoPending(isPendingMode ? ledgerId : null);
   const categoriesQuery = useCategories(isPendingMode ? ledgerId : null);
   const peopleQuery = usePeople(isPendingMode ? ledgerId : null);
+  const settingQuery = useRecordSetting(ledgerId);
   const membersQuery = useQuery({
     queryKey: queryKeys.ledgerMembers(ledgerId ?? "none"),
     queryFn: () => apiRequest<LedgerMember[]>(ledgerMembersPath(ledgerId!)),
@@ -159,18 +240,16 @@ export function BillDetailScreen({
   });
 
   const attachmentRecords = attachmentsQuery.data ?? [];
-  const downloadQueries = useQueries({
-    queries: attachmentRecords.map((attachment) => ({
-      enabled: Boolean(ledgerId && attachment.file),
-      queryFn: () =>
-        apiRequest<DownloadUrlResult>(ledgerApiPath(ledgerId!, `/attachments/${attachment.id}/download-url`)),
-      queryKey: ["ledger", ledgerId ?? "none", "attachment-download-url", attachment.id] as const,
-      staleTime: 10 * 60 * 1000,
-    })),
-  });
 
   const accounts = accountsQuery.data ?? [];
   const members = membersQuery.data ?? [];
+  const setting = settingQuery.data;
+  const visibleFields = setting?.visibleFields ?? {};
+  const order = setting?.fieldOrder?.length ? setting.fieldOrder : DEFAULT_FIELD_ORDER;
+  const showAccountCard = visibleFields.account !== false;
+  const showPersonCard = visibleFields.person !== false;
+  const showNoteCard = visibleFields.note !== false;
+  const showAttachmentCard = visibleFields.attachments !== false;
   const categories = categoriesQuery.data ?? [];
   const people = peopleQuery.data ?? [];
   const pendingItem = isPendingMode
@@ -221,22 +300,27 @@ export function BillDetailScreen({
   }, [pendingItem, categories, people]);
   const transaction = isPendingMode ? pendingDetail : transactionQuery.data;
   const attachmentItems = useMemo(
-    () =>
-      attachmentRecords.map((attachment, index) =>
-        toAttachmentItem(attachment, downloadQueries[index]?.data?.downloadUrl),
-      ),
-    [attachmentRecords, downloadQueries],
+    () => attachmentRecords.map((attachment) => toAttachmentItem(attachment)),
+    [attachmentRecords],
   );
 
   const deleteMutation = useMutation({
     mutationFn: () =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/transactions/${transactionId}`), { method: "DELETE" }),
+      apiRequest<void>(ledgerApiPath(ledgerId!, `/transactions/${transactionId}`), {
+        method: "DELETE",
+      }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.attachments(ledgerId ?? "none", "transaction", transactionId ?? "none") }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.attachments(
+            ledgerId ?? "none",
+            "transaction",
+            transactionId ?? "none",
+          ),
+        }),
       ]);
       showToast({ tone: "success", message: "已删除" });
       router.replace(routes.bills);
@@ -291,12 +375,17 @@ export function BillDetailScreen({
     router.replace(routes.billPendingEdit(pendingItem.id));
   };
 
-  function openAttachment(item: AttachmentItem) {
+  async function openAttachment(item: AttachmentItem): Promise<string | void> {
     if (item.url) {
-      window.open(item.url, "_blank", "noopener,noreferrer");
-      return;
+      return item.url;
     }
-    showToast({ tone: "error", message: "附件暂时无法预览" });
+    try {
+      return await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId!, `/attachments/${item.id}/content`),
+      );
+    } catch (error) {
+      showToast({ tone: "error", message: getApiErrorMessage(error, "附件暂时无法预览") });
+    }
   }
 
   const renderBody = (detail: TransactionDetail) => {
@@ -304,91 +393,181 @@ export function BillDetailScreen({
     const gross = BigInt(detail.grossAmountMicros);
     const effective = BigInt(detail.effectiveAmountMicros);
     const category = detail.categorySnapshot;
-    const title = isTransfer ? "转账" : (category?.subcategoryName ?? category?.name ?? TYPE_LABELS[detail.type]);
-    const typeText = isTransfer
-      ? "账户转账"
-      : [TYPE_LABELS[detail.type], category?.name].filter(Boolean).join(" · ");
-    const detailRows: DetailRow[] = [];
+    const links = detail.links ?? [];
+    const insuranceNames = links
+      .filter((link) => link.linkedType === "insurance")
+      .map((link) => insurancesQuery.data?.find((item) => item.id === link.linkedId)?.name)
+      .filter(Boolean);
+    const itemNames = links
+      .filter((link) => link.linkedType === "item")
+      .map((link) => itemsQuery.data?.find((item) => item.id === link.linkedId)?.name)
+      .filter(Boolean);
 
-    if (isTransfer) {
-      detailRows.push({
-        label: "转出账户",
-        value: accountLabel(accounts, detail.fromAccountId, detail.fromSubAccountId) ?? "未选择",
-      });
-      detailRows.push({
-        label: "转入账户",
-        value: accountLabel(accounts, detail.toAccountId, detail.toSubAccountId) ?? "未选择",
-      });
-    } else {
-      const account = accountLabel(accounts, detail.accountId, detail.subAccountId);
-      if (account) detailRows.push({ label: "账户", value: account });
-      if (detail.personSnapshot) detailRows.push({ label: "成员", value: detail.personSnapshot.name });
+    const renderOrderedField = (field: string) => {
+      switch (field) {
+        case "category":
+          if (isTransfer) return null;
+          return (
+            <ReadonlyCard key="category">
+              <ReadonlyRow label="分类" value={<CategoryValue category={category} />} />
+            </ReadonlyCard>
+          );
+        case "account":
+          if (isTransfer) {
+            return (
+              <ReadonlyCard key="account">
+                <ReadonlyRow
+                  label="转出账户"
+                  value={
+                    accountLabel(accounts, detail.fromAccountId, detail.fromSubAccountId) ??
+                    "未选择"
+                  }
+                />
+                <ReadonlyRow
+                  label="转入账户"
+                  value={
+                    accountLabel(accounts, detail.toAccountId, detail.toSubAccountId) ?? "未选择"
+                  }
+                />
+              </ReadonlyCard>
+            );
+          }
+          if (!showAccountCard) return null;
+          return detail.accountId ? (
+            <ReadonlyCard key="account">
+              <ReadonlyRow
+                label="账户"
+                value={accountLabel(accounts, detail.accountId, detail.subAccountId) ?? "未知账户"}
+              />
+            </ReadonlyCard>
+          ) : null;
+        case "date":
+          return (
+            <ReadonlyCard key="date">
+              <ReadonlyRow
+                label={isPendingMode ? "计划入账日期" : "日期"}
+                value={formatDateOnly(detail.occurredOn)}
+              />
+            </ReadonlyCard>
+          );
+        case "person":
+          if (!showPersonCard || isTransfer || !detail.personSnapshot) return null;
+          return (
+            <ReadonlyCard key="person">
+              <ReadonlyRow label="人员" value={detail.personSnapshot.name} />
+            </ReadonlyCard>
+          );
+        case "note":
+          if (!showNoteCard || !detail.note?.trim()) return null;
+          return (
+            <ReadonlyCard key="note">
+              <ReadonlyRow
+                className="bill-detail__readonly-row--multiline"
+                label="备注"
+                value={detail.note}
+              />
+            </ReadonlyCard>
+          );
+        default:
+          return null;
+      }
+    };
 
-      const links = detail.links ?? [];
-      const insuranceNames = links
-        .filter((link) => link.linkedType === "insurance")
-        .map((link) => insurancesQuery.data?.find((item) => item.id === link.linkedId)?.name)
-        .filter(Boolean);
-      const itemNames = links
-        .filter((link) => link.linkedType === "item")
-        .map((link) => itemsQuery.data?.find((item) => item.id === link.linkedId)?.name)
-        .filter(Boolean);
-      if (insuranceNames.length > 0) detailRows.push({ label: "关联保单", value: insuranceNames.join("、") });
-      if (itemNames.length > 0) detailRows.push({ label: "关联物品", value: itemNames.join("、") });
-    }
-
-    detailRows.push({ label: isPendingMode ? "计划入账日期" : "日期", value: formatDateOnly(detail.occurredOn) });
-    if (isPendingMode) {
-      detailRows.push({ label: "生成时间", value: formatDateFull(detail.createdAt) });
-      detailRows.push({ label: "状态", value: "待确认" });
-    } else {
-      detailRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
-      detailRows.push({ label: "记录时间", value: formatDateFull(detail.createdAt) });
-    }
-    if (detail.source !== "manual") detailRows.push({ label: "来源", value: SOURCE_LABELS[detail.source] ?? detail.source });
+    const amountRows: DetailRow[] = [];
     if (gross !== effective) {
-      detailRows.push({ label: "原始金额", value: signedAmount(detail, detail.grossAmountMicros, decimalPlaces) });
-      detailRows.push({ label: "有效金额", value: signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces) });
+      amountRows.push({
+        label: "原始金额",
+        value: signedAmount(detail, detail.grossAmountMicros, decimalPlaces),
+      });
+      amountRows.push({
+        label: "有效金额",
+        value: signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces),
+      });
     }
 
-    const relationRows = detail.relations.map((relation) => ({
-      label: `${RELATION_LABELS[relation.relationKind] ?? "关联"} · ${
-        accountLabel(accounts, relation.accountId) ?? ACCOUNT_TYPE_LABELS.receivable
-      }`,
-      value: <MoneyText amountMicros={relation.amountMicros} className="text-sm" tone="muted" />,
-    }));
+    const metaRows: DetailRow[] = [];
+    if (isPendingMode) {
+      metaRows.push({ label: "生成时间", value: formatDateFull(detail.createdAt) });
+      metaRows.push({ label: "状态", value: "待确认" });
+    } else {
+      if (detail.source !== "manual")
+        metaRows.push({ label: "来源", value: SOURCE_LABELS[detail.source] ?? detail.source });
+      metaRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
+      metaRows.push({ label: "记录时间", value: formatRecordTime(detail.createdAt) });
+    }
+
+    const labels = relationLabels(detail.type);
+    const primaryRelations = detail.relations.filter(
+      (relation) => relationBucket(relation.relationKind) === "primary",
+    );
+    const linkedRelations = detail.relations.filter(
+      (relation) => relationBucket(relation.relationKind) === "linked",
+    );
 
     return (
       <div className="bill-detail">
-        <section className="bill-detail__hero">
-          <span className="bill-detail__hero-icon">
-            {isTransfer ? "↔" : <CategoryIcon color={undefined} icon={category?.subcategoryIcon ?? category?.icon ?? undefined} />}
-          </span>
-          <span className="bill-detail__hero-copy">
-            <strong>{title}</strong>
-            <small>{typeText}</small>
-          </span>
+        <div className="bill-detail__top">
           <span className={`bill-detail__amount bill-detail__amount--${detail.type}`}>
             {signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces)}
           </span>
-        </section>
+        </div>
 
-        <DetailSection rows={detailRows} title="明细" />
-        <DetailSection rows={relationRows} title="可收回 / 需归还" />
+        <div className="bill-detail__cards">
+          {amountRows.length > 0 ? (
+            <ReadonlyCard>
+              {amountRows.map((row) => (
+                <ReadonlyRow key={row.label} {...row} />
+              ))}
+            </ReadonlyCard>
+          ) : null}
 
-        {detail.note?.trim() ? (
-          <section className="bill-detail__section">
-            <h2>备注</h2>
-            <div className="bill-detail__note">{detail.note}</div>
-          </section>
-        ) : null}
+          <ReadonlyCard>
+            <ReadonlyRow label="记录类型" value={TYPE_LABELS[detail.type]} />
+          </ReadonlyCard>
 
-        {attachmentItems.length > 0 ? (
-          <section className="bill-detail__section">
-            <h2>附件</h2>
-            <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
-          </section>
-        ) : null}
+          {order.filter((field) => field !== "type" && field !== "amount").map(renderOrderedField)}
+
+          {!isPendingMode && !isTransfer ? (
+            <>
+              <RelationBlock
+                accounts={accounts}
+                label={labels.primary}
+                relations={primaryRelations}
+              />
+              <RelationBlock
+                accounts={accounts}
+                label={labels.linked}
+                relations={linkedRelations}
+              />
+            </>
+          ) : null}
+
+          {showAttachmentCard && attachmentItems.length > 0 ? (
+            <ReadonlyBlock label="附件">
+              <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
+            </ReadonlyBlock>
+          ) : null}
+
+          {!isTransfer && insuranceNames.length > 0 ? (
+            <ReadonlyCard>
+              <ReadonlyRow label="保险" value={insuranceNames.join("、")} />
+            </ReadonlyCard>
+          ) : null}
+
+          {!isTransfer && itemNames.length > 0 ? (
+            <ReadonlyCard>
+              <ReadonlyRow label="关联物品" value={itemNames.join("、")} />
+            </ReadonlyCard>
+          ) : null}
+
+          {metaRows.length > 0 ? (
+            <ReadonlyCard>
+              {metaRows.map((row) => (
+                <ReadonlyRow key={row.label} {...row} />
+              ))}
+            </ReadonlyCard>
+          ) : null}
+        </div>
 
         {isPendingMode ? (
           <section className="bill-detail__delete">
@@ -412,7 +591,11 @@ export function BillDetailScreen({
                   >
                     {deletePendingMutation.isPending ? "删除中…" : "确认删除"}
                   </Button>
-                  <Button className="flex-1" onClick={() => setConfirmingDelete(false)} variant="ghost">
+                  <Button
+                    className="flex-1"
+                    onClick={() => setConfirmingDelete(false)}
+                    variant="ghost"
+                  >
                     取消
                   </Button>
                 </div>
@@ -430,35 +613,39 @@ export function BillDetailScreen({
             )}
           </section>
         ) : (
-        <section className="bill-detail__delete">
-          {confirmingDelete ? (
-            <>
-              <p>删除后这笔记录及相关附件将无法访问，确定删除吗？</p>
-              <div className="bill-detail__confirm-actions">
-                <Button
-                  className="flex-1"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => deleteMutation.mutate()}
-                  variant="danger"
-                >
-                  {deleteMutation.isPending ? "删除中…" : "确认删除"}
-                </Button>
-                <Button className="flex-1" onClick={() => setConfirmingDelete(false)} variant="ghost">
-                  取消
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Button
-              className="bill-detail__delete-button"
-              icon={<Trash2 size={18} />}
-              onClick={() => setConfirmingDelete(true)}
-              variant="danger"
-            >
-              删除记录
-            </Button>
-          )}
-        </section>
+          <section className="bill-detail__delete">
+            {confirmingDelete ? (
+              <>
+                <p>删除后这笔记录及相关附件将无法访问，确定删除吗？</p>
+                <div className="bill-detail__confirm-actions">
+                  <Button
+                    className="flex-1"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate()}
+                    variant="danger"
+                  >
+                    {deleteMutation.isPending ? "删除中…" : "确认删除"}
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => setConfirmingDelete(false)}
+                    variant="ghost"
+                  >
+                    取消
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button
+                className="bill-detail__delete-button"
+                icon={<Trash2 size={18} />}
+                onClick={() => setConfirmingDelete(true)}
+                variant="danger"
+              >
+                删除记录
+              </Button>
+            )}
+          </section>
         )}
       </div>
     );
@@ -489,7 +676,9 @@ export function BillDetailScreen({
         }
         title={isPendingMode ? "待确认详情" : "记录详情"}
       >
-        {(isPendingMode ? pendingQuery.isPending || categoriesQuery.isPending : transactionQuery.isPending) ? (
+        {(isPendingMode
+          ? pendingQuery.isPending || categoriesQuery.isPending
+          : transactionQuery.isPending) || settingQuery.isPending ? (
           <LoadingState rows={5} title={isPendingMode ? "加载待确认记录" : "加载交易"} />
         ) : transaction ? (
           renderBody(transaction)

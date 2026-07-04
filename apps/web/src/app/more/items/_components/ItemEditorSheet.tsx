@@ -3,20 +3,16 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AttachmentPicker,
-  DateWheelPicker,
-  type AttachmentItem,
-} from "@/components/business";
+import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
 import { IconButton, Input } from "@/components/ui";
 import {
   apiRequest,
+  createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
-  type DownloadUrlResult,
   type ItemAsset,
   type ItemType,
-  type UploadUrlResult,
+  uploadAttachmentFile,
 } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { useAttachments } from "@/lib/data/records";
@@ -66,34 +62,15 @@ function Section({ children, title }: { children: React.ReactNode; title: string
   return (
     <section className="flex flex-col gap-2">
       <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{title}</h3>
-      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">{children}</div>
+      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+        {children}
+      </div>
     </section>
   );
 }
 
 async function uploadItemAttachment(ledgerId: string, itemId: string, item: PendingAttachment) {
-  const mime = item.file.type || "application/octet-stream";
-  const upload = await apiRequest<UploadUrlResult>(ledgerApiPath(ledgerId, "/files/upload-url"), {
-    method: "POST",
-    body: { ownerType: "item", ownerId: itemId, originalName: item.file.name, mime },
-  });
-  const uploaded = await fetch(upload.uploadUrl, {
-    method: "PUT",
-    body: item.file,
-    headers: { "content-type": mime },
-  });
-  if (!uploaded.ok) throw new Error("附件上传失败");
-  await apiRequest(ledgerApiPath(ledgerId, "/attachments"), {
-    method: "POST",
-    body: {
-      ownerType: "item",
-      ownerId: itemId,
-      originalName: item.file.name,
-      mime,
-      objectKey: upload.objectKey,
-      sizeBytes: String(item.file.size),
-    },
-  });
+  await uploadAttachmentFile(ledgerId, "item", itemId, item.file);
 }
 
 export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetProps) {
@@ -111,9 +88,13 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
   // 用户通过「新增类型」临时加的类型名，保存时才真正创建。
   const [customTypeNames, setCustomTypeNames] = useState<string[]>([]);
   const [newType, setNewType] = useState("");
-  const [purchasePrice, setPurchasePrice] = useState(() => microsToInput(item?.purchasePriceMicros));
+  const [purchasePrice, setPurchasePrice] = useState(() =>
+    microsToInput(item?.purchasePriceMicros),
+  );
   const [purchaseDate, setPurchaseDate] = useState(item?.purchaseDate?.slice(0, 10) ?? todayKey());
-  const [expectedYears, setExpectedYears] = useState(item?.expectedYears ? String(Number(item.expectedYears)) : "");
+  const [expectedYears, setExpectedYears] = useState(
+    item?.expectedYears ? String(Number(item.expectedYears)) : "",
+  );
   const [note, setNote] = useState(item?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
@@ -197,7 +178,9 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
         : await apiRequest<ItemAsset>(ledgerApiPath(ledgerId, "/items"), { method: "POST", body });
 
       for (const attachmentId of removedAttachmentIds) {
-        await apiRequest(ledgerApiPath(ledgerId, `/attachments/${attachmentId}`), { method: "DELETE" });
+        await apiRequest(ledgerApiPath(ledgerId, `/attachments/${attachmentId}`), {
+          method: "DELETE",
+        });
       }
       for (const attachment of pendingAttachments) {
         await uploadItemAttachment(ledgerId, saved.id, attachment);
@@ -209,7 +192,9 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.item(ledgerId, saved.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.itemTypes(ledgerId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.attachments(ledgerId, "item", saved.id) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.attachments(ledgerId, "item", saved.id),
+        }),
       ]);
       showToast({ tone: "success", message: isEditing ? "物品已更新" : "物品已添加" });
       pop();
@@ -256,14 +241,12 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
   async function openAttachment(entry: AttachmentItem) {
     const pending = pendingAttachments.find((candidate) => candidate.id === entry.id);
     if (pending?.url) {
-      window.open(pending.url, "_blank", "noopener,noreferrer");
-      return;
+      return pending.url;
     }
     try {
-      const result = await apiRequest<DownloadUrlResult>(
-        ledgerApiPath(ledgerId, `/attachments/${entry.id}/download-url`),
+      return await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId, `/attachments/${entry.id}/content`),
       );
-      window.open(result.downloadUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
       showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
     }
@@ -360,7 +343,7 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
       </div>
 
       <AttachmentPicker
-        accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+        accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
         enabled
         items={attachmentItems}
         onFilesSelected={addFiles}

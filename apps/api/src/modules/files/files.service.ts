@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { extname } from "node:path";
+import type { Readable } from "node:stream";
 import { Injectable } from "@nestjs/common";
 import { AppError, BackgroundJobsService, PrismaService } from "@fin-nest/backend";
 import { loadConfig } from "@fin-nest/config";
 import { Prisma } from "@fin-nest/db";
 import { Client } from "minio";
 import { LedgersService } from "../ledgers/ledgers.service";
-import { BindAttachmentDto, CreateUploadUrlDto } from "./dto/file.dto";
+import { UploadAttachmentDto } from "./dto/file.dto";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -16,8 +17,36 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/heif",
   "image/gif",
   "application/pdf",
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-m4v",
 ]);
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+
+const PUBLIC_FILE_SELECT = {
+  checksum: true,
+  createdAt: true,
+  deletedAt: true,
+  id: true,
+  ledgerId: true,
+  mime: true,
+  originalName: true,
+  ownerUserId: true,
+  sizeBytes: true,
+  status: true,
+} satisfies Prisma.FileSelect;
+
+type UploadedAttachmentFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
 
 @Injectable()
 export class FilesService {
@@ -37,30 +66,28 @@ export class FilesService {
     private readonly ledgers: LedgersService,
   ) {}
 
-  async createUploadUrl(ledgerId: string, userId: string, input: CreateUploadUrlDto) {
+  async uploadAttachment(
+    ledgerId: string,
+    userId: string,
+    input: UploadAttachmentDto,
+    uploadedFile: UploadedAttachmentFile | undefined,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    assertAllowedMime(input.mime);
     await this.assertOwner(ledgerId, input.ownerType, input.ownerId);
-    const now = new Date();
-    const extension = safeExt(input.originalName);
-    const objectKey = `ledgers/${ledgerId}/${input.ownerType}/${input.ownerId}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}${extension}`;
-    const uploadUrl = await this.minio.presignedPutObject(this.bucket, objectKey, 15 * 60);
-    return { bucket: this.bucket, objectKey, uploadUrl, expiresInSeconds: 15 * 60 };
-  }
-
-  async bindAttachment(ledgerId: string, userId: string, input: BindAttachmentDto) {
-    await this.ledgers.assertMember(ledgerId, userId);
-    assertAllowedMime(input.mime);
-    await this.assertOwner(ledgerId, input.ownerType, input.ownerId);
-    if (!input.objectKey.startsWith(`ledgers/${ledgerId}/${input.ownerType}/${input.ownerId}/`)) {
-      throw new AppError("INVALID_OBJECT_KEY", "对象 key 与业务对象不匹配", 400);
-    }
-    // Trust the object actually present in storage rather than the client-reported size.
-    const stat = await this.minio.statObject(this.bucket, input.objectKey).catch(() => null);
-    if (!stat) throw new AppError("OBJECT_NOT_FOUND", "上传对象不存在或已过期", 400);
-    if (stat.size > MAX_FILE_SIZE_BYTES) {
+    if (!uploadedFile) throw new AppError("FILE_REQUIRED", "请选择要上传的文件", 400);
+    const mime = uploadedFile.mimetype || "application/octet-stream";
+    assertAllowedMime(mime);
+    if (uploadedFile.size > MAX_FILE_SIZE_BYTES) {
       throw new AppError("FILE_TOO_LARGE", "文件大小超过限制", 400);
     }
+
+    const now = new Date();
+    const extension = safeExt(uploadedFile.originalname);
+    const objectKey = `ledgers/${ledgerId}/${input.ownerType}/${input.ownerId}/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${randomUUID()}${extension}`;
+    await this.minio.putObject(this.bucket, objectKey, uploadedFile.buffer, uploadedFile.size, {
+      "Content-Type": mime,
+    });
+
     try {
       return await this.prisma.client.$transaction(async (tx) => {
         const file = await tx.file.create({
@@ -68,10 +95,10 @@ export class FilesService {
             ledgerId,
             ownerUserId: userId,
             bucket: this.bucket,
-            objectKey: input.objectKey,
-            originalName: input.originalName,
-            mime: input.mime,
-            sizeBytes: BigInt(stat.size),
+            objectKey,
+            originalName: uploadedFile.originalname,
+            mime,
+            sizeBytes: BigInt(uploadedFile.size),
             checksum: input.checksum,
             status: "attached",
           },
@@ -85,13 +112,10 @@ export class FilesService {
             createdBy: userId,
           },
         });
-        return { file, attachment };
+        return { file: toPublicFile(file), attachment };
       });
     } catch (error) {
-      // object_key 全局唯一，重复绑定（双击/重放）给出明确的 409 而不是 500。
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new AppError("OBJECT_ALREADY_BOUND", "该上传对象已绑定过附件", 409);
-      }
+      await this.minio.removeObject(this.bucket, objectKey).catch(() => undefined);
       throw error;
     }
   }
@@ -101,25 +125,32 @@ export class FilesService {
     await this.assertOwner(ledgerId, ownerType, ownerId);
     return this.prisma.client.attachment.findMany({
       where: { ledgerId, ownerType, ownerId },
-      include: { file: true },
+      include: { file: { select: PUBLIC_FILE_SELECT } },
       orderBy: { createdAt: "asc" },
     });
   }
 
-  async createDownloadUrl(ledgerId: string, attachmentId: string, userId: string) {
-    await this.ledgers.assertMember(ledgerId, userId);
-    const attachment = await this.prisma.client.attachment.findFirst({
-      where: { id: attachmentId, ledgerId },
-    });
-    if (!attachment) throw new AppError("ATTACHMENT_NOT_FOUND", "附件不存在", 404);
-    await this.assertOwner(ledgerId, attachment.ownerType, attachment.ownerId);
-    const file = await this.prisma.client.file.findFirst({
-      where: { id: attachment.fileId, ledgerId, deletedAt: null },
-    });
-    if (!file) throw new AppError("FILE_NOT_FOUND", "文件不存在", 404);
+  async getAttachmentContent(
+    ledgerId: string,
+    attachmentId: string,
+    userId: string,
+  ): Promise<{
+    fileName: string;
+    mime: string;
+    sizeBytes: bigint;
+    stream: Readable;
+  }> {
+    const { file } = await this.getAccessibleAttachmentFile(ledgerId, attachmentId, userId);
+    const stream = await this.minio
+      .getObject(file.bucket, file.objectKey)
+      .catch(() => {
+        throw new AppError("OBJECT_NOT_FOUND", "附件文件不存在", 404);
+      });
     return {
-      downloadUrl: await this.minio.presignedGetObject(file.bucket, file.objectKey, 15 * 60),
-      expiresInSeconds: 15 * 60,
+      fileName: file.originalName ?? "attachment",
+      mime: file.mime || "application/octet-stream",
+      sizeBytes: file.sizeBytes,
+      stream,
     };
   }
 
@@ -195,6 +226,20 @@ export class FilesService {
     }
   }
 
+  private async getAccessibleAttachmentFile(ledgerId: string, attachmentId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const attachment = await this.prisma.client.attachment.findFirst({
+      where: { id: attachmentId, ledgerId },
+    });
+    if (!attachment) throw new AppError("ATTACHMENT_NOT_FOUND", "附件不存在", 404);
+    await this.assertOwner(ledgerId, attachment.ownerType, attachment.ownerId);
+    const file = await this.prisma.client.file.findFirst({
+      where: { id: attachment.fileId, ledgerId, deletedAt: null },
+    });
+    if (!file) throw new AppError("FILE_NOT_FOUND", "文件不存在", 404);
+    return { attachment, file };
+  }
+
   private async assertOwner(ledgerId: string, ownerType: string, ownerId: string) {
     if (ownerType === "transaction") {
       const row = await this.prisma.client.transaction.findFirst({
@@ -230,4 +275,9 @@ function assertAllowedMime(mime: string): void {
 function safeExt(name: string): string {
   const extension = extname(name).toLowerCase();
   return /^[a-z0-9.]{1,16}$/.test(extension) ? extension : "";
+}
+
+function toPublicFile<TFile extends { bucket: string; objectKey: string }>(file: TFile) {
+  const { bucket: _bucket, objectKey: _objectKey, ...publicFile } = file;
+  return publicFile;
 }

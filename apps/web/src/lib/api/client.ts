@@ -10,7 +10,7 @@ export type ApiRequestOptions = Omit<RequestInit, "body" | "credentials"> & {
   query?: Record<string, PrimitiveQueryValue | PrimitiveQueryValue[]>;
 };
 
-function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
+export function buildApiUrl(path: string, query?: ApiRequestOptions["query"]): string {
   const target = path.startsWith("http") ? path : `${resolveApiBaseUrl()}${path}`;
   // 同源代理下 base 是相对路径（如 /api），需要以当前页面 origin 补全。
   const url = new URL(target, typeof window === "undefined" ? undefined : window.location.origin);
@@ -79,7 +79,7 @@ export async function apiRequest<TResponse>(
     }
   }
 
-  const response = await fetch(buildUrl(path, query), requestInit);
+  const response = await fetch(buildApiUrl(path, query), requestInit);
   const parsed = await parseResponse(response);
 
   if (!response.ok) {

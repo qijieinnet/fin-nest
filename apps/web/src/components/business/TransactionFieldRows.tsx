@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { BottomSheet, IconButton, Switch } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
@@ -148,7 +148,6 @@ export function AccountSelectRow({
                   type="button"
                 >
                   <span>{option.label}</span>
-                  {selected ? <Check size={16} strokeWidth={3} /> : null}
                 </button>
                 {children.length > 0 ? (
                   <div className="transaction-form__suboption-list">
@@ -167,7 +166,6 @@ export function AccountSelectRow({
                           type="button"
                         >
                           <span>{child.label}</span>
-                          {childSelected ? <Check size={16} strokeWidth={3} /> : null}
                         </button>
                       );
                     })}

@@ -1,5 +1,6 @@
 export { apiRequest } from "./client";
 export type { ApiRequestOptions } from "./client";
+export { createAuthorizedObjectUrl, uploadAttachmentFile } from "./files";
 export {
   adminUserAdminPath,
   adminUserStatusPath,
@@ -38,7 +39,6 @@ export type {
   BudgetProgressItem,
   Category,
   CategorySnapshot,
-  DownloadUrlResult,
   Insurance,
   InsuranceDetail,
   InsuranceInsuredPerson,
@@ -81,5 +81,4 @@ export type {
   TransactionRelationKind,
   TransactionSummary,
   TransactionType,
-  UploadUrlResult,
 } from "./contracts";

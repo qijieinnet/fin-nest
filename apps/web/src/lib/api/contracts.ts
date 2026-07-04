@@ -578,8 +578,6 @@ export type AttachmentRecord = {
     id: string;
     ledgerId: string;
     ownerUserId: string;
-    bucket: string;
-    objectKey: string;
     originalName: string | null;
     mime: string;
     sizeBytes: string;
@@ -588,16 +586,4 @@ export type AttachmentRecord = {
     createdAt: string;
     deletedAt: string | null;
   };
-};
-
-export type UploadUrlResult = {
-  bucket: string;
-  objectKey: string;
-  uploadUrl: string;
-  expiresInSeconds: number;
-};
-
-export type DownloadUrlResult = {
-  downloadUrl: string;
-  expiresInSeconds: number;
 };

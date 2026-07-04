@@ -23,12 +23,12 @@ import {
   apiRequest,
   getApiErrorMessage,
   ledgerApiPath,
+  uploadAttachmentFile,
   type AutoPendingTransaction,
   type TransactionDetail,
   type TransactionInput,
   type TransactionRelationInput,
   type TransactionType,
-  type UploadUrlResult,
 } from "@/lib/api";
 import {
   accountSelectionId,
@@ -147,33 +147,7 @@ function formatDateLabel(value: string): string {
 }
 
 async function uploadAttachment(ledgerId: string, transactionId: string, item: PendingAttachment) {
-  const mime = item.file.type || "application/octet-stream";
-  const upload = await apiRequest<UploadUrlResult>(ledgerApiPath(ledgerId, "/files/upload-url"), {
-    method: "POST",
-    body: {
-      ownerType: "transaction",
-      ownerId: transactionId,
-      originalName: item.file.name,
-      mime,
-    },
-  });
-  const uploaded = await fetch(upload.uploadUrl, {
-    method: "PUT",
-    body: item.file,
-    headers: { "content-type": mime },
-  });
-  if (!uploaded.ok) throw new Error("附件上传失败");
-  await apiRequest(ledgerApiPath(ledgerId, "/attachments"), {
-    method: "POST",
-    body: {
-      ownerType: "transaction",
-      ownerId: transactionId,
-      originalName: item.file.name,
-      mime,
-      objectKey: upload.objectKey,
-      sizeBytes: String(item.file.size),
-    },
-  });
+  await uploadAttachmentFile(ledgerId, "transaction", transactionId, item.file);
 }
 
 export type TransactionSeed = {
@@ -924,7 +898,7 @@ export function TransactionForm({
                 onEnabledChange={setAttachmentsEnabled}
                 onFilesSelected={addAttachments}
                 onOpen={(item) => {
-                  if (item.url) window.open(item.url, "_blank", "noopener,noreferrer");
+                  return item.url;
                 }}
                 onRemove={removeAttachment}
               />
