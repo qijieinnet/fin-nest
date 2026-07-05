@@ -53,7 +53,8 @@ import {
 } from "@/lib/data/records";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useDecimalPlaces, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { ItemEditorSheet } from "../../more/items/_components/ItemEditorSheet";
 
 const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
 
@@ -222,6 +223,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { push } = useSheetStack();
   const { showToast } = useToast();
   const isEdit = Boolean(initial);
   // 待确认模式下不涉及关联/附件/资产（后端待确认更新接口不支持），提交=保存+确认。
@@ -315,16 +317,17 @@ export function TransactionForm({
     isEdit && !isPendingMode && initial ? initial.id : null,
   );
   // 编辑模式下，回显已有的保险/物品关联（后端关联为 upsert 幂等，重新保存不会重复）。
-  const initialInsuranceId =
-    initial?.links?.find((link) => link.linkedType === "insurance")?.linkedId ??
-    seed?.insuranceId ??
-    null;
-  const initialItemId =
-    initial?.links?.find((link) => link.linkedType === "item")?.linkedId ?? seed?.itemId ?? null;
+  const initialInsuranceLink = initial?.links?.find((link) => link.linkedType === "insurance");
+  const initialItemLink = initial?.links?.find((link) => link.linkedType === "item");
+  const initialInsuranceId = initialInsuranceLink?.linkedId ?? seed?.insuranceId ?? null;
+  const initialItemId = initialItemLink?.linkedId ?? seed?.itemId ?? null;
   const [insuranceEnabled, setInsuranceEnabled] = useState(Boolean(initialInsuranceId));
   const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(initialInsuranceId);
   const [itemEnabled, setItemEnabled] = useState(Boolean(initialItemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialItemId);
+  const [selectedItemLinkKind, setSelectedItemLinkKind] = useState<"consumable" | "purchase">(
+    initialItemLink?.linkKind === "purchase" ? "purchase" : "consumable",
+  );
 
   const catOptions = useMemo(
     () => categoryOptions(categories, type === "income" ? "income" : "expense"),
@@ -529,6 +532,8 @@ export function TransactionForm({
         toAccountId: to.accountId,
         toSubAccountId: to.subAccountId,
         personId: personEnabled ? (personId ?? undefined) : undefined,
+        insuranceId: null,
+        itemId: null,
         note: note.trim() || undefined,
       };
     }
@@ -569,6 +574,9 @@ export function TransactionForm({
       accountId: account.accountId,
       subAccountId: account.subAccountId,
       note: note.trim() || undefined,
+      insuranceId: insuranceEnabled ? selectedInsuranceId : null,
+      itemId: itemEnabled ? selectedItemId : null,
+      itemLinkKind: itemEnabled && selectedItemId ? selectedItemLinkKind : undefined,
       relations: relations.length > 0 ? relations : undefined,
     };
   }
@@ -641,22 +649,6 @@ export function TransactionForm({
 
   async function postSave(transaction: TransactionDetail) {
     const tasks: Array<Promise<unknown>> = [];
-    if (insuranceEnabled && selectedInsuranceId) {
-      tasks.push(
-        apiRequest(ledgerApiPath(ledgerId, `/insurances/${selectedInsuranceId}/transactions`), {
-          method: "POST",
-          body: { transactionId: transaction.id },
-        }),
-      );
-    }
-    if (itemEnabled && selectedItemId) {
-      tasks.push(
-        apiRequest(ledgerApiPath(ledgerId, `/items/${selectedItemId}/transactions`), {
-          method: "POST",
-          body: { transactionId: transaction.id },
-        }),
-      );
-    }
     // 先删除被移除的既有附件（无论附件开关状态，删除都是显式操作）。
     for (const attachmentId of removedAttachmentIds) {
       tasks.push(
@@ -789,6 +781,24 @@ export function TransactionForm({
       const item = current.find((attachment) => attachment.id === id);
       if (item?.url) URL.revokeObjectURL(item.url);
       return current.filter((attachment) => attachment.id !== id);
+    });
+  }
+
+  function openCreateItemSheet() {
+    setItemEnabled(true);
+    push({
+      className: "ui-bottom-sheet--sheet-form",
+      hideDefaultHeader: true,
+      content: (
+        <ItemEditorSheet
+          ledgerId={ledgerId}
+          onSaved={(saved) => {
+            setSelectedItemId(saved.id);
+            setSelectedItemLinkKind("purchase");
+            setItemEnabled(true);
+          }}
+        />
+      ),
     });
   }
 
@@ -998,6 +1008,7 @@ export function TransactionForm({
 
             <AssetLinkCard
               checked={itemEnabled}
+              createLabel="新建物品"
               emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
               hint={
                 type === "income"
@@ -1010,7 +1021,11 @@ export function TransactionForm({
                 setItemEnabled(checked);
                 if (!checked) setSelectedItemId(null);
               }}
-              onSelect={setSelectedItemId}
+              onCreate={openCreateItemSheet}
+              onSelect={(itemId) => {
+                setSelectedItemId(itemId);
+                setSelectedItemLinkKind("consumable");
+              }}
               selectedId={selectedItemId}
             />
           </>

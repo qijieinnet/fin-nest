@@ -53,6 +53,16 @@ export class InsurancesController {
     return this.assets.terminateInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId);
   }
 
+  @Post(":insuranceId/resume")
+  @ApiOkResponse()
+  resume(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("insuranceId") insuranceId: string,
+  ) {
+    return this.assets.resumeInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId);
+  }
+
   @Post(":insuranceId/transactions")
   @ApiCreatedResponse()
   linkTransaction(

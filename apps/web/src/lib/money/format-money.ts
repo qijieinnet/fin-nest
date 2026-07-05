@@ -25,7 +25,7 @@ function groupInteger(value: string): string {
 export function formatMicros(
   amount: bigint | number | string,
   {
-    currencySymbol = "¥",
+    currencySymbol = "",
     decimalPlaces = ambientDecimalPlaces,
     showPositiveSign = false,
     trimTrailingZeros = false,
@@ -53,10 +53,12 @@ export function formatMicros(
   return `${sign}${currencySymbol}${groupInteger(units.toString())}${decimal}`;
 }
 
-export function getMoneyTone(amount: bigint | number | string, fallback: MoneyTone = "neutral"): MoneyTone {
+export function getMoneyTone(
+  amount: bigint | number | string,
+  fallback: MoneyTone = "neutral",
+): MoneyTone {
   const micros = normalizeMicros(amount);
   if (micros > 0n) return "income";
   if (micros < 0n) return "expense";
   return fallback;
 }
-

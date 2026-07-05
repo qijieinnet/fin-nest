@@ -9,12 +9,12 @@ const DEFAULT_VISIBLE_FIELDS = {
 };
 
 const DEFAULT_CATEGORIES = [
-  { type: "expense", name: "餐饮", icon: "utensils", sortOrder: 10 },
-  { type: "expense", name: "交通", icon: "bus", sortOrder: 20 },
-  { type: "expense", name: "购物", icon: "shopping-bag", sortOrder: 30 },
-  { type: "expense", name: "居家", icon: "home", sortOrder: 40 },
-  { type: "income", name: "工资", icon: "wallet", sortOrder: 10 },
-  { type: "income", name: "奖金", icon: "sparkles", sortOrder: 20 },
+  { type: "expense", name: "餐饮", icon: "🍽️", sortOrder: 10 },
+  { type: "expense", name: "交通", icon: "🚌", sortOrder: 20 },
+  { type: "expense", name: "购物", icon: "🛍️", sortOrder: 30 },
+  { type: "expense", name: "居家", icon: "🏠", sortOrder: 40 },
+  { type: "income", name: "工资", icon: "💰", sortOrder: 10 },
+  { type: "income", name: "奖金", icon: "✨", sortOrder: 20 },
 ] as const;
 
 export async function initializeLedgerDefaults(

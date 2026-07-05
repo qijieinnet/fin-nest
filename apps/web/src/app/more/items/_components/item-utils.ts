@@ -1,4 +1,4 @@
-import type { ItemAsset, Transaction } from "@/lib/api";
+import type { ItemAsset, ItemType, Transaction } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
 
 /** 常用物品类型的推荐图标，未匹配的自定义类型用兜底图标。 */
@@ -21,6 +21,11 @@ export function itemTypeIcon(typeName: string | null | undefined): string {
   return (typeName && ITEM_TYPE_ICONS[typeName]) || "📦";
 }
 
+/** 类型展示图标：优先用类型自定义 icon，否则按名称回退到推荐图标。 */
+export function typeGlyph(type: Pick<ItemType, "name" | "icon"> | null | undefined): string {
+  return type?.icon || itemTypeIcon(type?.name);
+}
+
 export function todayKey(): string {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -34,7 +39,9 @@ function usageEndKey(item: Pick<ItemAsset, "scrappedAt" | "scrapDate">): string 
   return todayKey();
 }
 
-export function itemUsedDays(item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">): number {
+export function itemUsedDays(
+  item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">,
+): number {
   if (!item.purchaseDate) return 0;
   const start = Date.parse(item.purchaseDate.slice(0, 10));
   const end = Date.parse(usageEndKey(item));
@@ -42,11 +49,15 @@ export function itemUsedDays(item: Pick<ItemAsset, "purchaseDate" | "scrappedAt"
   return Math.max(0, Math.round((end - start) / 86_400_000));
 }
 
-export function itemUsedYears(item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">): number {
+export function itemUsedYears(
+  item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">,
+): number {
   return itemUsedDays(item) / 365;
 }
 
-export function itemUsedMonths(item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">): number {
+export function itemUsedMonths(
+  item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate">,
+): number {
   return itemUsedDays(item) / 30.4375;
 }
 
@@ -115,9 +126,10 @@ export function formatFixed1(value: number): string {
   return value.toFixed(1);
 }
 
-/** 平均年价/月价（按微单位换算成元后除以时长），时长为 0 时返回 —。 */
+/** 平均年价/月价：不足 1 个统计周期时，按 1 个周期摊销，避免短期年化/月化失真。 */
 export function formatAverage(totalMicros: bigint, spans: number): string {
-  if (spans <= 0) return "—";
+  if (!Number.isFinite(spans) || spans < 0) return "—";
+  const divisor = Math.max(1, spans);
   const yuan = Number(totalMicros) / 1_000_000;
-  return `¥${(yuan / spans).toFixed(1)}`;
+  return `¥${(yuan / divisor).toFixed(1)}`;
 }

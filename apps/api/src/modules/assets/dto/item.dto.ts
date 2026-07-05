@@ -7,12 +7,20 @@ export class CreateItemTypeDto {
   @Length(1, 80)
   name!: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 16)
+  icon?: string;
+
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @IsInt()
   @Min(0)
   sortOrder?: number;
 }
+
+export class UpdateItemTypeDto extends PartialType(CreateItemTypeDto) {}
 
 export class CreateItemDto {
   @ApiProperty()

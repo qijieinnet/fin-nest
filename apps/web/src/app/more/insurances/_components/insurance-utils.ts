@@ -43,6 +43,15 @@ export function todayKey(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** 今天往后 years 年的同月同日（用于「到期日默认次年今天」）。 */
+export function todayPlusYearsKey(years: number): string {
+  const now = new Date();
+  now.setFullYear(now.getFullYear() + years);
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export type InsuranceStatus = {
   key: "active" | "expired" | "terminated";
   label: string;

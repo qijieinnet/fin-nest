@@ -1,71 +1,147 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, Settings2, X } from "lucide-react";
+import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
-import { IconButton, Input } from "@/components/ui";
+import { IconButton, PopoverMenu } from "@/components/ui";
 import {
   apiRequest,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
   type ItemAsset,
-  type ItemType,
   uploadAttachmentFile,
 } from "@/lib/api";
-import { cn } from "@/lib/format/class-names";
-import { useAttachments } from "@/lib/data/records";
+import { useAttachments, useItemTypes } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
-import { ITEM_TYPE_PRESETS, itemTypeIcon, microsToInput, todayKey } from "./item-utils";
+import { ItemTypeManagerSheet } from "./ItemTypeManagerSheet";
+import { microsToInput, todayKey, typeGlyph } from "./item-utils";
 
 type ItemEditorSheetProps = {
   item?: ItemAsset;
-  itemTypes: ItemType[];
   ledgerId: string;
+  onSaved?: (item: ItemAsset) => void | Promise<void>;
 };
 
 type PendingAttachment = AttachmentItem & { file: File };
 
-function Chip({
-  active,
-  icon,
+/** 记一笔风格的整卡输入行：标签在左，输入右对齐。 */
+function FieldRow({
+  inputMode,
   label,
-  onClick,
+  maxLength,
+  onChange,
+  placeholder,
+  prefix,
+  value,
 }: {
-  active: boolean;
-  icon?: string;
+  inputMode?: "decimal" | "numeric" | "text";
   label: string;
-  onClick: () => void;
+  maxLength?: number;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  prefix?: string;
+  value: string;
 }) {
   return (
-    <button
-      className={cn(
-        "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors",
-        active
-          ? "bg-[var(--color-tint)] text-[var(--color-tint-contrast)]"
-          : "bg-[var(--color-control-fill-muted)] text-[var(--color-text-secondary)]",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {icon ? <span>{icon}</span> : null}
-      {label}
-    </button>
+    <label className="account-form__field-row">
+      <span>{label}</span>
+      <span className="account-form__input-wrap">
+        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
+        <input
+          className="account-form__input"
+          inputMode={inputMode}
+          maxLength={maxLength}
+          onChange={onChange}
+          placeholder={placeholder}
+          value={value}
+        />
+      </span>
+    </label>
   );
 }
 
-function Section({ children, title }: { children: React.ReactNode; title: string }) {
+/** 类型选值行：点按弹出 PopoverMenu 选择，菜单底部固定「管理类型」入口。 */
+function TypeSelectRow({
+  onChange,
+  onManage,
+  options,
+  value,
+}: {
+  onChange: (value: string) => void;
+  onManage: () => void;
+  options: ReadonlyArray<{ icon: string; label: string; value: string }>;
+  value: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{title}</h3>
-      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-        {children}
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>类型</span>
+          <strong>{selected ? `${selected.icon} ${selected.label}` : "请选择"}</strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              icon: <span>{option.icon}</span>,
+              label: option.label,
+              onSelect: () => onChange(option.value),
+              selected: option.value === value,
+            })),
+            [
+              {
+                icon: <Settings2 size={16} />,
+                label: "管理类型",
+                onSelect: onManage,
+              },
+            ],
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
       </div>
-    </section>
+    </div>
+  );
+}
+
+/** 日期行：未设置时点按填入今天，已设置后展示滚轮选择器。 */
+function DateFieldRow({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  if (!value) {
+    return (
+      <div className="transaction-form__date-card">
+        <button className="biz-date-picker" onClick={() => onChange(todayKey())} type="button">
+          <span className="biz-date-popover__summary">
+            <span>{label}</span>
+            <strong>未选择</strong>
+          </span>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="transaction-form__date-card">
+      <DateWheelPicker label={label} onValueChange={onChange} value={value} />
+    </div>
   );
 }
 
@@ -73,21 +149,18 @@ async function uploadItemAttachment(ledgerId: string, itemId: string, item: Pend
   await uploadAttachmentFile(ledgerId, "item", itemId, item.file);
 }
 
-export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetProps) {
+export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProps) {
   const queryClient = useQueryClient();
-  const { pop } = useSheetStack();
+  const { pop, push } = useSheetStack();
   const { showToast } = useToast();
   const isEditing = Boolean(item);
 
+  const itemTypesQuery = useItemTypes(ledgerId);
+  const itemTypes = useMemo(() => itemTypesQuery.data ?? [], [itemTypesQuery.data]);
   const existingAttachmentsQuery = useAttachments(ledgerId, "item", item?.id ?? null);
 
   const [name, setName] = useState(item?.name ?? "");
-  const [typeName, setTypeName] = useState(
-    () => itemTypes.find((type) => type.id === item?.typeId)?.name ?? "",
-  );
-  // 用户通过「新增类型」临时加的类型名，保存时才真正创建。
-  const [customTypeNames, setCustomTypeNames] = useState<string[]>([]);
-  const [newType, setNewType] = useState("");
+  const [typeId, setTypeId] = useState(item?.typeId ?? "");
   const [purchasePrice, setPurchasePrice] = useState(() =>
     microsToInput(item?.purchasePriceMicros),
   );
@@ -98,7 +171,18 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
   const [note, setNote] = useState(item?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const pendingRef = useRef<PendingAttachment[]>([]);
+  const seededAttachments = useRef(false);
+
+  // 已有附件时默认展开附件区域，其余情况默认关闭，需手动打开再上传。
+  useEffect(() => {
+    if (seededAttachments.current) return;
+    const records = existingAttachmentsQuery.data;
+    if (!records) return;
+    seededAttachments.current = true;
+    if (records.length > 0) setAttachmentsEnabled(true);
+  }, [existingAttachmentsQuery.data]);
 
   useEffect(() => {
     pendingRef.current = pendingAttachments;
@@ -113,14 +197,19 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
     [],
   );
 
-  // 类型 chips：账本已有类型 + 常用推荐 + 本次会话新增，按名称去重。
-  const typeChipNames = useMemo(() => {
-    const names: string[] = [];
-    for (const type of itemTypes) if (!names.includes(type.name)) names.push(type.name);
-    for (const custom of customTypeNames) if (!names.includes(custom)) names.push(custom);
-    for (const preset of ITEM_TYPE_PRESETS) if (!names.includes(preset)) names.push(preset);
-    return names;
-  }, [itemTypes, customTypeNames]);
+  // 选项只展示未归档类型；若正在编辑的物品选中的是已归档类型，仍补进来以保持显示与可保存。
+  const typeOptions = useMemo(() => {
+    const options = itemTypes
+      .filter((type) => !type.archivedAt)
+      .map((type) => ({ icon: typeGlyph(type), label: type.name, value: type.id }));
+    if (typeId && !options.some((option) => option.value === typeId)) {
+      const selected = itemTypes.find((type) => type.id === typeId);
+      if (selected) {
+        options.push({ icon: typeGlyph(selected), label: selected.name, value: selected.id });
+      }
+    }
+    return options;
+  }, [itemTypes, typeId]);
 
   const existingAttachments = useMemo(
     () =>
@@ -136,7 +225,6 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
   const attachmentItems = [...existingAttachments, ...pendingAttachments];
 
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length > 0;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -147,24 +235,9 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
         throw new Error("预用年限格式不正确，最多两位小数");
       }
 
-      // 所选类型若在账本中不存在（推荐或新增的），先创建拿到 id。
-      let typeId: string | undefined;
-      if (typeName) {
-        const existing = itemTypes.find((type) => type.name === typeName);
-        if (existing) {
-          typeId = existing.id;
-        } else {
-          const created = await apiRequest<ItemType>(ledgerApiPath(ledgerId, "/item-types"), {
-            method: "POST",
-            body: { name: typeName },
-          });
-          typeId = created.id;
-        }
-      }
-
       const body = {
         name: trimmedName,
-        typeId,
+        typeId: typeId || undefined,
         purchasePriceMicros: priceParsed?.amountMicros,
         purchaseDate: purchaseDate || undefined,
         expectedYears: expectedTrimmed || undefined,
@@ -191,11 +264,11 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.item(ledgerId, saved.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.itemTypes(ledgerId) }),
         queryClient.invalidateQueries({
           queryKey: queryKeys.attachments(ledgerId, "item", saved.id),
         }),
       ]);
+      await onSaved?.(saved);
       showToast({ tone: "success", message: isEditing ? "物品已更新" : "物品已添加" });
       pop();
     },
@@ -204,15 +277,12 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
     },
   });
 
-  function addCustomType() {
-    const trimmed = newType.trim();
-    if (!trimmed) return;
-    if (!typeChipNames.includes(trimmed)) {
-      setCustomTypeNames((current) => [trimmed, ...current]);
-    }
-    setTypeName(trimmed);
-    setNewType("");
-  }
+  const openTypeManager = () => {
+    push({
+      hideDefaultHeader: true,
+      content: <ItemTypeManagerSheet ledgerId={ledgerId} />,
+    });
+  };
 
   function addFiles(files: File[]) {
     setPendingAttachments((current) => [
@@ -252,112 +322,92 @@ export function ItemEditorSheet({ item, itemTypes, ledgerId }: ItemEditorSheetPr
     }
   }
 
+  const canSubmit = trimmedName.length > 0 && !save.isPending;
+
   return (
     <form
-      className="flex flex-col gap-4 pb-4"
+      className="transaction-form flex min-h-0 flex-1 flex-col !gap-0 !pb-0"
       onSubmit={(event) => {
         event.preventDefault();
         if (canSubmit && !save.isPending) save.mutate();
       }}
     >
-      <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
+      <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {isEditing ? "编辑物品" : "添加物品"}
         </h2>
         <IconButton
-          disabled={!canSubmit || save.isPending}
+          disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存物品"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />
       </div>
 
-      <Input
-        aria-label="物品名称"
-        label="物品名称"
-        maxLength={120}
-        onChange={(event) => setName(event.target.value)}
-        placeholder="如：MacBook Pro"
-        value={name}
-      />
-
-      <Section title="类型">
-        <div className="flex flex-wrap gap-2">
-          {typeChipNames.map((chipName) => (
-            <Chip
-              active={typeName === chipName}
-              icon={itemTypeIcon(chipName)}
-              key={chipName}
-              label={chipName}
-              onClick={() => setTypeName(typeName === chipName ? "" : chipName)}
-            />
-          ))}
-        </div>
-        <div className="mt-3 flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <Input
-              aria-label="新增类型"
-              label="新增类型"
-              maxLength={80}
-              onChange={(event) => setNewType(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addCustomType();
-                }
-              }}
-              placeholder="新增类型…"
-              value={newType}
+      <div className="sheet-form-scroll flex-1 pb-6">
+        <div className="transaction-form__cards">
+          <div className="transaction-form__card">
+            <FieldRow
+              label="物品名称"
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="如：MacBook Pro"
+              value={name}
             />
           </div>
-          <button
-            className="h-[var(--space-control-height)] shrink-0 rounded-[12px] bg-[var(--color-tint-soft)] px-4 text-[13.5px] font-semibold text-[var(--color-tint)] disabled:opacity-50"
-            disabled={!newType.trim()}
-            onClick={addCustomType}
-            type="button"
-          >
-            添加
-          </button>
+
+          <TypeSelectRow
+            onChange={(value) => setTypeId(typeId === value ? "" : value)}
+            onManage={openTypeManager}
+            options={typeOptions}
+            value={typeId}
+          />
+
+          <div className="transaction-form__card">
+            <FieldRow
+              inputMode="decimal"
+              label="购买价格"
+              onChange={(event) => setPurchasePrice(event.target.value)}
+              placeholder="0.00"
+              prefix="¥"
+              value={purchasePrice}
+            />
+            <span className="transaction-form__divider" />
+            <DateFieldRow label="购买日期" onChange={setPurchaseDate} value={purchaseDate} />
+            <span className="transaction-form__divider" />
+            <FieldRow
+              inputMode="decimal"
+              label="预用年限"
+              onChange={(event) => setExpectedYears(event.target.value)}
+              placeholder="选填，如 3"
+              value={expectedYears}
+            />
+          </div>
+
+          <AttachmentPicker
+            accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
+            enabled={attachmentsEnabled}
+            items={attachmentItems}
+            onEnabledChange={setAttachmentsEnabled}
+            onFilesSelected={addFiles}
+            onOpen={openAttachment}
+            onRemove={removeAttachment}
+          />
+
+          <div className="transaction-form__card">
+            <FieldRow
+              label="备注"
+              maxLength={240}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="选填，如 序列号 / 购买渠道…"
+              value={note}
+            />
+          </div>
         </div>
-      </Section>
-
-      <div className="flex flex-col gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-        <Input
-          inputMode="decimal"
-          label="购买价格"
-          onChange={(event) => setPurchasePrice(event.target.value)}
-          placeholder="0"
-          prefix="¥"
-          value={purchasePrice}
-        />
-        <DateWheelPicker label="购买日期" onValueChange={setPurchaseDate} value={purchaseDate} />
-        <Input
-          inputMode="decimal"
-          label="预用年限（年，选填）"
-          onChange={(event) => setExpectedYears(event.target.value)}
-          placeholder="如：3"
-          value={expectedYears}
-        />
       </div>
-
-      <AttachmentPicker
-        accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
-        enabled
-        items={attachmentItems}
-        onFilesSelected={addFiles}
-        onOpen={openAttachment}
-        onRemove={removeAttachment}
-      />
-
-      <Input
-        label="备注"
-        maxLength={240}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder="选填，如 序列号 / 购买渠道…"
-        value={note}
-      />
     </form>
   );
 }

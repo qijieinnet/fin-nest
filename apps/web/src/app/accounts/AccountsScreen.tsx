@@ -148,14 +148,14 @@ export function AccountsScreen() {
                   message="把现金、银行卡、信用卡、投资等账户录入，净资产一目了然。"
                   title="还没有账户"
                 />
-                <button
+                {/* <button
                   className="mt-3 flex h-12 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
                   onClick={openEditor}
                   type="button"
                 >
-                  <Plus size={17} />
+                  <Plus size={18} />
                   新建账户
-                </button>
+                </button> */}
               </div>
             ) : (
               groups.map((group) => (

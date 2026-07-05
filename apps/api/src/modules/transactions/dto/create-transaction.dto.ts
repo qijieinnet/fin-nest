@@ -19,8 +19,20 @@ export class TransactionAccountRelationDto {
   @IsString()
   accountId!: string;
 
-  @ApiProperty({ enum: ["receivable_from_expense", "payable_from_income", "receivable_from_income", "payable_from_expense"] })
-  @IsIn(["receivable_from_expense", "payable_from_income", "receivable_from_income", "payable_from_expense"])
+  @ApiProperty({
+    enum: [
+      "receivable_from_expense",
+      "payable_from_income",
+      "receivable_from_income",
+      "payable_from_expense",
+    ],
+  })
+  @IsIn([
+    "receivable_from_expense",
+    "payable_from_income",
+    "receivable_from_income",
+    "payable_from_expense",
+  ])
   relationKind!: string;
 
   @ApiProperty({ example: "12000000" })
@@ -100,6 +112,21 @@ export class CreateTransactionDto {
   @IsString()
   @Length(0, 240)
   note?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  insuranceId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  itemId?: string | null;
+
+  @ApiPropertyOptional({ enum: ["consumable", "purchase"] })
+  @IsOptional()
+  @IsIn(["consumable", "purchase"])
+  itemLinkKind?: "consumable" | "purchase";
 
   @ApiPropertyOptional({ type: [TransactionAccountRelationDto] })
   @IsOptional()

@@ -549,6 +549,7 @@ export class BackupService {
         linkedId: (row.linkedType === "insurance"
           ? ref(maps.insurance, row.linkedId)
           : ref(maps.item, row.linkedId))!,
+        linkKind: row.linkKind ?? (row.linkedType === "item" ? "consumable" : "related"),
         createdAt: dt(row.createdAt) ?? undefined,
       }),
     );

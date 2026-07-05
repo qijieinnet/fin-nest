@@ -88,6 +88,15 @@ select:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+/* 通用「无描边」输入框：聚焦时不显示浏览器焦点环，也不描边，
+   保留元素自身的静态样式（背景/边框）。用于表单里成片的自定义输入。 */
+.input-flat:focus,
+.input-flat:focus-visible {
+  border-color: inherit;
+  outline: 0;
+  box-shadow: none;
+}
+
 .app-background {
   background: var(--color-bg-app);
 }
@@ -807,6 +816,13 @@ select:focus-visible {
   width: calc(100% + var(--space-sheet-x));
 }
 
+/* 滚动区向右溢出抵消面板右内边距，让 sheet-body 的滚动条紧贴弹窗最右侧。 */
+.ui-bottom-sheet--edge-scroll .sheet-body {
+  margin-right: calc(var(--space-sheet-x) * -1);
+  padding-right: var(--space-sheet-x);
+  width: calc(100% + var(--space-sheet-x));
+}
+
 .ui-sheet {
   background: #ededec;
   border: 1px solid var(--color-border-subtle);
@@ -822,6 +838,7 @@ select:focus-visible {
   justify-content: space-between;
   position: relative;
   z-index: 1;
+  padding-bottom: 8px;
 }
 
 .sheet-header h2 {
@@ -1811,7 +1828,9 @@ select:focus-visible {
 }
 
 .transaction-form input:focus,
-.transaction-form input:focus-visible {
+.transaction-form input:focus-visible,
+.transaction-form textarea:focus,
+.transaction-form textarea:focus-visible {
   box-shadow: none;
   outline: 0;
 }

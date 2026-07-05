@@ -238,6 +238,7 @@ export type TransactionLink = {
   transactionId: string;
   linkedType: "insurance" | "item";
   linkedId: string;
+  linkKind: "related" | "consumable" | "purchase";
   createdAt: string;
 };
 
@@ -292,6 +293,9 @@ export type TransactionInput = {
   toAccountId?: string;
   toSubAccountId?: string;
   note?: string;
+  insuranceId?: string | null;
+  itemId?: string | null;
+  itemLinkKind?: "consumable" | "purchase";
   relations?: TransactionRelationInput[];
 };
 
@@ -559,8 +563,10 @@ export type ItemType = {
   id: string;
   ledgerId: string;
   name: string;
+  icon: string | null;
   sortOrder: number;
   createdAt: string;
+  archivedAt: string | null;
 };
 
 export type ItemDetail = ItemAsset & {

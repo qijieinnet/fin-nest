@@ -337,6 +337,7 @@ model TransactionLink {
   transactionId String   @map("transaction_id") @db.Uuid
   linkedType    String   @map("linked_type")
   linkedId      String   @map("linked_id") @db.Uuid
+  linkKind      String   @default("related") @map("link_kind")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([transactionId, linkedType, linkedId])
@@ -525,11 +526,13 @@ model InsuranceInsuredPerson {
 }
 
 model ItemType {
-  id        String   @id @default(uuid()) @db.Uuid
-  ledgerId  String   @map("ledger_id") @db.Uuid
-  name      String
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String    @id @default(uuid()) @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  name       String
+  icon       String?
+  sortOrder  Int       @default(0) @map("sort_order")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
 
   @@map("item_types")
 }

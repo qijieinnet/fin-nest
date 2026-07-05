@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { AuthProvider } from "./AuthProvider";
+import { ConfirmProvider } from "./ConfirmProvider";
 import { DecimalPlacesProvider } from "./DecimalPlacesProvider";
 import { LedgerProvider } from "./LedgerProvider";
 import { PreferencesProvider } from "./PreferencesProvider";
@@ -17,7 +18,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <LedgerProvider>
             <DecimalPlacesProvider>
               <ToastProvider>
-                <SheetStackProvider>{children}</SheetStackProvider>
+                <ConfirmProvider>
+                  <SheetStackProvider>{children}</SheetStackProvider>
+                </ConfirmProvider>
               </ToastProvider>
             </DecimalPlacesProvider>
           </LedgerProvider>

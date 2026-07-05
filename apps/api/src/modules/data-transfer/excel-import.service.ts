@@ -995,8 +995,16 @@ export class ExcelImportService {
         );
         // CreateTransactionDto 不含保险/物品关联，链接需在交易创建后单独写入。
         for (const linked of [
-          ...planned.insuranceRefs.map((ref) => ({ linkedType: "insurance", linkedId: ref.id! })),
-          ...planned.itemRefs.map((ref) => ({ linkedType: "item", linkedId: ref.id! })),
+          ...planned.insuranceRefs.map((ref) => ({
+            linkedType: "insurance",
+            linkedId: ref.id!,
+            linkKind: "related",
+          })),
+          ...planned.itemRefs.map((ref) => ({
+            linkedType: "item",
+            linkedId: ref.id!,
+            linkKind: "consumable",
+          })),
         ]) {
           await tx.transactionLink.upsert({
             where: {
@@ -1007,7 +1015,7 @@ export class ExcelImportService {
               },
             },
             create: { ledgerId, transactionId: created.id, ...linked },
-            update: {},
+            update: { linkKind: linked.linkKind },
           });
         }
       }

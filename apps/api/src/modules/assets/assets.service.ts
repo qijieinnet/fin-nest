@@ -4,7 +4,13 @@ import { Prisma } from "@fin-nest/db";
 import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { CreateInsuranceDto, UpdateInsuranceDto } from "./dto/insurance.dto";
-import { CreateItemDto, CreateItemTypeDto, ScrapItemDto, UpdateItemDto } from "./dto/item.dto";
+import {
+  CreateItemDto,
+  CreateItemTypeDto,
+  ScrapItemDto,
+  UpdateItemDto,
+  UpdateItemTypeDto,
+} from "./dto/item.dto";
 
 @Injectable()
 export class AssetsService {
@@ -16,7 +22,10 @@ export class AssetsService {
 
   async listInsurances(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.insurance.findMany({ where: { ledgerId, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    return this.prisma.client.insurance.findMany({
+      where: { ledgerId, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
   }
 
   async getInsurance(ledgerId: string, insuranceId: string, userId: string) {
@@ -32,13 +41,20 @@ export class AssetsService {
   async createInsurance(ledgerId: string, userId: string, input: CreateInsuranceDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.$transaction(async (tx) => {
-      const insurance = await tx.insurance.create({ data: this.insuranceData(ledgerId, userId, input) });
+      const insurance = await tx.insurance.create({
+        data: this.insuranceData(ledgerId, userId, input),
+      });
       await this.replaceInsuredPeople(tx, ledgerId, insurance.id, input.insuredPersonIds ?? []);
       return insurance;
     });
   }
 
-  async updateInsurance(ledgerId: string, insuranceId: string, userId: string, input: UpdateInsuranceDto) {
+  async updateInsurance(
+    ledgerId: string,
+    insuranceId: string,
+    userId: string,
+    input: UpdateInsuranceDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertInsurance(ledgerId, insuranceId);
     return this.prisma.client.$transaction(async (tx) => {
@@ -46,7 +62,8 @@ export class AssetsService {
         where: { id: insuranceId },
         data: this.insuranceUpdateData(userId, input),
       });
-      if (input.insuredPersonIds) await this.replaceInsuredPeople(tx, ledgerId, insuranceId, input.insuredPersonIds);
+      if (input.insuredPersonIds)
+        await this.replaceInsuredPeople(tx, ledgerId, insuranceId, input.insuredPersonIds);
       return insurance;
     });
   }
@@ -54,31 +71,84 @@ export class AssetsService {
   async terminateInsurance(ledgerId: string, insuranceId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertInsurance(ledgerId, insuranceId);
-    return this.prisma.client.insurance.update({ where: { id: insuranceId }, data: { terminatedAt: new Date(), updatedBy: userId } });
+    return this.prisma.client.insurance.update({
+      where: { id: insuranceId },
+      data: { terminatedAt: new Date(), updatedBy: userId },
+    });
+  }
+
+  async resumeInsurance(ledgerId: string, insuranceId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertInsurance(ledgerId, insuranceId);
+    return this.prisma.client.insurance.update({
+      where: { id: insuranceId },
+      data: { terminatedAt: null, updatedBy: userId },
+    });
   }
 
   async deleteInsurance(ledgerId: string, insuranceId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertInsurance(ledgerId, insuranceId);
-    await this.prisma.client.insurance.update({ where: { id: insuranceId }, data: { deletedAt: new Date(), updatedBy: userId } });
+    await this.prisma.client.insurance.update({
+      where: { id: insuranceId },
+      data: { deletedAt: new Date(), updatedBy: userId },
+    });
     await this.files.deleteAttachmentsForOwner(ledgerId, "insurance", insuranceId);
   }
 
   async listItemTypes(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.itemType.findMany({ where: { ledgerId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
+    return this.prisma.client.itemType.findMany({
+      where: { ledgerId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
   }
 
   async createItemType(ledgerId: string, userId: string, input: CreateItemTypeDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.itemType.create({ data: { ledgerId, name: input.name, sortOrder: input.sortOrder ?? 0 } });
+    return this.prisma.client.itemType.create({
+      data: {
+        ledgerId,
+        name: input.name,
+        icon: input.icon ?? null,
+        sortOrder: input.sortOrder ?? 0,
+      },
+    });
+  }
+
+  async updateItemType(ledgerId: string, typeId: string, userId: string, input: UpdateItemTypeDto) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertItemType(ledgerId, typeId);
+    return this.prisma.client.itemType.update({
+      where: { id: typeId },
+      data: {
+        name: input.name,
+        icon: input.icon,
+        sortOrder: input.sortOrder,
+      },
+    });
+  }
+
+  // 归档而非删除：已记录的物品仍通过 typeId 显示类型名，仅从选择/管理列表隐藏。
+  async archiveItemType(ledgerId: string, typeId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertItemType(ledgerId, typeId);
+    await this.prisma.client.itemType.update({
+      where: { id: typeId },
+      data: { archivedAt: new Date() },
+    });
   }
 
   async listItems(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const items = await this.prisma.client.item.findMany({ where: { ledgerId, deletedAt: null }, orderBy: { createdAt: "asc" } });
+    const items = await this.prisma.client.item.findMany({
+      where: { ledgerId, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
     if (!items.length) return items;
-    const links = await this.prisma.client.transactionLink.findMany({ where: { ledgerId, linkedType: "item" } });
+    const links = await this.prisma.client.transactionLink.findMany({
+      where: { ledgerId, linkedType: "item", linkKind: "consumable" },
+    });
     const transactions = links.length
       ? await this.prisma.client.transaction.findMany({
           where: { id: { in: links.map((link) => link.transactionId) }, deletedAt: null },
@@ -90,10 +160,18 @@ export class AssetsService {
     for (const link of links) {
       const tx = transactionById.get(link.transactionId);
       if (!tx) continue;
-      const delta = tx.type === "expense" ? tx.effectiveAmountMicros : tx.type === "income" ? -tx.effectiveAmountMicros : 0n;
+      const delta =
+        tx.type === "expense"
+          ? tx.effectiveAmountMicros
+          : tx.type === "income"
+            ? -tx.effectiveAmountMicros
+            : 0n;
       consumablesByItem.set(link.linkedId, (consumablesByItem.get(link.linkedId) ?? 0n) + delta);
     }
-    return items.map((item) => ({ ...item, consumablesMicros: (consumablesByItem.get(item.id) ?? 0n).toString() }));
+    return items.map((item) => ({
+      ...item,
+      consumablesMicros: (consumablesByItem.get(item.id) ?? 0n).toString(),
+    }));
   }
 
   async getItem(ledgerId: string, itemId: string, userId: string) {
@@ -146,24 +224,41 @@ export class AssetsService {
   async deleteItem(ledgerId: string, itemId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertItem(ledgerId, itemId);
-    await this.prisma.client.item.update({ where: { id: itemId }, data: { deletedAt: new Date(), updatedBy: userId } });
+    await this.prisma.client.item.update({
+      where: { id: itemId },
+      data: { deletedAt: new Date(), updatedBy: userId },
+    });
     await this.files.deleteAttachmentsForOwner(ledgerId, "item", itemId);
   }
 
-  async linkTransaction(ledgerId: string, linkedType: "insurance" | "item", linkedId: string, transactionId: string, userId: string) {
+  async linkTransaction(
+    ledgerId: string,
+    linkedType: "insurance" | "item",
+    linkedId: string,
+    transactionId: string,
+    userId: string,
+    linkKind?: string,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     if (linkedType === "insurance") await this.assertInsurance(ledgerId, linkedId);
     if (linkedType === "item") await this.assertItem(ledgerId, linkedId);
-    const transaction = await this.prisma.client.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
+    const transaction = await this.prisma.client.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
     if (!transaction) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+    const normalizedKind = linkedType === "item" ? (linkKind ?? "consumable") : "related";
     return this.prisma.client.transactionLink.upsert({
       where: { transactionId_linkedType_linkedId: { transactionId, linkedType, linkedId } },
-      create: { ledgerId, transactionId, linkedType, linkedId },
-      update: {},
+      create: { ledgerId, transactionId, linkedType, linkedId, linkKind: normalizedKind },
+      update: { linkKind: normalizedKind },
     });
   }
 
-  private insuranceData(ledgerId: string, userId: string, input: CreateInsuranceDto): Prisma.InsuranceUncheckedCreateInput {
+  private insuranceData(
+    ledgerId: string,
+    userId: string,
+    input: CreateInsuranceDto,
+  ): Prisma.InsuranceUncheckedCreateInput {
     return {
       ledgerId,
       type: input.type,
@@ -185,7 +280,10 @@ export class AssetsService {
     };
   }
 
-  private insuranceUpdateData(userId: string, input: UpdateInsuranceDto): Prisma.InsuranceUncheckedUpdateInput {
+  private insuranceUpdateData(
+    userId: string,
+    input: UpdateInsuranceDto,
+  ): Prisma.InsuranceUncheckedUpdateInput {
     return {
       type: input.type,
       name: input.name,
@@ -205,7 +303,11 @@ export class AssetsService {
     };
   }
 
-  private itemData(ledgerId: string, userId: string, input: CreateItemDto): Prisma.ItemUncheckedCreateInput {
+  private itemData(
+    ledgerId: string,
+    userId: string,
+    input: CreateItemDto,
+  ): Prisma.ItemUncheckedCreateInput {
     return {
       ledgerId,
       name: input.name,
@@ -223,50 +325,85 @@ export class AssetsService {
     return {
       name: input.name,
       typeId: input.typeId,
-      purchasePriceMicros: input.purchasePriceMicros === undefined ? undefined : BigInt(input.purchasePriceMicros),
-      purchaseDate: input.purchaseDate === undefined ? undefined : parseDateOnly(input.purchaseDate),
-      expectedYears: input.expectedYears === undefined ? undefined : new Prisma.Decimal(input.expectedYears),
+      purchasePriceMicros:
+        input.purchasePriceMicros === undefined ? undefined : BigInt(input.purchasePriceMicros),
+      purchaseDate:
+        input.purchaseDate === undefined ? undefined : parseDateOnly(input.purchaseDate),
+      expectedYears:
+        input.expectedYears === undefined ? undefined : new Prisma.Decimal(input.expectedYears),
       note: input.note,
       updatedBy: userId,
     };
   }
 
   private async linkedTransactions(ledgerId: string, linkedType: string, linkedId: string) {
-    const links = await this.prisma.client.transactionLink.findMany({ where: { ledgerId, linkedType, linkedId } });
+    const links = await this.prisma.client.transactionLink.findMany({
+      where: { ledgerId, linkedType, linkedId },
+    });
+    const consumableTransactionIds =
+      linkedType === "item"
+        ? new Set(
+            links
+              .filter((link) => link.linkKind === "consumable")
+              .map((link) => link.transactionId),
+          )
+        : null;
     const transactions = links.length
       ? await this.prisma.client.transaction.findMany({
           where: { id: { in: links.map((link) => link.transactionId) }, deletedAt: null },
           orderBy: { occurredOn: "desc" },
         })
       : [];
-    const totalExpenseMicros = transactions.reduce((sum, tx) => sum + (tx.type === "expense" ? tx.effectiveAmountMicros : 0n), 0n);
-    return { transactionLinks: links, linkedTransactions: transactions, totalExpenseMicros: totalExpenseMicros.toString() };
+    const totalExpenseMicros = transactions.reduce((sum, tx) => {
+      if (consumableTransactionIds && !consumableTransactionIds.has(tx.id)) return sum;
+      return sum + (tx.type === "expense" ? tx.effectiveAmountMicros : 0n);
+    }, 0n);
+    return {
+      transactionLinks: links,
+      linkedTransactions: transactions,
+      totalExpenseMicros: totalExpenseMicros.toString(),
+    };
   }
 
   private itemUsage(item: Prisma.ItemGetPayload<Record<string, never>>) {
     if (!item.purchaseDate || !item.expectedYears) return { usagePercent: null };
     const totalMs = Number(item.expectedYears) * 365 * 24 * 60 * 60 * 1000;
     const usedMs = Date.now() - item.purchaseDate.getTime();
-    return { usagePercent: Math.max(0, Math.min(100, Math.round((usedMs / totalMs) * 10000) / 100)) };
+    return {
+      usagePercent: Math.max(0, Math.min(100, Math.round((usedMs / totalMs) * 10000) / 100)),
+    };
   }
 
-  private async replaceInsuredPeople(tx: Prisma.TransactionClient, ledgerId: string, insuranceId: string, personIds: string[]) {
+  private async replaceInsuredPeople(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    insuranceId: string,
+    personIds: string[],
+  ) {
     if (personIds.length) {
-      const count = await tx.person.count({ where: { ledgerId, id: { in: personIds }, archivedAt: null } });
+      const count = await tx.person.count({
+        where: { ledgerId, id: { in: personIds }, archivedAt: null },
+      });
       if (count !== personIds.length) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
     }
     await tx.insuranceInsuredPerson.deleteMany({ where: { insuranceId } });
-    await tx.insuranceInsuredPerson.createMany({ data: personIds.map((personId) => ({ insuranceId, personId })) });
+    await tx.insuranceInsuredPerson.createMany({
+      data: personIds.map((personId) => ({ insuranceId, personId })),
+    });
   }
 
   private async assertInsurance(ledgerId: string, insuranceId: string) {
-    const insurance = await this.prisma.client.insurance.findFirst({ where: { id: insuranceId, ledgerId, deletedAt: null } });
+    const insurance = await this.prisma.client.insurance.findFirst({
+      where: { id: insuranceId, ledgerId, deletedAt: null },
+    });
     if (!insurance) throw new AppError("INSURANCE_NOT_FOUND", "保险不存在", 404);
     return insurance;
   }
 
   private async assertItem(ledgerId: string, itemId: string) {
-    const item = await this.prisma.client.item.findFirst({ where: { id: itemId, ledgerId, deletedAt: null } });
+    const item = await this.prisma.client.item.findFirst({
+      where: { id: itemId, ledgerId, deletedAt: null },
+    });
     if (!item) throw new AppError("ITEM_NOT_FOUND", "物品不存在", 404);
     return item;
   }

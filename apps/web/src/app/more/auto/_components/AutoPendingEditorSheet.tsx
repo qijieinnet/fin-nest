@@ -166,6 +166,7 @@ export function AutoPendingEditorSheet({
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存待确认记录"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />

@@ -803,9 +803,14 @@ export class AutomationService {
     transactionId: string,
     links: { insuranceId: string | null; itemId: string | null },
   ): Promise<void> {
-    const targets: Array<{ linkedType: "insurance" | "item"; linkedId: string }> = [];
-    if (links.insuranceId) targets.push({ linkedType: "insurance", linkedId: links.insuranceId });
-    if (links.itemId) targets.push({ linkedType: "item", linkedId: links.itemId });
+    const targets: Array<{ linkedType: "insurance" | "item"; linkedId: string; linkKind: string }> =
+      [];
+    if (links.insuranceId) {
+      targets.push({ linkedType: "insurance", linkedId: links.insuranceId, linkKind: "related" });
+    }
+    if (links.itemId) {
+      targets.push({ linkedType: "item", linkedId: links.itemId, linkKind: "consumable" });
+    }
     for (const target of targets) {
       await tx.transactionLink.upsert({
         where: {
@@ -820,8 +825,9 @@ export class AutomationService {
           transactionId,
           linkedType: target.linkedType,
           linkedId: target.linkedId,
+          linkKind: target.linkKind,
         },
-        update: {},
+        update: { linkKind: target.linkKind },
       });
     }
   }

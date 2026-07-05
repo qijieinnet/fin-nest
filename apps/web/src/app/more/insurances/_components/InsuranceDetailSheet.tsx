@@ -1,10 +1,12 @@
 "use client";
 
-import { Ban, Edit3, Trash2 } from "lucide-react";
+import { Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { LoadingState } from "@/components/business";
 import { Button } from "@/components/ui";
 import type { Person } from "@/lib/api";
 import { useInsurance } from "@/lib/data/records";
+import { useSheetStack } from "@/providers";
+import { InsuranceTransactionList } from "./InsuranceTransactionList";
 import {
   formatDateLabel,
   formatMoney,
@@ -19,8 +21,10 @@ type InsuranceDetailSheetProps = {
   ledgerId: string;
   onDelete: () => void;
   onEdit: () => void;
+  onResume: () => void;
   onTerminate: () => void;
   people: Person[];
+  resuming?: boolean;
   terminating?: boolean;
 };
 
@@ -46,16 +50,32 @@ export function InsuranceDetailSheet({
   ledgerId,
   onDelete,
   onEdit,
+  onResume,
   onTerminate,
   people,
+  resuming = false,
   terminating = false,
 }: InsuranceDetailSheetProps) {
+  const { push } = useSheetStack();
   const detailQuery = useInsurance(ledgerId, insuranceId);
   const insurance = detailQuery.data;
 
   if (!insurance) {
     return <LoadingState rows={5} title="加载保单" />;
   }
+
+  const openLinkedTransactions = () => {
+    push({
+      title: "关联记账",
+      content: (
+        <InsuranceTransactionList
+          emptyText="还没有关联的记账，记账时打开「关联保险」即可归入此保单"
+          ledgerId={ledgerId}
+          transactions={insurance.linkedTransactions}
+        />
+      ),
+    });
+  };
 
   const meta = insuranceTypeMeta(insurance.type);
   const status = insuranceStatus(insurance);
@@ -67,8 +87,8 @@ export function InsuranceDetailSheet({
   const linked = insurance.linkedTransactions;
 
   return (
-    <div className="flex flex-col gap-4 pb-2">
-      <div className="flex items-center gap-3 rounded-[22px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <div className="flex w-full flex-col gap-4 pb-2">
+      <div className="flex items-center gap-3 rounded-[22px] bg-[var(--color-bg-surface)] p-4">
         <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[15px] bg-[var(--color-control-fill-muted)] text-[26px]">
           {meta.icon}
         </span>
@@ -85,13 +105,13 @@ export function InsuranceDetailSheet({
       </div>
 
       <section className="grid grid-cols-2 gap-3">
-        <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+        <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4">
           <div className="text-[11px] font-medium text-[var(--color-text-muted)]">保额</div>
           <div className="mt-1 text-[18px] font-bold text-[var(--color-text-primary)]">
             {formatMoney(insurance.coverageMicros)}
           </div>
         </div>
-        <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+        <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4">
           <div className="text-[11px] font-medium text-[var(--color-text-muted)]">{premiumLabel}</div>
           <div className="mt-1 text-[18px] font-bold text-[var(--color-text-primary)]">
             {formatMoney(insurance.premiumMicros)}
@@ -101,7 +121,7 @@ export function InsuranceDetailSheet({
 
       <section>
         <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">保单信息</h3>
-        <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+        <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailRow label="险种" value={meta.label} />
           {insurance.insurer ? <DetailRow label="保险公司" value={insurance.insurer} /> : null}
           {insuredNames ? <DetailRow label="被保人" value={insuredNames} /> : null}
@@ -120,7 +140,7 @@ export function InsuranceDetailSheet({
       {insurance.coverageDesc ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">保障内容</h3>
-          <div className="whitespace-pre-wrap rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
+          <div className="whitespace-pre-wrap rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {insurance.coverageDesc}
           </div>
         </section>
@@ -129,75 +149,67 @@ export function InsuranceDetailSheet({
       {insurance.note ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">备注</h3>
-          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
+          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {insurance.note}
           </div>
         </section>
       ) : null}
 
       <section>
-        <div className="mb-2 flex items-baseline justify-between px-1">
-          <h3 className="text-[13px] font-semibold text-[var(--color-text-muted)]">
-            关联记账 · {linked.length}
-          </h3>
-          {linked.length > 0 ? (
-            <span className="text-xs text-[var(--color-text-muted)]">
-              合计 {formatMoney(insurance.totalExpenseMicros)}
-            </span>
-          ) : null}
-        </div>
-        {linked.length === 0 ? (
-          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-5 text-center text-[13px] leading-5 text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-            还没有关联的记账
-            <br />
-            记账时打开「关联保险」即可把保费等记录归到此保单
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-            {linked.map((transaction) => {
-              const title =
-                transaction.categorySnapshot?.subcategoryName ??
-                transaction.categorySnapshot?.name ??
-                transaction.note ??
-                (transaction.type === "income" ? "收入" : "支出");
-              return (
-                <div
-                  className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-                  key={transaction.id}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14.5px] font-medium text-[var(--color-text-primary)]">{title}</div>
-                    <div className="mt-0.5 text-[11.5px] text-[var(--color-text-muted)]">
-                      {formatDateLabel(transaction.occurredOn)}
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[15px] font-semibold ${
-                      transaction.type === "income"
-                        ? "text-[var(--color-accent-income)]"
-                        : "text-[var(--color-text-primary)]"
-                    }`}
-                  >
-                    {formatMoney(transaction.grossAmountMicros)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">关联记账</h3>
+        <button
+          className="flex min-h-[52px] w-full items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-left"
+          onClick={openLinkedTransactions}
+          type="button"
+        >
+          <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
+            关联记账
+            {linked.length > 0 ? (
+              <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
+                合计 {formatMoney(insurance.totalExpenseMicros)}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
+            {linked.length} 条
+          </span>
+          <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
+        </button>
       </section>
 
       <div className="mt-2 flex flex-col gap-2">
-        <Button icon={<Edit3 size={17} />} onClick={onEdit} variant="secondary">
+        <Button
+          className="!bg-[var(--color-bg-surface)]"
+          icon={<Edit3 size={17} />}
+          onClick={onEdit}
+          variant="secondary"
+        >
           编辑保单
         </Button>
         {status.key === "active" ? (
-          <Button disabled={terminating} icon={<Ban size={17} />} onClick={onTerminate} variant="secondary">
+          <Button
+            className="!bg-[var(--color-bg-surface)]"
+            disabled={terminating}
+            icon={<Ban size={17} />}
+            onClick={onTerminate}
+            variant="secondary"
+          >
             {terminating ? "处理中…" : "终止续保"}
           </Button>
         ) : null}
+        {insurance.terminatedAt ? (
+          <Button
+            className="!bg-[var(--color-bg-surface)]"
+            disabled={resuming}
+            icon={<RotateCcw size={17} />}
+            onClick={onResume}
+            variant="secondary"
+          >
+            {resuming ? "处理中…" : "恢复保单"}
+          </Button>
+        ) : null}
         <Button
-          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
+          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           icon={<Trash2 size={17} />}
           onClick={onDelete}
           variant="danger"

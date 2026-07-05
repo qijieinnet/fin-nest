@@ -246,6 +246,7 @@ export class TransactionsService {
         });
 
         await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, input, normalized);
+        await this.replaceAssetLinks(tx, ledgerId, updated.id, input);
         await this.audit.write(
           {
             source: "user",
@@ -337,6 +338,7 @@ export class TransactionsService {
       },
     });
     await this.writeRelationsAndEntries(tx, ledgerId, transaction.id, userId, input, normalized);
+    await this.createAssetLinks(tx, ledgerId, transaction.id, input);
     return transaction;
   }
 
@@ -360,6 +362,9 @@ export class TransactionsService {
     }
     if (input.type === "transfer" && (!input.fromAccountId || !input.toAccountId)) {
       throw new AppError("TRANSFER_ACCOUNTS_REQUIRED", "转账必须选择转出和转入账户", 400);
+    }
+    if (input.type === "transfer" && (input.insuranceId || input.itemId)) {
+      throw new AppError("TRANSFER_ASSET_LINK_UNSUPPORTED", "转账不支持关联保险或物品", 400);
     }
     if (input.type !== "transfer" && input.accountId) {
       await this.accounts.assertActiveAccount(tx, ledgerId, input.accountId, input.subAccountId);
@@ -397,6 +402,7 @@ export class TransactionsService {
     if (relationTotal > grossAmountMicros) {
       throw new AppError("RELATION_AMOUNT_TOO_LARGE", "关联金额不能超过交易金额", 400);
     }
+    await this.validateAssetLinks(tx, ledgerId, input);
 
     // Transfers are not categorized; a stray categoryId must not trigger a (always-failing)
     // category lookup with type "transfer".
@@ -415,6 +421,95 @@ export class TransactionsService {
       ),
       personSnapshot: await this.personSnapshot(tx, ledgerId, input.personId),
     };
+  }
+
+  private async validateAssetLinks(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    input: CreateTransactionDto,
+  ) {
+    if (input.insuranceId) {
+      const insurance = await tx.insurance.findFirst({
+        where: { id: input.insuranceId, ledgerId, deletedAt: null },
+      });
+      if (!insurance) throw new AppError("INSURANCE_NOT_FOUND", "保险不存在", 404);
+    }
+    if (input.itemId) {
+      const item = await tx.item.findFirst({
+        where: { id: input.itemId, ledgerId, deletedAt: null },
+      });
+      if (!item) throw new AppError("ITEM_NOT_FOUND", "物品不存在", 404);
+    }
+  }
+
+  private async createAssetLinks(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    transactionId: string,
+    input: CreateTransactionDto,
+  ) {
+    if (input.insuranceId) {
+      await tx.transactionLink.create({
+        data: {
+          ledgerId,
+          transactionId,
+          linkedType: "insurance",
+          linkedId: input.insuranceId,
+          linkKind: "related",
+        },
+      });
+    }
+    if (input.itemId) {
+      await tx.transactionLink.create({
+        data: {
+          ledgerId,
+          transactionId,
+          linkedType: "item",
+          linkedId: input.itemId,
+          linkKind: input.itemLinkKind ?? "consumable",
+        },
+      });
+    }
+  }
+
+  private async replaceAssetLinks(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    transactionId: string,
+    input: UpdateTransactionDto,
+  ) {
+    if (Object.prototype.hasOwnProperty.call(input, "insuranceId")) {
+      await tx.transactionLink.deleteMany({
+        where: { ledgerId, transactionId, linkedType: "insurance" },
+      });
+      if (input.insuranceId) {
+        await tx.transactionLink.create({
+          data: {
+            ledgerId,
+            transactionId,
+            linkedType: "insurance",
+            linkedId: input.insuranceId,
+            linkKind: "related",
+          },
+        });
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "itemId")) {
+      await tx.transactionLink.deleteMany({
+        where: { ledgerId, transactionId, linkedType: "item" },
+      });
+      if (input.itemId) {
+        await tx.transactionLink.create({
+          data: {
+            ledgerId,
+            transactionId,
+            linkedType: "item",
+            linkedId: input.itemId,
+            linkKind: input.itemLinkKind ?? "consumable",
+          },
+        });
+      }
+    }
   }
 
   private async validateRelationAccounts(

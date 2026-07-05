@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Edit3, Plus, Trash2, Check, X, Repeat2 } from "lucide-react";
+import { ChevronLeft, Edit3, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { useState } from "react";
+import { PendingTransactionList } from "@/app/bills/pending/PendingTransactionList";
 import { AutoPendingEditorSheet } from "./_components/AutoPendingEditorSheet";
 import { AutoRuleDetailSheet } from "./_components/AutoRuleDetailSheet";
 import { AutoRuleEditorSheet } from "./_components/AutoRuleEditorSheet";
@@ -225,74 +226,6 @@ export function AutoScreen() {
     });
   };
 
-  const renderPendingRow = (item: AutoPendingTransaction) => {
-    const summary =
-      item.type === "transfer"
-        ? transferAccountSummary(
-            accounts,
-            item.fromAccountId,
-            item.fromSubAccountId,
-            item.toAccountId,
-            item.toSubAccountId,
-          )
-        : categorySummary(categories, item.categoryId, item.subcategoryId);
-    const account = accountSummary(accounts, item.accountId, item.subAccountId);
-    const meta = item.type === "transfer" ? summary.fullName : account.name;
-    const busy = confirmPending.isPending || deletePending.isPending || confirmBatch.isPending;
-    return (
-      <div
-        className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-        key={item.id}
-      >
-        <button
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-          onClick={() => openPendingEditor(item)}
-          type="button"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)] text-xl">
-            {summary.icon}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-semibold text-[var(--color-text-primary)]">
-              {summary.name}
-            </span>
-            <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-              {formatDateLabel(item.scheduledFor)} · {meta}
-              {item.note ? ` · ${item.note}` : ""}
-            </span>
-          </span>
-        </button>
-        <span className={`shrink-0 text-[15px] font-semibold ${amountToneClass(item.type)}`}>
-          {signedAmountText(item.type, item.amountMicros)}
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
-          <IconButton
-            className="!h-8 !w-8 !rounded-full"
-            disabled={busy}
-            icon={<Edit3 size={15} />}
-            label={`编辑${summary.name}`}
-            onClick={() => openPendingEditor(item)}
-          />
-          <IconButton
-            className="!h-8 !w-8 !rounded-full"
-            disabled={busy}
-            icon={<X size={15} />}
-            label={`忽略${summary.name}`}
-            onClick={() => deletePending.mutate(item.id)}
-          />
-          <IconButton
-            className="!h-8 !w-8 !rounded-full"
-            disabled={busy}
-            icon={<Check size={16} />}
-            label={`确认${summary.name}`}
-            onClick={() => confirmPending.mutate(item.id)}
-            variant="primary"
-          />
-        </div>
-      </div>
-    );
-  };
-
   const renderRuleRow = (rule: AutoRule) => {
     const summary =
       rule.type === "transfer"
@@ -368,6 +301,8 @@ export function AutoScreen() {
     );
   };
 
+  const pendingBusy = confirmBatch.isPending || confirmPending.isPending || deletePending.isPending;
+
   return (
     <MobileAppShell>
       <DeleteAutoRuleConfirmDialog
@@ -406,33 +341,30 @@ export function AutoScreen() {
           ) : (
             <>
               {pending.length > 0 ? (
-                <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-                  <div className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]">
-                      <Repeat2 size={20} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <strong className="block text-[15px] text-[var(--color-text-primary)]">
-                        待确认
-                      </strong>
-                      <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                        {pending.length} 条自动生成记录等待入账
-                      </span>
+                <section className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <span className="text-[13px] font-semibold text-[var(--color-text-secondary)]">
+                      待确认 · {pending.length} 条
                     </span>
                     <Button
                       className="!h-9 !px-3 !text-sm"
-                      disabled={
-                        confirmBatch.isPending ||
-                        confirmPending.isPending ||
-                        deletePending.isPending
-                      }
+                      disabled={pendingBusy}
                       onClick={() => confirmBatch.mutate(pending.map((item) => item.id))}
                       variant="primary"
                     >
                       全部确认
                     </Button>
                   </div>
-                  {pending.map(renderPendingRow)}
+                  <PendingTransactionList
+                    accounts={accounts}
+                    busy={pendingBusy}
+                    categories={categories}
+                    items={pending}
+                    onConfirm={(item) => confirmPending.mutate(item.id)}
+                    onDelete={(item) => deletePending.mutate(item.id)}
+                    onEdit={openPendingEditor}
+                    onOpen={(item) => router.push(routes.billPending(item.id))}
+                  />
                 </section>
               ) : null}
 

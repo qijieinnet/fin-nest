@@ -7,7 +7,7 @@ export class CreateLedgerDto {
   @Length(1, 80)
   name!: string;
 
-  @ApiPropertyOptional({ example: "home" })
+  @ApiPropertyOptional({ example: "🏠" })
   @IsOptional()
   @IsString()
   @Length(1, 40)

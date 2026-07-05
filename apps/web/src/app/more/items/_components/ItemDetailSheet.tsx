@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { LoadingState } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
@@ -10,7 +10,8 @@ import {
   type ItemType,
 } from "@/lib/api";
 import { useAttachments, useItem } from "@/lib/data/records";
-import { useToast } from "@/providers";
+import { useSheetStack, useToast } from "@/providers";
+import { ItemTransactionList } from "./ItemTransactionList";
 import {
   consumablesFromTransactions,
   formatAverage,
@@ -19,9 +20,9 @@ import {
   formatMoney,
   itemStatus,
   itemTotalMicros,
-  itemTypeIcon,
   itemUsedMonths,
   itemUsedYears,
+  typeGlyph,
 } from "./item-utils";
 
 type ItemDetailSheetProps = {
@@ -54,7 +55,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4">
       <div className="text-[11px] font-medium text-[var(--color-text-muted)]">{label}</div>
       <div className="mt-1 text-[18px] font-bold text-[var(--color-text-primary)]">{value}</div>
     </div>
@@ -72,6 +73,7 @@ export function ItemDetailSheet({
   restoring = false,
 }: ItemDetailSheetProps) {
   const { showToast } = useToast();
+  const { push } = useSheetStack();
   const detailQuery = useItem(ledgerId, itemId);
   const attachmentsQuery = useAttachments(ledgerId, "item", itemId);
   const item = detailQuery.data;
@@ -80,9 +82,17 @@ export function ItemDetailSheet({
     return <LoadingState rows={5} title="加载物品" />;
   }
 
-  const typeName = itemTypes.find((type) => type.id === item.typeId)?.name ?? "其他";
+  const type = itemTypes.find((entry) => entry.id === item.typeId);
+  const typeName = type?.name ?? "其他";
   const status = itemStatus(item);
-  const consumables = consumablesFromTransactions(item.linkedTransactions);
+  const consumableTransactionIds = new Set(
+    item.transactionLinks
+      .filter((link) => link.linkKind === "consumable")
+      .map((link) => link.transactionId),
+  );
+  const consumables = consumablesFromTransactions(
+    item.linkedTransactions.filter((transaction) => consumableTransactionIds.has(transaction.id)),
+  );
   const total = itemTotalMicros(item, consumables);
   const usedYears = itemUsedYears(item);
   const usedMonths = itemUsedMonths(item);
@@ -90,6 +100,20 @@ export function ItemDetailSheet({
   const expected = Number(item.expectedYears ?? 0);
   const linked = item.linkedTransactions;
   const attachments = attachmentsQuery.data ?? [];
+
+  const openLinkedTransactions = () => {
+    push({
+      title: "关联记账",
+      content: (
+        <ItemTransactionList
+          emptyText="还没有关联的记账，记账时打开「关联物品」即可归入此物品"
+          ledgerId={ledgerId}
+          transactionLinks={item.transactionLinks}
+          transactions={linked}
+        />
+      ),
+    });
+  };
 
   async function openAttachment(attachmentId: string) {
     try {
@@ -103,19 +127,23 @@ export function ItemDetailSheet({
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-2">
-      <div className="flex items-center gap-3 rounded-[22px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <div className="flex flex-col gap-4 pb-2 flex-1">
+      <div className="flex items-center gap-3 rounded-[22px] bg-[var(--color-bg-surface)] p-4">
         <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[15px] bg-[var(--color-control-fill-muted)] text-[26px]">
-          {itemTypeIcon(typeName)}
+          {typeGlyph(type)}
         </span>
         <span className="min-w-0 flex-1">
-          <strong className="block truncate text-[19px] text-[var(--color-text-primary)]">{item.name}</strong>
+          <strong className="block truncate text-[19px] text-[var(--color-text-primary)]">
+            {item.name}
+          </strong>
           <span className="mt-0.5 block truncate text-[13px] text-[var(--color-text-muted)]">
             {typeName}
             {hasPurchaseDate ? ` · 购于 ${formatDateLabel(item.purchaseDate)}` : ""}
           </span>
         </span>
-        <span className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[status.tone]}`}>
+        <span
+          className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[status.tone]}`}
+        >
           {status.label}
         </span>
       </div>
@@ -123,19 +151,39 @@ export function ItemDetailSheet({
       <section className="grid grid-cols-2 gap-3">
         <StatCell label="总价" value={formatMoney(total)} />
         <StatCell label="购买价格" value={formatMoney(item.purchasePriceMicros ?? "0")} />
-        <StatCell label="平均年价" value={hasPurchaseDate ? formatAverage(total, usedYears) : "—"} />
-        <StatCell label="平均月价" value={hasPurchaseDate ? formatAverage(total, usedMonths) : "—"} />
+        <StatCell
+          label="平均年价"
+          value={hasPurchaseDate ? formatAverage(total, usedYears) : "—"}
+        />
+        <StatCell
+          label="平均月价"
+          value={hasPurchaseDate ? formatAverage(total, usedMonths) : "—"}
+        />
       </section>
 
       <section>
-        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">物品信息</h3>
-        <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+          物品信息
+        </h3>
+        <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailRow label="类型" value={typeName} />
           <DetailRow label="购买价格" value={formatMoney(item.purchasePriceMicros ?? "0")} />
-          <DetailRow label="购买日期" value={hasPurchaseDate ? formatDateLabel(item.purchaseDate) : "未设置"} />
-          <DetailRow label="预用年限" value={expected > 0 ? `${formatFixed1(expected)} 年` : "未设置"} />
-          <DetailRow label="使用年份" value={hasPurchaseDate ? `${formatFixed1(usedYears)} 年` : "—"} />
-          <DetailRow label="使用月份" value={hasPurchaseDate ? `${formatFixed1(usedMonths)} 个月` : "—"} />
+          <DetailRow
+            label="购买日期"
+            value={hasPurchaseDate ? formatDateLabel(item.purchaseDate) : "未设置"}
+          />
+          <DetailRow
+            label="预用年限"
+            value={expected > 0 ? `${formatFixed1(expected)} 年` : "未设置"}
+          />
+          <DetailRow
+            label="使用年份"
+            value={hasPurchaseDate ? `${formatFixed1(usedYears)} 年` : "—"}
+          />
+          <DetailRow
+            label="使用月份"
+            value={hasPurchaseDate ? `${formatFixed1(usedMonths)} 个月` : "—"}
+          />
           <DetailRow label="耗材总价" value={formatMoney(consumables)} />
           <DetailRow
             label="到达年限"
@@ -155,8 +203,10 @@ export function ItemDetailSheet({
 
       {item.note ? (
         <section>
-          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">备注</h3>
-          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
+          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+            备注
+          </h3>
+          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {item.note}
           </div>
         </section>
@@ -167,7 +217,7 @@ export function ItemDetailSheet({
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
             附件 · {attachments.length} 个
           </h3>
-          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
             {attachments.map((attachment) => (
               <button
                 className="flex w-full items-center gap-3 px-4 py-3 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
@@ -188,70 +238,60 @@ export function ItemDetailSheet({
       ) : null}
 
       <section>
-        <div className="mb-2 flex items-baseline justify-between px-1">
-          <h3 className="text-[13px] font-semibold text-[var(--color-text-muted)]">
-            关联记账 · {linked.length}
-          </h3>
-          {linked.length > 0 ? (
-            <span className="text-xs text-[var(--color-text-muted)]">耗材 {formatMoney(consumables)}</span>
-          ) : null}
-        </div>
-        {linked.length === 0 ? (
-          <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-5 text-center text-[13px] leading-5 text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-            还没有关联的记账
-            <br />
-            记账时打开「关联物品」即可把耗材开销归到此物品
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-            {linked.map((transaction) => {
-              const title =
-                transaction.categorySnapshot?.subcategoryName ??
-                transaction.categorySnapshot?.name ??
-                transaction.note ??
-                (transaction.type === "income" ? "收入" : "支出");
-              return (
-                <div
-                  className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-                  key={transaction.id}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14.5px] font-medium text-[var(--color-text-primary)]">{title}</div>
-                    <div className="mt-0.5 text-[11.5px] text-[var(--color-text-muted)]">
-                      {formatDateLabel(transaction.occurredOn)}
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[15px] font-semibold ${
-                      transaction.type === "income"
-                        ? "text-[var(--color-accent-income)]"
-                        : "text-[var(--color-text-primary)]"
-                    }`}
-                  >
-                    {formatMoney(transaction.grossAmountMicros)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+          关联记账
+        </h3>
+        <button
+          className="flex min-h-[52px] w-full items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-left"
+          onClick={openLinkedTransactions}
+          type="button"
+        >
+          <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
+            关联记账
+            {linked.length > 0 ? (
+              <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
+                耗材 {formatMoney(consumables)}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
+            {linked.length} 条
+          </span>
+          <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
+        </button>
       </section>
 
       <div className="mt-2 flex flex-col gap-2">
-        <Button icon={<Edit3 size={17} />} onClick={onEdit} variant="secondary">
+        <Button
+          className="!bg-[var(--color-bg-surface)]"
+          icon={<Edit3 size={17} />}
+          onClick={onEdit}
+          variant="secondary"
+        >
           编辑物品
         </Button>
         {item.scrappedAt ? (
-          <Button disabled={restoring} icon={<RotateCcw size={17} />} onClick={onRestore} variant="secondary">
+          <Button
+            className="!bg-[var(--color-bg-surface)]"
+            disabled={restoring}
+            icon={<RotateCcw size={17} />}
+            onClick={onRestore}
+            variant="secondary"
+          >
             {restoring ? "处理中…" : "恢复在用"}
           </Button>
         ) : (
-          <Button icon={<Archive size={17} />} onClick={onScrap} variant="secondary">
+          <Button
+            className="!bg-[var(--color-bg-surface)]"
+            icon={<Archive size={17} />}
+            onClick={onScrap}
+            variant="secondary"
+          >
             报废或出售
           </Button>
         )}
         <Button
-          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
+          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           icon={<Trash2 size={17} />}
           onClick={onDelete}
           variant="danger"

@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
-import { IconButton, Input } from "@/components/ui";
+import { IconButton, PopoverMenu } from "@/components/ui";
 import {
   apiRequest,
   createAuthorizedObjectUrl,
@@ -14,7 +15,6 @@ import {
   type Person,
   uploadAttachmentFile,
 } from "@/lib/api";
-import { cn } from "@/lib/format/class-names";
 import { useAttachments, useInsurance } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
@@ -26,6 +26,7 @@ import {
   PREMIUM_FREQ_OPTIONS,
   RENEWAL_OPTIONS,
   todayKey,
+  todayPlusYearsKey,
 } from "./insurance-utils";
 
 type InsuranceEditorSheetProps = {
@@ -36,42 +37,193 @@ type InsuranceEditorSheetProps = {
 
 type PendingAttachment = AttachmentItem & { file: File };
 
-function Chip({
-  active,
-  icon,
+/** 多选行：点按弹出 PopoverMenu 勾选（被保人可多选；勾选后菜单关闭，再点开可继续增减）。 */
+function MultiSelectRow({
+  emptyLabel,
   label,
-  onClick,
+  onToggle,
+  options,
+  placeholder,
+  values,
 }: {
-  active: boolean;
-  icon?: string;
+  emptyLabel: string;
   label: string;
-  onClick: () => void;
+  onToggle: (value: string) => void;
+  options: ReadonlyArray<{ label: string; value: string }>;
+  placeholder: string;
+  values: string[];
 }) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = options
+    .filter((option) => values.includes(option.value))
+    .map((option) => option.label);
+  const isEmpty = options.length === 0;
+  const display = isEmpty
+    ? emptyLabel
+    : selectedLabels.length > 0
+      ? selectedLabels.join("、")
+      : placeholder;
   return (
-    <button
-      className={cn(
-        "flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors",
-        active
-          ? "bg-[var(--color-tint)] text-[var(--color-tint-contrast)]"
-          : "bg-[var(--color-control-fill-muted)] text-[var(--color-text-secondary)]",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {icon ? <span>{icon}</span> : null}
-      {label}
-    </button>
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          disabled={isEmpty}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>{label}</span>
+          <strong>{display}</strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              label: option.label,
+              onSelect: () => onToggle(option.value),
+              selected: values.includes(option.value),
+            })),
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
+      </div>
+    </div>
   );
 }
 
-function Section({ children, title }: { children: React.ReactNode; title: string }) {
+/** 记一笔风格的整卡输入行：标签在左，输入右对齐。 */
+function FieldRow({
+  inputMode,
+  label,
+  maxLength,
+  onChange,
+  placeholder,
+  prefix,
+  value,
+}: {
+  inputMode?: "decimal" | "numeric" | "text";
+  label: string;
+  maxLength?: number;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  prefix?: string;
+  value: string;
+}) {
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{title}</h3>
-      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <label className="account-form__field-row">
+      <span>{label}</span>
+      <span className="account-form__input-wrap">
+        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
+        <input
+          className="account-form__input"
+          inputMode={inputMode}
+          maxLength={maxLength}
+          onChange={onChange}
+          placeholder={placeholder}
+          value={value}
+        />
+      </span>
+    </label>
+  );
+}
+
+/** 记一笔风格的选值行：点按弹出 PopoverMenu 选择（用于险种、缴费周期等枚举）。 */
+function SelectRow({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: ReadonlyArray<{ icon?: string; label: string; value: string }>;
+  value: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+  return (
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>{label}</span>
+          <strong>
+            {selected ? `${selected.icon ? `${selected.icon} ` : ""}${selected.label}` : "请选择"}
+          </strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              icon: option.icon ? <span>{option.icon}</span> : undefined,
+              label: option.label,
+              onSelect: () => onChange(option.value),
+              selected: option.value === value,
+            })),
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** 带标题的整卡容器，用于承载 chip 组、多行文本等非行内内容。 */
+function LabeledCard({
+  children,
+  hint,
+  label,
+}: {
+  children: ReactNode;
+  hint?: string;
+  label: string;
+}) {
+  return (
+    <div className="transaction-form__card">
+      <div className="flex flex-col gap-2.5 px-4 py-3.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+            {label}
+          </span>
+          {hint ? <span className="text-[12px] text-[var(--color-text-muted)]">{hint}</span> : null}
+        </div>
         {children}
       </div>
-    </section>
+    </div>
+  );
+}
+
+/** 日期行：未设置时点按填入今天，已设置后展示滚轮选择器（与账户表单一致）。 */
+function DateFieldRow({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  if (!value) {
+    return (
+      <div className="transaction-form__date-card">
+        <button className="biz-date-picker" onClick={() => onChange(todayKey())} type="button">
+          <span className="biz-date-popover__summary">
+            <span>{label}</span>
+            <strong>未选择</strong>
+          </span>
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="transaction-form__date-card">
+      <DateWheelPicker label={label} onValueChange={onChange} value={value} />
+    </div>
   );
 }
 
@@ -103,14 +255,21 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const [premiumFreq, setPremiumFreq] = useState(insurance?.premiumFreq ?? "year");
   const [periods, setPeriods] = useState(insurance?.periods ? String(insurance.periods) : "");
   const [renewal, setRenewal] = useState(insurance?.renewal ?? "auto");
-  const [startDate, setStartDate] = useState(insurance?.startDate?.slice(0, 10) ?? "");
-  const [endDate, setEndDate] = useState(insurance?.endDate?.slice(0, 10) ?? "");
+  // 新建保单默认生效日为今天、到期日为次年今天；编辑时沿用已有值（可为空）。
+  const [startDate, setStartDate] = useState(
+    insurance ? (insurance.startDate?.slice(0, 10) ?? "") : todayKey(),
+  );
+  const [endDate, setEndDate] = useState(
+    insurance ? (insurance.endDate?.slice(0, 10) ?? "") : todayPlusYearsKey(1),
+  );
   const [coverageDesc, setCoverageDesc] = useState(insurance?.coverageDesc ?? "");
   const [note, setNote] = useState(insurance?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const pendingRef = useRef<PendingAttachment[]>([]);
   const seededInsured = useRef(false);
+  const seededAttachments = useRef(false);
 
   // 编辑模式下，被保人来自详情接口，加载后回填一次（不覆盖用户后续修改）。
   useEffect(() => {
@@ -120,6 +279,15 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       seededInsured.current = true;
     }
   }, [detailQuery.data]);
+
+  // 已有附件时默认展开附件区域，其余情况默认关闭，需手动打开再上传。
+  useEffect(() => {
+    if (seededAttachments.current) return;
+    const records = existingAttachmentsQuery.data;
+    if (!records) return;
+    seededAttachments.current = true;
+    if (records.length > 0) setAttachmentsEnabled(true);
+  }, [existingAttachmentsQuery.data]);
 
   useEffect(() => {
     pendingRef.current = pendingAttachments;
@@ -149,7 +317,6 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
   const freqIsSingle = premiumFreq === "single";
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length > 0;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -258,216 +425,164 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
     );
   };
 
+  const canSubmit = trimmedName.length > 0 && !save.isPending;
+
   return (
     <form
-      className="flex flex-col gap-4 pb-4"
+      className="transaction-form flex min-h-0 flex-1 flex-col !gap-0 !pb-0"
       onSubmit={(event) => {
         event.preventDefault();
         if (canSubmit && !save.isPending) save.mutate();
       }}
     >
-      <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
+      <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {isEditing ? "编辑保单" : "添加保单"}
         </h2>
         <IconButton
-          disabled={!canSubmit || save.isPending}
+          disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存保单"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />
       </div>
 
-      <Input
-        aria-label="保单名称"
-        label="保单名称"
-        maxLength={120}
-        onChange={(event) => setName(event.target.value)}
-        placeholder="如：百万医疗险"
-        value={name}
-      />
-
-      <Section title="险种">
-        <div className="flex flex-wrap gap-2">
-          {INSURANCE_TYPES.map((option) => (
-            <Chip
-              active={type === option.value}
-              icon={option.icon}
-              key={option.value}
-              label={option.label}
-              onClick={() => setType(option.value)}
+      <div className="sheet-form-scroll flex-1 pb-6">
+        <div className="transaction-form__cards">
+          <div className="transaction-form__card">
+            <FieldRow
+              label="保单名称"
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="如：百万医疗险"
+              value={name}
             />
-          ))}
-        </div>
-      </Section>
-
-      <div className="flex flex-col gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-        <Input
-          label="保险公司"
-          onChange={(event) => setInsurer(event.target.value)}
-          placeholder="如：平安保险"
-          value={insurer}
-        />
-        <Input
-          label="保单号"
-          onChange={(event) => setPolicyNo(event.target.value)}
-          placeholder="选填"
-          value={policyNo}
-        />
-        <Input
-          label="投保方式"
-          onChange={(event) => setMethod(event.target.value)}
-          placeholder="选填，如 线上自助 / 代理人"
-          value={method}
-        />
-      </div>
-
-      <Section title="被保人 · 可多选">
-        {people.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">
-            还没有人员，可到「人员管理」中添加
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {people.map((person) => (
-              <Chip
-                active={insuredIds.includes(person.id)}
-                key={person.id}
-                label={person.name}
-                onClick={() => toggleInsured(person.id)}
-              />
-            ))}
           </div>
-        )}
-      </Section>
 
-      <div className="flex flex-col gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-        <Input
-          inputMode="decimal"
-          label="保额"
-          onChange={(event) => setCoverage(event.target.value)}
-          placeholder="0"
-          prefix="¥"
-          value={coverage}
-        />
-        <div className="flex flex-col gap-1.5">
-          <span className="ui-field__label px-0.5">缴费周期</span>
-          <div className="flex flex-wrap gap-2">
-            {PREMIUM_FREQ_OPTIONS.map((option) => (
-              <Chip
-                active={premiumFreq === option.value}
-                key={option.value}
-                label={option.label}
-                onClick={() => setPremiumFreq(option.value)}
-              />
-            ))}
-          </div>
-        </div>
-        <Input
-          inputMode="decimal"
-          label={freqIsSingle ? "保费" : premiumFreq === "month" ? "每月保费" : "每年保费"}
-          onChange={(event) => setPremium(event.target.value)}
-          placeholder="0"
-          prefix="¥"
-          value={premium}
-        />
-        {!freqIsSingle ? (
-          <>
-            <Input
-              inputMode="numeric"
-              label="缴费期数（选填）"
-              onChange={(event) => setPeriods(event.target.value)}
-              placeholder="如：20"
-              value={periods}
+          <SelectRow label="险种" onChange={setType} options={INSURANCE_TYPES} value={type} />
+
+          <div className="transaction-form__card">
+            <FieldRow
+              label="保险公司"
+              maxLength={80}
+              onChange={(event) => setInsurer(event.target.value)}
+              placeholder="如：平安保险"
+              value={insurer}
             />
-            <div className="flex flex-col gap-1.5">
-              <span className="ui-field__label px-0.5">续费</span>
-              <div className="flex flex-wrap gap-2">
-                {RENEWAL_OPTIONS.map((option) => (
-                  <Chip
-                    active={renewal === option.value}
-                    key={option.value}
-                    label={option.label}
-                    onClick={() => setRenewal(option.value)}
-                  />
-                ))}
-              </div>
-            </div>
-          </>
-        ) : null}
-      </div>
+            <span className="transaction-form__divider" />
+            <FieldRow
+              label="保单号"
+              maxLength={80}
+              onChange={(event) => setPolicyNo(event.target.value)}
+              placeholder="选填"
+              value={policyNo}
+            />
+            <span className="transaction-form__divider" />
+            <FieldRow
+              label="投保方式"
+              maxLength={40}
+              onChange={(event) => setMethod(event.target.value)}
+              placeholder="线上自助 / 代理人"
+              value={method}
+            />
+          </div>
 
-      <Section title="保障期间">
-        <div className="flex flex-col gap-3">
-          <OptionalDateRow label="生效日" onChange={setStartDate} value={startDate} />
-          <OptionalDateRow label="到期日" onChange={setEndDate} value={endDate} />
+          <MultiSelectRow
+            emptyLabel="请先到人员管理添加"
+            label="被保人"
+            onToggle={toggleInsured}
+            options={people.map((person) => ({ label: person.name, value: person.id }))}
+            placeholder="选择被保人（可多选）"
+            values={insuredIds}
+          />
+
+          <SelectRow
+            label="缴费周期"
+            onChange={setPremiumFreq}
+            options={PREMIUM_FREQ_OPTIONS}
+            value={premiumFreq}
+          />
+
+          <div className="transaction-form__card">
+            <FieldRow
+              inputMode="decimal"
+              label="保额"
+              onChange={(event) => setCoverage(event.target.value)}
+              placeholder="0.00"
+              prefix="¥"
+              value={coverage}
+            />
+            <span className="transaction-form__divider" />
+            <FieldRow
+              inputMode="decimal"
+              label={freqIsSingle ? "保费" : premiumFreq === "month" ? "每月保费" : "每年保费"}
+              onChange={(event) => setPremium(event.target.value)}
+              placeholder="0.00"
+              prefix="¥"
+              value={premium}
+            />
+            {!freqIsSingle ? (
+              <>
+                <span className="transaction-form__divider" />
+                <FieldRow
+                  inputMode="numeric"
+                  label="缴费期数"
+                  onChange={(event) => setPeriods(event.target.value)}
+                  placeholder="选填，如 20"
+                  value={periods}
+                />
+              </>
+            ) : null}
+          </div>
+
+          {!freqIsSingle ? (
+            <SelectRow
+              label="续费"
+              onChange={setRenewal}
+              options={RENEWAL_OPTIONS}
+              value={renewal}
+            />
+          ) : null}
+
+          <div className="transaction-form__card">
+            <DateFieldRow label="生效日" onChange={setStartDate} value={startDate} />
+            <span className="transaction-form__divider" />
+            <DateFieldRow label="到期日" onChange={setEndDate} value={endDate} />
+          </div>
+
+          <AttachmentPicker
+            accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
+            enabled={attachmentsEnabled}
+            items={attachmentItems}
+            onEnabledChange={setAttachmentsEnabled}
+            onFilesSelected={addFiles}
+            onOpen={openAttachment}
+            onRemove={removeAttachment}
+          />
+
+          <LabeledCard label="保障内容">
+            <textarea
+              className="min-h-[76px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
+              onChange={(event) => setCoverageDesc(event.target.value)}
+              placeholder="选填，如 一般医疗+重疾医疗，0免赔…"
+              value={coverageDesc}
+            />
+          </LabeledCard>
+
+          <LabeledCard label="备注">
+            <textarea
+              className="min-h-[52px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
+              maxLength={240}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="选填，如 含三者险 / 缴费方式…"
+              value={note}
+            />
+          </LabeledCard>
         </div>
-      </Section>
-
-      <AttachmentPicker
-        accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
-        enabled
-        items={attachmentItems}
-        onFilesSelected={addFiles}
-        onOpen={openAttachment}
-        onRemove={removeAttachment}
-      />
-
-      <Section title="保障内容">
-        <textarea
-          className="min-h-[78px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none"
-          onChange={(event) => setCoverageDesc(event.target.value)}
-          placeholder="选填，如 一般医疗+重疾医疗，0免赔…"
-          value={coverageDesc}
-        />
-      </Section>
-
-      <Input
-        label="备注"
-        maxLength={240}
-        onChange={(event) => setNote(event.target.value)}
-        placeholder="选填，如 含三者险 / 缴费方式…"
-        value={note}
-      />
+      </div>
     </form>
-  );
-}
-
-function OptionalDateRow({
-  label,
-  onChange,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  if (!value) {
-    return (
-      <button
-        className="flex items-center justify-between rounded-[12px] bg-[var(--color-control-fill-muted)] px-4 py-3 text-[15px] text-[var(--color-text-secondary)]"
-        onClick={() => onChange(todayKey())}
-        type="button"
-      >
-        <span>{label}</span>
-        <span className="text-[var(--color-text-muted)]">点击选择</span>
-      </button>
-    );
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <div className="min-w-0 flex-1">
-        <DateWheelPicker label={label} onValueChange={onChange} value={value} />
-      </div>
-      <button
-        className="shrink-0 text-[13px] text-[var(--color-text-muted)]"
-        onClick={() => onChange("")}
-        type="button"
-      >
-        清除
-      </button>
-    </div>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui";
 import { ToggleCard } from "./TransactionFieldRows";
 import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 
@@ -16,7 +18,9 @@ type AssetLinkCardProps = {
   hint: string;
   items: AssetLinkOption[];
   label: string;
+  createLabel?: string;
   onCheckedChange: (checked: boolean) => void;
+  onCreate?: () => void;
   onSelect: (id: string | null) => void;
   selectedId: string | null;
 };
@@ -28,7 +32,9 @@ export function AssetLinkCard({
   hint,
   items,
   label,
+  createLabel,
   onCheckedChange,
+  onCreate,
   onSelect,
   selectedId,
 }: AssetLinkCardProps) {
@@ -45,18 +51,32 @@ export function AssetLinkCard({
   return (
     <ToggleCard checked={checked} hint={hint} label={label} onCheckedChange={onCheckedChange}>
       {items.length === 0 ? (
-        <p className="transaction-form__empty-text">{emptyText}</p>
+        <div className="flex flex-col gap-3">
+          <p className="transaction-form__empty-text">{emptyText}</p>
+          {onCreate ? (
+            <Button icon={<Plus size={16} />} onClick={onCreate} type="button" variant="secondary">
+              {createLabel ?? `新建${label}`}
+            </Button>
+          ) : null}
+        </div>
       ) : (
-        <SearchableOptionSelectRow
-          emptyText={emptyText}
-          hideLabel
-          label={label}
-          onValueChange={onSelect}
-          options={options}
-          placeholder={`选择${label}`}
-          searchPlaceholder={`搜索${label}`}
-          value={selectedId}
-        />
+        <div className="flex flex-col gap-3">
+          <SearchableOptionSelectRow
+            emptyText={emptyText}
+            hideLabel
+            label={label}
+            onValueChange={onSelect}
+            options={options}
+            placeholder={`选择${label}`}
+            searchPlaceholder={`搜索${label}`}
+            value={selectedId}
+          />
+          {onCreate ? (
+            <Button icon={<Plus size={16} />} onClick={onCreate} type="button" variant="secondary">
+              {createLabel ?? `新建${label}`}
+            </Button>
+          ) : null}
+        </div>
       )}
     </ToggleCard>
   );

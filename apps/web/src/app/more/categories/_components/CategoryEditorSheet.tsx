@@ -12,7 +12,7 @@ import {
   type Subcategory,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useConfirm, useSheetStack, useToast } from "@/providers";
 
 type CategoryKind = "expense" | "income";
 
@@ -36,6 +36,7 @@ export function CategoryEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const editingItem = subcategory ?? category;
   const isSubcategory = Boolean(parentCategory);
   const isEditing = Boolean(editingItem);
@@ -109,9 +110,14 @@ export function CategoryEditorSheet({
     if (canSubmit) save.mutate();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!isEditing || remove.isPending) return;
-    const confirmed = window.confirm(`删除分类「${editingItem?.name}」？有关联账单时会自动归档。`);
+    const confirmed = await confirm({
+      title: `删除${isSubcategory ? "子分类" : "分类"}「${editingItem?.name}」？`,
+      message: "有关联账单时会自动归档。",
+      confirmText: "删除",
+      tone: "danger",
+    });
     if (confirmed) remove.mutate();
   };
 
@@ -124,6 +130,7 @@ export function CategoryEditorSheet({
             disabled={!canSubmit}
             icon={<Check size={24} strokeWidth={2.6} />}
             label="保存分类"
+            loading={save.isPending}
             onClick={submit}
             variant="primary"
           />
@@ -138,13 +145,12 @@ export function CategoryEditorSheet({
         <div className="flex items-center gap-3.5">
           <span
             aria-hidden
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-bg-surface)] text-[24px] leading-none shadow-[var(--shadow-soft)]"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[13px] bg-white text-[24px] leading-none"
           >
             {icon}
           </span>
           <input
-            autoFocus
-            className="h-12 min-w-0 flex-1 rounded-[13px] border-0 bg-[var(--color-bg-surface)] px-4 text-[17px] font-medium text-[var(--color-text-primary)] shadow-[var(--shadow-soft)] outline-none ring-0 placeholder:text-[var(--color-text-muted)] focus:border-0 focus:outline-none focus:ring-0 focus-visible:border-0 focus-visible:outline-none focus-visible:ring-0"
+            className="input-flat h-12 min-w-0 flex-1 rounded-[13px] border-0 bg-white px-4 text-[17px] font-medium text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
             maxLength={80}
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {
