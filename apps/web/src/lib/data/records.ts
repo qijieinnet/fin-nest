@@ -82,6 +82,15 @@ export function usePlans(ledgerId: string | null) {
   });
 }
 
+export function useStoppedPlans(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.stoppedPlans(ledgerId ?? "none"),
+    queryFn: () => apiRequest<Plan[]>(ledgerApiPath(ledgerId!, "/plans/stopped")),
+    enabled: Boolean(ledgerId),
+    staleTime: 30_000,
+  });
+}
+
 export function usePlanProgress(ledgerId: string | null, planId: string | null) {
   return useQuery({
     queryKey: queryKeys.planProgress(ledgerId ?? "none", planId ?? "none"),

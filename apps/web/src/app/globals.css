@@ -806,6 +806,24 @@ select:focus-visible {
   overflow: hidden;
 }
 
+.ui-bottom-sheet--auto-sheet-form {
+  max-height: calc(100dvh - env(safe-area-inset-top) - 16px);
+}
+
+.ui-bottom-sheet--auto-sheet-form > .sheet-body {
+  flex: 0 1 auto;
+  padding-top: 0;
+}
+
+.ui-bottom-sheet--auto-sheet-form .transaction-form {
+  flex: 0 1 auto !important;
+}
+
+.ui-bottom-sheet--auto-sheet-form .sheet-form-scroll {
+  flex: 0 1 auto !important;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 104px);
+}
+
 .sheet-form-scroll {
   box-sizing: border-box;
   margin-right: calc(var(--space-sheet-x) * -1);
@@ -819,6 +837,39 @@ select:focus-visible {
 /* 滚动区向右溢出抵消面板右内边距，让 sheet-body 的滚动条紧贴弹窗最右侧。 */
 .ui-bottom-sheet--edge-scroll .sheet-body {
   margin-right: calc(var(--space-sheet-x) * -1);
+  padding-right: var(--space-sheet-x);
+  width: calc(100% + var(--space-sheet-x));
+}
+
+.ui-bottom-sheet--import-preview > .sheet-body {
+  display: flex;
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.import-preview-sheet {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.import-preview-sheet__header {
+  align-items: center;
+  display: grid;
+  flex: 0 0 auto;
+  gap: 12px;
+  grid-template-columns: var(--space-control-height) minmax(0, 1fr) var(--space-control-height);
+  padding-bottom: 14px;
+}
+
+.import-preview-sheet__scroll {
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+  margin-right: calc(var(--space-sheet-x) * -1);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: var(--space-sheet-x);
   width: calc(100% + var(--space-sheet-x));
 }

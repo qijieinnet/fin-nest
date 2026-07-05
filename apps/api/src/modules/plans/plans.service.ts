@@ -38,8 +38,16 @@ export class PlansService {
   async listPlans(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.plan.findMany({
-      where: { ledgerId, archivedAt: null },
+      where: { ledgerId, archivedAt: null, stoppedAt: null },
       orderBy: [{ kind: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
+  async listStoppedPlans(ledgerId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    return this.prisma.client.plan.findMany({
+      where: { ledgerId, archivedAt: null, stoppedAt: { not: null } },
+      orderBy: [{ stoppedAt: "desc" }, { createdAt: "desc" }],
     });
   }
 
@@ -95,6 +103,24 @@ export class PlansService {
     await this.prisma.client.plan.update({
       where: { id: planId },
       data: { archivedAt: new Date(), updatedBy: userId },
+    });
+  }
+
+  async stopPlan(ledgerId: string, planId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertPlan(ledgerId, planId);
+    return this.prisma.client.plan.update({
+      where: { id: planId },
+      data: { stoppedAt: new Date(), updatedBy: userId },
+    });
+  }
+
+  async restorePlan(ledgerId: string, planId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertPlan(ledgerId, planId);
+    return this.prisma.client.plan.update({
+      where: { id: planId },
+      data: { stoppedAt: null, updatedBy: userId },
     });
   }
 

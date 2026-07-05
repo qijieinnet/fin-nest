@@ -7,8 +7,8 @@ function trimTrailingSlash(value: string): string {
 
 function normalizeApiBaseUrl(value: string | undefined): string {
   const trimmed = (value ?? "").trim();
-  // 兼容旧配置：auto（按 hostname 直连 API 端口）已废弃，统一走同源 /api 代理。
-  if (trimmed.length === 0 || trimmed === "auto") {
+  if (trimmed === "auto") return "auto";
+  if (trimmed.length === 0) {
     return DEFAULT_API_BASE_URL;
   }
   return trimTrailingSlash(trimmed);
@@ -24,8 +24,12 @@ export const publicEnv = {
 } as const;
 
 export function resolveApiBaseUrl(): string {
-  // 浏览器端走同源 /api 前缀：开发由 Next rewrites 转发，线上由前置 nginx 转发。
   if (typeof window !== "undefined") {
+    // 开发环境的 Next rewrite 代理对大文件/长耗时导入容易断开；
+    // auto 按当前页面 hostname 直连 API 端口，仍由 API CORS 放行。
+    if (publicEnv.apiBaseUrl === "auto") {
+      return `http://${window.location.hostname}:${DEFAULT_API_PORT}`;
+    }
     return publicEnv.apiBaseUrl;
   }
 

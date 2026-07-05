@@ -154,6 +154,7 @@ export function BillsScreen() {
     () => ({
       expenseMicros: BigInt(summaryQuery.data?.expenseMicros ?? "0"),
       incomeMicros: BigInt(summaryQuery.data?.incomeMicros ?? "0"),
+      count: summaryQuery.data?.count ?? 0,
     }),
     [summaryQuery.data],
   );
@@ -320,6 +321,12 @@ export function BillsScreen() {
                 style={{ color: "var(--color-tint-strong)" }}
                 tone="neutral"
               />
+            </div>
+            <div>
+              <p className="text-[11px] text-[var(--color-text-muted)]">条数</p>
+              <p className="mt-0.5 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+                {totals.count}
+              </p>
             </div>
           </div>
 

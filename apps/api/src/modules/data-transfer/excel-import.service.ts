@@ -215,7 +215,16 @@ export class ExcelImportService {
       return { dryRun, committed: false, counts, errors, warnings };
     }
 
-    await this.commit(ledgerId, userId, plan, counts);
+    try {
+      await this.commit(ledgerId, userId, plan, counts);
+    } catch (error) {
+      errors.push({
+        sheet: SHEET_NAMES.transactions,
+        row: 0,
+        message: `导入提交失败：${messageOf(error)}`,
+      });
+      return { dryRun: false, committed: false, counts, errors, warnings };
+    }
     return { dryRun: false, committed: true, counts, errors: [], warnings };
   }
 
@@ -774,7 +783,9 @@ export class ExcelImportService {
         const type = valueOfLabel(TRANSACTION_TYPE_LABELS, cellToText(value("type")));
         if (!type) throw new Error("类型必须是 支出/收入/转账 之一");
         const occurredOn = cellToDateText(value("occurredOn"));
-        const grossAmountMicros = cellToMicrosString(value("amount"));
+        const grossAmountMicros = toPositiveMicrosString(
+          cellToMicrosString(value("amount"), { allowNegative: true }),
+        );
         if (BigInt(grossAmountMicros) <= 0n) throw new Error("金额必须大于 0");
 
         const planned: PlannedTransaction = {
@@ -823,21 +834,24 @@ export class ExcelImportService {
           const categoryName = cellToText(value("category"));
           if (categoryName) {
             const categoryKey = `${type}:${categoryName}`;
-            const categoryRef = registry.categoryByKey.get(categoryKey);
-            if (!categoryRef) {
-              throw new Error(
-                `${TRANSACTION_TYPE_LABELS[type]}分类「${categoryName}」不存在（可先在分类表新增）`,
-              );
-            }
+            const categoryRef = this.resolveOrPlanCategory(
+              registry,
+              plan,
+              counts,
+              type,
+              categoryName,
+            );
             planned.categoryRef = categoryRef;
             const subcategoryName = cellToText(value("subcategory"));
             if (subcategoryName) {
-              const subcategoryRef = registry.subcategoryByKey.get(
-                `${categoryKey}:${subcategoryName}`,
+              planned.subcategoryRef = this.resolveOrPlanSubcategory(
+                registry,
+                plan,
+                counts,
+                categoryKey,
+                categoryRef,
+                subcategoryName,
               );
-              if (!subcategoryRef)
-                throw new Error(`子分类「${subcategoryName}」不存在（可先在子分类表新增）`);
-              planned.subcategoryRef = subcategoryRef;
             }
           } else if (cellToText(value("subcategory"))) {
             throw new Error("填写子分类时必须同时填写分类");
@@ -871,9 +885,7 @@ export class ExcelImportService {
 
         const personName = cellToText(value("person"));
         if (personName) {
-          const person = registry.personByName.get(personName);
-          if (!person) throw new Error(`成员「${personName}」不存在（可先在成员表新增）`);
-          planned.personRef = person;
+          planned.personRef = this.resolveOrPlanPerson(registry, plan, counts, personName);
         } else if (settings?.personRequired) {
           throw new Error("当前账本要求流水必须填写成员");
         }
@@ -902,6 +914,56 @@ export class ExcelImportService {
         400,
       );
     }
+  }
+
+  private resolveOrPlanCategory(
+    registry: Registry,
+    plan: Plan,
+    counts: ImportResult["counts"],
+    type: string,
+    name: string,
+  ): Ref {
+    const key = `${type}:${name}`;
+    const existing = registry.categoryByKey.get(key);
+    if (existing) return existing;
+    const ref: Ref = { id: null };
+    registry.categoryByKey.set(key, ref);
+    plan.categories.push({ ref, type, name, icon: null, sortOrder: 0 });
+    this.ensureCount(counts, "categories").new += 1;
+    return ref;
+  }
+
+  private resolveOrPlanSubcategory(
+    registry: Registry,
+    plan: Plan,
+    counts: ImportResult["counts"],
+    categoryKey: string,
+    categoryRef: Ref,
+    name: string,
+  ): Ref {
+    const key = `${categoryKey}:${name}`;
+    const existing = registry.subcategoryByKey.get(key);
+    if (existing) return existing;
+    const ref: Ref = { id: null };
+    registry.subcategoryByKey.set(key, ref);
+    plan.subcategories.push({ ref, categoryRef, name, icon: null, sortOrder: 0 });
+    this.ensureCount(counts, "subcategories").new += 1;
+    return ref;
+  }
+
+  private resolveOrPlanPerson(
+    registry: Registry,
+    plan: Plan,
+    counts: ImportResult["counts"],
+    name: string,
+  ): Ref {
+    const existing = registry.personByName.get(name);
+    if (existing) return existing;
+    const ref: Ref = { id: null };
+    registry.personByName.set(name, ref);
+    plan.people.push({ ref, name, icon: null });
+    this.ensureCount(counts, "people").new += 1;
+    return ref;
   }
 
   private resolveAccountPair(
@@ -967,7 +1029,7 @@ export class ExcelImportService {
     await this.txs.run(async (tx) => {
       await this.createBaseEntities(tx, ledgerId, userId, plan);
       for (const planned of plan.transactions) {
-        const created = await this.transactions.createInsideExistingTransaction(
+        const created = await this.transactions.createInsideExistingTransactionLight(
           tx,
           ledgerId,
           userId,
@@ -1047,20 +1109,27 @@ export class ExcelImportService {
       planned.ref.id = created.id;
     }
     for (const planned of plan.people) {
-      const created = await tx.person.create({
-        data: {
+      const created = await tx.person.upsert({
+        where: { ledgerId_name: { ledgerId, name: planned.name } },
+        create: {
           ledgerId,
           name: planned.name,
           icon: planned.icon,
           createdBy: userId,
           updatedBy: userId,
         },
+        update: {
+          archivedAt: null,
+          icon: planned.icon,
+          updatedBy: userId,
+        },
       });
       planned.ref.id = created.id;
     }
     for (const planned of plan.categories) {
-      const created = await tx.category.create({
-        data: {
+      const created = await tx.category.upsert({
+        where: { ledgerId_type_name: { ledgerId, type: planned.type, name: planned.name } },
+        create: {
           ledgerId,
           type: planned.type,
           name: planned.name,
@@ -1069,18 +1138,31 @@ export class ExcelImportService {
           createdBy: userId,
           updatedBy: userId,
         },
+        update: {
+          archivedAt: null,
+          icon: planned.icon,
+          sortOrder: planned.sortOrder,
+          updatedBy: userId,
+        },
       });
       planned.ref.id = created.id;
     }
     for (const planned of plan.subcategories) {
-      const created = await tx.subcategory.create({
-        data: {
+      const created = await tx.subcategory.upsert({
+        where: { categoryId_name: { categoryId: planned.categoryRef.id!, name: planned.name } },
+        create: {
           ledgerId,
           categoryId: planned.categoryRef.id!,
           name: planned.name,
           icon: planned.icon,
           sortOrder: planned.sortOrder,
           createdBy: userId,
+          updatedBy: userId,
+        },
+        update: {
+          archivedAt: null,
+          icon: planned.icon,
+          sortOrder: planned.sortOrder,
           updatedBy: userId,
         },
       });
@@ -1183,6 +1265,11 @@ export class ExcelImportService {
 
 function refId(ref: Ref | null): string | undefined {
   return ref?.id ?? undefined;
+}
+
+function toPositiveMicrosString(micros: string): string {
+  const value = BigInt(micros);
+  return (value < 0n ? -value : value).toString();
 }
 
 function hasCellValue(value: unknown): boolean {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import {
   createContext,
   useCallback,
@@ -15,6 +15,7 @@ import { createClientId } from "@/lib/id/client-id";
 
 type SheetStackEntry = {
   className?: string;
+  closeDisabled?: boolean;
   content: ReactNode;
   hideDefaultHeader?: boolean;
   id?: string;
@@ -22,11 +23,14 @@ type SheetStackEntry = {
 };
 
 type SheetStackItem = Required<Pick<SheetStackEntry, "id">> & Omit<SheetStackEntry, "id">;
+type PopOptions = { force?: boolean };
+type PopArg = MouseEvent<HTMLElement> | PopOptions;
 
 type SheetStackContextValue = {
   clear: () => void;
-  pop: () => void;
+  pop: (options?: PopArg) => void;
   push: (sheet: SheetStackEntry) => string;
+  setActiveCloseDisabled: (disabled: boolean) => void;
   stack: SheetStackItem[];
 };
 
@@ -59,9 +63,24 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
     return id;
   }, []);
 
-  const pop = useCallback(() => {
+  const pop = useCallback((options?: PopArg) => {
     if (stackRef.current.length === 0) return;
+    const force =
+      typeof options === "object" &&
+      options !== null &&
+      "force" in options &&
+      options.force === true;
+    if (!force && stackRef.current.at(-1)?.closeDisabled) return;
     window.history.back();
+  }, []);
+
+  const setActiveCloseDisabled = useCallback((disabled: boolean) => {
+    setStack((current) => {
+      if (current.length === 0) return current;
+      const active = current.at(-1)!;
+      if (active.closeDisabled === disabled) return current;
+      return [...current.slice(0, -1), { ...active, closeDisabled: disabled }];
+    });
   }, []);
 
   const clear = useCallback(() => {
@@ -76,16 +95,27 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handlePopState() {
-      if (stackRef.current.length > 0) {
-        popFromState();
+      const activeSheet = stackRef.current.at(-1);
+      if (!activeSheet) return;
+      if (activeSheet.closeDisabled) {
+        window.history.pushState(
+          { ...window.history.state, finNestSheetId: activeSheet.id },
+          "",
+          window.location.href,
+        );
+        return;
       }
+      popFromState();
     }
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [popFromState]);
 
-  const value = useMemo(() => ({ clear, pop, push, stack }), [clear, pop, push, stack]);
+  const value = useMemo(
+    () => ({ clear, pop, push, setActiveCloseDisabled, stack }),
+    [clear, pop, push, setActiveCloseDisabled, stack],
+  );
   const activeSheet = stack.at(-1);
 
   return (

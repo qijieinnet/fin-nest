@@ -78,6 +78,7 @@ export function ImportExportScreen() {
     },
     onSuccess: (result, file) => {
       push({
+        className: "ui-bottom-sheet--import-preview",
         hideDefaultHeader: true,
         content: <ImportPreviewSheet file={file} initial={result} ledgerId={ledgerId!} />,
       });

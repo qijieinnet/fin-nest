@@ -316,10 +316,11 @@ export type TransactionListQuery = {
   offset?: number;
 };
 
-/** 按筛选聚合的支出/收入合计（列表分页时汇总卡片用）。 */
+/** 按筛选聚合的支出/收入合计与条数（列表分页时汇总卡片用）。 */
 export type TransactionSummary = {
   expenseMicros: string;
   incomeMicros: string;
+  count: number;
 };
 
 export type BudgetProgressItem = {
@@ -358,6 +359,7 @@ export type Plan = {
   foresightEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+  stoppedAt: string | null;
   archivedAt: string | null;
 };
 

@@ -20,6 +20,12 @@ export class PlansController {
     return this.plans.listPlans(ledgerId, (auth as SessionAuthContext).userId);
   }
 
+  @Get("stopped")
+  @ApiOkResponse()
+  stopped(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
+    return this.plans.listStoppedPlans(ledgerId, (auth as SessionAuthContext).userId);
+  }
+
   @Post()
   @ApiCreatedResponse()
   create(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Body() body: CreatePlanDto) {
@@ -45,6 +51,26 @@ export class PlansController {
     @Param("planId") planId: string,
   ): Promise<void> {
     await this.plans.archivePlan(ledgerId, planId, (auth as SessionAuthContext).userId);
+  }
+
+  @Post(":planId/stop")
+  @ApiOkResponse()
+  stop(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+  ) {
+    return this.plans.stopPlan(ledgerId, planId, (auth as SessionAuthContext).userId);
+  }
+
+  @Post(":planId/restore")
+  @ApiOkResponse()
+  restore(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+  ) {
+    return this.plans.restorePlan(ledgerId, planId, (auth as SessionAuthContext).userId);
   }
 
   @Get(":planId/progress")

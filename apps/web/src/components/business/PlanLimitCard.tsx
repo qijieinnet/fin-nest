@@ -85,10 +85,10 @@ export function PlanLimitCard({
       label: isIncome ? "已收" : "已用",
       value: formatStatMoney(used, decimalPlaces),
     },
-    {
-      label: "1D",
-      value: (Number(dailyMicros) / Number(MICROS_PER_UNIT)).toFixed(2),
-    },
+    // {
+    //   label: "1D",
+    //   value: (Number(dailyMicros) / Number(MICROS_PER_UNIT)).toFixed(2),
+    // },
     {
       label: isIncome ? "超出" : "超过",
       value: formatStatMoney(over, decimalPlaces),

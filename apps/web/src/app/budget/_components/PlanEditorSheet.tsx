@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
-import { useState } from "react";
-import { DateWheelPicker } from "@/components/business";
-import { IconButton, Input } from "@/components/ui";
+import { Check, ChevronRight, X } from "lucide-react";
+import type { ChangeEvent } from "react";
+import { useMemo, useState } from "react";
+import { DateWheelPicker, FieldCard, FilterSheet } from "@/components/business";
+import { IconButton, Input, PopoverMenu, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -15,8 +16,9 @@ import {
   type PlanMetric,
   type PlanRepeatRule,
 } from "@/lib/api";
-import { cn } from "@/lib/format/class-names";
 import { useAccounts, useCategories, usePeople } from "@/lib/data/records";
+import { categoryOptions, personOptions } from "@/lib/data/options";
+import type { BusinessFilterValue } from "@/components/business";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
@@ -28,43 +30,119 @@ type PlanEditorSheetProps = {
   plan?: Plan;
 };
 
-function Chip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
+type Option<TValue extends string> = {
   label: string;
-  onClick: () => void;
+  value: TValue;
+};
+
+const KIND_OPTIONS: Array<Option<PlanKind>> = [
+  { value: "expense", label: "支出限额" },
+  { value: "income", label: "收入目标" },
+];
+
+const METRIC_OPTIONS: Array<Option<PlanMetric>> = [
+  { value: "amount", label: "金额" },
+  { value: "count", label: "次数" },
+];
+
+function TextFieldRow({
+  inputMode,
+  label,
+  maxLength,
+  onChange,
+  placeholder,
+  prefix,
+  value,
+}: {
+  inputMode?: "decimal" | "numeric" | "text";
+  label: string;
+  maxLength?: number;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  prefix?: string;
+  value: string;
 }) {
   return (
-    <button
-      className={cn(
-        "rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors",
-        active
-          ? "bg-[var(--color-tint)] text-[var(--color-tint-contrast)]"
-          : "bg-[var(--color-control-fill-muted)] text-[var(--color-text-secondary)]",
-      )}
-      onClick={onClick}
-      type="button"
-    >
-      {label}
-    </button>
+    <FieldCard className="transaction-form__note-card" label={label}>
+      <div className="transaction-form__note-row">
+        <span>{label}</span>
+        <Input
+          aria-label={label}
+          inputMode={inputMode}
+          label={label}
+          maxLength={maxLength}
+          onChange={onChange}
+          placeholder={placeholder}
+          prefix={prefix}
+          value={value}
+        />
+      </div>
+    </FieldCard>
   );
 }
 
-function Section({ children, hint, title }: { children: React.ReactNode; hint?: string; title: string }) {
+function SelectRow<TValue extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: TValue) => void;
+  options: ReadonlyArray<Option<TValue>>;
+  value: TValue;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{title}</h3>
-      <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">{children}</div>
-      {hint ? <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">{hint}</p> : null}
-    </section>
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>{label}</span>
+          <strong>{selected?.label ?? "请选择"}</strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              label: option.label,
+              onSelect: () => onChange(option.value),
+              selected: option.value === value,
+            })),
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
+      </div>
+    </div>
   );
 }
 
-function toggleId(list: string[], id: string): string[] {
-  return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+function activeFilterCount({
+  accountIds,
+  categoryIds,
+  noteContains,
+  personIds,
+  subcategoryIds,
+}: {
+  accountIds: string[];
+  categoryIds: string[];
+  noteContains: string;
+  personIds: string[];
+  subcategoryIds: string[];
+}) {
+  let count = 0;
+  if (categoryIds.length) count += 1;
+  if (subcategoryIds.length) count += 1;
+  if (accountIds.length) count += 1;
+  if (personIds.length) count += 1;
+  if (noteContains.trim()) count += 1;
+  return count;
 }
 
 export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: PlanEditorSheetProps) {
@@ -85,15 +163,65 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
   const [startDate, setStartDate] = useState(plan?.startDate.slice(0, 10) ?? todayKey());
   const [repeatRule, setRepeatRule] = useState<PlanRepeatRule>(plan?.repeatRule ?? "monthly");
   const [categoryIds, setCategoryIds] = useState<string[]>(plan?.matchRule?.categoryIds ?? []);
+  const [subcategoryIds, setSubcategoryIds] = useState<string[]>(
+    plan?.matchRule?.subcategoryIds ?? [],
+  );
   const [accountIds, setAccountIds] = useState<string[]>(plan?.matchRule?.accountIds ?? []);
   const [personIds, setPersonIds] = useState<string[]>(plan?.matchRule?.personIds ?? []);
   const [noteContains, setNoteContains] = useState(plan?.matchRule?.noteContains ?? "");
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  const categories = (categoriesQuery.data ?? []).filter((category) => category.type === kind);
-  const accounts = (accountsQuery.data ?? []).filter((account) =>
-    ["savings", "credit", "invest"].includes(account.type),
+  const filterCategoryOptions = useMemo(
+    () => categoryOptions(categoriesQuery.data ?? [], kind),
+    [categoriesQuery.data, kind],
   );
-  const people = peopleQuery.data ?? [];
+  const filterAccountOptions = useMemo(
+    () =>
+      (accountsQuery.data ?? [])
+        .filter((account) => ["savings", "credit", "invest"].includes(account.type))
+        .map((account) => ({ id: account.id, label: account.name, icon: account.icon ?? undefined })),
+    [accountsQuery.data],
+  );
+  const filterPersonOptions = useMemo(
+    () => personOptions(peopleQuery.data ?? []),
+    [peopleQuery.data],
+  );
+  const validCategoryIds = useMemo(
+    () =>
+      categoryIds.filter((id) =>
+        filterCategoryOptions.some((option) => !option.parentId && option.id === id),
+      ),
+    [categoryIds, filterCategoryOptions],
+  );
+  const validSubcategoryIds = useMemo(
+    () =>
+      subcategoryIds.filter((id) =>
+        filterCategoryOptions.some((option) => option.parentId && option.id === id),
+      ),
+    [filterCategoryOptions, subcategoryIds],
+  );
+  const filterCount = activeFilterCount({
+    accountIds,
+    categoryIds: validCategoryIds,
+    noteContains,
+    personIds,
+    subcategoryIds: validSubcategoryIds,
+  });
+  const filterSummary = filterCount === 0 ? "全部记账" : `已设置 ${filterCount} 项`;
+  const filterValue = useMemo<BusinessFilterValue>(
+    () => ({
+      accountId: accountIds.at(-1) ?? null,
+      accountIds,
+      categoryId: validCategoryIds.at(-1) ?? null,
+      categoryIds: validCategoryIds,
+      keyword: noteContains,
+      personId: personIds.at(-1) ?? null,
+      personIds,
+      subcategoryIds: validSubcategoryIds,
+      type: kind,
+    }),
+    [accountIds, kind, noteContains, personIds, validCategoryIds, validSubcategoryIds],
+  );
 
   const save = useMutation({
     mutationFn: async () => {
@@ -109,15 +237,14 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
       }
 
       const matchRule: PlanMatchRule = {};
-      // 分类换了收支方向后可能残留另一方向的选择，按当前方向过滤后写入。
-      const validCategoryIds = categoryIds.filter((id) => categories.some((category) => category.id === id));
       if (validCategoryIds.length) matchRule.categoryIds = validCategoryIds;
+      if (validSubcategoryIds.length) matchRule.subcategoryIds = validSubcategoryIds;
       if (accountIds.length) matchRule.accountIds = accountIds;
       if (personIds.length) matchRule.personIds = personIds;
       if (noteContains.trim()) matchRule.noteContains = noteContains.trim();
 
       const body = {
-        kind,
+        ...(plan ? {} : { kind }),
         metric,
         name: name.trim() || (kind === "income" ? "收入目标" : "支出限额"),
         limitAmountMicros,
@@ -144,175 +271,124 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
   });
 
   return (
-    <form
-      className="flex flex-col gap-4 pb-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!save.isPending) save.mutate();
-      }}
-    >
-      <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
-        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑计划" : "新计划"}
-        </h2>
-        <IconButton
-          disabled={save.isPending}
-          icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存计划"
-          variant="primary"
-          type="submit"
-        />
-      </div>
-
-      <div>
-        <Input
-          aria-label="行动代号"
-          label="行动代号"
-          maxLength={80}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="选填，如 拿铁基金"
-          value={name}
-        />
-        <p className="mt-1.5 px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-          行动代号是可选的，添加行动代号能有助提高计划执行力。
-        </p>
-      </div>
-
-      <Section title="目的">
-        <div className="flex flex-wrap gap-2">
-          <Chip active={kind === "expense"} label="支出限额" onClick={() => setKind("expense")} />
-          <Chip active={kind === "income"} label="收入目标" onClick={() => setKind("income")} />
-        </div>
-      </Section>
-
-      <Section title={`${kind === "income" ? "收入" : "支出"}目标`}>
-        <div className="flex flex-col gap-3">
-          <div className="flex h-9 rounded-full bg-[var(--color-control-fill-muted)] p-[3px]">
-            {(
-              [
-                { value: "amount", label: "金额" },
-                { value: "count", label: "次数" },
-              ] as const
-            ).map((option) => (
-              <button
-                className={cn(
-                  "flex-1 rounded-full text-sm font-semibold transition-all",
-                  metric === option.value
-                    ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow-[0_1px_4px_rgba(0,0,0,0.12)]"
-                    : "text-[var(--color-text-secondary)]",
-                )}
-                key={option.value}
-                onClick={() => setMetric(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          {metric === "amount" ? (
-            <Input
-              inputMode="decimal"
-              label="金额"
-              onChange={(event) => setLimitAmount(event.target.value)}
-              placeholder="0"
-              prefix="¥"
-              value={limitAmount}
-            />
-          ) : (
-            <Input
-              inputMode="numeric"
-              label="次数"
-              onChange={(event) => setLimitCount(event.target.value)}
-              placeholder="0"
-              value={limitCount}
-            />
-          )}
-        </div>
-      </Section>
-
-      <div className="flex flex-col gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-        <DateWheelPicker label="开始日期" onValueChange={setStartDate} value={startDate} />
-        <div className="flex flex-col gap-1.5">
-          <span className="ui-field__label px-0.5">重复</span>
-          <div className="flex flex-wrap gap-2">
-            {REPEAT_OPTIONS.map((option) => (
-              <Chip
-                active={repeatRule === option.value}
-                key={option.value}
-                label={option.label}
-                onClick={() => setRepeatRule(option.value)}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <Section
-        hint="不设置过滤条件时，统计该方向的全部记账；设置后仅统计命中的记账。"
-        title="过滤条件 · 选填"
+    <>
+      <form
+        className="transaction-form flex min-h-0 flex-1 flex-col !gap-0 !pb-0"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!save.isPending) save.mutate();
+        }}
       >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <span className="ui-field__label px-0.5">分类</span>
-            {categories.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-muted)]">暂无分类</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <Chip
-                    active={categoryIds.includes(category.id)}
-                    key={category.id}
-                    label={`${category.icon ?? ""}${category.name}`}
-                    onClick={() => setCategoryIds((current) => toggleId(current, category.id))}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="ui-field__label px-0.5">账户</span>
-            {accounts.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-muted)]">暂无账户</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {accounts.map((account) => (
-                  <Chip
-                    active={accountIds.includes(account.id)}
-                    key={account.id}
-                    label={account.name}
-                    onClick={() => setAccountIds((current) => toggleId(current, account.id))}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="ui-field__label px-0.5">人员</span>
-            {people.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-muted)]">暂无人员</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {people.map((person) => (
-                  <Chip
-                    active={personIds.includes(person.id)}
-                    key={person.id}
-                    label={person.name}
-                    onClick={() => setPersonIds((current) => toggleId(current, person.id))}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          <Input
-            label="备注包含"
-            maxLength={80}
-            onChange={(event) => setNoteContains(event.target.value)}
-            placeholder="选填，如 咖啡"
-            value={noteContains}
+        <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
+          <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+          <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
+            {isEditing ? "编辑计划" : "新计划"}
+          </h2>
+          <IconButton
+            disabled={save.isPending}
+            icon={<Check size={24} strokeWidth={2.6} />}
+            label="保存计划"
+            loading={save.isPending}
+            variant="primary"
+            type="submit"
           />
         </div>
-      </Section>
-    </form>
+
+        <div className="sheet-form-scroll flex-1 pb-6">
+          <div className="transaction-form__cards">
+            <Tabs
+              className="transaction-form__type-tabs"
+              items={isEditing ? KIND_OPTIONS.filter((option) => option.value === kind) : KIND_OPTIONS}
+              onValueChange={(value) => setKind(value as PlanKind)}
+              value={kind}
+            />
+
+            <TextFieldRow
+              label="计划名称"
+              maxLength={80}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="选填，如 拿铁基金"
+              value={name}
+            />
+
+            <SelectRow
+              label="目标类型"
+              onChange={setMetric}
+              options={METRIC_OPTIONS}
+              value={metric}
+            />
+
+            {metric === "amount" ? (
+              <TextFieldRow
+                inputMode="decimal"
+                label={`${kind === "income" ? "收入" : "支出"}金额`}
+                onChange={(event) => setLimitAmount(event.target.value)}
+                placeholder="0"
+                prefix="¥"
+                value={limitAmount}
+              />
+            ) : (
+              <TextFieldRow
+                inputMode="numeric"
+                label={`${kind === "income" ? "收入" : "支出"}次数`}
+                onChange={(event) => setLimitCount(event.target.value)}
+                placeholder="0"
+                value={limitCount}
+              />
+            )}
+
+            <FieldCard className="transaction-form__date-card" label="开始日期">
+              <DateWheelPicker label="开始日期" onValueChange={setStartDate} value={startDate} />
+            </FieldCard>
+
+            <SelectRow
+              label="重复"
+              onChange={setRepeatRule}
+              options={REPEAT_OPTIONS}
+              value={repeatRule}
+            />
+
+            <button
+              className="transaction-form__row-card"
+              onClick={() => setFilterOpen(true)}
+              type="button"
+            >
+              <span className="font-semibold">过滤条件</span>
+              <strong>{filterSummary}</strong>
+              <ChevronRight size={18} />
+            </button>
+
+            <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+              不设置过滤条件时，统计该方向的全部记账；设置后仅统计命中的记账。
+            </p>
+          </div>
+        </div>
+      </form>
+
+      <FilterSheet
+        accountOptions={filterAccountOptions}
+        categoryOptions={filterCategoryOptions}
+        fields={["category", "account", "person", "keyword"]}
+        onApply={() => undefined}
+        onChange={(next) => {
+          setCategoryIds(next.categoryIds ?? (next.categoryId ? [next.categoryId] : []));
+          setSubcategoryIds(next.subcategoryIds ?? []);
+          setAccountIds(next.accountIds ?? (next.accountId ? [next.accountId] : []));
+          setPersonIds(next.personIds ?? (next.personId ? [next.personId] : []));
+          setNoteContains(next.keyword ?? "");
+        }}
+        onOpenChange={setFilterOpen}
+        onReset={() => {
+          setCategoryIds([]);
+          setSubcategoryIds([]);
+          setAccountIds([]);
+          setPersonIds([]);
+          setNoteContains("");
+        }}
+        open={filterOpen}
+        personOptions={filterPersonOptions}
+        value={filterValue}
+      />
+    </>
   );
 }

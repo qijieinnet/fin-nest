@@ -235,12 +235,12 @@ export function cellToDateText(value: unknown): string {
   }
   if (typeof value === "string") {
     const text = value.trim().replaceAll("/", "-");
-    const match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+    const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.exec(text);
     if (match) {
       return `${match[1]}-${match[2]!.padStart(2, "0")}-${match[3]!.padStart(2, "0")}`;
     }
   }
-  throw new Error("日期格式无效（应为 YYYY-MM-DD）");
+  throw new Error("日期格式无效（应为 YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss）");
 }
 
 /** 读取单元格为去空格文本；空/undefined 返回空串。 */

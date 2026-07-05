@@ -110,22 +110,25 @@ export class TransactionsService {
     });
   }
 
-  /** 按相同筛选（忽略分页）聚合支出 / 收入合计，供列表分页时的汇总卡片使用。 */
+  /** 按相同筛选（忽略分页）聚合支出 / 收入合计与条数，供列表分页时的汇总卡片使用。 */
   async summary(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
     await this.ledgers.assertMember(ledgerId, userId);
     const grouped = await this.prisma.client.transaction.groupBy({
       by: ["type"],
       where: this.buildListWhere(ledgerId, query),
       _sum: { effectiveAmountMicros: true },
+      _count: { _all: true },
     });
     let expenseMicros = 0n;
     let incomeMicros = 0n;
+    let count = 0;
     for (const row of grouped) {
       const sum = row._sum.effectiveAmountMicros ?? 0n;
       if (row.type === "expense") expenseMicros = sum;
       else if (row.type === "income") incomeMicros = sum;
+      count += row._count._all;
     }
-    return { expenseMicros, incomeMicros };
+    return { expenseMicros, incomeMicros, count };
   }
 
   async get(ledgerId: string, transactionId: string, userId: string) {
@@ -192,6 +195,28 @@ export class TransactionsService {
       tx,
     );
     return this.getWithRelations(tx, ledgerId, transaction.id);
+  }
+
+  async createInsideExistingTransactionLight(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    userId: string,
+    input: CreateTransactionDto,
+    options: CreateTransactionOptions = {},
+  ) {
+    const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input, options);
+    await this.audit.write(
+      {
+        source: "user",
+        actorUserId: userId,
+        ledgerId,
+        action: options.auditAction ?? "transaction.create",
+        entityType: "transaction",
+        entityId: transaction.id,
+      },
+      tx,
+    );
+    return transaction;
   }
 
   async update(

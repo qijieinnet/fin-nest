@@ -1,23 +1,25 @@
 "use client";
 
-import { Edit3, Trash2 } from "lucide-react";
+import { Ban, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { LoadingState } from "@/components/business";
 import { Button } from "@/components/ui";
-import type { PlanPeriodProgress } from "@/lib/api";
+import type { Plan, PlanPeriodProgress } from "@/lib/api";
 import { usePlanProgress } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { PlanEditorSheet } from "./PlanEditorSheet";
 import { PlanMatchedListSheet } from "./PlanMatchedListSheet";
 import { PlanPeriodCard } from "./PlanPeriodCard";
-import { formatMoney, periodRangeText, periodShortLabel, planLimitText } from "./plan-utils";
+import { periodShortLabel } from "./plan-utils";
 
 type PlanDetailSheetProps = {
   ledgerId: string;
   onDelete: () => void;
+  onRestore?: (plan: Plan) => void;
+  onStop?: (plan: Plan) => void;
   planId: string;
 };
 
-export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetProps) {
+export function PlanDetailSheet({ ledgerId, onDelete, onRestore, onStop, planId }: PlanDetailSheetProps) {
   const { push } = useSheetStack();
   const progressQuery = usePlanProgress(ledgerId, planId);
   const result = progressQuery.data;
@@ -27,13 +29,13 @@ export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetP
   }
 
   const { history, period, plan } = result;
-  const isCount = plan.metric === "count";
   const past = history
     .filter((item) => item.start !== period.start)
     .sort((a, b) => (a.start < b.start ? 1 : -1));
 
   const openMatchedList = (target: PlanPeriodProgress) => {
     push({
+      className: "ui-bottom-sheet--edge-scroll",
       title: periodShortLabel(plan, target.start, target.endExclusive),
       content: (
         <PlanMatchedListSheet
@@ -48,72 +50,18 @@ export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetP
 
   const openEditor = () => {
     push({
-      className: "ui-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--sheet-form",
       hideDefaultHeader: true,
       content: <PlanEditorSheet ledgerId={ledgerId} plan={plan} />,
     });
   };
 
-  const renderPastRow = (item: PlanPeriodProgress) => {
-    const limit = isCount ? BigInt(plan.limitCount ?? 0) : BigInt(item.targetAmountMicros ?? "0");
-    const used = isCount ? BigInt(item.projectedCount) : BigInt(item.projectedAmountMicros);
-    const remain = limit > used ? limit - used : 0n;
-    const overLimit = used > limit;
-    const formatValue = (value: bigint) =>
-      isCount ? `${value.toString()} 次` : formatMoney(value);
-    return (
-      <button
-        className="w-full rounded-[20px] bg-[var(--color-bg-surface)] p-4 text-left shadow-[var(--shadow-soft)]"
-        key={item.start}
-        onClick={() => openMatchedList(item)}
-        type="button"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-base font-semibold text-[var(--color-text-primary)]">
-            {periodShortLabel(plan, item.start, item.endExclusive)}
-          </span>
-          <span className="flex items-center gap-2.5">
-            <span className="block h-[5px] w-[56px] overflow-hidden rounded-full bg-[var(--color-control-fill-muted)]">
-              <span
-                className="block h-full rounded-full"
-                style={{
-                  width: `${Math.min(item.percent, 100)}%`,
-                  background: overLimit ? "var(--color-accent-expense)" : "var(--color-tint)",
-                }}
-              />
-            </span>
-            <span className="min-w-[52px] text-right text-[13px] font-bold text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
-              {item.percent.toFixed(2)}%
-            </span>
-          </span>
-        </div>
-        <div className="mt-3 flex items-end gap-6">
-          <span>
-            <span className="block text-[11px] text-[var(--color-text-muted)]">已用</span>
-            <span className="mt-0.5 block text-[17px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-              {formatValue(used)}
-            </span>
-          </span>
-          <span>
-            <span className="block text-[11px] text-[var(--color-text-muted)]">剩余</span>
-            <span className="mt-0.5 block text-[17px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-              {formatValue(remain)}
-            </span>
-          </span>
-          <span className="flex-1 text-right text-[13px] text-[var(--color-text-muted)]">
-            {item.actualCount + item.foresightCount} 笔 ›
-          </span>
-        </div>
-      </button>
-    );
-  };
-
   return (
     <div className="flex flex-col gap-4 pb-2">
-      <p className="px-1 text-[13px] text-[var(--color-text-muted)]">
+      {/* <p className="px-1 text-[13px] text-[var(--color-text-muted)]">
         {plan.kind === "income" ? "收入目标" : "支出限额"} · {planLimitText(plan)} ·{" "}
         {periodRangeText(period.start, period.endExclusive)}
-      </p>
+      </p> */}
 
       <section className="flex flex-col gap-2">
         <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">本期</h3>
@@ -122,27 +70,63 @@ export function PlanDetailSheet({ ledgerId, onDelete, planId }: PlanDetailSheetP
           plan={plan}
           progress={period}
           showMatchedFooter
-          title={periodRangeText(period.start, period.endExclusive)}
+          title={periodShortLabel(plan, period.start, period.endExclusive)}
         />
       </section>
 
       <section className="flex flex-col gap-2">
         <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">以往周期</h3>
         {past.length === 0 ? (
-          <p className="rounded-[18px] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-sm text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
+          <p className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
             暂无以往周期
           </p>
         ) : (
-          <div className="flex flex-col gap-2.5">{past.map(renderPastRow)}</div>
+          <div className="flex flex-col gap-2.5">
+            {past.map((item) => (
+              <PlanPeriodCard
+                key={item.start}
+                onTap={() => openMatchedList(item)}
+                plan={plan}
+                progress={item}
+                showMatchedFooter
+                title={periodShortLabel(plan, item.start, item.endExclusive)}
+              />
+            ))}
+          </div>
         )}
       </section>
 
       <div className="mt-1 flex flex-col gap-2">
-        <Button icon={<Edit3 size={17} />} onClick={openEditor} variant="secondary">
+        {plan.stoppedAt && onRestore ? (
+          <Button
+            className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
+            icon={<RotateCcw size={17} />}
+            onClick={() => onRestore(plan)}
+            variant="plain"
+          >
+            恢复计划
+          </Button>
+        ) : null}
+        {!plan.stoppedAt && onStop ? (
+          <Button
+            className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
+            icon={<Ban size={17} />}
+            onClick={() => onStop(plan)}
+            variant="plain"
+          >
+            停止计划
+          </Button>
+        ) : null}
+        <Button
+          className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
+          icon={<Edit3 size={17} />}
+          onClick={openEditor}
+          variant="plain"
+        >
           编辑计划
         </Button>
         <Button
-          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
+          className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           icon={<Trash2 size={17} />}
           onClick={onDelete}
           variant="danger"

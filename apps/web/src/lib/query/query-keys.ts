@@ -14,6 +14,7 @@ export const queryKeys = {
   accountEntries: (ledgerId: string, accountId: string) =>
     ["ledger", ledgerId, "accounts", accountId, "entries"] as const,
   plans: (ledgerId: string) => ["ledger", ledgerId, "plans"] as const,
+  stoppedPlans: (ledgerId: string) => ["ledger", ledgerId, "plans", "stopped"] as const,
   planProgress: (ledgerId: string, planId: string) =>
     ["ledger", ledgerId, "plans", planId, "progress"] as const,
   autoRules: (ledgerId: string) => ["ledger", ledgerId, "auto-rules"] as const,

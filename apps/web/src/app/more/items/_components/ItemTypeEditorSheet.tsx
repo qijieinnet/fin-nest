@@ -69,7 +69,8 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
   });
 
   const trimmedName = name.trim();
-  const changed = trimmedName !== (type?.name ?? "") || icon !== (type?.icon?.trim() || DEFAULT_ICON);
+  const changed =
+    trimmedName !== (type?.name ?? "") || icon !== (type?.icon?.trim() || DEFAULT_ICON);
   const canSubmit = trimmedName.length > 0 && !save.isPending && (!isEditing || changed);
 
   const submit = () => {
@@ -130,7 +131,7 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
 
       {isEditing ? (
         <Button
-          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)]"
+          className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           disabled={remove.isPending}
           icon={<Trash2 size={17} />}
           onClick={handleDelete}
