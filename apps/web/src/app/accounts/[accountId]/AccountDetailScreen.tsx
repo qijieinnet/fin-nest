@@ -6,13 +6,21 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { IconButton, IconButtonGroup, MobileAppShell } from "@/components/ui";
-import { apiRequest, getApiErrorMessage, ledgerApiPath, type SubAccount } from "@/lib/api";
-import { useAccountEntries, useAccounts } from "@/lib/data/records";
+import { Button, IconButton, IconButtonGroup, MobileAppShell, Switch } from "@/components/ui";
+import {
+  apiRequest,
+  getApiErrorMessage,
+  ledgerApiPath,
+  type Account,
+  type SubAccount,
+} from "@/lib/api";
+import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
+import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
+import { BalanceAdjustmentListSheet } from "../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../_components/BalanceEditSheet";
 import { DeleteAccountConfirmDialog } from "../_components/DeleteAccountConfirmDialog";
 import {
@@ -20,13 +28,11 @@ import {
   RelatedTransactionList,
 } from "../_components/RelatedTransactionList";
 import { SettleSheet } from "../_components/SettleSheet";
-import { SubAccountAddSheet } from "../_components/SubAccountAddSheet";
 import {
   accountGroupMeta,
   accountTotalMicros,
   balanceLabel,
   defaultBucketMicros,
-  entryTypeLabel,
   formatDateLabel,
   formatMoney,
   isLendAccount,
@@ -57,6 +63,57 @@ function StatRow({ color, label, value }: { color?: string; label: string; value
   );
 }
 
+function DetailLinkRow({
+  count,
+  label,
+  onClick,
+}: {
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="flex min-h-[52px] w-full items-center gap-3 px-4 py-3 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">{label}</span>
+      <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
+        {count} 条
+      </span>
+      <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
+    </button>
+  );
+}
+
+function NetWorthSwitchRow({
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
+        <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+          开启后该余额不计入净资产统计
+        </p>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        label="不计入总资产"
+        onCheckedChange={onCheckedChange}
+      />
+    </div>
+  );
+}
+
 export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -64,11 +121,12 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const accountsQuery = useAccounts(ledgerId);
+  const transactionsQuery = useTransactions(ledgerId, { accountId });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const isLend = account ? isLendAccount(account.type) : false;
-  const entriesQuery = useAccountEntries(ledgerId, isLend ? accountId : null);
+  const entriesQuery = useAccountEntries(ledgerId, accountId);
 
   const invalidate = async () => {
     if (!ledgerId) return;
@@ -113,6 +171,21 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     },
   });
 
+  const updateNetWorth = useMutation({
+    mutationFn: (includeInNetWorth: boolean) =>
+      apiRequest<Account>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), {
+        method: "PATCH",
+        body: { includeInNetWorth },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
+      showToast({ tone: "success", message: "设置已更新" });
+    },
+    onError: (error) => {
+      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
+    },
+  });
+
   const goBack = () => {
     if (window.history.length > 1) router.back();
     else router.push(routes.accounts);
@@ -151,11 +224,18 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
   const hasSplitSubAccounts = account.subAccounts.length > 0;
+  const hasMultipleSubAccounts = account.subAccounts.length > 1;
+  const showRelatedRecordsLink = !hasSplitSubAccounts;
+  const showAdjustmentRecordsLink = !hasMultipleSubAccounts;
+  const defaultSubAccountName = account.defaultSubAccountName ?? "默认";
+  const defaultSubAccountIcon = account.defaultSubAccountIcon ?? account.icon ?? "💼";
   const entries = (entriesQuery.data ?? []).filter((entry) => entry.entryType !== "reversal");
+  const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
+  const transactions = transactionsQuery.data ?? [];
 
   const openEditor = () => {
     push({
-      className: "ui-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
       content: <AccountEditorSheet account={account} ledgerId={ledgerId} />,
     });
@@ -180,8 +260,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const openSubAdd = () => {
     push({
+      className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
-      content: <SubAccountAddSheet accountId={account.id} ledgerId={ledgerId} />,
+      content: <AccountEditorSheet ledgerId={ledgerId} parentAccount={account} />,
     });
   };
 
@@ -189,6 +270,35 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     push({
       hideDefaultHeader: true,
       content: <SettleSheet account={account} ledgerId={ledgerId} />,
+    });
+  };
+
+  const openRelatedRecords = () => {
+    push({
+      title: "关联记录",
+      content: (
+        <RelatedTransactionList
+          accountId={account.id}
+          emptyText="还没有使用该账户的记账"
+          ledgerId={ledgerId}
+        />
+      ),
+    });
+  };
+
+  const openAdjustmentRecords = () => {
+    push({
+      title: "余额修改记录",
+      content: (
+        <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />
+      ),
+    });
+  };
+
+  const openEntryRecords = () => {
+    push({
+      title: "资金变动记录",
+      content: <AccountEntryListSheet accountType={account.type} entries={entries} />,
     });
   };
 
@@ -231,10 +341,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       color: settled ? "var(--color-text-muted)" : "var(--color-tint)",
     });
   }
-  if (!account.includeInNetWorth) {
-    stats.push({ label: "计入总资产", value: "否", color: "var(--color-text-muted)" });
-  }
-
   const subRows = account.subAccounts.map((subAccount) => {
     const actions: SwipeAction[] = [
       {
@@ -259,6 +365,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           type="button"
         >
           <span className="flex-1 truncate text-[15px] text-[var(--color-text-primary)]">
+            <span className="mr-2">{subAccount.icon ?? "💵"}</span>
             {subAccount.name}
           </span>
           <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
@@ -295,11 +402,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           <IconButtonGroup
             items={[
               { icon: <Pencil size={20} />, label: "编辑账户", onClick: openEditor },
-              {
-                icon: <Trash2 size={20} />,
-                label: "删除账户",
-                onClick: () => setPendingDelete({ kind: "account", name: account.name }),
-              },
+              ...(moneyAccount
+                ? [{ icon: <Plus size={20} />, label: "添加子账户", onClick: openSubAdd }]
+                : []),
             ]}
           />
         </header>
@@ -351,13 +456,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           <section className="mt-6">
             <div className="flex items-center justify-between px-1 pb-2">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
-              <IconButton
-                className="h-8 w-8"
-                icon={<Plus size={18} />}
-                label="添加子账户"
-                onClick={openSubAdd}
-                variant="muted"
-              />
             </div>
             {account.subAccounts.length > 0 ? (
               <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
@@ -366,7 +464,10 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
                   onClick={() => router.push(routes.subAccount(account.id, DEFAULT_SUB_ACCOUNT_ID))}
                   type="button"
                 >
-                  <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">默认</span>
+                  <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
+                    <span className="mr-2">{defaultSubAccountIcon}</span>
+                    {defaultSubAccountName}
+                  </span>
                   <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                     {formatMoney(defaultBucketMicros(account))}
                   </span>
@@ -382,6 +483,14 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
+        <div className="mt-4">
+          <NetWorthSwitchRow
+            checked={!account.includeInNetWorth}
+            disabled={updateNetWorth.isPending}
+            onCheckedChange={(checked) => updateNetWorth.mutate(!checked)}
+          />
+        </div>
+
         {isLend && !settled && total > 0n ? (
           <button
             className="mt-4 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-tint)] text-[15px] font-semibold text-[var(--color-tint-contrast)]"
@@ -392,57 +501,43 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </button>
         ) : null}
 
-        {isLend && entries.length > 0 ? (
-          <section className="mt-6">
-            <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
-              资金变动记录
-            </h2>
-            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-              {entries.map((entry) => {
-                const delta = BigInt(entry.amountDeltaMicros);
-                const positive = delta >= 0n;
-                const abs = positive ? delta : -delta;
-                return (
-                  <div
-                    className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-                    key={entry.id}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14.5px] font-medium text-[var(--color-text-primary)]">
-                        {entry.note ?? entryTypeLabel(entry.entryType, account.type)}
-                      </span>
-                      <span className="mt-0.5 block text-[11.5px] text-[var(--color-text-muted)]">
-                        {entryTypeLabel(entry.entryType, account.type)} ·{" "}
-                        {formatDateLabel(entry.occurredAt)}
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 text-[15px] font-semibold [font-variant-numeric:tabular-nums] ${
-                        positive ? "text-[var(--color-text-primary)]" : "text-[var(--color-tint)]"
-                      }`}
-                    >
-                      {positive ? "+" : "−"}
-                      {formatMoney(abs)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+        {isLend || showRelatedRecordsLink || showAdjustmentRecordsLink ? (
+          <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            {isLend ? (
+              <DetailLinkRow
+                count={entries.length}
+                label="资金变动记录"
+                onClick={openEntryRecords}
+              />
+            ) : null}
+            {showRelatedRecordsLink ? (
+              <DetailLinkRow
+                count={transactions.length}
+                label="关联记录"
+                onClick={openRelatedRecords}
+              />
+            ) : null}
+            {showAdjustmentRecordsLink ? (
+              <DetailLinkRow
+                count={adjustmentEntries.length}
+                label="余额修改记录"
+                onClick={openAdjustmentRecords}
+              />
+            ) : null}
           </section>
         ) : null}
 
-        {!hasSplitSubAccounts ? (
-          <section className="mt-6">
-            <h2 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">
-              关联记录
-            </h2>
-            <RelatedTransactionList
-              accountId={account.id}
-              emptyText="还没有使用该账户的记账"
-              ledgerId={ledgerId}
-            />
-          </section>
-        ) : null}
+        <section className="bill-detail__delete">
+          <Button
+            className="bill-detail__delete-button"
+            disabled={removeAccount.isPending}
+            icon={<Trash2 size={18} />}
+            onClick={() => setPendingDelete({ kind: "account", name: account.name })}
+            variant="danger"
+          >
+            删除账户
+          </Button>
+        </section>
       </main>
     </MobileAppShell>
   );

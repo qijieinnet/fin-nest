@@ -97,7 +97,9 @@ export class AccountsService {
           ledgerId,
           accountId,
           name: input.name,
+          icon: input.icon,
           balanceMicros,
+          includeInNetWorth: input.includeInNetWorth ?? true,
           createdBy: userId,
           updatedBy: userId,
         },
@@ -134,11 +136,94 @@ export class AccountsService {
     await this.assertActiveSubAccount(ledgerId, accountId, subAccountId);
     return this.prisma.client.subAccount.update({
       where: { id: subAccountId },
-      data: { name: input.name, updatedBy: userId },
+      data: {
+        name: input.name,
+        icon: input.icon,
+        includeInNetWorth: input.includeInNetWorth,
+        updatedBy: userId,
+      },
     });
   }
 
-  async archiveSubAccount(ledgerId: string, accountId: string, subAccountId: string, userId: string): Promise<void> {
+  async makeSubAccountDefault(
+    ledgerId: string,
+    accountId: string,
+    subAccountId: string,
+    userId: string,
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    return this.txs.run(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+      const account = await tx.account.findFirst({
+        where: { id: accountId, ledgerId, archivedAt: null },
+      });
+      if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+      const subAccount = await tx.subAccount.findFirst({
+        where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
+      });
+      if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+
+      const oldDefaultBalance = await this.defaultBucketMicros(tx, ledgerId, accountId);
+      const hasOldDefaultRefs = await this.hasDefaultSubAccountRefs(tx, ledgerId, accountId);
+      let oldDefaultSubAccountId: string | null = null;
+
+      if (oldDefaultBalance !== 0n || hasOldDefaultRefs) {
+        const oldDefaultName = await this.uniqueSubAccountName(
+          tx,
+          accountId,
+          account.defaultSubAccountName ?? "默认",
+        );
+        const oldDefault = await tx.subAccount.create({
+          data: {
+            ledgerId,
+            accountId,
+            name: oldDefaultName,
+            icon: account.defaultSubAccountIcon ?? account.icon,
+            balanceMicros: oldDefaultBalance,
+            includeInNetWorth: account.includeInNetWorth,
+            createdBy: userId,
+            updatedBy: userId,
+          },
+        });
+        oldDefaultSubAccountId = oldDefault.id;
+        await this.moveSubAccountRefs(tx, ledgerId, accountId, null, oldDefaultSubAccountId);
+      }
+
+      await this.moveSubAccountRefs(tx, ledgerId, accountId, subAccountId, null);
+      await tx.subAccount.update({
+        where: { id: subAccountId },
+        data: { balanceMicros: 0n, archivedAt: new Date(), updatedBy: userId },
+      });
+      const updatedAccount = await tx.account.update({
+        where: { id: accountId },
+        data: {
+          defaultSubAccountName: subAccount.name,
+          defaultSubAccountIcon: subAccount.icon,
+          includeInNetWorth: subAccount.includeInNetWorth,
+          updatedBy: userId,
+        },
+      });
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: userId,
+          ledgerId,
+          action: "sub_account.make_default",
+          entityType: "sub_account",
+          entityId: subAccountId,
+        },
+        tx,
+      );
+      return updatedAccount;
+    });
+  }
+
+  async archiveSubAccount(
+    ledgerId: string,
+    accountId: string,
+    subAccountId: string,
+    userId: string,
+  ): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     // 子账户余额已计入父账户，带余额归档会留下一笔“看不见的钱”；要求先清零。
     await this.txs.run(async (tx) => {
@@ -168,25 +253,29 @@ export class AccountsService {
 
   async create(ledgerId: string, userId: string, input: CreateAccountDto, idempotencyKey?: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.idempotency.run({ scope: `account.create:${ledgerId}`, key: idempotencyKey, userId }, () =>
-      this.prisma.client.account.create({
-        data: {
-          ledgerId,
-          type: input.type,
-          name: input.name,
-          icon: input.icon,
-          balanceMicros: BigInt(input.balanceMicros ?? "0"),
-          includeInNetWorth: input.includeInNetWorth ?? true,
-          creditLimitMicros: input.creditLimitMicros ? BigInt(input.creditLimitMicros) : null,
-          investmentCostMicros: input.investmentCostMicros ? BigInt(input.investmentCostMicros) : null,
-          counterparty: input.counterparty,
-          dueDate: input.dueDate ? parseDateOnly(input.dueDate) : null,
-          billDay: input.billDay,
-          repayDay: input.repayDay,
-          createdBy: userId,
-          updatedBy: userId,
-        },
-      }),
+    return this.idempotency.run(
+      { scope: `account.create:${ledgerId}`, key: idempotencyKey, userId },
+      () =>
+        this.prisma.client.account.create({
+          data: {
+            ledgerId,
+            type: input.type,
+            name: input.name,
+            icon: input.icon,
+            balanceMicros: BigInt(input.balanceMicros ?? "0"),
+            includeInNetWorth: input.includeInNetWorth ?? true,
+            creditLimitMicros: input.creditLimitMicros ? BigInt(input.creditLimitMicros) : null,
+            investmentCostMicros: input.investmentCostMicros
+              ? BigInt(input.investmentCostMicros)
+              : null,
+            counterparty: input.counterparty,
+            dueDate: input.dueDate ? parseDateOnly(input.dueDate) : null,
+            billDay: input.billDay,
+            repayDay: input.repayDay,
+            createdBy: userId,
+            updatedBy: userId,
+          },
+        }),
     );
   }
 
@@ -198,8 +287,11 @@ export class AccountsService {
       data: {
         name: input.name,
         icon: input.icon,
+        defaultSubAccountName: input.defaultSubAccountName,
+        defaultSubAccountIcon: input.defaultSubAccountIcon,
         includeInNetWorth: input.includeInNetWorth,
-        creditLimitMicros: input.creditLimitMicros === undefined ? undefined : BigInt(input.creditLimitMicros),
+        creditLimitMicros:
+          input.creditLimitMicros === undefined ? undefined : BigInt(input.creditLimitMicros),
         investmentCostMicros:
           input.investmentCostMicros === undefined ? undefined : BigInt(input.investmentCostMicros),
         counterparty: input.counterparty,
@@ -249,58 +341,69 @@ export class AccountsService {
     );
   }
 
-  private async adjustInner(ledgerId: string, accountId: string, userId: string, input: AdjustAccountDto) {
-    return this.txs.run(async (tx) => {
-      // delta 由“当前余额”算出，读之前必须锁行，否则并发写会让 delta 基于过期余额。
-      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
-      const account = await tx.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
-      if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-      const subAccount = input.subAccountId
-        ? await tx.subAccount.findFirst({
-            where: { id: input.subAccountId, accountId, ledgerId, archivedAt: null },
-          })
-        : null;
-      if (input.subAccountId && !subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
-      const before = subAccount?.balanceMicros ?? account.balanceMicros;
-      const after = BigInt(input.balanceAfterMicros);
-      const delta = after - before;
+  private async adjustInner(
+    ledgerId: string,
+    accountId: string,
+    userId: string,
+    input: AdjustAccountDto,
+  ) {
+    return this.txs.run(
+      async (tx) => {
+        // delta 由“当前余额”算出，读之前必须锁行，否则并发写会让 delta 基于过期余额。
+        await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+        const account = await tx.account.findFirst({
+          where: { id: accountId, ledgerId, archivedAt: null },
+        });
+        if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+        const subAccount = input.subAccountId
+          ? await tx.subAccount.findFirst({
+              where: { id: input.subAccountId, accountId, ledgerId, archivedAt: null },
+            })
+          : null;
+        if (input.subAccountId && !subAccount)
+          throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+        const before = subAccount?.balanceMicros ?? account.balanceMicros;
+        const after = BigInt(input.balanceAfterMicros);
+        const delta = after - before;
 
-      const adjustment = await tx.accountAdjustment.create({
-        data: {
+        const adjustment = await tx.accountAdjustment.create({
+          data: {
+            ledgerId,
+            accountId,
+            subAccountId: input.subAccountId ?? null,
+            balanceBeforeMicros: before,
+            balanceAfterMicros: after,
+            deltaMicros: delta,
+            note: input.note,
+            createdBy: userId,
+          },
+        });
+        await this.applyEntry(tx, {
           ledgerId,
           accountId,
-          subAccountId: input.subAccountId ?? null,
-          balanceBeforeMicros: before,
-          balanceAfterMicros: after,
-          deltaMicros: delta,
+          subAccountId: input.subAccountId,
+          entryType: "adjustment",
+          amountDeltaMicros: delta,
+          adjustmentId: adjustment.id,
           note: input.note,
+          occurredAt: new Date(),
           createdBy: userId,
-        },
-      });
-      await this.applyEntry(tx, {
-        ledgerId,
-        accountId,
-        subAccountId: input.subAccountId,
-        entryType: "adjustment",
-        amountDeltaMicros: delta,
-        adjustmentId: adjustment.id,
-        note: input.note,
-        occurredAt: new Date(),
-        createdBy: userId,
-      });
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: userId,
-          ledgerId,
-          action: "account.adjust",
-          entityType: "account_adjustment",
-          entityId: adjustment.id,
-        },
-        tx,
-      );
-      return adjustment;
-    }, { timeout: 20_000 });
+        });
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: userId,
+            ledgerId,
+            action: "account.adjust",
+            entityType: "account_adjustment",
+            entityId: adjustment.id,
+          },
+          tx,
+        );
+        return adjustment;
+      },
+      { timeout: 20_000 },
+    );
   }
 
   async settle(
@@ -317,56 +420,73 @@ export class AccountsService {
     );
   }
 
-  private async settleInner(ledgerId: string, accountId: string, userId: string, input: SettleAccountDto) {
-    return this.txs.run(async (tx) => {
-      // settleAll/金额上限校验基于当前余额，读之前锁行，防止并发结算超额。
-      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
-      const account = await tx.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
-      if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-      if (!["receivable", "payable"].includes(account.type)) {
-        throw new AppError("SETTLEMENT_ACCOUNT_TYPE_INVALID", "只有可收回/需归还账户可以收款或还款", 400);
-      }
-      const subAccount = input.subAccountId
-        ? await tx.subAccount.findFirst({
-            where: { id: input.subAccountId, accountId, ledgerId, archivedAt: null },
-          })
-        : null;
-      if (input.subAccountId && !subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
-
-      const current = subAccount?.balanceMicros ?? account.balanceMicros;
-      const amount = input.settleAll ? current : BigInt(input.amountMicros ?? "0");
-      if (amount <= 0n) throw new AppError("INVALID_SETTLEMENT_AMOUNT", "结算金额必须大于 0", 400);
-      if (amount > current) throw new AppError("SETTLEMENT_AMOUNT_TOO_LARGE", "结算金额不能超过账户余额", 400);
-
-      const entry = await this.applyEntry(tx, {
-        ledgerId,
-        accountId,
-        subAccountId: input.subAccountId,
-        entryType: "settlement",
-        amountDeltaMicros: -amount,
-        note: input.note,
-        occurredAt: input.occurredOn ? parseDateOnly(input.occurredOn) : new Date(),
-        createdBy: userId,
-      });
-      if (entry.balanceAfterMicros === 0n) {
-        await tx.account.update({
-          where: { id: accountId },
-          data: { settledAt: new Date(), updatedBy: userId },
+  private async settleInner(
+    ledgerId: string,
+    accountId: string,
+    userId: string,
+    input: SettleAccountDto,
+  ) {
+    return this.txs.run(
+      async (tx) => {
+        // settleAll/金额上限校验基于当前余额，读之前锁行，防止并发结算超额。
+        await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+        const account = await tx.account.findFirst({
+          where: { id: accountId, ledgerId, archivedAt: null },
         });
-      }
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: userId,
+        if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+        if (!["receivable", "payable"].includes(account.type)) {
+          throw new AppError(
+            "SETTLEMENT_ACCOUNT_TYPE_INVALID",
+            "只有可收回/需归还账户可以收款或还款",
+            400,
+          );
+        }
+        const subAccount = input.subAccountId
+          ? await tx.subAccount.findFirst({
+              where: { id: input.subAccountId, accountId, ledgerId, archivedAt: null },
+            })
+          : null;
+        if (input.subAccountId && !subAccount)
+          throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+
+        const current = subAccount?.balanceMicros ?? account.balanceMicros;
+        const amount = input.settleAll ? current : BigInt(input.amountMicros ?? "0");
+        if (amount <= 0n)
+          throw new AppError("INVALID_SETTLEMENT_AMOUNT", "结算金额必须大于 0", 400);
+        if (amount > current)
+          throw new AppError("SETTLEMENT_AMOUNT_TOO_LARGE", "结算金额不能超过账户余额", 400);
+
+        const entry = await this.applyEntry(tx, {
           ledgerId,
-          action: "account.settle",
-          entityType: "account_entry",
-          entityId: entry.id,
-        },
-        tx,
-      );
-      return entry;
-    }, { timeout: 20_000 });
+          accountId,
+          subAccountId: input.subAccountId,
+          entryType: "settlement",
+          amountDeltaMicros: -amount,
+          note: input.note,
+          occurredAt: input.occurredOn ? parseDateOnly(input.occurredOn) : new Date(),
+          createdBy: userId,
+        });
+        if (entry.balanceAfterMicros === 0n) {
+          await tx.account.update({
+            where: { id: accountId },
+            data: { settledAt: new Date(), updatedBy: userId },
+          });
+        }
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: userId,
+            ledgerId,
+            action: "account.settle",
+            entityType: "account_entry",
+            entityId: entry.id,
+          },
+          tx,
+        );
+        return entry;
+      },
+      { timeout: 20_000 },
+    );
   }
 
   async applyEntry(tx: PrismaTransactionClient, input: AccountEntryInput) {
@@ -394,7 +514,10 @@ export class AccountsService {
       if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
       await tx.subAccount.update({
         where: { id: input.subAccountId },
-        data: { balanceMicros: subAccount.balanceMicros + input.amountDeltaMicros, updatedBy: input.createdBy },
+        data: {
+          balanceMicros: subAccount.balanceMicros + input.amountDeltaMicros,
+          updatedBy: input.createdBy,
+        },
       });
     }
 
@@ -423,13 +546,172 @@ export class AccountsService {
     });
   }
 
+  private async defaultBucketMicros(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    accountId: string,
+  ): Promise<bigint> {
+    const account = await tx.account.findFirst({ where: { id: accountId, ledgerId } });
+    if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    const subAccounts = await tx.subAccount.findMany({
+      where: { ledgerId, accountId, archivedAt: null },
+      select: { balanceMicros: true },
+    });
+    return subAccounts.reduce(
+      (sum, subAccount) => sum - subAccount.balanceMicros,
+      account.balanceMicros,
+    );
+  }
+
+  private async hasDefaultSubAccountRefs(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    accountId: string,
+  ): Promise<boolean> {
+    const [entries, adjustments, transactions, rules, pending, templates] = await Promise.all([
+      tx.accountEntry.count({ where: { ledgerId, accountId, subAccountId: null } }),
+      tx.accountAdjustment.count({ where: { ledgerId, accountId, subAccountId: null } }),
+      tx.transaction.count({
+        where: {
+          ledgerId,
+          OR: [
+            { accountId, subAccountId: null },
+            { fromAccountId: accountId, fromSubAccountId: null },
+            { toAccountId: accountId, toSubAccountId: null },
+          ],
+        },
+      }),
+      tx.autoRule.count({
+        where: {
+          ledgerId,
+          OR: [
+            { accountId, subAccountId: null },
+            { fromAccountId: accountId, fromSubAccountId: null },
+            { toAccountId: accountId, toSubAccountId: null },
+          ],
+        },
+      }),
+      tx.autoPendingTransaction.count({
+        where: {
+          ledgerId,
+          OR: [
+            { accountId, subAccountId: null },
+            { fromAccountId: accountId, fromSubAccountId: null },
+            { toAccountId: accountId, toSubAccountId: null },
+          ],
+        },
+      }),
+      tx.quickTemplate.count({
+        where: {
+          ledgerId,
+          OR: [
+            { accountId, subAccountId: null },
+            { fromAccountId: accountId, fromSubAccountId: null },
+            { toAccountId: accountId, toSubAccountId: null },
+          ],
+        },
+      }),
+    ]);
+    return [entries, adjustments, transactions, rules, pending, templates].some(
+      (count) => count > 0,
+    );
+  }
+
+  private async uniqueSubAccountName(
+    tx: PrismaTransactionClient,
+    accountId: string,
+    preferredName: string,
+  ): Promise<string> {
+    const base = preferredName.trim() || "默认";
+    const existing = await tx.subAccount.findMany({
+      where: { accountId },
+      select: { name: true },
+    });
+    const names = new Set(existing.map((item) => item.name));
+    if (!names.has(base)) return base;
+    for (let index = 2; index < 1000; index += 1) {
+      const candidate = `${base} ${index}`;
+      if (!names.has(candidate)) return candidate;
+    }
+    throw new AppError("SUB_ACCOUNT_NAME_CONFLICT", "子账户名称冲突", 400);
+  }
+
+  private async moveSubAccountRefs(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    accountId: string,
+    fromSubAccountId: string | null,
+    toSubAccountId: string | null,
+  ): Promise<void> {
+    await Promise.all([
+      tx.accountEntry.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.accountAdjustment.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.transaction.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.transaction.updateMany({
+        where: { ledgerId, fromAccountId: accountId, fromSubAccountId },
+        data: { fromSubAccountId: toSubAccountId },
+      }),
+      tx.transaction.updateMany({
+        where: { ledgerId, toAccountId: accountId, toSubAccountId: fromSubAccountId },
+        data: { toSubAccountId: toSubAccountId },
+      }),
+      tx.autoRule.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.autoRule.updateMany({
+        where: { ledgerId, fromAccountId: accountId, fromSubAccountId },
+        data: { fromSubAccountId: toSubAccountId },
+      }),
+      tx.autoRule.updateMany({
+        where: { ledgerId, toAccountId: accountId, toSubAccountId: fromSubAccountId },
+        data: { toSubAccountId: toSubAccountId },
+      }),
+      tx.autoPendingTransaction.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.autoPendingTransaction.updateMany({
+        where: { ledgerId, fromAccountId: accountId, fromSubAccountId },
+        data: { fromSubAccountId: toSubAccountId },
+      }),
+      tx.autoPendingTransaction.updateMany({
+        where: { ledgerId, toAccountId: accountId, toSubAccountId: fromSubAccountId },
+        data: { toSubAccountId: toSubAccountId },
+      }),
+      tx.quickTemplate.updateMany({
+        where: { ledgerId, accountId, subAccountId: fromSubAccountId },
+        data: { subAccountId: toSubAccountId },
+      }),
+      tx.quickTemplate.updateMany({
+        where: { ledgerId, fromAccountId: accountId, fromSubAccountId },
+        data: { fromSubAccountId: toSubAccountId },
+      }),
+      tx.quickTemplate.updateMany({
+        where: { ledgerId, toAccountId: accountId, toSubAccountId: fromSubAccountId },
+        data: { toSubAccountId: toSubAccountId },
+      }),
+    ]);
+  }
+
   async assertActiveAccount(
     tx: PrismaTransactionClient,
     ledgerId: string,
     accountId: string,
     subAccountId?: string | null,
   ): Promise<void> {
-    const account = await tx.account.findFirst({ where: { id: accountId, ledgerId, archivedAt: null } });
+    const account = await tx.account.findFirst({
+      where: { id: accountId, ledgerId, archivedAt: null },
+    });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
     if (!subAccountId) return;
 
@@ -440,11 +722,17 @@ export class AccountsService {
   }
 
   private async assertAccountInLedger(ledgerId: string, accountId: string): Promise<void> {
-    const account = await this.prisma.client.account.findFirst({ where: { id: accountId, ledgerId } });
+    const account = await this.prisma.client.account.findFirst({
+      where: { id: accountId, ledgerId },
+    });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
   }
 
-  private async assertActiveSubAccount(ledgerId: string, accountId: string, subAccountId: string): Promise<void> {
+  private async assertActiveSubAccount(
+    ledgerId: string,
+    accountId: string,
+    subAccountId: string,
+  ): Promise<void> {
     const subAccount = await this.prisma.client.subAccount.findFirst({
       where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
     });

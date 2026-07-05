@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, Length } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Length } from "class-validator";
 
 export class UpdateSubAccountDto {
   @ApiPropertyOptional()
@@ -7,4 +7,15 @@ export class UpdateSubAccountDto {
   @IsString()
   @Length(1, 80)
   name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  icon?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  includeInNetWorth?: boolean;
 }

@@ -189,7 +189,10 @@ export function SearchableOptionSelectRow({
                 })}
 
             {hasMore ? (
-              <Button onClick={() => setVisibleCount((count) => count + visibleStep)} variant="secondary">
+              <Button
+                onClick={() => setVisibleCount((count) => count + visibleStep)}
+                variant="secondary"
+              >
                 加载更多
               </Button>
             ) : null}

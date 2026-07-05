@@ -190,7 +190,10 @@ export function BillsScreen() {
     ],
     [categoriesQuery.data],
   );
-  const filterAccountOptions = useMemo(() => moneyAccountOptions(accounts), [accounts]);
+  const filterAccountOptions = useMemo(
+    () => moneyAccountOptions(accounts, { parentSelectable: true }),
+    [accounts],
+  );
   const filterPersonOptions = useMemo(
     () => personOptions(peopleQuery.data ?? []),
     [peopleQuery.data],

@@ -1,5 +1,6 @@
 import type { BusinessFilterValue } from "@/components/business";
 import type { Transaction, TransactionListQuery } from "@/lib/api";
+import { resolveFilterAccountOptionId } from "@/lib/data/options";
 import { parseMoneyToMicros } from "@/lib/money";
 
 export function currentMonthKey(): string {
@@ -38,7 +39,10 @@ export function periodLabel(value: BusinessFilterValue): string {
 }
 
 /** 把筛选弹层的时间选择（预设或自定义）解析成交易列表的日期范围。 */
-export function timeRangeFromFilter(value: BusinessFilterValue): { dateFrom?: string; dateTo?: string } {
+export function timeRangeFromFilter(value: BusinessFilterValue): {
+  dateFrom?: string;
+  dateTo?: string;
+} {
   const preset = value.timePreset ?? "month";
   if (preset === "all") return {};
   if (preset === "custom") {
@@ -56,9 +60,15 @@ export function timeRangeFromFilter(value: BusinessFilterValue): { dateFrom?: st
     case "lastmonth":
       return { dateFrom: ymd(new Date(y, m - 1, 1)), dateTo: ymd(new Date(y, m, 0)) };
     case "week":
-      return { dateFrom: ymd(new Date(y, m, d - mondayOffset)), dateTo: ymd(new Date(y, m, d - mondayOffset + 6)) };
+      return {
+        dateFrom: ymd(new Date(y, m, d - mondayOffset)),
+        dateTo: ymd(new Date(y, m, d - mondayOffset + 6)),
+      };
     case "lastweek":
-      return { dateFrom: ymd(new Date(y, m, d - mondayOffset - 7)), dateTo: ymd(new Date(y, m, d - mondayOffset - 1)) };
+      return {
+        dateFrom: ymd(new Date(y, m, d - mondayOffset - 7)),
+        dateTo: ymd(new Date(y, m, d - mondayOffset - 1)),
+      };
     case "30d":
       return { dateFrom: ymd(new Date(y, m, d - 29)), dateTo: ymd(now) };
     case "year":
@@ -81,7 +91,10 @@ export function dayLabel(iso: string): string {
 }
 
 /** 把筛选弹层的值（不含时间，由月份控制）映射成交易列表查询参数。 */
-export function filterToQuery(value: BusinessFilterValue, decimalPlaces: number): TransactionListQuery {
+export function filterToQuery(
+  value: BusinessFilterValue,
+  decimalPlaces: number,
+): TransactionListQuery {
   const query: TransactionListQuery = {};
   if (value.type && value.type !== "all") query.type = value.type;
 
@@ -90,8 +103,9 @@ export function filterToQuery(value: BusinessFilterValue, decimalPlaces: number)
   const subcategoryId = value.subcategoryIds?.[0];
   if (subcategoryId) query.subcategoryId = subcategoryId;
 
-  const accountId = value.accountIds?.[0] ?? value.accountId ?? undefined;
-  if (accountId) query.accountId = accountId;
+  const account = resolveFilterAccountOptionId(value.accountIds?.[0] ?? value.accountId);
+  if (account.accountId) query.accountId = account.accountId;
+  if (account.subAccountId) query.subAccountId = account.subAccountId;
   const personId = value.personIds?.[0] ?? value.personId ?? undefined;
   if (personId) query.personId = personId;
   if (value.keyword) query.note = value.keyword;
@@ -131,7 +145,10 @@ export function groupByDay(transactions: Transaction[]): DayGroup[] {
   return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-export function monthTotals(transactions: Transaction[]): { expenseMicros: bigint; incomeMicros: bigint } {
+export function monthTotals(transactions: Transaction[]): {
+  expenseMicros: bigint;
+  incomeMicros: bigint;
+} {
   let expenseMicros = 0n;
   let incomeMicros = 0n;
   for (const transaction of transactions) {

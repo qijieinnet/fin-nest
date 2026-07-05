@@ -12,6 +12,7 @@ export { DateWheelPicker } from "./DateWheelPicker";
 export { EmptyState } from "./EmptyState";
 export { FilterBar } from "./FilterBar";
 export { FilterSheet } from "./FilterSheet";
+export { InlineHint } from "./InlineHint";
 export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
@@ -34,7 +35,12 @@ export { TransactionTypeSwitch } from "./TransactionTypeSwitch";
 export { countActiveFilters, hasNonTimeFilters, resetFilterValue } from "./filter-utils";
 export { defaultFilterValue } from "./filter-types";
 export type { AssetLinkOption } from "./AssetLinkCard";
-export type { AttachmentItem, BusinessOption, CategoryOption, TransactionType } from "./business-types";
+export type {
+  AttachmentItem,
+  BusinessOption,
+  CategoryOption,
+  TransactionType,
+} from "./business-types";
 export type { BusinessFilterValue, FilterField } from "./filter-types";
 export type { CategoryRingSegment } from "./CategoryRingChart";
 export type { RecoverablePayableItem } from "./RecoverablePayableEditor";

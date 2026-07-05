@@ -12,6 +12,7 @@ import { useDecimalPlaces, useLedger, useSheetStack } from "@/providers";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
 import {
   ACCOUNT_GROUPS,
+  accountNetWorthMicros,
   accountSubtitle,
   accountTotalMicros,
   formatMoney,
@@ -31,7 +32,7 @@ export function AccountsScreen() {
   const openEditor = () => {
     if (!ledgerId) return;
     push({
-      className: "ui-bottom-sheet--full-height",
+      className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
       content: <AccountEditorSheet ledgerId={ledgerId} />,
     });
@@ -39,10 +40,7 @@ export function AccountsScreen() {
 
   const groups = ACCOUNT_GROUPS.map((group) => {
     const list = accounts.filter((account) => account.type === group.key);
-    const total = list.reduce(
-      (sum, account) => sum + (account.includeInNetWorth ? accountTotalMicros(account) : 0n),
-      0n,
-    );
+    const total = list.reduce((sum, account) => sum + accountNetWorthMicros(account), 0n);
     return { ...group, list, total };
   }).filter((group) => group.list.length > 0);
 

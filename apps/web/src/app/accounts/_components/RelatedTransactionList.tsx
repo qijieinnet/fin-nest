@@ -18,7 +18,7 @@ type RelatedTransactionListProps = {
 
 const DEFAULT_SUB_ACCOUNT_ID = "default";
 
-function transactionUsesDefaultSubAccount(transaction: Transaction, accountId: string) {
+export function transactionUsesDefaultSubAccount(transaction: Transaction, accountId: string) {
   return (
     (transaction.accountId === accountId && !transaction.subAccountId) ||
     (transaction.fromAccountId === accountId && !transaction.fromSubAccountId) ||

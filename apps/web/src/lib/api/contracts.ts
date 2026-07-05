@@ -153,7 +153,9 @@ export type SubAccount = {
   ledgerId: string;
   accountId: string;
   name: string;
+  icon: string | null;
   balanceMicros: string;
+  includeInNetWorth: boolean;
   archivedAt: string | null;
 };
 
@@ -163,6 +165,8 @@ export type Account = {
   type: AccountType;
   name: string;
   icon: string | null;
+  defaultSubAccountName: string | null;
+  defaultSubAccountIcon: string | null;
   /** 账户总余额（含子账户）。 */
   balanceMicros: string;
   includeInNetWorth: boolean;

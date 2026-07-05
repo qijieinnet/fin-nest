@@ -110,7 +110,21 @@ export function FilterSheet({
   }
 
   function toggleAccount(id: string) {
-    const next = toggleValue(accountIds, id);
+    const option = accountOptions.find((item) => item.id === id);
+    const selected = accountIds.includes(id);
+    let next: string[];
+    if (option?.parentId) {
+      next = accountIds.filter((item) => item !== id && item !== option.parentId);
+      if (!selected) next.push(id);
+    } else if (option) {
+      const childIds = accountOptions
+        .filter((item) => item.parentId === option.id)
+        .map((item) => item.id);
+      next = accountIds.filter((item) => item !== id && !childIds.includes(item));
+      if (!selected) next.push(id);
+    } else {
+      next = toggleValue(accountIds, id);
+    }
     patch({ accountId: next.at(-1) ?? null, accountIds: next });
   }
 
@@ -282,7 +296,9 @@ export function FilterSheet({
               <p className="biz-filter-label">账户（可选到子账户，多选）</p>
               <div className="biz-category-picker-sheet">
                 {primaryAccountOptions.map((account) => {
-                  const subOptions = accountOptions.filter((option) => option.parentId === account.id);
+                  const subOptions = accountOptions.filter(
+                    (option) => option.parentId === account.id,
+                  );
                   return (
                     <section className="biz-category-group" key={account.id}>
                       <button
@@ -294,7 +310,9 @@ export function FilterSheet({
                         onClick={() => toggleAccount(account.id)}
                         type="button"
                       >
-                        {account.icon ? <span className="biz-category-icon">{account.icon}</span> : null}
+                        {account.icon ? (
+                          <span className="biz-category-icon">{account.icon}</span>
+                        ) : null}
                         <span>{account.label}</span>
                       </button>
 
@@ -311,7 +329,9 @@ export function FilterSheet({
                               onClick={() => toggleAccount(sub.id)}
                               type="button"
                             >
-                              {sub.icon ? <span className="biz-category-icon">{sub.icon}</span> : null}
+                              {sub.icon ? (
+                                <span className="biz-category-icon">{sub.icon}</span>
+                              ) : null}
                               <span>{sub.label}</span>
                             </button>
                           ))}

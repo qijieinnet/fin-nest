@@ -49,8 +49,20 @@ export type ImportResult = {
 /** 注册表条目：已有实体带 id；本文件新增的实体 id 在提交阶段创建后回填。 */
 type Ref = { id: string | null };
 
-type PlannedCategory = { ref: Ref; type: string; name: string; icon: string | null; sortOrder: number };
-type PlannedSubcategory = { ref: Ref; categoryRef: Ref; name: string; icon: string | null; sortOrder: number };
+type PlannedCategory = {
+  ref: Ref;
+  type: string;
+  name: string;
+  icon: string | null;
+  sortOrder: number;
+};
+type PlannedSubcategory = {
+  ref: Ref;
+  categoryRef: Ref;
+  name: string;
+  icon: string | null;
+  sortOrder: number;
+};
 type PlannedPerson = { ref: Ref; name: string; icon: string | null };
 type PlannedAccount = {
   ref: Ref;
@@ -64,7 +76,14 @@ type PlannedAccount = {
   billDay: number | null;
   repayDay: number | null;
 };
-type PlannedSubAccount = { ref: Ref; accountRef: Ref; name: string; balanceMicros: string };
+type PlannedSubAccount = {
+  ref: Ref;
+  accountRef: Ref;
+  name: string;
+  icon: string | null;
+  balanceMicros: string;
+  includeInNetWorth: boolean;
+};
 type PlannedItemType = { ref: Ref; name: string; sortOrder: number };
 type PlannedItem = {
   ref: Ref;
@@ -150,7 +169,12 @@ export class ExcelImportService {
     private readonly transactions: TransactionsService,
   ) {}
 
-  async importExcel(ledgerId: string, userId: string, file: Buffer, dryRun: boolean): Promise<ImportResult> {
+  async importExcel(
+    ledgerId: string,
+    userId: string,
+    file: Buffer,
+    dryRun: boolean,
+  ): Promise<ImportResult> {
     await this.ledgers.assertMember(ledgerId, userId);
 
     const workbook = new ExcelJS.Workbook();
@@ -198,18 +222,27 @@ export class ExcelImportService {
   private async buildRegistry(ledgerId: string): Promise<Registry> {
     const client = this.prisma.client;
     const where = { ledgerId };
-    const [categories, subcategories, people, accounts, subAccounts, insurances, items, itemTypes, transactions] =
-      await Promise.all([
-        client.category.findMany({ where: { ...where, archivedAt: null } }),
-        client.subcategory.findMany({ where: { ...where, archivedAt: null } }),
-        client.person.findMany({ where: { ...where, archivedAt: null } }),
-        client.account.findMany({ where: { ...where, archivedAt: null } }),
-        client.subAccount.findMany({ where: { ...where, archivedAt: null } }),
-        client.insurance.findMany({ where: { ...where, deletedAt: null } }),
-        client.item.findMany({ where: { ...where, deletedAt: null } }),
-        client.itemType.findMany({ where }),
-        client.transaction.findMany({ where, select: { id: true } }),
-      ]);
+    const [
+      categories,
+      subcategories,
+      people,
+      accounts,
+      subAccounts,
+      insurances,
+      items,
+      itemTypes,
+      transactions,
+    ] = await Promise.all([
+      client.category.findMany({ where: { ...where, archivedAt: null } }),
+      client.subcategory.findMany({ where: { ...where, archivedAt: null } }),
+      client.person.findMany({ where: { ...where, archivedAt: null } }),
+      client.account.findMany({ where: { ...where, archivedAt: null } }),
+      client.subAccount.findMany({ where: { ...where, archivedAt: null } }),
+      client.insurance.findMany({ where: { ...where, deletedAt: null } }),
+      client.item.findMany({ where: { ...where, deletedAt: null } }),
+      client.itemType.findMany({ where }),
+      client.transaction.findMany({ where, select: { id: true } }),
+    ]);
 
     const categoryById = new Map(categories.map((row) => [row.id, row]));
     const accountById = new Map(accounts.map((row) => [row.id, row]));
@@ -224,11 +257,16 @@ export class ExcelImportService {
           }),
       ),
       personByName: new Map(people.map((row) => [row.name, { id: row.id }])),
-      accountByName: new Map(accounts.map((row) => [row.name, { ref: { id: row.id }, type: row.type }])),
+      accountByName: new Map(
+        accounts.map((row) => [row.name, { ref: { id: row.id }, type: row.type }]),
+      ),
       subAccountByKey: new Map(
         subAccounts
           .filter((row) => accountById.has(row.accountId))
-          .map((row) => [`${accountById.get(row.accountId)!.name}:${row.name}`, { id: row.id }] as const),
+          .map(
+            (row) =>
+              [`${accountById.get(row.accountId)!.name}:${row.name}`, { id: row.id }] as const,
+          ),
       ),
       insuranceByName: new Map(insurances.map((row) => [row.name, { id: row.id }])),
       itemByName: new Map(items.map((row) => [row.name, { id: row.id }])),
@@ -273,7 +311,9 @@ export class ExcelImportService {
         const colNumber = columnByKey.get(key);
         return colNumber ? row.getCell(colNumber).value : null;
       };
-      const hasContent = [...columnByKey.values()].some((colNumber) => cellToText(row.getCell(colNumber).value) !== "");
+      const hasContent = [...columnByKey.values()].some(
+        (colNumber) => cellToText(row.getCell(colNumber).value) !== "",
+      );
       if (!hasContent) continue;
       yield { rowNumber, value };
     }
@@ -292,14 +332,21 @@ export class ExcelImportService {
     if (id) {
       count.skipped += 1;
       if (!registry.existingIds.has(id)) {
-        warnings.push({ sheet: sheetName, row: rowNumber, message: "该行的 ID 在账本中不存在，已跳过" });
+        warnings.push({
+          sheet: sheetName,
+          row: rowNumber,
+          message: "该行的 ID 在账本中不存在，已跳过",
+        });
       }
       return "skip";
     }
     return "new";
   }
 
-  private ensureCount(counts: ImportResult["counts"], key: string): { new: number; matched: number; skipped: number } {
+  private ensureCount(
+    counts: ImportResult["counts"],
+    key: string,
+  ): { new: number; matched: number; skipped: number } {
     if (!counts[key]) counts[key] = { new: 0, matched: 0, skipped: 0 };
     return counts[key];
   }
@@ -317,7 +364,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, ITEM_TYPE_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         if (registry.itemTypeByName.has(name)) {
@@ -349,7 +399,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, PERSON_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("姓名不能为空");
         if (registry.personByName.has(name)) {
@@ -381,7 +434,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, CATEGORY_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const type = valueOfLabel(CATEGORY_TYPE_LABELS, cellToText(value("type")));
         if (!type) throw new Error("类型必须是 支出 或 收入");
         const name = cellToText(value("name"));
@@ -422,7 +478,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, SUBCATEGORY_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         const categoryName = cellToText(value("category"));
@@ -458,14 +517,17 @@ export class ExcelImportService {
       const type = valueOfLabel(CATEGORY_TYPE_LABELS, typeText);
       if (!type) throw new Error("所属分类类型必须是 支出 或 收入");
       const key = `${type}:${categoryName}`;
-      if (!registry.categoryByKey.has(key)) throw new Error(`分类「${categoryName}」不存在（可先在分类表新增）`);
+      if (!registry.categoryByKey.has(key))
+        throw new Error(`分类「${categoryName}」不存在（可先在分类表新增）`);
       return key;
     }
     const candidates = ["expense", "income"]
       .map((type) => `${type}:${categoryName}`)
       .filter((key) => registry.categoryByKey.has(key));
-    if (candidates.length === 0) throw new Error(`分类「${categoryName}」不存在（可先在分类表新增）`);
-    if (candidates.length > 1) throw new Error(`分类「${categoryName}」在支出和收入中都存在，请填写所属分类类型`);
+    if (candidates.length === 0)
+      throw new Error(`分类「${categoryName}」不存在（可先在分类表新增）`);
+    if (candidates.length > 1)
+      throw new Error(`分类「${categoryName}」在支出和收入中都存在，请填写所属分类类型`);
     return candidates[0]!;
   }
 
@@ -482,7 +544,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, ACCOUNT_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         if (registry.accountByName.has(name)) {
@@ -501,9 +566,13 @@ export class ExcelImportService {
           type,
           name,
           icon: cellToText(value("icon")) || null,
-          balanceMicros: hasCellValue(value("balance")) ? cellToMicrosString(value("balance"), { allowNegative: true }) : "0",
+          balanceMicros: hasCellValue(value("balance"))
+            ? cellToMicrosString(value("balance"), { allowNegative: true })
+            : "0",
           includeInNetWorth: includeText ? includeText !== "否" : true,
-          creditLimitMicros: hasCellValue(value("creditLimit")) ? cellToMicrosString(value("creditLimit")) : null,
+          creditLimitMicros: hasCellValue(value("creditLimit"))
+            ? cellToMicrosString(value("creditLimit"))
+            : null,
           counterparty: cellToText(value("counterparty")) || null,
           billDay: cellToInt(value("billDay")),
           repayDay: cellToInt(value("repayDay")),
@@ -528,7 +597,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, SUB_ACCOUNT_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         const accountName = cellToText(value("account"));
@@ -548,7 +620,11 @@ export class ExcelImportService {
           ref,
           accountRef: account.ref,
           name,
-          balanceMicros: hasCellValue(value("balance")) ? cellToMicrosString(value("balance"), { allowNegative: true }) : "0",
+          icon: cellToText(value("icon")) || null,
+          balanceMicros: hasCellValue(value("balance"))
+            ? cellToMicrosString(value("balance"), { allowNegative: true })
+            : "0",
+          includeInNetWorth: cellToText(value("includeInNetWorth")) !== "否",
         });
         count.new += 1;
       } catch (error) {
@@ -570,7 +646,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, INSURANCE_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         if (registry.insuranceByName.has(name)) {
@@ -580,11 +659,13 @@ export class ExcelImportService {
         if (seen.has(name)) throw new Error(`保险「${name}」在文件中重复`);
         const type = cellToText(value("type"));
         if (!type) throw new Error("险种不能为空");
-        const insuredPeopleRefs = splitNames(cellToText(value("insuredPeople"))).map((personName) => {
-          const person = registry.personByName.get(personName);
-          if (!person) throw new Error(`被保人「${personName}」不存在（可先在成员表新增）`);
-          return person;
-        });
+        const insuredPeopleRefs = splitNames(cellToText(value("insuredPeople"))).map(
+          (personName) => {
+            const person = registry.personByName.get(personName);
+            if (!person) throw new Error(`被保人「${personName}」不存在（可先在成员表新增）`);
+            return person;
+          },
+        );
         seen.add(name);
         const ref: Ref = { id: null };
         registry.insuranceByName.set(name, ref);
@@ -595,8 +676,12 @@ export class ExcelImportService {
           insurer: cellToText(value("insurer")) || null,
           method: cellToText(value("method")) || null,
           policyNo: cellToText(value("policyNo")) || null,
-          coverageMicros: hasCellValue(value("coverage")) ? cellToMicrosString(value("coverage")) : null,
-          premiumMicros: hasCellValue(value("premium")) ? cellToMicrosString(value("premium")) : null,
+          coverageMicros: hasCellValue(value("coverage"))
+            ? cellToMicrosString(value("coverage"))
+            : null,
+          premiumMicros: hasCellValue(value("premium"))
+            ? cellToMicrosString(value("premium"))
+            : null,
           premiumFreq: cellToText(value("premiumFreq")) || null,
           periods: cellToInt(value("periods")),
           renewal: cellToText(value("renewal")) || null,
@@ -626,7 +711,10 @@ export class ExcelImportService {
     const seen = new Set<string>();
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, ITEM_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const name = cellToText(value("name"));
         if (!name) throw new Error("名称不能为空");
         if (registry.itemByName.has(name)) {
@@ -638,7 +726,8 @@ export class ExcelImportService {
         let itemTypeRef: Ref | null = null;
         if (itemTypeName) {
           const itemType = registry.itemTypeByName.get(itemTypeName);
-          if (!itemType) throw new Error(`物品类型「${itemTypeName}」不存在（可先在物品类型表新增）`);
+          if (!itemType)
+            throw new Error(`物品类型「${itemTypeName}」不存在（可先在物品类型表新增）`);
           itemTypeRef = itemType;
         }
         seen.add(name);
@@ -648,8 +737,12 @@ export class ExcelImportService {
           ref,
           name,
           itemTypeRef,
-          purchasePriceMicros: hasCellValue(value("purchasePrice")) ? cellToMicrosString(value("purchasePrice")) : null,
-          purchaseDate: hasCellValue(value("purchaseDate")) ? cellToDateText(value("purchaseDate")) : null,
+          purchasePriceMicros: hasCellValue(value("purchasePrice"))
+            ? cellToMicrosString(value("purchasePrice"))
+            : null,
+          purchaseDate: hasCellValue(value("purchaseDate"))
+            ? cellToDateText(value("purchaseDate"))
+            : null,
           expectedYears: cellToText(value("expectedYears")) || null,
           note: cellToText(value("note")) || null,
         });
@@ -674,7 +767,10 @@ export class ExcelImportService {
     const settings = await this.prisma.client.recordSetting.findUnique({ where: { ledgerId } });
     for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, TRANSACTION_COLUMNS)) {
       try {
-        if (this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip") continue;
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
         const type = valueOfLabel(TRANSACTION_TYPE_LABELS, cellToText(value("type")));
         if (!type) throw new Error("类型必须是 支出/收入/转账 之一");
         const occurredOn = cellToDateText(value("occurredOn"));
@@ -702,8 +798,18 @@ export class ExcelImportService {
         };
 
         if (type === "transfer") {
-          const from = this.resolveAccountPair(registry, cellToText(value("fromAccount")), cellToText(value("fromSubAccount")), "转出");
-          const to = this.resolveAccountPair(registry, cellToText(value("toAccount")), cellToText(value("toSubAccount")), "转入");
+          const from = this.resolveAccountPair(
+            registry,
+            cellToText(value("fromAccount")),
+            cellToText(value("fromSubAccount")),
+            "转出",
+          );
+          const to = this.resolveAccountPair(
+            registry,
+            cellToText(value("toAccount")),
+            cellToText(value("toSubAccount")),
+            "转入",
+          );
           if (!from || !to) throw new Error("转账必须填写转出账户和转入账户");
           planned.fromAccountRef = from.accountRef;
           planned.fromSubAccountRef = from.subAccountRef;
@@ -719,20 +825,30 @@ export class ExcelImportService {
             const categoryKey = `${type}:${categoryName}`;
             const categoryRef = registry.categoryByKey.get(categoryKey);
             if (!categoryRef) {
-              throw new Error(`${TRANSACTION_TYPE_LABELS[type]}分类「${categoryName}」不存在（可先在分类表新增）`);
+              throw new Error(
+                `${TRANSACTION_TYPE_LABELS[type]}分类「${categoryName}」不存在（可先在分类表新增）`,
+              );
             }
             planned.categoryRef = categoryRef;
             const subcategoryName = cellToText(value("subcategory"));
             if (subcategoryName) {
-              const subcategoryRef = registry.subcategoryByKey.get(`${categoryKey}:${subcategoryName}`);
-              if (!subcategoryRef) throw new Error(`子分类「${subcategoryName}」不存在（可先在子分类表新增）`);
+              const subcategoryRef = registry.subcategoryByKey.get(
+                `${categoryKey}:${subcategoryName}`,
+              );
+              if (!subcategoryRef)
+                throw new Error(`子分类「${subcategoryName}」不存在（可先在子分类表新增）`);
               planned.subcategoryRef = subcategoryRef;
             }
           } else if (cellToText(value("subcategory"))) {
             throw new Error("填写子分类时必须同时填写分类");
           }
 
-          const pair = this.resolveAccountPair(registry, cellToText(value("account")), cellToText(value("subAccount")), "");
+          const pair = this.resolveAccountPair(
+            registry,
+            cellToText(value("account")),
+            cellToText(value("subAccount")),
+            "",
+          );
           if (pair) {
             planned.accountRef = pair.accountRef;
             planned.subAccountRef = pair.subAccountRef;
@@ -740,9 +856,17 @@ export class ExcelImportService {
             throw new Error("当前账本要求流水必须填写账户");
           }
 
-          planned.relations = this.parseRelationCell(registry, type, cellToText(value("relations")));
-          const relationTotal = planned.relations.reduce((sum, relation) => sum + BigInt(relation.amountMicros), 0n);
-          if (relationTotal > BigInt(grossAmountMicros)) throw new Error("往来关联金额合计不能超过流水金额");
+          planned.relations = this.parseRelationCell(
+            registry,
+            type,
+            cellToText(value("relations")),
+          );
+          const relationTotal = planned.relations.reduce(
+            (sum, relation) => sum + BigInt(relation.amountMicros),
+            0n,
+          );
+          if (relationTotal > BigInt(grossAmountMicros))
+            throw new Error("往来关联金额合计不能超过流水金额");
         }
 
         const personName = cellToText(value("person"));
@@ -772,7 +896,11 @@ export class ExcelImportService {
       }
     }
     if (count.new > IMPORT_MAX_TRANSACTION_ROWS) {
-      throw new AppError("IMPORT_TOO_MANY_ROWS", `单次导入流水不能超过 ${IMPORT_MAX_TRANSACTION_ROWS} 行`, 400);
+      throw new AppError(
+        "IMPORT_TOO_MANY_ROWS",
+        `单次导入流水不能超过 ${IMPORT_MAX_TRANSACTION_ROWS} 行`,
+        400,
+      );
     }
   }
 
@@ -790,7 +918,8 @@ export class ExcelImportService {
     if (!account) throw new Error(`${label}账户「${accountName}」不存在（可先在账户表新增）`);
     if (!subAccountName) return { accountRef: account.ref, subAccountRef: null };
     const subAccount = registry.subAccountByKey.get(`${accountName}:${subAccountName}`);
-    if (!subAccount) throw new Error(`${label}子账户「${subAccountName}」不存在（可先在子账户表新增）`);
+    if (!subAccount)
+      throw new Error(`${label}子账户「${subAccountName}」不存在（可先在子账户表新增）`);
     return { accountRef: account.ref, subAccountRef: subAccount };
   }
 
@@ -807,7 +936,8 @@ export class ExcelImportService {
       .filter(Boolean)
       .map((part) => {
         const segments = part.split("/").map((segment) => segment.trim());
-        if (segments.length !== 3) throw new Error(`往来关联「${part}」格式无效，应为 账户名/可收回/金额`);
+        if (segments.length !== 3)
+          throw new Error(`往来关联「${part}」格式无效，应为 账户名/可收回/金额`);
         const [accountName, kindLabel, amountText] = segments as [string, string, string];
         const kind = valueOfLabel(RELATION_KIND_LABELS, kindLabel);
         if (!kind) throw new Error(`往来关联类型「${kindLabel}」无效，应为 可收回 或 需归还`);
@@ -827,7 +957,12 @@ export class ExcelImportService {
   }
 
   /** 提交阶段：单事务内先建基础数据（回填 ref.id），再逐行走交易服务复用记账逻辑。 */
-  private async commit(ledgerId: string, userId: string, plan: Plan, counts: ImportResult["counts"]): Promise<void> {
+  private async commit(
+    ledgerId: string,
+    userId: string,
+    plan: Plan,
+    counts: ImportResult["counts"],
+  ): Promise<void> {
     const batchId = randomUUID();
     await this.txs.run(async (tx) => {
       await this.createBaseEntities(tx, ledgerId, userId, plan);
@@ -905,7 +1040,13 @@ export class ExcelImportService {
     }
     for (const planned of plan.people) {
       const created = await tx.person.create({
-        data: { ledgerId, name: planned.name, icon: planned.icon, createdBy: userId, updatedBy: userId },
+        data: {
+          ledgerId,
+          name: planned.name,
+          icon: planned.icon,
+          createdBy: userId,
+          updatedBy: userId,
+        },
       });
       planned.ref.id = created.id;
     }
@@ -963,7 +1104,9 @@ export class ExcelImportService {
           ledgerId,
           accountId: planned.accountRef.id!,
           name: planned.name,
+          icon: planned.icon,
           balanceMicros,
+          includeInNetWorth: planned.includeInNetWorth,
           createdBy: userId,
           updatedBy: userId,
         },
@@ -1002,7 +1145,10 @@ export class ExcelImportService {
       planned.ref.id = created.id;
       if (planned.insuredPeopleRefs.length) {
         await tx.insuranceInsuredPerson.createMany({
-          data: planned.insuredPeopleRefs.map((personRef) => ({ insuranceId: created.id, personId: personRef.id! })),
+          data: planned.insuredPeopleRefs.map((personRef) => ({
+            insuranceId: created.id,
+            personId: personRef.id!,
+          })),
         });
       }
     }
@@ -1012,7 +1158,9 @@ export class ExcelImportService {
           ledgerId,
           name: planned.name,
           typeId: planned.itemTypeRef?.id ?? null,
-          purchasePriceMicros: planned.purchasePriceMicros ? BigInt(planned.purchasePriceMicros) : null,
+          purchasePriceMicros: planned.purchasePriceMicros
+            ? BigInt(planned.purchasePriceMicros)
+            : null,
           purchaseDate: planned.purchaseDate ? parseDateOnly(planned.purchaseDate) : null,
           expectedYears: planned.expectedYears ?? null,
           note: planned.note,

@@ -16,6 +16,18 @@ export class UpdateAccountDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @Length(1, 80)
+  defaultSubAccountName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 40)
+  defaultSubAccountIcon?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsBoolean()
   includeInNetWorth?: boolean;
 

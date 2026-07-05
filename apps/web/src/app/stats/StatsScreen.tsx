@@ -109,7 +109,7 @@ export function StatsScreen() {
     [categoriesQuery.data],
   );
   const filterAccountOptions = useMemo(
-    () => moneyAccountOptions(accountsQuery.data ?? []),
+    () => moneyAccountOptions(accountsQuery.data ?? [], { parentSelectable: true }),
     [accountsQuery.data],
   );
   const filterPersonOptions = useMemo(

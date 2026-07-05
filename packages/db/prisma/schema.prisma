@@ -195,41 +195,45 @@ model Person {
 }
 
 model Account {
-  id                   String    @id @default(uuid()) @db.Uuid
-  ledgerId             String    @map("ledger_id") @db.Uuid
-  type                 String
-  name                 String
-  icon                 String?
-  balanceMicros        BigInt    @default(0) @map("balance_micros")
-  includeInNetWorth    Boolean   @default(true) @map("include_in_net_worth")
-  creditLimitMicros    BigInt?   @map("credit_limit_micros")
-  investmentCostMicros BigInt?   @map("investment_cost_micros")
-  counterparty         String?
-  dueDate              DateTime? @map("due_date") @db.Date
-  billDay              Int?      @map("bill_day") @db.SmallInt
-  repayDay             Int?      @map("repay_day") @db.SmallInt
-  settledAt            DateTime? @map("settled_at") @db.Timestamptz(6)
-  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdBy            String?   @map("created_by") @db.Uuid
-  updatedBy            String?   @map("updated_by") @db.Uuid
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    String    @id @default(uuid()) @db.Uuid
+  ledgerId              String    @map("ledger_id") @db.Uuid
+  type                  String
+  name                  String
+  icon                  String?
+  defaultSubAccountName String?   @map("default_sub_account_name")
+  defaultSubAccountIcon String?   @map("default_sub_account_icon")
+  balanceMicros         BigInt    @default(0) @map("balance_micros")
+  includeInNetWorth     Boolean   @default(true) @map("include_in_net_worth")
+  creditLimitMicros     BigInt?   @map("credit_limit_micros")
+  investmentCostMicros  BigInt?   @map("investment_cost_micros")
+  counterparty          String?
+  dueDate               DateTime? @map("due_date") @db.Date
+  billDay               Int?      @map("bill_day") @db.SmallInt
+  repayDay              Int?      @map("repay_day") @db.SmallInt
+  settledAt             DateTime? @map("settled_at") @db.Timestamptz(6)
+  archivedAt            DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy             String?   @map("created_by") @db.Uuid
+  updatedBy             String?   @map("updated_by") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([ledgerId, type, archivedAt])
   @@map("accounts")
 }
 
 model SubAccount {
-  id            String    @id @default(uuid()) @db.Uuid
-  ledgerId      String    @map("ledger_id") @db.Uuid
-  accountId     String    @map("account_id") @db.Uuid
-  name          String
-  balanceMicros BigInt    @default(0) @map("balance_micros")
-  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdBy     String?   @map("created_by") @db.Uuid
-  updatedBy     String?   @map("updated_by") @db.Uuid
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String    @id @default(uuid()) @db.Uuid
+  ledgerId          String    @map("ledger_id") @db.Uuid
+  accountId         String    @map("account_id") @db.Uuid
+  name              String
+  icon              String?
+  balanceMicros     BigInt    @default(0) @map("balance_micros")
+  includeInNetWorth Boolean   @default(true) @map("include_in_net_worth")
+  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy         String?   @map("created_by") @db.Uuid
+  updatedBy         String?   @map("updated_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([accountId, name])
   @@index([accountId, archivedAt])

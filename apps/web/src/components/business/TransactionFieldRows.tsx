@@ -7,7 +7,6 @@ import { BottomSheet, IconButton, Switch } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
 import { InlineHint } from "./InlineHint";
-import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 import type { BusinessOption, CategoryOption } from "./business-types";
 
 export function nestedOptionLabel(
@@ -89,6 +88,71 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
   );
 }
 
+type AccountSelectionListProps = {
+  onSelect: (option: BusinessOption, parent: BusinessOption | null) => void;
+  options: BusinessOption[];
+  selectedId: string | null;
+};
+
+function AccountSelectionList({ onSelect, options, selectedId }: AccountSelectionListProps) {
+  const primaryOptions = options.filter((option) => !option.parentId);
+
+  return (
+    <div className="biz-category-picker-sheet">
+      {primaryOptions.map((account) => {
+        const subOptions = options.filter((option) => option.parentId === account.id);
+        const selected = account.id === selectedId;
+        const childSelected = subOptions.some((option) => option.id === selectedId);
+        const parentDisabled = account.disabled;
+
+        return (
+          <section className="biz-category-group" key={account.id}>
+            <button
+              className={cn(
+                "biz-category-chip",
+                "biz-category-chip--primary",
+                (selected || childSelected) && "biz-category-chip--selected",
+                parentDisabled && "biz-category-chip--readonly",
+              )}
+              disabled={parentDisabled}
+              onClick={() => {
+                if (parentDisabled) return;
+                onSelect(account, null);
+              }}
+              type="button"
+            >
+              {account.icon ? <span className="biz-category-icon">{account.icon}</span> : null}
+              <span>{account.label}</span>
+            </button>
+
+            {subOptions.length > 0 ? (
+              <div className="biz-category-subchips">
+                {subOptions.map((subOption) => (
+                  <button
+                    className={cn(
+                      "biz-category-chip",
+                      "biz-category-chip--sub",
+                      subOption.id === selectedId && "biz-category-chip--selected",
+                    )}
+                    key={subOption.id}
+                    onClick={() => onSelect(subOption, account)}
+                    type="button"
+                  >
+                    {subOption.icon ? (
+                      <span className="biz-category-icon">{subOption.icon}</span>
+                    ) : null}
+                    <span>{subOption.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 type AccountSelectRowProps = {
   className?: string;
   hideLabel?: boolean;
@@ -108,18 +172,54 @@ export function AccountSelectRow({
   placeholder = "选择账户",
   value,
 }: AccountSelectRowProps) {
+  const [open, setOpen] = useState(false);
+  const displayValue = nestedOptionLabel(options, value, placeholder);
+
   return (
-    <SearchableOptionSelectRow
-      className={className}
-      emptyText="暂无可选账户"
-      hideLabel={hideLabel}
-      label={label}
-      onValueChange={onValueChange}
-      options={options}
-      placeholder={placeholder}
-      searchPlaceholder="搜索账户"
-      value={value}
-    />
+    <>
+      <button
+        className={cn(
+          "transaction-form__select-row",
+          hideLabel && "transaction-form__select-row--value-only",
+          className,
+        )}
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        {hideLabel ? null : <span>{label}</span>}
+        <strong>{displayValue}</strong>
+        <ChevronRight size={18} />
+      </button>
+      <BottomSheet
+        className="ui-bottom-sheet--transaction-picker"
+        hideDefaultHeader
+        onClose={() => setOpen(false)}
+        open={open}
+      >
+        <div className="transaction-form__sheet-header">
+          <IconButton
+            icon={<X size={24} strokeWidth={2.3} />}
+            label="关闭"
+            onClick={() => setOpen(false)}
+          />
+          <h2>{label}</h2>
+          <span aria-hidden />
+        </div>
+        {options.length === 0 ? (
+          <p className="biz-muted">暂无可选账户</p>
+        ) : (
+          <AccountSelectionList
+            onSelect={(option) => {
+              if (option.disabled) return;
+              onValueChange(option.id);
+              setOpen(false);
+            }}
+            options={options}
+            selectedId={value}
+          />
+        )}
+      </BottomSheet>
+    </>
   );
 }
 

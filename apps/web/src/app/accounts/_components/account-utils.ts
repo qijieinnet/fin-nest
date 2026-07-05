@@ -68,9 +68,23 @@ export function accountTotalMicros(account: Pick<Account, "balanceMicros">): big
 }
 
 /** 默认桶余额 = 总余额 − 各子账户余额。 */
-export function defaultBucketMicros(account: Pick<Account, "balanceMicros" | "subAccounts">): bigint {
+export function defaultBucketMicros(
+  account: Pick<Account, "balanceMicros" | "subAccounts">,
+): bigint {
   const subs = account.subAccounts.reduce((sum, sub) => sum + BigInt(sub.balanceMicros), 0n);
   return BigInt(account.balanceMicros) - subs;
+}
+
+export function accountNetWorthMicros(account: Account): bigint {
+  if (account.subAccounts.length === 0) {
+    return account.includeInNetWorth ? accountTotalMicros(account) : 0n;
+  }
+  const defaultBucket = account.includeInNetWorth ? defaultBucketMicros(account) : 0n;
+  return account.subAccounts.reduce(
+    (sum, subAccount) =>
+      subAccount.includeInNetWorth === false ? sum : sum + BigInt(subAccount.balanceMicros),
+    defaultBucket,
+  );
 }
 
 export type NetWorthSummary = {
@@ -83,8 +97,7 @@ export function netWorthSummary(accounts: Account[]): NetWorthSummary {
   let assetsMicros = 0n;
   let liabilitiesMicros = 0n;
   for (const account of accounts) {
-    if (!account.includeInNetWorth) continue;
-    const total = accountTotalMicros(account);
+    const total = accountNetWorthMicros(account);
     if (isLiability(account.type)) liabilitiesMicros += total;
     else assetsMicros += total;
   }
@@ -113,7 +126,8 @@ export function microsToInput(micros: string | null | undefined): string {
   const value = negative ? BigInt(micros.slice(1)) : BigInt(micros);
   const units = value / 1_000_000n;
   const fraction = (value % 1_000_000n) / 10_000n;
-  const text = fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
+  const text =
+    fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
   return negative ? `-${text}` : text;
 }
 

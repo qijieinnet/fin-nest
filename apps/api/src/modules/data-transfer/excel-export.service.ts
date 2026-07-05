@@ -38,7 +38,11 @@ export class ExcelExportService {
     private readonly ledgers: LedgersService,
   ) {}
 
-  async buildWorkbook(ledgerId: string, userId: string, options: { template: boolean }): Promise<Buffer> {
+  async buildWorkbook(
+    ledgerId: string,
+    userId: string,
+    options: { template: boolean },
+  ): Promise<Buffer> {
     await this.ledgers.assertMember(ledgerId, userId);
     const data = await this.loadLedgerData(ledgerId);
     const workbook = new ExcelJS.Workbook();
@@ -88,7 +92,10 @@ export class ExcelExportService {
       categoryBudgets,
       insuredPeople,
     ] = await Promise.all([
-      client.category.findMany({ where, orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] }),
+      client.category.findMany({
+        where,
+        orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
       client.subcategory.findMany({ where, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
       client.person.findMany({ where, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }),
       client.account.findMany({ where, orderBy: [{ type: "asc" }, { createdAt: "asc" }] }),
@@ -102,7 +109,10 @@ export class ExcelExportService {
       }),
       client.transactionAccountRelation.findMany({ where }),
       client.transactionLink.findMany({ where }),
-      client.plan.findMany({ where: { ledgerId, archivedAt: null }, orderBy: { createdAt: "asc" } }),
+      client.plan.findMany({
+        where: { ledgerId, archivedAt: null },
+        orderBy: { createdAt: "asc" },
+      }),
       client.budgetSetting.findUnique({ where: { ledgerId } }),
       client.categoryBudget.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.insuranceInsuredPerson.findMany({}),
@@ -166,9 +176,17 @@ export class ExcelExportService {
     };
   }
 
-  private addSheet(workbook: ExcelJS.Workbook, name: string, columns: ColumnDef[]): ExcelJS.Worksheet {
+  private addSheet(
+    workbook: ExcelJS.Workbook,
+    name: string,
+    columns: ColumnDef[],
+  ): ExcelJS.Worksheet {
     const sheet = workbook.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
-    sheet.columns = columns.map((column) => ({ header: column.header, key: column.key, width: column.width ?? 12 }));
+    sheet.columns = columns.map((column) => ({
+      header: column.header,
+      key: column.key,
+      width: column.width ?? 12,
+    }));
     sheet.getRow(1).font = { bold: true };
     return sheet;
   }
@@ -177,7 +195,9 @@ export class ExcelExportService {
     const sheet = workbook.addWorksheet(SHEET_NAMES.readme);
     sheet.getColumn(1).width = 110;
     const lines = [
-      template ? "fin-nest 记账模板（可在 Excel 中记账后导入）" : "fin-nest 账本导出（可在 Excel 中继续记账后导入）",
+      template
+        ? "fin-nest 记账模板（可在 Excel 中记账后导入）"
+        : "fin-nest 账本导出（可在 Excel 中继续记账后导入）",
       "",
       "使用说明：",
       "1. 每个工作表第一列都是 ID：由系统导出的行带有 ID，请勿修改；你新增的行请将 ID 留空，导入时会识别为新增。",
@@ -197,12 +217,20 @@ export class ExcelExportService {
     sheet.getRow(1).font = { bold: true, size: 14 };
   }
 
-  private addTransactionsSheet(workbook: ExcelJS.Workbook, data: LedgerData, template: boolean): ExcelJS.Worksheet {
+  private addTransactionsSheet(
+    workbook: ExcelJS.Workbook,
+    data: LedgerData,
+    template: boolean,
+  ): ExcelJS.Worksheet {
     const sheet = this.addSheet(workbook, SHEET_NAMES.transactions, TRANSACTION_COLUMNS);
     if (template) return sheet;
     for (const transaction of data.transactions) {
-      const category = transaction.categoryId ? data.categoryById.get(transaction.categoryId) : null;
-      const subcategory = transaction.subcategoryId ? data.subcategoryById.get(transaction.subcategoryId) : null;
+      const category = transaction.categoryId
+        ? data.categoryById.get(transaction.categoryId)
+        : null;
+      const subcategory = transaction.subcategoryId
+        ? data.subcategoryById.get(transaction.subcategoryId)
+        : null;
       const relationText = (data.relationsByTransaction.get(transaction.id) ?? [])
         .map((relation) => {
           const account = data.accountById.get(relation.accountId);
@@ -228,14 +256,24 @@ export class ExcelExportService {
         amount: microsToYuanNumber(transaction.grossAmountMicros),
         category: category?.name ?? "",
         subcategory: subcategory?.name ?? "",
-        account: transaction.accountId ? (data.accountById.get(transaction.accountId)?.name ?? "") : "",
-        subAccount: transaction.subAccountId ? (data.subAccountById.get(transaction.subAccountId)?.name ?? "") : "",
-        fromAccount: transaction.fromAccountId ? (data.accountById.get(transaction.fromAccountId)?.name ?? "") : "",
+        account: transaction.accountId
+          ? (data.accountById.get(transaction.accountId)?.name ?? "")
+          : "",
+        subAccount: transaction.subAccountId
+          ? (data.subAccountById.get(transaction.subAccountId)?.name ?? "")
+          : "",
+        fromAccount: transaction.fromAccountId
+          ? (data.accountById.get(transaction.fromAccountId)?.name ?? "")
+          : "",
         fromSubAccount: transaction.fromSubAccountId
           ? (data.subAccountById.get(transaction.fromSubAccountId)?.name ?? "")
           : "",
-        toAccount: transaction.toAccountId ? (data.accountById.get(transaction.toAccountId)?.name ?? "") : "",
-        toSubAccount: transaction.toSubAccountId ? (data.subAccountById.get(transaction.toSubAccountId)?.name ?? "") : "",
+        toAccount: transaction.toAccountId
+          ? (data.accountById.get(transaction.toAccountId)?.name ?? "")
+          : "",
+        toSubAccount: transaction.toSubAccountId
+          ? (data.subAccountById.get(transaction.toSubAccountId)?.name ?? "")
+          : "",
         person: transaction.personId ? (data.personById.get(transaction.personId)?.name ?? "") : "",
         insurance: insuranceNames,
         item: itemNames,
@@ -316,7 +354,9 @@ export class ExcelExportService {
         id: subAccount.id,
         account: account?.name ?? "",
         name: subAccount.name,
+        icon: subAccount.icon ?? "",
         balance: microsToYuanNumber(subAccount.balanceMicros),
+        includeInNetWorth: labelOf(BOOLEAN_LABELS, String(subAccount.includeInNetWorth)),
       });
       row.getCell("balance").numFmt = MONEY_FORMAT;
     }
@@ -422,10 +462,16 @@ export class ExcelExportService {
     );
     const lists: { column: string; values: string[] }[] = [
       { column: "A", values: Object.values(TRANSACTION_TYPE_LABELS) },
-      { column: "B", values: data.categories.filter((row) => !row.archivedAt).map((row) => row.name) },
+      {
+        column: "B",
+        values: data.categories.filter((row) => !row.archivedAt).map((row) => row.name),
+      },
       { column: "C", values: moneyAccounts.map((row) => row.name) },
       { column: "D", values: data.people.filter((row) => !row.archivedAt).map((row) => row.name) },
-      { column: "E", values: data.insurances.filter((row) => !row.deletedAt).map((row) => row.name) },
+      {
+        column: "E",
+        values: data.insurances.filter((row) => !row.deletedAt).map((row) => row.name),
+      },
       { column: "F", values: data.items.filter((row) => !row.deletedAt).map((row) => row.name) },
     ];
     for (const list of lists) {
@@ -448,7 +494,8 @@ export class ExcelExportService {
     ];
     for (const validation of validations) {
       if (!validation.formula) continue;
-      const columnIndex = TRANSACTION_COLUMNS.findIndex((column) => column.key === validation.key) + 1;
+      const columnIndex =
+        TRANSACTION_COLUMNS.findIndex((column) => column.key === validation.key) + 1;
       const columnLetter = transactionSheet.getColumn(columnIndex).letter;
       for (let rowNumber = 2; rowNumber <= TEMPLATE_VALIDATION_ROWS + 1; rowNumber += 1) {
         transactionSheet.getCell(`${columnLetter}${rowNumber}`).dataValidation = {
@@ -460,7 +507,8 @@ export class ExcelExportService {
       }
     }
     // 日期列给出格式提示。
-    const dateColumnIndex = TRANSACTION_COLUMNS.findIndex((column) => column.key === "occurredOn") + 1;
+    const dateColumnIndex =
+      TRANSACTION_COLUMNS.findIndex((column) => column.key === "occurredOn") + 1;
     transactionSheet.getColumn(dateColumnIndex).numFmt = "yyyy-mm-dd";
   }
 }

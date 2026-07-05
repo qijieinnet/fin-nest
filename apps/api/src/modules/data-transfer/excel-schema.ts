@@ -83,7 +83,9 @@ export const SUB_ACCOUNT_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },
   { key: "account", header: "所属账户", width: 14 },
   { key: "name", header: "名称", width: 14 },
+  { key: "icon", header: "图标", width: 12 },
   { key: "balance", header: "余额(元)", width: 12 },
+  { key: "includeInNetWorth", header: "计入净资产", width: 10 },
 ];
 
 export const INSURANCE_COLUMNS: ColumnDef[] = [
@@ -251,7 +253,11 @@ export function cellToText(value: unknown): string {
   if (typeof value === "object") {
     // exceljs 富文本 / 超链接 / 公式单元格。
     const candidate = value as { richText?: { text: string }[]; text?: unknown; result?: unknown };
-    if (Array.isArray(candidate.richText)) return candidate.richText.map((part) => part.text).join("").trim();
+    if (Array.isArray(candidate.richText))
+      return candidate.richText
+        .map((part) => part.text)
+        .join("")
+        .trim();
     if (candidate.text != null) return cellToText(candidate.text);
     if (candidate.result != null) return cellToText(candidate.result);
   }
@@ -269,11 +275,17 @@ export function cellToInt(value: unknown): number | null {
 
 export const IMPORT_MAX_TRANSACTION_ROWS = 5000;
 
-export function importRowError(sheet: string, row: number, message: string): { sheet: string; row: number; message: string } {
+export function importRowError(
+  sheet: string,
+  row: number,
+  message: string,
+): { sheet: string; row: number; message: string } {
   return { sheet, row, message };
 }
 
-export function assertBackupEnvelope(parsed: unknown): asserts parsed is { formatVersion: number; data: Record<string, unknown> } {
+export function assertBackupEnvelope(
+  parsed: unknown,
+): asserts parsed is { formatVersion: number; data: Record<string, unknown> } {
   if (
     typeof parsed !== "object" ||
     parsed === null ||

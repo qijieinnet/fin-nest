@@ -35,6 +35,7 @@ import { cn } from "@/lib/format/class-names";
 import {
   accountSelectionId,
   categoryOptions,
+  firstSelectableAccountOptionId,
   moneyAccountOptions,
   personOptions,
   relationAccountOptions,
@@ -76,17 +77,23 @@ const TYPE_ITEMS = [
 ];
 
 /** 交易类型 + 关联桶（主/联动）对应的账户类型（可收回/需归还）。 */
-function relationAccountKind(type: TransactionType, bucket: RelationBucket): "receivable" | "payable" {
+function relationAccountKind(
+  type: TransactionType,
+  bucket: RelationBucket,
+): "receivable" | "payable" {
   if (type === "income") return bucket === "primary" ? "payable" : "receivable";
   return bucket === "primary" ? "receivable" : "payable";
 }
 
 /** 把规则里已存的关联拆回「主项目 / 联动项目」两个编辑桶。 */
-function splitRelationBuckets(relations: AutoRelation[] | null | undefined): Record<RelationBucket, RecoverablePayableItem[]> {
+function splitRelationBuckets(
+  relations: AutoRelation[] | null | undefined,
+): Record<RelationBucket, RecoverablePayableItem[]> {
   const buckets: Record<RelationBucket, RecoverablePayableItem[]> = { primary: [], linked: [] };
   for (const relation of relations ?? []) {
     const bucket =
-      relation.relationKind === "receivable_from_expense" || relation.relationKind === "payable_from_income"
+      relation.relationKind === "receivable_from_expense" ||
+      relation.relationKind === "payable_from_income"
         ? "primary"
         : "linked";
     buckets[bucket].push({
@@ -100,7 +107,9 @@ function splitRelationBuckets(relations: AutoRelation[] | null | undefined): Rec
 
 function firstCategoryId(categories: Category[], type: "expense" | "income"): string | null {
   const first = categories.find((category) => category.type === type);
-  return first?.subcategories.find((subcategory) => !subcategory.archivedAt)?.id ?? first?.id ?? null;
+  return (
+    first?.subcategories.find((subcategory) => !subcategory.archivedAt)?.id ?? first?.id ?? null
+  );
 }
 
 function categoryType(type: TransactionType): "expense" | "income" {
@@ -122,10 +131,15 @@ export function AutoRuleEditorSheet({
   const [type, setType] = useState<TransactionType>(rule?.type ?? "expense");
   const [amount, setAmount] = useState(() => microsToInput(rule?.amountMicros));
   const [categoryId, setCategoryId] = useState<string | null>(
-    rule && rule.type !== "transfer" ? ruleCategorySelection(rule) : firstCategoryId(categories, "expense"),
+    rule && rule.type !== "transfer"
+      ? ruleCategorySelection(rule)
+      : firstCategoryId(categories, "expense"),
   );
+  const initialAccountOptions = useMemo(() => moneyAccountOptions(accounts), [accounts]);
   const [accountId, setAccountId] = useState<string | null>(
-    rule ? accountSelectionId(rule.accountId, rule.subAccountId) : (moneyAccountOptions(accounts)[0]?.id ?? null),
+    rule
+      ? accountSelectionId(rule.accountId, rule.subAccountId)
+      : firstSelectableAccountOptionId(initialAccountOptions),
   );
   const [fromAccountId, setFromAccountId] = useState<string | null>(
     rule ? accountSelectionId(rule.fromAccountId, rule.fromSubAccountId) : null,
@@ -135,13 +149,26 @@ export function AutoRuleEditorSheet({
   );
   const [personEnabled, setPersonEnabled] = useState(Boolean(rule?.personId));
   const [personId, setPersonId] = useState<string | null>(rule?.personId ?? null);
-  const initialBuckets = useMemo(() => splitRelationBuckets(rule?.relationPayload), [rule?.relationPayload]);
-  const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(initialBuckets.primary.length > 0);
-  const [linkedRelationsEnabled, setLinkedRelationsEnabled] = useState(initialBuckets.linked.length > 0);
-  const [primaryRelationItems, setPrimaryRelationItems] = useState<RecoverablePayableItem[]>(initialBuckets.primary);
-  const [linkedRelationItems, setLinkedRelationItems] = useState<RecoverablePayableItem[]>(initialBuckets.linked);
+  const initialBuckets = useMemo(
+    () => splitRelationBuckets(rule?.relationPayload),
+    [rule?.relationPayload],
+  );
+  const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(
+    initialBuckets.primary.length > 0,
+  );
+  const [linkedRelationsEnabled, setLinkedRelationsEnabled] = useState(
+    initialBuckets.linked.length > 0,
+  );
+  const [primaryRelationItems, setPrimaryRelationItems] = useState<RecoverablePayableItem[]>(
+    initialBuckets.primary,
+  );
+  const [linkedRelationItems, setLinkedRelationItems] = useState<RecoverablePayableItem[]>(
+    initialBuckets.linked,
+  );
   const [insuranceEnabled, setInsuranceEnabled] = useState(Boolean(rule?.insuranceId));
-  const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(rule?.insuranceId ?? null);
+  const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(
+    rule?.insuranceId ?? null,
+  );
   const [itemEnabled, setItemEnabled] = useState(Boolean(rule?.itemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(rule?.itemId ?? null);
   const [repeatRule, setRepeatRule] = useState<AutoRepeatRule>(rule?.repeatRule ?? "monthly");
@@ -150,8 +177,11 @@ export function AutoRuleEditorSheet({
   const [enabled, setEnabled] = useState(rule?.enabled ?? true);
 
   const isEditing = Boolean(rule);
-  const catOptions = useMemo(() => categoryOptions(categories, categoryType(type)), [categories, type]);
-  const acctOptions = useMemo(() => moneyAccountOptions(accounts), [accounts]);
+  const catOptions = useMemo(
+    () => categoryOptions(categories, categoryType(type)),
+    [categories, type],
+  );
+  const acctOptions = initialAccountOptions;
   const peopleOptions = useMemo(() => personOptions(people), [people]);
   const primaryRelationOpts = useMemo(
     () => relationAccountOptions(accounts, relationAccountKind(type, "primary")),
@@ -204,7 +234,11 @@ export function AutoRuleEditorSheet({
     setCategoryId(firstCategoryId(categories, nextType));
   }
 
-  function buildRelations(bucket: RelationBucket, enabled: boolean, relationItems: RecoverablePayableItem[]) {
+  function buildRelations(
+    bucket: RelationBucket,
+    enabled: boolean,
+    relationItems: RecoverablePayableItem[],
+  ) {
     if (!enabled) return [];
     const relations: AutoRelation[] = [];
     for (const item of relationItems) {
@@ -213,10 +247,15 @@ export function AutoRuleEditorSheet({
       if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("关联项目金额无效");
       const relationAccount = accounts.find((account) => account.id === item.accountId);
       const expectedKind = relationAccountKind(type, bucket);
-      if (!relationAccount || relationAccount.type !== expectedKind) throw new Error("关联项目类型不正确");
+      if (!relationAccount || relationAccount.type !== expectedKind)
+        throw new Error("关联项目类型不正确");
       const relationKind = relationKindFor(type, relationAccount.type);
       if (!relationKind) throw new Error("当前交易类型不支持关联");
-      relations.push({ accountId: item.accountId, relationKind, amountMicros: parsed.amountMicros });
+      relations.push({
+        accountId: item.accountId,
+        relationKind,
+        amountMicros: parsed.amountMicros,
+      });
     }
     return relations;
   }
@@ -303,7 +342,9 @@ export function AutoRuleEditorSheet({
   const canSubmit =
     parsedAmount.ok &&
     BigInt(parsedAmount.amountMicros) > 0n &&
-    (type === "transfer" ? transferReady : Boolean(resolveCategorySelection(categories, categoryId).categoryId)) &&
+    (type === "transfer"
+      ? transferReady
+      : Boolean(resolveCategorySelection(categories, categoryId).categoryId)) &&
     !save.isPending;
 
   return (
@@ -337,7 +378,10 @@ export function AutoRuleEditorSheet({
             value={type}
           />
           <AmountInput
-            className={cn("transaction-form__amount", type === "income" && "transaction-form__amount--income")}
+            className={cn(
+              "transaction-form__amount",
+              type === "income" && "transaction-form__amount--income",
+            )}
             label="每期金额"
             onValueChange={setAmount}
             value={amount}
@@ -347,7 +391,11 @@ export function AutoRuleEditorSheet({
         <div className="transaction-form__cards">
           {type !== "transfer" ? (
             <FieldCard className="transaction-form__picker-card" label="分类">
-              <CategorySelectRow onValueChange={setCategoryId} options={catOptions} value={categoryId} />
+              <CategorySelectRow
+                onValueChange={setCategoryId}
+                options={catOptions}
+                value={categoryId}
+              />
             </FieldCard>
           ) : null}
 
@@ -372,7 +420,7 @@ export function AutoRuleEditorSheet({
               checked={Boolean(accountId)}
               label="账户"
               onCheckedChange={(checked) => {
-                setAccountId(checked ? (acctOptions[0]?.id ?? null) : null);
+                setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
               }}
             >
               <AccountSelectRow
@@ -423,7 +471,11 @@ export function AutoRuleEditorSheet({
                 addLabel={`添加${primaryRelationLabel}项目`}
                 emptyText={`还没有${primaryRelationLabel}项目，可到「账户」中先添加${primaryRelationLabel}账户`}
                 enabled={primaryRelationsEnabled}
-                hint={type === "income" ? "这笔收入中需要归还他人的部分" : "这笔支出中可向他人收回的部分"}
+                hint={
+                  type === "income"
+                    ? "这笔收入中需要归还他人的部分"
+                    : "这笔支出中可向他人收回的部分"
+                }
                 items={primaryRelationItems}
                 label={primaryRelationLabel}
                 onChange={setPrimaryRelationItems}
@@ -449,7 +501,11 @@ export function AutoRuleEditorSheet({
               <AssetLinkCard
                 checked={insuranceEnabled}
                 emptyText="还没有保单，可到「我的 · 保险管理」中先添加保单"
-                hint={type === "income" ? "把这笔收入（如理赔款）关联到一份保单" : "把这笔支出（如保费）关联到一份保单"}
+                hint={
+                  type === "income"
+                    ? "把这笔收入（如理赔款）关联到一份保单"
+                    : "把这笔支出（如保费）关联到一份保单"
+                }
                 items={insuranceOptions}
                 label="保险"
                 onCheckedChange={(checked) => {
@@ -463,7 +519,11 @@ export function AutoRuleEditorSheet({
               <AssetLinkCard
                 checked={itemEnabled}
                 emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
-                hint={type === "income" ? "把这笔收入（如转卖回款）关联到一件物品" : "把这笔支出（如耗材、维修）关联到一件物品"}
+                hint={
+                  type === "income"
+                    ? "把这笔收入（如转卖回款）关联到一件物品"
+                    : "把这笔支出（如耗材、维修）关联到一件物品"
+                }
                 items={itemOptions}
                 label="关联物品"
                 onCheckedChange={(checked) => {
@@ -483,7 +543,10 @@ export function AutoRuleEditorSheet({
                 onValueChange={(value) => {
                   if (value) setRepeatRule(value as AutoRepeatRule);
                 }}
-                options={REPEAT_OPTIONS.map((option) => ({ id: option.value, label: option.label }))}
+                options={REPEAT_OPTIONS.map((option) => ({
+                  id: option.value,
+                  label: option.label,
+                }))}
                 value={repeatRule}
               />
             </FieldCard>
@@ -493,7 +556,8 @@ export function AutoRuleEditorSheet({
                 <span>
                   <strong>启用</strong>
                   <small>
-                    下次自动生成：{enabled ? formatDateLabel(nextPreview) : "暂停中"} · {REPEAT_LABELS[repeatRule]}
+                    下次自动生成：{enabled ? formatDateLabel(nextPreview) : "暂停中"} ·{" "}
+                    {REPEAT_LABELS[repeatRule]}
                   </small>
                 </span>
                 <Switch checked={enabled} label="启用" onCheckedChange={setEnabled} />

@@ -22,6 +22,8 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
   links: Prisma.TransactionLinkGetPayload<Record<string, never>>[];
 };
 
+const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
+
 export type CreateTransactionOptions = {
   source?: "manual" | "quick" | "auto" | "import" | "ai";
   sourceId?: string | null;
@@ -40,7 +42,10 @@ export class TransactionsService {
     private readonly files: FilesService,
   ) {}
 
-  private buildListWhere(ledgerId: string, query: ListTransactionsQueryDto): Prisma.TransactionWhereInput {
+  private buildListWhere(
+    ledgerId: string,
+    query: ListTransactionsQueryDto,
+  ): Prisma.TransactionWhereInput {
     const where: Prisma.TransactionWhereInput = { ledgerId, deletedAt: null };
     if (query.type) where.type = query.type;
     if (query.categoryId) where.categoryId = query.categoryId;
@@ -59,9 +64,19 @@ export class TransactionsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
-    // 账户 / 子账户各自是一组 OR（出入账任一侧命中），两者可叠加，用 AND 组合。
+    // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
     const sideFilters: Prisma.TransactionWhereInput[] = [];
-    if (query.accountId) {
+    if (query.accountId && query.subAccountId) {
+      const subAccountId =
+        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      sideFilters.push({
+        OR: [
+          { accountId: query.accountId, subAccountId },
+          { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
+          { toAccountId: query.accountId, toSubAccountId: subAccountId },
+        ],
+      });
+    } else if (query.accountId) {
       sideFilters.push({
         OR: [
           { accountId: query.accountId },
@@ -69,13 +84,14 @@ export class TransactionsService {
           { toAccountId: query.accountId },
         ],
       });
-    }
-    if (query.subAccountId) {
+    } else if (query.subAccountId) {
+      const subAccountId =
+        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
       sideFilters.push({
         OR: [
-          { subAccountId: query.subAccountId },
-          { fromSubAccountId: query.subAccountId },
-          { toSubAccountId: query.subAccountId },
+          { subAccountId },
+          { fromSubAccountId: subAccountId },
+          { toSubAccountId: subAccountId },
         ],
       });
     }
@@ -125,23 +141,34 @@ export class TransactionsService {
     options: CreateTransactionOptions = {},
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.idempotency.run({ scope: `transaction.create:${ledgerId}`, key: idempotencyKey, userId }, () =>
-      // 每条分录都会加账户行锁（多次往返），放宽默认 5s 事务超时。
-      this.txs.run(async (tx) => {
-        const transaction = await this.createInsideTransaction(tx, ledgerId, userId, input, options);
-        await this.audit.write(
-          {
-            source: "user",
-            actorUserId: userId,
-            ledgerId,
-            action: options.auditAction ?? "transaction.create",
-            entityType: "transaction",
-            entityId: transaction.id,
+    return this.idempotency.run(
+      { scope: `transaction.create:${ledgerId}`, key: idempotencyKey, userId },
+      () =>
+        // 每条分录都会加账户行锁（多次往返），放宽默认 5s 事务超时。
+        this.txs.run(
+          async (tx) => {
+            const transaction = await this.createInsideTransaction(
+              tx,
+              ledgerId,
+              userId,
+              input,
+              options,
+            );
+            await this.audit.write(
+              {
+                source: "user",
+                actorUserId: userId,
+                ledgerId,
+                action: options.auditAction ?? "transaction.create",
+                entityType: "transaction",
+                entityId: transaction.id,
+              },
+              tx,
+            );
+            return this.getWithRelations(tx, ledgerId, transaction.id);
           },
-          tx,
-        );
-        return this.getWithRelations(tx, ledgerId, transaction.id);
-      }, { timeout: 20_000 }),
+          { timeout: 20_000 },
+        ),
     );
   }
 
@@ -167,81 +194,110 @@ export class TransactionsService {
     return this.getWithRelations(tx, ledgerId, transaction.id);
   }
 
-  async update(ledgerId: string, transactionId: string, userId: string, input: UpdateTransactionDto) {
+  async update(
+    ledgerId: string,
+    transactionId: string,
+    userId: string,
+    input: UpdateTransactionDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     // 更新会先冲正旧分录再写新分录，每条都加账户行锁，放宽默认 5s 事务超时。
-    return this.txs.run(async (tx) => {
-      const existing = await tx.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
-      if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+    return this.txs.run(
+      async (tx) => {
+        const existing = await tx.transaction.findFirst({
+          where: { id: transactionId, ledgerId, deletedAt: null },
+        });
+        if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
 
-      await this.reverseEntries(tx, ledgerId, transactionId, userId, new Date(), "transaction.update.reversal");
-      await tx.transactionAccountRelation.deleteMany({ where: { ledgerId, transactionId } });
-      const normalized = await this.normalize(tx, ledgerId, input);
-
-      const updated = await tx.transaction.update({
-        where: { id: transactionId },
-        data: {
-          type: input.type,
-          grossAmountMicros: normalized.grossAmountMicros,
-          effectiveAmountMicros: normalized.effectiveAmountMicros,
-          currency: input.currency ?? "CNY",
-          occurredOn: parseDateOnly(input.occurredOn),
-          occurredAt: parseDateOnly(input.occurredOn),
-          categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
-          subcategoryId: input.type === "transfer" ? null : (input.subcategoryId ?? null),
-          categorySnapshot: normalized.categorySnapshot ?? Prisma.JsonNull,
-          personId: input.personId ?? null,
-          personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
-          accountId: input.type === "transfer" ? null : (input.accountId ?? null),
-          subAccountId: input.type === "transfer" ? null : (input.subAccountId ?? null),
-          fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
-          fromSubAccountId: input.type === "transfer" ? (input.fromSubAccountId ?? null) : null,
-          toAccountId: input.type === "transfer" ? input.toAccountId : null,
-          toSubAccountId: input.type === "transfer" ? (input.toSubAccountId ?? null) : null,
-          note: input.note ?? null,
-          updatedBy: userId,
-        },
-      });
-
-      await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, input, normalized);
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: userId,
+        await this.reverseEntries(
+          tx,
           ledgerId,
-          action: "transaction.update",
-          entityType: "transaction",
-          entityId: updated.id,
-        },
-        tx,
-      );
-      return this.getWithRelations(tx, ledgerId, updated.id);
-    }, { timeout: 20_000 });
+          transactionId,
+          userId,
+          new Date(),
+          "transaction.update.reversal",
+        );
+        await tx.transactionAccountRelation.deleteMany({ where: { ledgerId, transactionId } });
+        const normalized = await this.normalize(tx, ledgerId, input);
+
+        const updated = await tx.transaction.update({
+          where: { id: transactionId },
+          data: {
+            type: input.type,
+            grossAmountMicros: normalized.grossAmountMicros,
+            effectiveAmountMicros: normalized.effectiveAmountMicros,
+            currency: input.currency ?? "CNY",
+            occurredOn: parseDateOnly(input.occurredOn),
+            occurredAt: parseDateOnly(input.occurredOn),
+            categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
+            subcategoryId: input.type === "transfer" ? null : (input.subcategoryId ?? null),
+            categorySnapshot: normalized.categorySnapshot ?? Prisma.JsonNull,
+            personId: input.personId ?? null,
+            personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
+            accountId: input.type === "transfer" ? null : (input.accountId ?? null),
+            subAccountId: input.type === "transfer" ? null : (input.subAccountId ?? null),
+            fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
+            fromSubAccountId: input.type === "transfer" ? (input.fromSubAccountId ?? null) : null,
+            toAccountId: input.type === "transfer" ? input.toAccountId : null,
+            toSubAccountId: input.type === "transfer" ? (input.toSubAccountId ?? null) : null,
+            note: input.note ?? null,
+            updatedBy: userId,
+          },
+        });
+
+        await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, input, normalized);
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: userId,
+            ledgerId,
+            action: "transaction.update",
+            entityType: "transaction",
+            entityId: updated.id,
+          },
+          tx,
+        );
+        return this.getWithRelations(tx, ledgerId, updated.id);
+      },
+      { timeout: 20_000 },
+    );
   }
 
   async delete(ledgerId: string, transactionId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     // 删除会冲正每条分录（各自加账户行锁），放宽默认 5s 事务超时。
-    await this.txs.run(async (tx) => {
-      const existing = await tx.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
-      if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
-      await this.reverseEntries(tx, ledgerId, transactionId, userId, new Date(), "transaction.delete.reversal");
-      await tx.transaction.update({
-        where: { id: transactionId },
-        data: { deletedAt: new Date(), deletedBy: userId, updatedBy: userId },
-      });
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: userId,
+    await this.txs.run(
+      async (tx) => {
+        const existing = await tx.transaction.findFirst({
+          where: { id: transactionId, ledgerId, deletedAt: null },
+        });
+        if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+        await this.reverseEntries(
+          tx,
           ledgerId,
-          action: "transaction.delete",
-          entityType: "transaction",
-          entityId: transactionId,
-        },
-        tx,
-      );
-    }, { timeout: 20_000 });
+          transactionId,
+          userId,
+          new Date(),
+          "transaction.delete.reversal",
+        );
+        await tx.transaction.update({
+          where: { id: transactionId },
+          data: { deletedAt: new Date(), deletedBy: userId, updatedBy: userId },
+        });
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: userId,
+            ledgerId,
+            action: "transaction.delete",
+            entityType: "transaction",
+            entityId: transactionId,
+          },
+          tx,
+        );
+      },
+      { timeout: 20_000 },
+    );
     await this.files.deleteAttachmentsForOwner(ledgerId, "transaction", transactionId);
   }
 
@@ -284,7 +340,11 @@ export class TransactionsService {
     return transaction;
   }
 
-  private async normalize(tx: PrismaTransactionClient, ledgerId: string, input: CreateTransactionDto) {
+  private async normalize(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    input: CreateTransactionDto,
+  ) {
     const grossAmountMicros = BigInt(input.grossAmountMicros);
     if (grossAmountMicros <= 0n) throw new AppError("INVALID_AMOUNT", "金额必须大于 0", 400);
 
@@ -305,9 +365,22 @@ export class TransactionsService {
       await this.accounts.assertActiveAccount(tx, ledgerId, input.accountId, input.subAccountId);
     }
     if (input.type === "transfer") {
-      await this.accounts.assertActiveAccount(tx, ledgerId, input.fromAccountId!, input.fromSubAccountId);
-      await this.accounts.assertActiveAccount(tx, ledgerId, input.toAccountId!, input.toSubAccountId);
-      if (input.fromAccountId === input.toAccountId && input.fromSubAccountId === input.toSubAccountId) {
+      await this.accounts.assertActiveAccount(
+        tx,
+        ledgerId,
+        input.fromAccountId!,
+        input.fromSubAccountId,
+      );
+      await this.accounts.assertActiveAccount(
+        tx,
+        ledgerId,
+        input.toAccountId!,
+        input.toSubAccountId,
+      );
+      if (
+        input.fromAccountId === input.toAccountId &&
+        input.fromSubAccountId === input.toSubAccountId
+      ) {
         throw new AppError("TRANSFER_SAME_ACCOUNT", "转出和转入账户不能相同", 400);
       }
     }
@@ -317,7 +390,10 @@ export class TransactionsService {
       throw new AppError("TRANSFER_RELATION_UNSUPPORTED", "转账不支持可收回/需归还关联", 400);
     }
     await this.validateRelationAccounts(tx, ledgerId, input.type, relations);
-    const relationTotal = relations.reduce((sum, relation) => sum + BigInt(relation.amountMicros), 0n);
+    const relationTotal = relations.reduce(
+      (sum, relation) => sum + BigInt(relation.amountMicros),
+      0n,
+    );
     if (relationTotal > grossAmountMicros) {
       throw new AppError("RELATION_AMOUNT_TOO_LARGE", "关联金额不能超过交易金额", 400);
     }
@@ -330,7 +406,13 @@ export class TransactionsService {
     return {
       grossAmountMicros,
       effectiveAmountMicros: grossAmountMicros - relationTotal,
-      categorySnapshot: await this.categorySnapshot(tx, ledgerId, input.type, categoryId, subcategoryId),
+      categorySnapshot: await this.categorySnapshot(
+        tx,
+        ledgerId,
+        input.type,
+        categoryId,
+        subcategoryId,
+      ),
       personSnapshot: await this.personSnapshot(tx, ledgerId, input.personId),
     };
   }
@@ -344,21 +426,34 @@ export class TransactionsService {
     if (relations.length === 0) return;
 
     const accounts = await tx.account.findMany({
-      where: { id: { in: relations.map((relation) => relation.accountId) }, ledgerId, archivedAt: null },
+      where: {
+        id: { in: relations.map((relation) => relation.accountId) },
+        ledgerId,
+        archivedAt: null,
+      },
     });
     const accountById = new Map(accounts.map((account) => [account.id, account]));
 
     for (const relation of relations) {
-      if (transactionType === "expense" && !["receivable_from_expense", "payable_from_expense"].includes(relation.relationKind)) {
+      if (
+        transactionType === "expense" &&
+        !["receivable_from_expense", "payable_from_expense"].includes(relation.relationKind)
+      ) {
         throw new AppError("RELATION_KIND_MISMATCH", "关联类型与交易类型不匹配", 400);
       }
-      if (transactionType === "income" && !["payable_from_income", "receivable_from_income"].includes(relation.relationKind)) {
+      if (
+        transactionType === "income" &&
+        !["payable_from_income", "receivable_from_income"].includes(relation.relationKind)
+      ) {
         throw new AppError("RELATION_KIND_MISMATCH", "关联类型与交易类型不匹配", 400);
       }
-      if (BigInt(relation.amountMicros) <= 0n) throw new AppError("INVALID_RELATION_AMOUNT", "关联金额必须大于 0", 400);
+      if (BigInt(relation.amountMicros) <= 0n)
+        throw new AppError("INVALID_RELATION_AMOUNT", "关联金额必须大于 0", 400);
       const account = accountById.get(relation.accountId);
       if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-      const expectedType = relation.relationKind.startsWith("receivable") ? "receivable" : "payable";
+      const expectedType = relation.relationKind.startsWith("receivable")
+        ? "receivable"
+        : "payable";
       if (account.type !== expectedType) {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
       }
@@ -440,7 +535,9 @@ export class TransactionsService {
       await this.accounts.applyEntry(tx, {
         ledgerId,
         accountId: relation.accountId,
-        entryType: relation.relationKind.startsWith("receivable") ? "receivable_increase" : "payable_increase",
+        entryType: relation.relationKind.startsWith("receivable")
+          ? "receivable_increase"
+          : "payable_increase",
         amountDeltaMicros: BigInt(relation.amountMicros),
         transactionId,
         note: input.note,
@@ -506,12 +603,23 @@ export class TransactionsService {
     ledgerId: string,
     transactionId: string,
   ): Promise<TransactionWithRelations> {
-    const transaction = await client.transaction.findFirst({ where: { id: transactionId, ledgerId, deletedAt: null } });
+    const transaction = await client.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
     if (!transaction) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
     const [relations, entries, links] = await Promise.all([
-      client.transactionAccountRelation.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
-      client.accountEntry.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
-      client.transactionLink.findMany({ where: { ledgerId, transactionId }, orderBy: { createdAt: "asc" } }),
+      client.transactionAccountRelation.findMany({
+        where: { ledgerId, transactionId },
+        orderBy: { createdAt: "asc" },
+      }),
+      client.accountEntry.findMany({
+        where: { ledgerId, transactionId },
+        orderBy: { createdAt: "asc" },
+      }),
+      client.transactionLink.findMany({
+        where: { ledgerId, transactionId },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
     return { ...transaction, relations, entries, links };
   }
@@ -524,9 +632,15 @@ export class TransactionsService {
     subcategoryId?: string,
   ) {
     if (!categoryId) return null;
-    const category = await tx.category.findFirst({ where: { id: categoryId, ledgerId, type: transactionType, archivedAt: null } });
+    const category = await tx.category.findFirst({
+      where: { id: categoryId, ledgerId, type: transactionType, archivedAt: null },
+    });
     if (!category) throw new AppError("CATEGORY_NOT_FOUND", "分类不存在", 404);
-    const snapshot: Record<string, string | null> = { id: category.id, name: category.name, icon: category.icon };
+    const snapshot: Record<string, string | null> = {
+      id: category.id,
+      name: category.name,
+      icon: category.icon,
+    };
     if (subcategoryId) {
       const subcategory = await tx.subcategory.findFirst({
         where: { id: subcategoryId, ledgerId, categoryId, archivedAt: null },
@@ -541,7 +655,9 @@ export class TransactionsService {
 
   private async personSnapshot(tx: PrismaTransactionClient, ledgerId: string, personId?: string) {
     if (!personId) return null;
-    const person = await tx.person.findFirst({ where: { id: personId, ledgerId, archivedAt: null } });
+    const person = await tx.person.findFirst({
+      where: { id: personId, ledgerId, archivedAt: null },
+    });
     if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
     return { id: person.id, name: person.name, icon: person.icon };
   }

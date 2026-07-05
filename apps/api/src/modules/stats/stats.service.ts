@@ -1,11 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@fin-nest/db";
-import { currentMonthKey, dateKey, monthRange, parseDateOnly, PrismaService } from "@fin-nest/backend";
+import {
+  currentMonthKey,
+  dateKey,
+  monthRange,
+  parseDateOnly,
+  PrismaService,
+} from "@fin-nest/backend";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { StatsQueryDto } from "./dto/stats-query.dto";
 
 const TREND_MONTHS = 6;
 const UNCATEGORIZED_KEY = "__uncategorized__";
+const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
 // 「全部」时间预设不传日期范围，用一个足够宽的窗口覆盖所有历史交易。
 const EPOCH = new Date(Date.UTC(1970, 0, 1));
 const FAR_FUTURE = new Date(Date.UTC(9999, 0, 1));
@@ -74,9 +81,19 @@ export class StatsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
-    // 账户 / 子账户各自是一组 OR（出入账任一侧命中），可叠加，用 AND 组合。
+    // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
     const sideFilters: Prisma.TransactionWhereInput[] = [];
-    if (query.accountId) {
+    if (query.accountId && query.subAccountId) {
+      const subAccountId =
+        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      sideFilters.push({
+        OR: [
+          { accountId: query.accountId, subAccountId },
+          { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
+          { toAccountId: query.accountId, toSubAccountId: subAccountId },
+        ],
+      });
+    } else if (query.accountId) {
       sideFilters.push({
         OR: [
           { accountId: query.accountId },
@@ -84,13 +101,14 @@ export class StatsService {
           { toAccountId: query.accountId },
         ],
       });
-    }
-    if (query.subAccountId) {
+    } else if (query.subAccountId) {
+      const subAccountId =
+        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
       sideFilters.push({
         OR: [
-          { subAccountId: query.subAccountId },
-          { fromSubAccountId: query.subAccountId },
-          { toSubAccountId: query.subAccountId },
+          { subAccountId },
+          { fromSubAccountId: subAccountId },
+          { toSubAccountId: subAccountId },
         ],
       });
     }
@@ -158,7 +176,9 @@ export class StatsService {
     ]);
 
     const categoryById = new Map(categories.map((category) => [category.id, category]));
-    const subcategoryById = new Map(subcategories.map((subcategory) => [subcategory.id, subcategory]));
+    const subcategoryById = new Map(
+      subcategories.map((subcategory) => [subcategory.id, subcategory]),
+    );
 
     const trend: Record<StatsType, Map<string, bigint>> = {
       expense: new Map(months.map((key) => [key, 0n])),
@@ -174,13 +194,17 @@ export class StatsService {
       const amount = transaction.effectiveAmountMicros;
       const txMonth = dateKey(transaction.occurredOn).slice(0, 7);
       // 趋势只累加落在 6 个月窗口内的月份。
-      if (trend[type].has(txMonth)) trend[type].set(txMonth, (trend[type].get(txMonth) ?? 0n) + amount);
+      if (trend[type].has(txMonth))
+        trend[type].set(txMonth, (trend[type].get(txMonth) ?? 0n) + amount);
       // 分类拆分只累加落在选中时间范围内的交易。
-      if (transaction.occurredOn < breakdownStart || transaction.occurredOn >= breakdownEnd) continue;
+      if (transaction.occurredOn < breakdownStart || transaction.occurredOn >= breakdownEnd)
+        continue;
 
       // 分类名称/图标优先取当前分类表（跟随改名），分类已删除时退回交易快照。
       const snapshot = transaction.categorySnapshot as SnapshotShape;
-      const category = transaction.categoryId ? categoryById.get(transaction.categoryId) : undefined;
+      const category = transaction.categoryId
+        ? categoryById.get(transaction.categoryId)
+        : undefined;
       const key = transaction.categoryId ?? UNCATEGORIZED_KEY;
       let bucket = buckets[type].get(key);
       if (!bucket) {
@@ -220,16 +244,24 @@ export class StatsService {
     };
   }
 
-  private packType(months: string[], trend: Map<string, bigint>, buckets: Map<string, CategoryBucket>) {
+  private packType(
+    months: string[],
+    trend: Map<string, bigint>,
+    buckets: Map<string, CategoryBucket>,
+  ) {
     const categories = [...buckets.values()]
-      .sort((a, b) => (a.amountMicros === b.amountMicros ? 0 : a.amountMicros > b.amountMicros ? -1 : 1))
+      .sort((a, b) =>
+        a.amountMicros === b.amountMicros ? 0 : a.amountMicros > b.amountMicros ? -1 : 1,
+      )
       .map((bucket) => ({
         categoryId: bucket.categoryId,
         name: bucket.name,
         icon: bucket.icon,
         amountMicros: bucket.amountMicros.toString(),
         subcategories: [...bucket.subcategories.values()]
-          .sort((a, b) => (a.amountMicros === b.amountMicros ? 0 : a.amountMicros > b.amountMicros ? -1 : 1))
+          .sort((a, b) =>
+            a.amountMicros === b.amountMicros ? 0 : a.amountMicros > b.amountMicros ? -1 : 1,
+          )
           .map((sub) => ({
             subcategoryId: sub.subcategoryId,
             name: sub.name,
@@ -237,7 +269,10 @@ export class StatsService {
             amountMicros: sub.amountMicros.toString(),
           })),
       }));
-    const totalMicros = [...buckets.values()].reduce((sum, bucket) => sum + bucket.amountMicros, 0n);
+    const totalMicros = [...buckets.values()].reduce(
+      (sum, bucket) => sum + bucket.amountMicros,
+      0n,
+    );
     return {
       totalMicros: totalMicros.toString(),
       trend: months.map((key) => ({ month: key, totalMicros: (trend.get(key) ?? 0n).toString() })),

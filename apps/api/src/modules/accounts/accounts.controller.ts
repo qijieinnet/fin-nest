@@ -1,5 +1,21 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
@@ -32,7 +48,12 @@ export class AccountsController {
     @Body() body: CreateAccountDto,
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
-    return this.accounts.create(ledgerId, (auth as SessionAuthContext).userId, body, idempotencyKey);
+    return this.accounts.create(
+      ledgerId,
+      (auth as SessionAuthContext).userId,
+      body,
+      idempotencyKey,
+    );
   }
 
   @Patch(":accountId")
@@ -118,6 +139,22 @@ export class AccountsController {
     );
   }
 
+  @Post(":accountId/sub-accounts/:subAccountId/default")
+  @ApiOkResponse()
+  makeSubAccountDefault(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("accountId") accountId: string,
+    @Param("subAccountId") subAccountId: string,
+  ) {
+    return this.accounts.makeSubAccountDefault(
+      ledgerId,
+      accountId,
+      subAccountId,
+      (auth as SessionAuthContext).userId,
+    );
+  }
+
   @Delete(":accountId")
   @ApiNoContentResponse()
   async archive(
@@ -137,7 +174,13 @@ export class AccountsController {
     @Body() body: SettleAccountDto,
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
-    return this.accounts.settle(ledgerId, accountId, (auth as SessionAuthContext).userId, body, idempotencyKey);
+    return this.accounts.settle(
+      ledgerId,
+      accountId,
+      (auth as SessionAuthContext).userId,
+      body,
+      idempotencyKey,
+    );
   }
 
   @Post(":accountId/adjustments")
@@ -149,6 +192,12 @@ export class AccountsController {
     @Body() body: AdjustAccountDto,
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
-    return this.accounts.adjust(ledgerId, accountId, (auth as SessionAuthContext).userId, body, idempotencyKey);
+    return this.accounts.adjust(
+      ledgerId,
+      accountId,
+      (auth as SessionAuthContext).userId,
+      body,
+      idempotencyKey,
+    );
   }
 }

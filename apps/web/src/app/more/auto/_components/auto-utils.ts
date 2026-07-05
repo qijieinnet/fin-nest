@@ -1,4 +1,11 @@
-import type { Account, AutoRepeatRule, AutoRule, Category, Person, TransactionType } from "@/lib/api";
+import type {
+  Account,
+  AutoRepeatRule,
+  AutoRule,
+  Category,
+  Person,
+  TransactionType,
+} from "@/lib/api";
 import { accountSelectionId } from "@/lib/data/options";
 import { formatMicros } from "@/lib/money";
 
@@ -105,7 +112,7 @@ export function accountSummary(
   const account = accounts.find((item) => item.id === accountId);
   const subAccount = account?.subAccounts.find((item) => item.id === subAccountId);
   return {
-    icon: account?.icon?.trim() || "💼",
+    icon: subAccount?.icon?.trim() || account?.icon?.trim() || "💼",
     name: [account?.name, subAccount?.name].filter(Boolean).join(" · ") || "未绑定账户",
     selectionId: accountSelectionId(accountId, subAccountId),
   };

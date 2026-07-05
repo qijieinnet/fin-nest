@@ -24,6 +24,7 @@ import {
 import {
   accountSelectionId,
   categoryOptions,
+  firstSelectableAccountOptionId,
   moneyAccountOptions,
   personOptions,
   resolveAccountSelection,
@@ -54,7 +55,9 @@ export function AutoPendingEditorSheet({
   const { showToast } = useToast();
   const [amount, setAmount] = useState(() => microsToInput(pending.amountMicros));
   const [scheduledFor, setScheduledFor] = useState(dateOnly(pending.scheduledFor));
-  const [categoryId, setCategoryId] = useState<string | null>(pending.subcategoryId ?? pending.categoryId);
+  const [categoryId, setCategoryId] = useState<string | null>(
+    pending.subcategoryId ?? pending.categoryId,
+  );
   const [accountId, setAccountId] = useState<string | null>(
     accountSelectionId(pending.accountId, pending.subAccountId),
   );
@@ -156,7 +159,9 @@ export function AutoPendingEditorSheet({
     >
       <div className="auto-transaction-sheet__header">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
-        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">编辑待确认</h2>
+        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
+          编辑待确认
+        </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
@@ -169,7 +174,10 @@ export function AutoPendingEditorSheet({
       <div className="auto-transaction-sheet__body">
         <div className="transaction-form__top">
           <AmountInput
-            className={cn("transaction-form__amount", pending.type === "income" && "transaction-form__amount--income")}
+            className={cn(
+              "transaction-form__amount",
+              pending.type === "income" && "transaction-form__amount--income",
+            )}
             label="金额"
             onValueChange={setAmount}
             value={amount}
@@ -179,7 +187,11 @@ export function AutoPendingEditorSheet({
         <div className="transaction-form__cards">
           {pending.type !== "transfer" ? (
             <FieldCard className="transaction-form__picker-card" label="分类">
-              <CategorySelectRow onValueChange={setCategoryId} options={catOptions} value={categoryId} />
+              <CategorySelectRow
+                onValueChange={setCategoryId}
+                options={catOptions}
+                value={categoryId}
+              />
             </FieldCard>
           ) : null}
 
@@ -204,7 +216,7 @@ export function AutoPendingEditorSheet({
               checked={Boolean(accountId)}
               label="账户"
               onCheckedChange={(checked) => {
-                setAccountId(checked ? (acctOptions[0]?.id ?? null) : null);
+                setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
               }}
             >
               <AccountSelectRow
@@ -219,7 +231,11 @@ export function AutoPendingEditorSheet({
           )}
 
           <FieldCard className="transaction-form__date-card" label="日期">
-            <DateWheelPicker label="记账日期" onValueChange={setScheduledFor} value={scheduledFor} />
+            <DateWheelPicker
+              label="记账日期"
+              onValueChange={setScheduledFor}
+              value={scheduledFor}
+            />
           </FieldCard>
 
           <ToggleCard
@@ -236,7 +252,10 @@ export function AutoPendingEditorSheet({
                   const selected = person.id === personId;
                   return (
                     <button
-                      className={cn("transaction-form__chip", selected && "transaction-form__chip--selected")}
+                      className={cn(
+                        "transaction-form__chip",
+                        selected && "transaction-form__chip--selected",
+                      )}
                       key={person.id}
                       onClick={() => setPersonId(person.id)}
                       type="button"
