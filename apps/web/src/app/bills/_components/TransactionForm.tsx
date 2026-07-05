@@ -48,13 +48,16 @@ import {
   useCategories,
   useInsurances,
   useItems,
+  useItemTypes,
   usePeople,
   useRecordSetting,
 } from "@/lib/data/records";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { insuranceTypeMeta } from "../../more/insurances/_components/insurance-utils";
 import { ItemEditorSheet } from "../../more/items/_components/ItemEditorSheet";
+import { typeGlyph } from "../../more/items/_components/item-utils";
 
 const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
 
@@ -204,6 +207,7 @@ type TransactionFormProps = {
   ledgerId: string;
   initial?: TransactionDetail;
   onCanSubmitChange?: (canSubmit: boolean) => void;
+  onSaved?: () => void;
   onSubmitBlocked?: (submitBlocked: () => void) => void;
   onPendingChange?: (pending: boolean) => void;
   /** 待确认模式：预填这条待确认，提交时保存修改并直接确认入账。 */
@@ -217,6 +221,7 @@ export function TransactionForm({
   ledgerId,
   onCanSubmitChange,
   onPendingChange,
+  onSaved,
   onSubmitBlocked,
   pending,
   seed,
@@ -235,6 +240,7 @@ export function TransactionForm({
   const accountsQuery = useAccounts(ledgerId);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
+  const itemTypesQuery = useItemTypes(ledgerId);
 
   const setting = settingQuery.data;
   const categories = categoriesQuery.data ?? [];
@@ -347,19 +353,23 @@ export function TransactionForm({
     () =>
       (insurancesQuery.data ?? []).map((insurance) => ({
         id: insurance.id,
-        icon: "保",
+        icon: insuranceTypeMeta(insurance.type).icon,
         name: insurance.name,
       })),
     [insurancesQuery.data],
+  );
+  const itemTypeById = useMemo(
+    () => new Map((itemTypesQuery.data ?? []).map((itemType) => [itemType.id, itemType])),
+    [itemTypesQuery.data],
   );
   const itemOptions = useMemo(
     () =>
       (itemsQuery.data ?? []).map((item) => ({
         id: item.id,
-        icon: "物",
+        icon: typeGlyph(item.typeId ? itemTypeById.get(item.typeId) : null),
         name: item.name,
       })),
-    [itemsQuery.data],
+    [itemTypeById, itemsQuery.data],
   );
 
   const visibleFields = setting?.visibleFields ?? {};
@@ -700,7 +710,8 @@ export function TransactionForm({
         showToast({ tone: "success", message: "已确认入账" });
         // 编辑页在历史里紧邻待确认列表（详情进编辑用 replace 取代了详情），
         // 用 back 直接回到列表，避免残留失效的详情页。
-        router.back();
+        if (onSaved) onSaved();
+        else router.back();
         return;
       }
       let postSaveFailed = false;
@@ -730,7 +741,8 @@ export function TransactionForm({
       if (!postSaveFailed) {
         showToast({ tone: "success", message: isEdit ? "已保存修改" : "已记一笔" });
       }
-      router.back();
+      if (onSaved) onSaved();
+      else router.back();
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });

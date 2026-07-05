@@ -2,20 +2,18 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Zap } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { EmptyState, LoadingState, MoneyText } from "@/components/business";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type QuickTemplate } from "@/lib/api";
 import { useQuickTemplates } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
+import { NewBillFormScreen } from "./NewBillFormScreen";
 
 export function QuickTemplateSheet() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
-  const { pop } = useSheetStack();
+  const { clear, pop, push } = useSheetStack();
   const { showToast } = useToast();
   const templatesQuery = useQuickTemplates(ledgerId);
 
@@ -42,8 +40,13 @@ export function QuickTemplateSheet() {
   const templates = templatesQuery.data ?? [];
 
   const openPrefill = (template: QuickTemplate) => {
-    pop();
-    router.push(`${routes.billNew}?template=${template.id}`);
+    push({
+      className: "ui-bottom-sheet--sheet-form",
+      hideDefaultHeader: true,
+      content: (
+        <NewBillFormScreen embedded onClose={pop} onSaved={clear} templateId={template.id} />
+      ),
+    });
   };
 
   return (

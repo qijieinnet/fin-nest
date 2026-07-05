@@ -562,8 +562,8 @@ select:focus-visible {
 
 .ui-surface {
   background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-subtle);
-  box-shadow: var(--shadow-floating);
+  /* border: 1px solid var(--color-border-subtle); */
+  /* box-shadow: var(--shadow-floating); */
   overflow: hidden;
   position: relative;
 }
@@ -701,24 +701,33 @@ select:focus-visible {
   cursor: default;
   inset: 0;
   position: fixed;
-  z-index: 40;
+  /* 高于 sheet 层（z-index 50），确保点击 sheet 任意处都能关闭菜单。 */
+  z-index: 60;
 }
 
 .ui-popover-menu {
   animation: ui-popover-menu-pop var(--motion-duration-fast) ease;
-  position: absolute;
-  top: calc(100% + 8px);
-  z-index: 50;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Portal 到 body 后以 fixed 定位，位置由内联样式给出，避免被 overflow 容器截断。 */
+  position: fixed;
+  z-index: 61;
 }
 
-.ui-popover-menu--end {
-  right: 0;
+.ui-popover-menu--down.ui-popover-menu--end {
   transform-origin: top right;
 }
 
-.ui-popover-menu--start {
-  left: 0;
+.ui-popover-menu--down.ui-popover-menu--start {
   transform-origin: top left;
+}
+
+.ui-popover-menu--up.ui-popover-menu--end {
+  transform-origin: bottom right;
+}
+
+.ui-popover-menu--up.ui-popover-menu--start {
+  transform-origin: bottom left;
 }
 
 @keyframes ui-popover-menu-pop {
@@ -773,6 +782,18 @@ select:focus-visible {
 
 .ui-bottom-sheet--category-picker {
   min-height: min(72dvh, 620px);
+}
+
+.ui-bottom-sheet--category-picker > .sheet-body {
+  box-sizing: border-box;
+  margin-right: calc(var(--space-sheet-x) * -1);
+  padding-right: var(--space-sheet-x);
+  width: calc(100% + var(--space-sheet-x));
+}
+
+.ui-bottom-sheet--category-picker .biz-category-picker-sheet {
+  max-height: none;
+  overflow: visible;
 }
 
 .ui-bottom-sheet--full-height {
@@ -839,6 +860,7 @@ select:focus-visible {
   margin-right: calc(var(--space-sheet-x) * -1);
   padding-right: var(--space-sheet-x);
   width: calc(100% + var(--space-sheet-x));
+  padding-top: 0;
 }
 
 .ui-bottom-sheet--import-preview > .sheet-body {
@@ -2028,6 +2050,20 @@ select:focus-visible {
   overflow-x: hidden;
 }
 
+.ui-bottom-sheet--transaction-category-picker .biz-category-picker-sheet,
+.ui-bottom-sheet--transaction-account-picker .biz-category-picker-sheet {
+  max-height: none;
+  overflow: visible;
+}
+
+.ui-bottom-sheet--transaction-category-picker .transaction-form__sheet-header,
+.ui-bottom-sheet--transaction-account-picker .transaction-form__sheet-header {
+  background: #ededec;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
 .transaction-form__sheet-header {
   align-items: center;
   display: grid;
@@ -2346,7 +2382,7 @@ select:focus-visible {
 .biz-category-chip {
   -webkit-tap-highlight-color: transparent;
   align-items: center;
-  background: #f1f0ed;
+  background: #ffffff;
   border: 0;
   border-radius: 999px;
   color: #333431;
@@ -2361,7 +2397,7 @@ select:focus-visible {
 }
 
 .biz-category-chip .biz-category-icon {
-  background: rgba(255, 255, 255, 0.68);
+  background: transparent;
   border-radius: 999px;
   height: 24px;
   width: 24px;
@@ -2390,7 +2426,7 @@ select:focus-visible {
 }
 
 .biz-category-chip--readonly.biz-category-chip--selected {
-  background: #f1f0ed;
+  background: #ffffff;
   color: var(--color-tint-strong);
 }
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/format/class-names";
 import { Menu, type MenuItem } from "./Menu";
 
@@ -12,8 +14,21 @@ type PopoverMenuProps = {
   open: boolean;
 };
 
+/** 面板离屏幕边缘保留的安全边距。 */
+const VIEWPORT_MARGIN = 12;
+/** 面板与锚点之间的间隙。 */
+const ANCHOR_GAP = 8;
+
+type Placement = {
+  direction: "up" | "down";
+  maxHeight: number;
+  style: CSSProperties;
+};
+
 /**
- * 锚定式弹出菜单：透明背板点击关闭 + 锚点下方弹出 Menu 面板。
+ * 锚定式弹出菜单：透明背板点击关闭 + 根据锚点在屏幕中的位置动态向上/向下弹出。
+ * 通过 Portal 以 fixed 定位渲染，避免被 sheet 等 overflow 容器截断；
+ * 面板高度依据可用空间自适应（超出则内部滚动）。
  * 放在一个 `relative` 容器内使用；表单选值、导航「更多」菜单通用。
  */
 export function PopoverMenu({
@@ -23,24 +38,86 @@ export function PopoverMenu({
   onOpenChange,
   open,
 }: PopoverMenuProps) {
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<Placement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const compute = () => {
+      const anchor = markerRef.current?.parentElement;
+      const panel = panelRef.current;
+      if (!anchor) return;
+
+      const rect = anchor.getBoundingClientRect();
+      const { innerHeight: vh, innerWidth: vw } = window;
+      const spaceBelow = vh - rect.bottom - ANCHOR_GAP - VIEWPORT_MARGIN;
+      const spaceAbove = rect.top - ANCHOR_GAP - VIEWPORT_MARGIN;
+
+      // 优先向下；下方空间不足且上方更充裕时向上翻转。
+      const needed = panel?.scrollHeight ?? 0;
+      const direction: "up" | "down" =
+        spaceBelow < needed && spaceAbove > spaceBelow ? "up" : "down";
+      const maxHeight = Math.max(0, direction === "up" ? spaceAbove : spaceBelow);
+
+      const style: CSSProperties =
+        direction === "up"
+          ? { bottom: vh - rect.top + ANCHOR_GAP }
+          : { top: rect.bottom + ANCHOR_GAP };
+      if (align === "end") style.right = vw - rect.right;
+      else style.left = rect.left;
+
+      setPlacement({ direction, maxHeight, style });
+    };
+
+    compute();
+    window.addEventListener("resize", compute);
+    window.addEventListener("scroll", compute, true);
+    return () => {
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("scroll", compute, true);
+    };
+  }, [open, groups, align]);
+
   if (!open) return null;
+
+  // 内联标记：本体经 Portal 渲染，用它来定位锚点（其父元素即锚点容器）。
+  const marker = <span aria-hidden ref={markerRef} style={{ display: "none" }} />;
+
+  if (typeof document === "undefined") return marker;
+
   return (
     <>
-      <button
-        aria-label="关闭菜单"
-        className="ui-popover-menu__backdrop"
-        onClick={() => onOpenChange(false)}
-        type="button"
-      />
-      <div
-        className={cn(
-          "ui-popover-menu",
-          align === "end" ? "ui-popover-menu--end" : "ui-popover-menu--start",
-          className,
-        )}
-      >
-        <Menu groups={groups} onClose={() => onOpenChange(false)} />
-      </div>
+      {marker}
+      {createPortal(
+        <>
+          <button
+            aria-label="关闭菜单"
+            className="ui-popover-menu__backdrop"
+            onClick={() => onOpenChange(false)}
+            type="button"
+          />
+          <div
+            className={cn(
+              "ui-popover-menu",
+              align === "end" ? "ui-popover-menu--end" : "ui-popover-menu--start",
+              placement?.direction === "up" ? "ui-popover-menu--up" : "ui-popover-menu--down",
+              className,
+            )}
+            ref={panelRef}
+            style={{
+              ...placement?.style,
+              maxHeight: placement && placement.maxHeight > 0 ? placement.maxHeight : undefined,
+              // 首帧尚未测量时先隐藏，避免定位跳动。
+              visibility: placement ? undefined : "hidden",
+            }}
+          >
+            <Menu groups={groups} onClose={() => onOpenChange(false)} />
+          </div>
+        </>,
+        document.body,
+      )}
     </>
   );
 }

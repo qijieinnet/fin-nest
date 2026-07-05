@@ -60,7 +60,7 @@ export function CategorySelectRow({ onValueChange, options, value }: CategorySel
         <ChevronRight size={18} />
       </button>
       <BottomSheet
-        className="ui-bottom-sheet--transaction-picker"
+        className="ui-bottom-sheet--transaction-picker ui-bottom-sheet--edge-scroll ui-bottom-sheet--transaction-category-picker"
         hideDefaultHeader
         onClose={() => setOpen(false)}
         open={open}
@@ -191,7 +191,7 @@ export function AccountSelectRow({
         <ChevronRight size={18} />
       </button>
       <BottomSheet
-        className="ui-bottom-sheet--transaction-picker"
+        className="ui-bottom-sheet--transaction-picker ui-bottom-sheet--edge-scroll ui-bottom-sheet--transaction-account-picker"
         hideDefaultHeader
         onClose={() => setOpen(false)}
         open={open}
