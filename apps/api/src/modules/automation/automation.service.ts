@@ -382,8 +382,9 @@ export class AutomationService {
 
   async listTemplates(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
+    // 快捷模板按用户隔离：仅返回当前用户创建的模板。
     return this.prisma.client.quickTemplate.findMany({
-      where: { ledgerId, archivedAt: null },
+      where: { ledgerId, createdBy: userId, archivedAt: null },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
   }
@@ -403,7 +404,7 @@ export class AutomationService {
     input: UpdateQuickTemplateDto,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const existing = await this.assertTemplate(ledgerId, templateId);
+    const existing = await this.assertTemplate(ledgerId, templateId, userId);
     const type = input.type ?? existing.type;
     const account = this.mergeAccountPair(
       { accountId: existing.accountId, subAccountId: existing.subAccountId },
@@ -492,7 +493,7 @@ export class AutomationService {
 
   async archiveTemplate(ledgerId: string, templateId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertTemplate(ledgerId, templateId);
+    await this.assertTemplate(ledgerId, templateId, userId);
     await this.prisma.client.quickTemplate.update({
       where: { id: templateId },
       data: { archivedAt: new Date(), updatedBy: userId },
@@ -501,7 +502,7 @@ export class AutomationService {
 
   async prefillTemplate(ledgerId: string, templateId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const template = await this.assertTemplate(ledgerId, templateId);
+    const template = await this.assertTemplate(ledgerId, templateId, userId);
     return {
       ...this.templateToTransaction(template, todayKey()),
       insuranceId: template.insuranceId,
@@ -511,7 +512,7 @@ export class AutomationService {
 
   async runTemplate(ledgerId: string, templateId: string, userId: string, idempotencyKey?: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const template = await this.assertTemplate(ledgerId, templateId);
+    const template = await this.assertTemplate(ledgerId, templateId, userId);
     if (!template.directEnabled)
       throw new AppError("QUICK_TEMPLATE_DIRECT_DISABLED", "模板未开启直接记账", 400);
     if (!template.amountMicros)
@@ -657,9 +658,10 @@ export class AutomationService {
     return pending;
   }
 
-  private async assertTemplate(ledgerId: string, templateId: string) {
+  private async assertTemplate(ledgerId: string, templateId: string, userId: string) {
+    // 快捷模板按用户隔离：仅允许操作当前用户创建的模板。
     const template = await this.prisma.client.quickTemplate.findFirst({
-      where: { id: templateId, ledgerId, archivedAt: null },
+      where: { id: templateId, ledgerId, createdBy: userId, archivedAt: null },
     });
     if (!template) throw new AppError("QUICK_TEMPLATE_NOT_FOUND", "快捷模板不存在", 404);
     return template;

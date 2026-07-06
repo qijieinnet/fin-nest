@@ -1,21 +1,17 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type RecordSetting,
-} from "@/lib/api";
+import { apiRequest, getApiErrorMessage, ledgerApiPath, type RecordSetting } from "@/lib/api";
 import { useRecordSetting } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useToast } from "@/providers";
+import { FieldSortList } from "./_components/FieldSortList";
 
 // 记账页面可调整展示/顺序的字段（type/amount 固定在顶部，不参与配置）。
 const FIELD_META: Record<string, { name: string; icon: string }> = {
@@ -102,14 +98,6 @@ export function RecordSettingsScreen() {
     });
   };
 
-  const moveField = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= orderable.length) return;
-    const next = [...orderable];
-    [next[index], next[target]] = [next[target]!, next[index]!];
-    persistOrder(next);
-  };
-
   const resetFields = () => {
     setSortMode(false);
     update.mutate({
@@ -137,7 +125,9 @@ export function RecordSettingsScreen() {
           ) : (
             <>
               <div className="flex items-end justify-between px-1">
-                <span className="text-[13px] font-semibold text-[var(--color-text-muted)]">字段</span>
+                <span className="text-[13px] font-semibold text-[var(--color-text-muted)]">
+                  字段
+                </span>
                 <button
                   className="text-[15px] font-medium text-[var(--color-tint)]"
                   onClick={() => setSortMode((value) => !value)}
@@ -146,78 +136,69 @@ export function RecordSettingsScreen() {
                   {sortMode ? "完成" : "排序"}
                 </button>
               </div>
-              <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+              {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
                 {sortMode
-                  ? "用右侧箭头调整记账页面的字段顺序。"
+                  ? "按住右侧图标拖动调整记账页面的字段顺序。"
                   : "开关控制字段是否在记账页面展示，点「排序」可调整顺序。"}
-              </p>
+              </p> */}
 
-              <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-                <ul className="divide-y divide-black/[0.06]">
-                  {orderable.map((key, index) => {
+              {sortMode ? (
+                <FieldSortList
+                  fields={orderable.flatMap((key) => {
                     const meta = FIELD_META[key];
-                    if (!meta) return null;
-                    const toggleable = TOGGLEABLE_KEYS.has(key);
-                    const visible = visibleFields[key] !== false;
-                    return (
-                      <li className="flex items-center gap-3 px-4 py-[15px]" key={key}>
-                        <span className="w-6 text-center text-lg">{meta.icon}</span>
-                        <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
-                          {meta.name}
-                        </span>
-                        {sortMode ? (
-                          <div className="flex items-center gap-1">
-                            <button
-                              aria-label={`上移${meta.name}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-control-fill-muted)] text-[var(--color-text-secondary)] disabled:opacity-35"
-                              disabled={index === 0 || update.isPending}
-                              onClick={() => moveField(index, -1)}
-                              type="button"
-                            >
-                              <ChevronUp size={17} />
-                            </button>
-                            <button
-                              aria-label={`下移${meta.name}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-control-fill-muted)] text-[var(--color-text-secondary)] disabled:opacity-35"
-                              disabled={index === orderable.length - 1 || update.isPending}
-                              onClick={() => moveField(index, 1)}
-                              type="button"
-                            >
-                              <ChevronDown size={17} />
-                            </button>
-                          </div>
-                        ) : toggleable ? (
-                          <Switch
-                            checked={visible}
-                            label={`${visible ? "隐藏" : "显示"}${meta.name}`}
-                            onCheckedChange={() => toggleVisible(key)}
-                          />
-                        ) : (
-                          <span className="text-xs text-[var(--color-text-muted)]">常驻</span>
-                        )}
-                      </li>
-                    );
+                    return meta ? [{ key, name: meta.name, icon: meta.icon }] : [];
                   })}
-                </ul>
-              </section>
+                  onReorder={persistOrder}
+                />
+              ) : (
+                <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+                  <ul className="divide-y divide-black/[0.06]">
+                    {orderable.map((key) => {
+                      const meta = FIELD_META[key];
+                      if (!meta) return null;
+                      const toggleable = TOGGLEABLE_KEYS.has(key);
+                      const visible = visibleFields[key] !== false;
+                      return (
+                        <li className="flex items-center gap-3 px-4 py-[15px]" key={key}>
+                          <span className="w-6 text-center text-lg">{meta.icon}</span>
+                          <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
+                            {meta.name}
+                          </span>
+                          {toggleable ? (
+                            <Switch
+                              checked={visible}
+                              label={`${visible ? "隐藏" : "显示"}${meta.name}`}
+                              onCheckedChange={() => toggleVisible(key)}
+                            />
+                          ) : (
+                            <span className="text-xs text-[var(--color-text-muted)]">常驻</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
 
-              <button
+              {/* <button
                 className="self-start px-1 text-sm font-medium text-[var(--color-tint)]"
                 onClick={resetFields}
                 type="button"
               >
                 重置
-              </button>
+              </button> */}
 
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
                 必填校验
               </span>
-              <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+              {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
                 设为必填后，记账页面默认展开该字段。
-              </p>
+              </p> */}
               <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
                 <div className="flex items-center gap-3 px-4 py-[15px] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)]">
-                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">账户必填</span>
+                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
+                    账户必填
+                  </span>
                   <Switch
                     checked={setting.acctRequired}
                     label="账户必填"
@@ -225,7 +206,9 @@ export function RecordSettingsScreen() {
                   />
                 </div>
                 <div className="flex items-center gap-3 px-4 py-[15px]">
-                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">人员必填</span>
+                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
+                    人员必填
+                  </span>
                   <Switch
                     checked={setting.personRequired}
                     label="人员必填"
@@ -237,12 +220,15 @@ export function RecordSettingsScreen() {
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
                 记账体验
               </span>
-              <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                开启后，在新建记账页面提交后不自动关闭，并清空金额、备注等输入，保留日期、分类、人员，方便连续记账。
-              </p>
+
               <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
                 <div className="flex items-center gap-3 px-4 py-[15px]">
-                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">连续记账</span>
+                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
+                    连续记账
+                    {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                      开启后，在新建记账页面提交后不自动关闭，并清空金额、备注等输入，保留日期、分类、人员，方便连续记账。
+                    </p> */}
+                  </span>
                   <Switch
                     checked={setting.continuousEntry}
                     label="连续记账"

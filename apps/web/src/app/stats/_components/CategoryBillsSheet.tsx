@@ -8,26 +8,21 @@ import {
   TransactionRow,
 } from "@/components/business";
 import type { Account, Transaction, TransactionListQuery } from "@/lib/api";
-import { accountName } from "@/lib/data/options";
-import { useAccounts, useInfiniteTransactions } from "@/lib/data/records";
+import {
+  accountName,
+  buildCategoryLookup,
+  type CategoryLookup,
+  categoryRowProps,
+} from "@/lib/data/options";
+import { useAccounts, useCategories, useInfiniteTransactions } from "@/lib/data/records";
 import { useLedger, useSheetStack } from "@/providers";
 import { BillDetailScreen } from "../../bills/[transactionId]/BillDetailScreen";
 import { dayLabel, groupByDay } from "../../bills/_components/bill-utils";
 
-function rowProps(transaction: Transaction, accounts: Account[]) {
-  const snapshot = transaction.categorySnapshot;
-  const title =
-    snapshot?.subcategoryName ??
-    snapshot?.name ??
-    (transaction.type === "income" ? "收入" : "支出");
+function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   return {
     type: transaction.type,
-    title,
-    categoryName: snapshot?.name ?? title,
-    categoryIcon:
-      snapshot?.subcategoryIcon ??
-      snapshot?.icon ??
-      (transaction.type === "income" ? "income" : undefined),
+    ...categoryRowProps(transaction, categoryLookup),
     amountMicros: transaction.effectiveAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
@@ -42,6 +37,11 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
   const transactionsQuery = useInfiniteTransactions(ledgerId, filters);
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
+  const categoriesQuery = useCategories(ledgerId);
+  const categoryLookup = useMemo(
+    () => buildCategoryLookup(categoriesQuery.data ?? []),
+    [categoriesQuery.data],
+  );
 
   const transactions = useMemo(
     () => transactionsQuery.data?.pages.flat() ?? [],
@@ -93,7 +93,7 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
   }
 
   return (
-    <div className="flex max-h-[70dvh] flex-col gap-5 overflow-y-auto pb-2">
+    <div className="flex flex-col gap-5 pb-2">
       {groups.map((group) => (
         <TransactionGroup
           dateLabel={dayLabel(group.date)}
@@ -105,7 +105,7 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
             <TransactionRow
               key={transaction.id}
               onClick={() => openBill(transaction.id)}
-              {...rowProps(transaction, accounts)}
+              {...rowProps(transaction, accounts, categoryLookup)}
             />
           ))}
         </TransactionGroup>

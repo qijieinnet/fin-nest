@@ -3,8 +3,14 @@
 import { useMemo } from "react";
 import { LoadingState, TransactionGroup, TransactionRow } from "@/components/business";
 import type { Account, Transaction, TransactionLink } from "@/lib/api";
-import { accountName } from "@/lib/data/options";
-import { useAccounts } from "@/lib/data/records";
+import {
+  accountName,
+  buildCategoryLookup,
+  type CategoryLookup,
+  categoryRowProps,
+  TRANSFER_ICON,
+} from "@/lib/data/options";
+import { useAccounts, useCategories } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { BillDetailScreen } from "../../../bills/[transactionId]/BillDetailScreen";
 import { dayLabel, groupByDay } from "../../../bills/_components/bill-utils";
@@ -24,7 +30,12 @@ function purchaseBadge() {
   );
 }
 
-function rowProps(transaction: Transaction, accounts: Account[], purchase: boolean) {
+function rowProps(
+  transaction: Transaction,
+  accounts: Account[],
+  categoryLookup: CategoryLookup,
+  purchase: boolean,
+) {
   if (transaction.type === "transfer") {
     const from = accountName(accounts, transaction.fromAccountId);
     const to = accountName(accounts, transaction.toAccountId);
@@ -32,26 +43,16 @@ function rowProps(transaction: Transaction, accounts: Account[], purchase: boole
       type: "transfer" as const,
       title: "转账",
       categoryName: "转账",
-      categoryIcon: "transfer",
+      categoryIcon: TRANSFER_ICON,
       description: from && to ? `${from} → ${to}` : undefined,
       amountMicros: transaction.effectiveAmountMicros,
       meta: purchase ? purchaseBadge() : undefined,
     };
   }
 
-  const snapshot = transaction.categorySnapshot;
-  const title =
-    snapshot?.subcategoryName ??
-    snapshot?.name ??
-    (transaction.type === "income" ? "收入" : "支出");
   return {
     type: transaction.type,
-    title,
-    categoryName: snapshot?.name ?? title,
-    categoryIcon:
-      snapshot?.subcategoryIcon ??
-      snapshot?.icon ??
-      (transaction.type === "income" ? "income" : undefined),
+    ...categoryRowProps(transaction, categoryLookup),
     amountMicros: transaction.effectiveAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
@@ -70,6 +71,11 @@ export function ItemTransactionList({
   const { pop, push } = useSheetStack();
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
+  const categoriesQuery = useCategories(ledgerId);
+  const categoryLookup = useMemo(
+    () => buildCategoryLookup(categoriesQuery.data ?? []),
+    [categoriesQuery.data],
+  );
   const groups = useMemo(() => groupByDay(transactions), [transactions]);
   const purchaseTransactionIds = useMemo(
     () =>
@@ -114,7 +120,12 @@ export function ItemTransactionList({
             <TransactionRow
               key={transaction.id}
               onClick={() => openBill(transaction.id)}
-              {...rowProps(transaction, accounts, purchaseTransactionIds.has(transaction.id))}
+              {...rowProps(
+                transaction,
+                accounts,
+                categoryLookup,
+                purchaseTransactionIds.has(transaction.id),
+              )}
             />
           ))}
         </TransactionGroup>

@@ -41,9 +41,13 @@ import {
 } from "@/lib/api";
 import {
   accountName,
+  buildCategoryLookup,
+  type CategoryLookup,
   categoryOptions,
+  categoryRowProps,
   moneyAccountOptions,
   personOptions,
+  TRANSFER_ICON,
 } from "@/lib/data/options";
 import {
   useAccounts,
@@ -70,7 +74,7 @@ import {
 // 按账本缓存筛选条件，进出详情页（路由跳转会重挂载）后仍保留。模块级变量在客户端导航间不清空。
 const billsFilterCache = new Map<string, BusinessFilterValue>();
 
-function rowProps(transaction: Transaction, accounts: Account[]) {
+function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   if (transaction.type === "transfer") {
     const from = accountName(accounts, transaction.fromAccountId);
     const to = accountName(accounts, transaction.toAccountId);
@@ -78,24 +82,14 @@ function rowProps(transaction: Transaction, accounts: Account[]) {
       type: "transfer" as const,
       title: "转账",
       categoryName: "转账",
-      categoryIcon: "transfer",
+      categoryIcon: TRANSFER_ICON,
       description: from && to ? `${from} → ${to}` : undefined,
       amountMicros: transaction.effectiveAmountMicros,
     };
   }
-  const snapshot = transaction.categorySnapshot;
-  const title =
-    snapshot?.subcategoryName ??
-    snapshot?.name ??
-    (transaction.type === "income" ? "收入" : "支出");
   return {
     type: transaction.type,
-    title,
-    categoryName: snapshot?.name ?? title,
-    categoryIcon:
-      snapshot?.subcategoryIcon ??
-      snapshot?.icon ??
-      (transaction.type === "income" ? "income" : undefined),
+    ...categoryRowProps(transaction, categoryLookup),
     amountMicros: transaction.effectiveAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
@@ -188,6 +182,10 @@ export function BillsScreen() {
     ],
     [categoriesQuery.data],
   );
+  const categoryLookup = useMemo(
+    () => buildCategoryLookup(categoriesQuery.data ?? []),
+    [categoriesQuery.data],
+  );
   const filterAccountOptions = useMemo(
     () => moneyAccountOptions(accounts, { parentSelectable: true }),
     [accounts],
@@ -221,7 +219,7 @@ export function BillsScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+100px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+60px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
         <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 pb-3">
           <div className="flex min-w-0 justify-start">
             {showLedgerSwitcher ? (
@@ -401,7 +399,7 @@ export function BillsScreen() {
                     >
                       <TransactionRow
                         onClick={() => router.push(routes.bill(transaction.id))}
-                        {...rowProps(transaction, accounts)}
+                        {...rowProps(transaction, accounts, categoryLookup)}
                       />
                     </SwipeActionRow>
                   ))}
@@ -429,10 +427,10 @@ export function BillsScreen() {
       {/* 右侧浮动动作：记一笔 */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
         <div className="relative w-[min(100vw,430px)]">
-          <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] border border-white/50 bg-[rgba(255,255,255,0.62)] shadow-[var(--shadow-app)] backdrop-blur-xl">
+          <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">
             <button
               aria-label="记一笔"
-              className="flex h-full w-full items-center justify-center text-[var(--color-text-primary)]"
+              className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
               onClick={() => router.push(routes.billNew)}
               type="button"
             >

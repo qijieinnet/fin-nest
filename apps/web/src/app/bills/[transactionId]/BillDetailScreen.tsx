@@ -33,6 +33,11 @@ import {
   useRecordSetting,
   useTransaction,
 } from "@/lib/data/records";
+import {
+  buildCategoryLookup,
+  type CategoryLookup,
+  resolveCategoryDisplay,
+} from "@/lib/data/options";
 import { formatMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -142,20 +147,27 @@ function RawCategoryIcon({ icon }: { icon?: string | null }) {
   return <span className="bill-detail__category-icon">{icon.trim()}</span>;
 }
 
-function CategoryValue({ category }: { category: TransactionDetail["categorySnapshot"] }) {
+function CategoryValue({
+  category,
+  categoryLookup,
+}: {
+  category: TransactionDetail["categorySnapshot"];
+  categoryLookup: CategoryLookup;
+}) {
   if (!category) return "未选择";
+  const resolved = resolveCategoryDisplay(category, categoryLookup);
   return (
     <span className="bill-detail__category-value">
       <span>
-        <RawCategoryIcon icon={category.icon} />
-        <span>{category.name}</span>
+        <RawCategoryIcon icon={resolved.icon} />
+        <span>{resolved.name}</span>
       </span>
-      {category.subcategoryName ? (
+      {resolved.subcategoryName ? (
         <>
           <span className="bill-detail__category-separator">/</span>
           <span>
-            <RawCategoryIcon icon={category.subcategoryIcon} />
-            <span>{category.subcategoryName}</span>
+            <RawCategoryIcon icon={resolved.subcategoryIcon} />
+            <span>{resolved.subcategoryName}</span>
           </span>
         </>
       ) : null}
@@ -237,7 +249,7 @@ export function BillDetailScreen({
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
   const pendingQuery = useAutoPending(isPendingMode ? ledgerId : null);
-  const categoriesQuery = useCategories(isPendingMode ? ledgerId : null);
+  const categoriesQuery = useCategories(ledgerId);
   const peopleQuery = usePeople(isPendingMode ? ledgerId : null);
   const settingQuery = useRecordSetting(ledgerId);
   const membersQuery = useQuery({
@@ -259,6 +271,7 @@ export function BillDetailScreen({
   const showNoteCard = visibleFields.note !== false;
   const showAttachmentCard = visibleFields.attachments !== false;
   const categories = categoriesQuery.data ?? [];
+  const categoryLookup = useMemo(() => buildCategoryLookup(categories), [categories]);
   const people = peopleQuery.data ?? [];
   const pendingItem = isPendingMode
     ? pendingQuery.data?.find((item) => item.id === pendingId)
@@ -420,7 +433,10 @@ export function BillDetailScreen({
           if (isTransfer) return null;
           return (
             <ReadonlyCard key="category">
-              <ReadonlyRow label="分类" value={<CategoryValue category={category} />} />
+              <ReadonlyRow
+                label="分类"
+                value={<CategoryValue category={category} categoryLookup={categoryLookup} />}
+              />
             </ReadonlyCard>
           );
         case "account":

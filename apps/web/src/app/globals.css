@@ -3199,10 +3199,12 @@ select:focus-visible {
 .biz-transaction-group__header {
   align-items: flex-start;
   color: var(--color-text-primary);
-  display: grid;
+  /* display: grid; */
   gap: 6px;
   justify-items: start;
   margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
 }
 
 .biz-transaction-group__header > strong {

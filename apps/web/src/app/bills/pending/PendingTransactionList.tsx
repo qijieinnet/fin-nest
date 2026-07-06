@@ -12,6 +12,7 @@ import {
   categorySummary,
   transferAccountSummary,
 } from "@/app/more/auto/_components/auto-utils";
+import { TRANSFER_ICON } from "@/lib/data/options";
 import { dayLabel } from "../_components/bill-utils";
 
 type PendingDayGroup = {
@@ -63,7 +64,7 @@ function pendingRowProps(item: AutoPendingTransaction, accounts: Account[], cate
       type: "transfer" as const,
       title: "转账",
       categoryName: "转账",
-      categoryIcon: "transfer",
+      categoryIcon: TRANSFER_ICON,
       description: summary.fullName,
       amountMicros: item.amountMicros,
     };

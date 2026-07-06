@@ -385,12 +385,12 @@ export function AutoScreen() {
                 <LoadingState rows={4} title="加载自动记账规则" />
               ) : rules.length === 0 ? (
                 <EmptyState
-                  action={
-                    <Button onClick={() => openEditor()} variant="primary">
-                      新建自动记账
-                    </Button>
-                  }
-                  message="把房租、订阅、工资这类固定收支交给自动记账，到期后确认入账。"
+                  // action={
+                  //   <Button onClick={() => openEditor()} variant="primary">
+                  //     新建自动记账
+                  //   </Button>
+                  // }
+                  message=""
                   title="还没有自动记账"
                 />
               ) : (

@@ -1,5 +1,13 @@
 import type { BusinessOption, CategoryOption } from "@/components/business";
-import type { Account, AccountType, Category, Person, TransactionType } from "@/lib/api";
+import type {
+  Account,
+  AccountType,
+  Category,
+  CategorySnapshot,
+  Person,
+  Transaction,
+  TransactionType,
+} from "@/lib/api";
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   savings: "储蓄",
@@ -58,6 +66,75 @@ export function categoryOptions(
     }
   }
   return options;
+}
+
+/** 转账不能选分类，列表统一用这个图标。 */
+export const TRANSFER_ICON = "💱";
+
+/** 分类/子分类的实时图标与名称索引，按 id 查询。 */
+export type CategoryLookup = Map<string, { icon: string | null; name: string }>;
+
+export function buildCategoryLookup(categories: Category[]): CategoryLookup {
+  const lookup: CategoryLookup = new Map();
+  for (const category of categories) {
+    lookup.set(category.id, { icon: category.icon, name: category.name });
+    for (const sub of category.subcategories) {
+      lookup.set(sub.id, { icon: sub.icon, name: sub.name });
+    }
+  }
+  return lookup;
+}
+
+export type ResolvedCategory = {
+  /** 父分类名称（实时优先，回退快照）。 */
+  name: string | null;
+  /** 父分类图标（实时优先，回退快照）。 */
+  icon: string | null;
+  /** 子分类名称，无子分类时为 null。 */
+  subcategoryName: string | null;
+  /** 子分类图标，无子分类时为 null。 */
+  subcategoryIcon: string | null;
+  /** 列表行展示用的单个图标：子分类优先于父分类。 */
+  displayIcon: string | null;
+};
+
+/**
+ * 记账展示：优先用快照中的 id 命中分类接口的实时数据（名称/图标），
+ * 未命中（分类已删除）再回退到快照。子分类优先于父分类，与历史快照顺序一致。
+ */
+export function resolveCategoryDisplay(
+  snapshot: CategorySnapshot | null | undefined,
+  lookup: CategoryLookup,
+): ResolvedCategory {
+  if (!snapshot) {
+    return { name: null, icon: null, subcategoryName: null, subcategoryIcon: null, displayIcon: null };
+  }
+  const liveCat = lookup.get(snapshot.id);
+  const name = liveCat?.name ?? snapshot.name ?? null;
+  const icon = liveCat?.icon ?? snapshot.icon ?? null;
+  const liveSub = snapshot.subcategoryId ? lookup.get(snapshot.subcategoryId) : undefined;
+  const subcategoryName = snapshot.subcategoryId
+    ? (liveSub?.name ?? snapshot.subcategoryName ?? null)
+    : null;
+  const subcategoryIcon = snapshot.subcategoryId
+    ? (liveSub?.icon ?? snapshot.subcategoryIcon ?? null)
+    : null;
+  return { name, icon, subcategoryName, subcategoryIcon, displayIcon: subcategoryIcon ?? icon };
+}
+
+/** 记账列表行的分类展示字段（标题 / 分类名 / 图标），实时优先。转账请自行处理。 */
+export function categoryRowProps(
+  transaction: Pick<Transaction, "type" | "categorySnapshot">,
+  lookup: CategoryLookup,
+) {
+  const resolved = resolveCategoryDisplay(transaction.categorySnapshot, lookup);
+  const isIncome = transaction.type === "income";
+  const title = resolved.subcategoryName ?? resolved.name ?? (isIncome ? "收入" : "支出");
+  return {
+    title,
+    categoryName: resolved.name ?? title,
+    categoryIcon: resolved.displayIcon ?? (isIncome ? "income" : undefined),
+  };
 }
 
 export function moneyAccountOptions(

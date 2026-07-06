@@ -3,8 +3,13 @@
 import { useMemo } from "react";
 import { EmptyState, LoadingState, TransactionGroup, TransactionRow } from "@/components/business";
 import type { Account, Plan, Transaction } from "@/lib/api";
-import { accountName } from "@/lib/data/options";
-import { useAccounts, useTransactions } from "@/lib/data/records";
+import {
+  accountName,
+  buildCategoryLookup,
+  type CategoryLookup,
+  categoryRowProps,
+} from "@/lib/data/options";
+import { useAccounts, useCategories, useTransactions } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { BillDetailScreen } from "../../bills/[transactionId]/BillDetailScreen";
 import { dayLabel, groupByDay } from "../../bills/_components/bill-utils";
@@ -17,20 +22,10 @@ type PlanMatchedListSheetProps = {
   start: string;
 };
 
-function rowProps(transaction: Transaction, accounts: Account[]) {
-  const snapshot = transaction.categorySnapshot;
-  const title =
-    snapshot?.subcategoryName ??
-    snapshot?.name ??
-    (transaction.type === "income" ? "收入" : "支出");
+function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   return {
     type: transaction.type,
-    title,
-    categoryName: snapshot?.name ?? title,
-    categoryIcon:
-      snapshot?.subcategoryIcon ??
-      snapshot?.icon ??
-      (transaction.type === "income" ? "income" : undefined),
+    ...categoryRowProps(transaction, categoryLookup),
     amountMicros: transaction.effectiveAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
@@ -53,6 +48,11 @@ export function PlanMatchedListSheet({
   });
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
+  const categoriesQuery = useCategories(ledgerId);
+  const categoryLookup = useMemo(
+    () => buildCategoryLookup(categoriesQuery.data ?? []),
+    [categoriesQuery.data],
+  );
 
   const matched = useMemo(
     () =>
@@ -103,7 +103,7 @@ export function PlanMatchedListSheet({
                 <TransactionRow
                   key={transaction.id}
                   onClick={() => openBill(transaction.id)}
-                  {...rowProps(transaction, accounts)}
+                  {...rowProps(transaction, accounts, categoryLookup)}
                 />
               ))}
             </TransactionGroup>

@@ -201,7 +201,11 @@ export function StatsScreen() {
       subcategoryId: entry.subcategoryId ?? undefined,
     };
     const title = drilled ? `${drilled.name} · ${entry.name}` : entry.name;
-    push({ title, content: <CategoryBillsSheet filters={filters} /> });
+    push({
+      className: "ui-bottom-sheet--edge-scroll",
+      title,
+      content: <CategoryBillsSheet filters={filters} />,
+    });
   };
 
   const handleEntryClick = (entry: RankEntry) => {
