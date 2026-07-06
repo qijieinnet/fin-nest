@@ -3,6 +3,11 @@
 
 generator client {
   provider = "prisma-client-js"
+  // 生成到包内固定目录，确保 pnpm deploy / Docker 打包能带上生成的 client 与查询引擎。
+  output   = "../generated/client"
+  // native：本地开发（macOS/当前架构）；
+  // debian-*：容器运行时 node:*-slim —— 同时覆盖 amd64 与 arm64，便于在任意架构主机上构建镜像。
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {

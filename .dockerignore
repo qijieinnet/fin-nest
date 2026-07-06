@@ -1,0 +1,28 @@
+# 构建上下文瘦身：依赖与产物都在镜像内重新安装/构建，无需从主机拷入。
+**/node_modules
+.pnpm-store
+**/dist
+**/.next
+**/out
+**/*.tsbuildinfo
+
+# Prisma 生成物（镜像内 `prisma generate` 重新生成）
+packages/db/generated
+**/.prisma
+
+# 机密与本地环境（务必不要进镜像）
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# 版本库与杂项
+.git
+.gitignore
+**/*.log
+coverage
+.DS_Store
+.idea
+.vscode
+claude-design
+docs

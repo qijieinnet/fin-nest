@@ -4,6 +4,7 @@
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": ["dist", "generated", "prisma"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

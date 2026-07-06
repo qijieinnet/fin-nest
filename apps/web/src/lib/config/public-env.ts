@@ -33,6 +33,10 @@ export function resolveApiBaseUrl(): string {
     return publicEnv.apiBaseUrl;
   }
 
-  // SSR/构建阶段没有同源代理，直连本机 API。
+  // SSR/构建阶段没有同源代理，直连 API 服务。
+  // 容器编排下通过 API_INTERNAL_URL 指向 api 服务（如 http://api:4000）；
+  // 未设置时回退到本机端口（开发 / 单机同容器）。
+  const internal = process.env.API_INTERNAL_URL?.trim();
+  if (internal) return internal.replace(/\/$/, "");
   return `http://localhost:${process.env.API_PORT ?? DEFAULT_API_PORT}`;
 }

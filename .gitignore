@@ -15,6 +15,7 @@ packages/db/generated/
 
 # env
 .env
+.env.docker
 .env.local
 .env.*.local
 

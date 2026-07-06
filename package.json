@@ -23,7 +23,11 @@
     "dev:worker": "pnpm build:packages && pnpm --filter @fin-nest/worker run dev",
     "db:studio": "pnpm --filter @fin-nest/db run studio",
     "infra:up": "docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d",
-    "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down"
+    "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down",
+    "docker:build": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker build",
+    "docker:up": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker up -d --build",
+    "docker:down": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker down",
+    "docker:logs": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker logs -f"
   },
   "devDependencies": {
     "prettier": "^3.8.5",
