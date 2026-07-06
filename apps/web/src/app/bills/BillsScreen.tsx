@@ -9,7 +9,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -57,9 +56,8 @@ import {
 } from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
-import { useDecimalPlaces, useLedger, usePreferences, useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useLedger, usePreferences, useToast } from "@/providers";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
-import { QuickTemplateSheet } from "./_components/QuickTemplateSheet";
 import {
   currentMonthKey,
   dayLabel,
@@ -109,7 +107,6 @@ export function BillsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { currentLedger, ledgerId } = useLedger();
-  const { push } = useSheetStack();
   const { showToast } = useToast();
   const { preferences } = usePreferences();
   const showLedgerSwitcher = preferences.showLedgerSwitcherOnBills;
@@ -429,21 +426,13 @@ export function BillsScreen() {
 
       <EdgeFade />
 
-      {/* 右侧浮动动作栈：闪电快捷 / 记一笔 */}
+      {/* 右侧浮动动作：记一笔 */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
         <div className="relative w-[min(100vw,430px)]">
-          <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex w-[52px] flex-col overflow-hidden rounded-[26px] border border-white/50 bg-[rgba(255,255,255,0.62)] shadow-[var(--shadow-app)] backdrop-blur-xl">
-            <button
-              aria-label="快捷记账"
-              className="flex h-[52px] items-center justify-center border-b border-black/5 text-[var(--color-text-primary)]"
-              onClick={() => push({ title: "快捷记账", content: <QuickTemplateSheet /> })}
-              type="button"
-            >
-              <Zap size={20} />
-            </button>
+          <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] border border-white/50 bg-[rgba(255,255,255,0.62)] shadow-[var(--shadow-app)] backdrop-blur-xl">
             <button
               aria-label="记一笔"
-              className="flex h-[52px] items-center justify-center text-[var(--color-text-primary)]"
+              className="flex h-full w-full items-center justify-center text-[var(--color-text-primary)]"
               onClick={() => router.push(routes.billNew)}
               type="button"
             >

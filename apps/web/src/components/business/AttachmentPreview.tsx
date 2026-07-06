@@ -9,6 +9,7 @@ import {
   Image as ImageIcon,
   Paperclip,
   RotateCcw,
+  Trash2,
   Video,
   X,
   ZoomIn,
@@ -105,7 +106,12 @@ export function AttachmentPreview({
     if (!onOpen) return;
     let cancelled = false;
     for (const item of items) {
-      if (!isImage(item) || item.url || previewUrls[item.id] || loadingPreviewIdsRef.current.has(item.id)) {
+      if (
+        !isImage(item) ||
+        item.url ||
+        previewUrls[item.id] ||
+        loadingPreviewIdsRef.current.has(item.id)
+      ) {
         continue;
       }
       loadingPreviewIdsRef.current.add(item.id);
@@ -259,7 +265,7 @@ export function AttachmentPreview({
                   onClick={() => onRemove(item.id)}
                   type="button"
                 >
-                  <X size={12} />
+                  <Trash2 size={12} />
                 </button>
               ) : null}
             </div>

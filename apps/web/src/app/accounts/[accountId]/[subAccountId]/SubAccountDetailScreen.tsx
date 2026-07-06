@@ -64,10 +64,12 @@ function DetailLinkRow({
 
 function NetWorthSwitchRow({
   checked,
+  description = "开启后该子账户余额不计入净资产统计",
   disabled,
   onCheckedChange,
 }: {
   checked: boolean;
+  description?: string;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
@@ -75,9 +77,7 @@ function NetWorthSwitchRow({
     <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
-        <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-          开启后该子账户余额不计入净资产统计
-        </p>
+        <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">{description}</p>
       </div>
       <Switch
         checked={checked}
@@ -361,6 +361,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
               isDefaultSubAccount
                 ? !account.includeInNetWorth
                 : subAccount!.includeInNetWorth === false
+            }
+            description={
+              isDefaultSubAccount
+                ? "开启后该账户及子账户余额不计入净资产统计"
+                : undefined
             }
             disabled={
               isDefaultSubAccount ? updateAccountNetWorth.isPending : updateSubNetWorth.isPending

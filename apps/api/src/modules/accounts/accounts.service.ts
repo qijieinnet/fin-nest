@@ -152,70 +152,73 @@ export class AccountsService {
     userId: string,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.txs.run(async (tx) => {
-      await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
-      const account = await tx.account.findFirst({
-        where: { id: accountId, ledgerId, archivedAt: null },
-      });
-      if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-      const subAccount = await tx.subAccount.findFirst({
-        where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
-      });
-      if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+    return this.txs.run(
+      async (tx) => {
+        await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+        const account = await tx.account.findFirst({
+          where: { id: accountId, ledgerId, archivedAt: null },
+        });
+        if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+        const subAccount = await tx.subAccount.findFirst({
+          where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
+        });
+        if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
 
-      const oldDefaultBalance = await this.defaultBucketMicros(tx, ledgerId, accountId);
-      const hasOldDefaultRefs = await this.hasDefaultSubAccountRefs(tx, ledgerId, accountId);
-      let oldDefaultSubAccountId: string | null = null;
+        const oldDefaultBalance = await this.defaultBucketMicros(tx, ledgerId, accountId);
+        const hasOldDefaultRefs = await this.hasDefaultSubAccountRefs(tx, ledgerId, accountId);
+        let oldDefaultSubAccountId: string | null = null;
 
-      if (oldDefaultBalance !== 0n || hasOldDefaultRefs) {
-        const oldDefaultName = await this.uniqueSubAccountName(
-          tx,
-          accountId,
-          account.defaultSubAccountName ?? "默认",
-        );
-        const oldDefault = await tx.subAccount.create({
-          data: {
-            ledgerId,
+        if (oldDefaultBalance !== 0n || hasOldDefaultRefs) {
+          const oldDefaultName = await this.uniqueSubAccountName(
+            tx,
             accountId,
-            name: oldDefaultName,
-            icon: account.defaultSubAccountIcon ?? account.icon,
-            balanceMicros: oldDefaultBalance,
-            includeInNetWorth: account.includeInNetWorth,
-            createdBy: userId,
+            account.defaultSubAccountName ?? "默认",
+          );
+          const oldDefault = await tx.subAccount.create({
+            data: {
+              ledgerId,
+              accountId,
+              name: oldDefaultName,
+              icon: account.defaultSubAccountIcon ?? account.icon,
+              balanceMicros: oldDefaultBalance,
+              includeInNetWorth: account.includeInNetWorth,
+              createdBy: userId,
+              updatedBy: userId,
+            },
+          });
+          oldDefaultSubAccountId = oldDefault.id;
+          await this.moveSubAccountRefs(tx, ledgerId, accountId, null, oldDefaultSubAccountId);
+        }
+
+        await this.moveSubAccountRefs(tx, ledgerId, accountId, subAccountId, null);
+        await tx.subAccount.update({
+          where: { id: subAccountId },
+          data: { balanceMicros: 0n, archivedAt: new Date(), updatedBy: userId },
+        });
+        const updatedAccount = await tx.account.update({
+          where: { id: accountId },
+          data: {
+            defaultSubAccountName: subAccount.name,
+            defaultSubAccountIcon: subAccount.icon,
+            includeInNetWorth: subAccount.includeInNetWorth,
             updatedBy: userId,
           },
         });
-        oldDefaultSubAccountId = oldDefault.id;
-        await this.moveSubAccountRefs(tx, ledgerId, accountId, null, oldDefaultSubAccountId);
-      }
-
-      await this.moveSubAccountRefs(tx, ledgerId, accountId, subAccountId, null);
-      await tx.subAccount.update({
-        where: { id: subAccountId },
-        data: { balanceMicros: 0n, archivedAt: new Date(), updatedBy: userId },
-      });
-      const updatedAccount = await tx.account.update({
-        where: { id: accountId },
-        data: {
-          defaultSubAccountName: subAccount.name,
-          defaultSubAccountIcon: subAccount.icon,
-          includeInNetWorth: subAccount.includeInNetWorth,
-          updatedBy: userId,
-        },
-      });
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: userId,
-          ledgerId,
-          action: "sub_account.make_default",
-          entityType: "sub_account",
-          entityId: subAccountId,
-        },
-        tx,
-      );
-      return updatedAccount;
-    });
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: userId,
+            ledgerId,
+            action: "sub_account.make_default",
+            entityType: "sub_account",
+            entityId: subAccountId,
+          },
+          tx,
+        );
+        return updatedAccount;
+      },
+      { timeout: 20_000 },
+    );
   }
 
   async archiveSubAccount(

@@ -11,6 +11,7 @@ import {
   createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
+  type AttachmentRecord,
   type ItemAsset,
   uploadAttachmentFile,
 } from "@/lib/api";
@@ -29,6 +30,15 @@ type ItemEditorSheetProps = {
 };
 
 type PendingAttachment = AttachmentItem & { file: File };
+
+function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
+  return {
+    id: record.id,
+    name: record.file?.originalName ?? "附件",
+    contentType: record.file?.mime ?? undefined,
+    sizeBytes: record.file?.sizeBytes ? Number(record.file.sizeBytes) : undefined,
+  };
+}
 
 /** 记一笔风格的整卡输入行：标签在左，输入右对齐。 */
 function FieldRow({
@@ -170,18 +180,21 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
   );
   const [note, setNote] = useState(item?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<AttachmentItem[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const pendingRef = useRef<PendingAttachment[]>([]);
   const seededAttachments = useRef(false);
 
-  // 已有附件时默认展开附件区域，其余情况默认关闭，需手动打开再上传。
+  // 已有附件时回填展示列表并默认展开附件区域，其余情况默认关闭，需手动打开再上传。
   useEffect(() => {
     if (seededAttachments.current) return;
     const records = existingAttachmentsQuery.data;
     if (!records) return;
     seededAttachments.current = true;
-    if (records.length > 0) setAttachmentsEnabled(true);
+    if (records.length === 0) return;
+    setExistingAttachments(records.map(recordToAttachmentItem));
+    setAttachmentsEnabled(true);
   }, [existingAttachmentsQuery.data]);
 
   useEffect(() => {
@@ -211,17 +224,6 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
     return options;
   }, [itemTypes, typeId]);
 
-  const existingAttachments = useMemo(
-    () =>
-      (existingAttachmentsQuery.data ?? [])
-        .filter((record) => !removedAttachmentIds.includes(record.id))
-        .map<AttachmentItem>((record) => ({
-          id: record.id,
-          name: record.file?.originalName ?? "附件",
-          contentType: record.file?.mime ?? undefined,
-        })),
-    [existingAttachmentsQuery.data, removedAttachmentIds],
-  );
   const attachmentItems = [...existingAttachments, ...pendingAttachments];
 
   const trimmedName = name.trim();
@@ -305,7 +307,8 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
       setPendingAttachments((current) => current.filter((entry) => entry.id !== id));
       return;
     }
-    setRemovedAttachmentIds((current) => [...current, id]);
+    setExistingAttachments((current) => current.filter((entry) => entry.id !== id));
+    setRemovedAttachmentIds((current) => (current.includes(id) ? current : [...current, id]));
   }
 
   async function openAttachment(entry: AttachmentItem) {

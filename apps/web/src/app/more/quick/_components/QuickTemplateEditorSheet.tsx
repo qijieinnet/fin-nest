@@ -346,6 +346,7 @@ export function QuickTemplateEditorSheet({
           disabled={!canSubmit || save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存快速记账"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />

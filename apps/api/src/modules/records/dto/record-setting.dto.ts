@@ -24,6 +24,11 @@ export class UpdateRecordSettingDto {
   @IsBoolean()
   personRequired?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  continuousEntry?: boolean;
+
   @ApiPropertyOptional({ minimum: 0, maximum: 6 })
   @IsOptional()
   @IsInt()

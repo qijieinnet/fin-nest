@@ -2749,7 +2749,7 @@ select:focus-visible {
 
 .biz-filter-chip {
   -webkit-tap-highlight-color: transparent;
-  background: #edece9;
+  background: #ffffff;
   border: 0;
   border-radius: 999px;
   color: rgba(24, 24, 27, 0.58);
@@ -3499,7 +3499,7 @@ select:focus-visible {
   background: #f1f0ed;
   border-radius: 12px;
   height: 64px;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   width: 64px;
 }
@@ -3508,21 +3508,25 @@ select:focus-visible {
   align-items: center;
   background: transparent;
   border: 0;
+  border-radius: inherit;
   cursor: pointer;
   display: flex;
   height: 100%;
   justify-content: center;
+  overflow: hidden;
   padding: 0;
   width: 100%;
 }
 
 .biz-attachment-tile img {
+  border-radius: inherit;
   height: 100%;
   object-fit: cover;
   width: 100%;
 }
 
 .biz-attachment-tile video {
+  border-radius: inherit;
   height: 100%;
   object-fit: cover;
   width: 100%;
@@ -3530,12 +3534,20 @@ select:focus-visible {
 
 .biz-attachment-tile > button:last-child {
   align-items: center;
-  border: 0;
-  color: #ffffff;
+  background: #ffffff;
+  /* border: 1px solid #ff0000; */
+  border-radius: 999px;
+  color: #ff0000;
   cursor: pointer;
   display: flex;
+  height: 22px;
   justify-content: center;
   padding: 0;
+  position: absolute;
+  right: -10px;
+  top: -8px;
+  width: 22px;
+  z-index: 1;
 }
 
 .biz-attachment {

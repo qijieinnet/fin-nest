@@ -134,6 +134,7 @@ model RecordSetting {
   visibleFields       Json     @map("visible_fields") @db.JsonB
   acctRequired        Boolean  @default(false) @map("acct_required")
   personRequired      Boolean  @default(false) @map("person_required")
+  continuousEntry     Boolean  @default(false) @map("continuous_entry")
   amountDecimalPlaces Int      @default(2) @map("amount_decimal_places") @db.SmallInt
   updatedBy           String?  @map("updated_by") @db.Uuid
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -183,6 +184,7 @@ model Person {
   name       String
   icon       String?
   isDefault  Boolean   @default(false) @map("is_default")
+  sortOrder  Int       @default(0) @map("sort_order")
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
   createdBy  String?   @map("created_by") @db.Uuid
   updatedBy  String?   @map("updated_by") @db.Uuid

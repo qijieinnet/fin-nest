@@ -63,7 +63,12 @@ export class RecordsService {
     });
   }
 
-  async updateCategory(ledgerId: string, categoryId: string, userId: string, input: UpdateCategoryDto) {
+  async updateCategory(
+    ledgerId: string,
+    categoryId: string,
+    userId: string,
+    input: UpdateCategoryDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertCategory(ledgerId, categoryId);
     return this.prisma.client.category.update({
@@ -76,7 +81,10 @@ export class RecordsService {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertCategory(ledgerId, categoryId);
     await this.txs.run(async (tx) => {
-      const subcategories = await tx.subcategory.findMany({ where: { ledgerId, categoryId }, select: { id: true } });
+      const subcategories = await tx.subcategory.findMany({
+        where: { ledgerId, categoryId },
+        select: { id: true },
+      });
       const subcategoryIds = subcategories.map((subcategory) => subcategory.id);
       // schema 无外键，硬删除被引用的分类会留下悬空引用，之后模板/规则执行时持续报错；
       // 有任何引用（交易、快捷模板、自动规则、待确认）时归档而不是删除。
@@ -111,7 +119,10 @@ export class RecordsService {
         }),
       ]);
       if (hasTransactions + templateRefs + ruleRefs + pendingRefs > 0) {
-        await tx.category.update({ where: { id: categoryId }, data: { archivedAt: new Date(), updatedBy: userId } });
+        await tx.category.update({
+          where: { id: categoryId },
+          data: { archivedAt: new Date(), updatedBy: userId },
+        });
         await tx.subcategory.updateMany({
           where: { ledgerId, categoryId, archivedAt: null },
           data: { archivedAt: new Date(), updatedBy: userId },
@@ -123,7 +134,12 @@ export class RecordsService {
     });
   }
 
-  async createSubcategory(ledgerId: string, categoryId: string, userId: string, input: CreateSubcategoryDto) {
+  async createSubcategory(
+    ledgerId: string,
+    categoryId: string,
+    userId: string,
+    input: CreateSubcategoryDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertCategory(ledgerId, categoryId);
     return this.prisma.client.subcategory.create({
@@ -164,9 +180,13 @@ export class RecordsService {
     await this.assertSubcategory(ledgerId, categoryId, subcategoryId);
     const [hasTransactions, templateRefs, ruleRefs, pendingRefs] = await Promise.all([
       this.prisma.client.transaction.count({ where: { ledgerId, subcategoryId, deletedAt: null } }),
-      this.prisma.client.quickTemplate.count({ where: { ledgerId, subcategoryId, archivedAt: null } }),
+      this.prisma.client.quickTemplate.count({
+        where: { ledgerId, subcategoryId, archivedAt: null },
+      }),
       this.prisma.client.autoRule.count({ where: { ledgerId, subcategoryId, archivedAt: null } }),
-      this.prisma.client.autoPendingTransaction.count({ where: { ledgerId, subcategoryId, status: "pending" } }),
+      this.prisma.client.autoPendingTransaction.count({
+        where: { ledgerId, subcategoryId, status: "pending" },
+      }),
     ]);
     if (hasTransactions + templateRefs + ruleRefs + pendingRefs > 0) {
       await this.prisma.client.subcategory.update({
@@ -178,18 +198,66 @@ export class RecordsService {
     await this.prisma.client.subcategory.delete({ where: { id: subcategoryId } });
   }
 
+  async reorderCategories(ledgerId: string, userId: string, type: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.prisma.client.category.findMany({
+      where: { ledgerId, type, archivedAt: null },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((category) => category.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("CATEGORY_ORDER_MISMATCH", "分类顺序与当前分类不一致", 400);
+    }
+    await this.txs.run(async (tx) => {
+      await Promise.all(
+        ids.map((id, index) =>
+          tx.category.update({ where: { id }, data: { sortOrder: index, updatedBy: userId } }),
+        ),
+      );
+    });
+  }
+
+  async reorderSubcategories(ledgerId: string, categoryId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertCategory(ledgerId, categoryId);
+    const existing = await this.prisma.client.subcategory.findMany({
+      where: { ledgerId, categoryId, archivedAt: null },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((subcategory) => subcategory.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("SUBCATEGORY_ORDER_MISMATCH", "二级分类顺序与当前分类不一致", 400);
+    }
+    await this.txs.run(async (tx) => {
+      await Promise.all(
+        ids.map((id, index) =>
+          tx.subcategory.update({ where: { id }, data: { sortOrder: index, updatedBy: userId } }),
+        ),
+      );
+    });
+  }
+
   async listPeople(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.person.findMany({
       where: { ledgerId, archivedAt: null },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
   }
 
   async createPerson(ledgerId: string, userId: string, input: CreatePersonDto) {
     await this.ledgers.assertMember(ledgerId, userId);
+    // 新增人员追加到列表末尾。
+    const count = await this.prisma.client.person.count({ where: { ledgerId, archivedAt: null } });
     return this.prisma.client.person.create({
-      data: { ledgerId, name: input.name, icon: input.icon, createdBy: userId, updatedBy: userId },
+      data: {
+        ledgerId,
+        name: input.name,
+        icon: input.icon,
+        sortOrder: count,
+        createdBy: userId,
+        updatedBy: userId,
+      },
     });
   }
 
@@ -202,15 +270,37 @@ export class RecordsService {
     });
   }
 
+  async reorderPeople(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.prisma.client.person.findMany({
+      where: { ledgerId, archivedAt: null },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((person) => person.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("PERSON_ORDER_MISMATCH", "人员顺序与当前人员不一致", 400);
+    }
+    await this.txs.run(async (tx) => {
+      await Promise.all(
+        ids.map((id, index) =>
+          tx.person.update({ where: { id }, data: { sortOrder: index, updatedBy: userId } }),
+        ),
+      );
+    });
+  }
+
   async deletePerson(ledgerId: string, personId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     const person = await this.assertPerson(ledgerId, personId);
-    if (person.isDefault) throw new AppError("DEFAULT_PERSON_CANNOT_BE_DELETED", "默认人员不能删除", 400);
+    if (person.isDefault)
+      throw new AppError("DEFAULT_PERSON_CANNOT_BE_DELETED", "默认人员不能删除", 400);
     const [hasTransactions, templateRefs, ruleRefs, pendingRefs, insuredRefs] = await Promise.all([
       this.prisma.client.transaction.count({ where: { ledgerId, personId, deletedAt: null } }),
       this.prisma.client.quickTemplate.count({ where: { ledgerId, personId, archivedAt: null } }),
       this.prisma.client.autoRule.count({ where: { ledgerId, personId, archivedAt: null } }),
-      this.prisma.client.autoPendingTransaction.count({ where: { ledgerId, personId, status: "pending" } }),
+      this.prisma.client.autoPendingTransaction.count({
+        where: { ledgerId, personId, status: "pending" },
+      }),
       this.prisma.client.insuranceInsuredPerson.count({ where: { personId } }),
     ]);
     if (hasTransactions + templateRefs + ruleRefs + pendingRefs + insuredRefs > 0) {
@@ -232,7 +322,8 @@ export class RecordsService {
     await this.ledgers.assertMember(ledgerId, userId);
     if (input.visibleFields) {
       for (const [key, value] of Object.entries(input.visibleFields)) {
-        if (typeof value !== "boolean") throw new AppError("INVALID_VISIBLE_FIELD", `${key} 必须是布尔值`, 400);
+        if (typeof value !== "boolean")
+          throw new AppError("INVALID_VISIBLE_FIELD", `${key} 必须是布尔值`, 400);
       }
     }
     const setting = await this.prisma.client.recordSetting.update({
@@ -242,6 +333,7 @@ export class RecordsService {
         visibleFields: input.visibleFields,
         acctRequired: input.acctRequired,
         personRequired: input.personRequired,
+        continuousEntry: input.continuousEntry,
         amountDecimalPlaces: input.amountDecimalPlaces,
         updatedBy: userId,
       },
@@ -313,8 +405,12 @@ export class RecordsService {
   private sumByType(transactions: Prisma.TransactionGetPayload<Record<string, never>>[]) {
     return transactions.reduce(
       (sum, transaction) => ({
-        expenseMicros: sum.expenseMicros + (transaction.type === "expense" ? transaction.effectiveAmountMicros : 0n),
-        incomeMicros: sum.incomeMicros + (transaction.type === "income" ? transaction.effectiveAmountMicros : 0n),
+        expenseMicros:
+          sum.expenseMicros +
+          (transaction.type === "expense" ? transaction.effectiveAmountMicros : 0n),
+        incomeMicros:
+          sum.incomeMicros +
+          (transaction.type === "income" ? transaction.effectiveAmountMicros : 0n),
       }),
       { expenseMicros: 0n, incomeMicros: 0n },
     );
@@ -324,13 +420,20 @@ export class RecordsService {
     const ranking = new Map<string, { amountMicros: bigint; snapshot: Prisma.JsonValue | null }>();
     for (const transaction of transactions) {
       const key = transaction.subcategoryId ?? transaction.categoryId ?? "uncategorized";
-      const current = ranking.get(key) ?? { amountMicros: 0n, snapshot: transaction.categorySnapshot };
+      const current = ranking.get(key) ?? {
+        amountMicros: 0n,
+        snapshot: transaction.categorySnapshot,
+      };
       current.amountMicros += transaction.effectiveAmountMicros;
       if (!current.snapshot) current.snapshot = transaction.categorySnapshot;
       ranking.set(key, current);
     }
     return [...ranking.entries()]
-      .map(([id, item]) => ({ id, amountMicros: item.amountMicros.toString(), snapshot: item.snapshot }))
+      .map(([id, item]) => ({
+        id,
+        amountMicros: item.amountMicros.toString(),
+        snapshot: item.snapshot,
+      }))
       .sort((a, b) => Number(BigInt(b.amountMicros) - BigInt(a.amountMicros)));
   }
 
@@ -338,17 +441,27 @@ export class RecordsService {
     const ranking = new Map<string, { amountMicros: bigint; snapshot: Prisma.JsonValue | null }>();
     for (const transaction of transactions) {
       const key = transaction.personId ?? "none";
-      const current = ranking.get(key) ?? { amountMicros: 0n, snapshot: transaction.personSnapshot };
+      const current = ranking.get(key) ?? {
+        amountMicros: 0n,
+        snapshot: transaction.personSnapshot,
+      };
       current.amountMicros += transaction.effectiveAmountMicros;
       if (!current.snapshot) current.snapshot = transaction.personSnapshot;
       ranking.set(key, current);
     }
     return [...ranking.entries()]
-      .map(([id, item]) => ({ id, amountMicros: item.amountMicros.toString(), snapshot: item.snapshot }))
+      .map(([id, item]) => ({
+        id,
+        amountMicros: item.amountMicros.toString(),
+        snapshot: item.snapshot,
+      }))
       .sort((a, b) => Number(BigInt(b.amountMicros) - BigInt(a.amountMicros)));
   }
 
-  private trendBucket(month: string, transactions: Prisma.TransactionGetPayload<Record<string, never>>[]): MonthBucket {
+  private trendBucket(
+    month: string,
+    transactions: Prisma.TransactionGetPayload<Record<string, never>>[],
+  ): MonthBucket {
     const { start, end } = monthRange(month);
     return transactions.reduce(
       (sum, transaction) => {
@@ -356,8 +469,12 @@ export class RecordsService {
         if (happenedAt < start || happenedAt >= end) return sum;
         return {
           month,
-          expenseMicros: sum.expenseMicros + (transaction.type === "expense" ? transaction.effectiveAmountMicros : 0n),
-          incomeMicros: sum.incomeMicros + (transaction.type === "income" ? transaction.effectiveAmountMicros : 0n),
+          expenseMicros:
+            sum.expenseMicros +
+            (transaction.type === "expense" ? transaction.effectiveAmountMicros : 0n),
+          incomeMicros:
+            sum.incomeMicros +
+            (transaction.type === "income" ? transaction.effectiveAmountMicros : 0n),
         };
       },
       { month, expenseMicros: 0n, incomeMicros: 0n },

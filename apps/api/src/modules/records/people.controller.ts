@@ -1,9 +1,15 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
-import { CreatePersonDto, UpdatePersonDto } from "./dto/person.dto";
+import { CreatePersonDto, ReorderPeopleDto, UpdatePersonDto } from "./dto/person.dto";
 import { RecordsService } from "./records.service";
 
 @ApiTags("people")
@@ -21,8 +27,22 @@ export class PeopleController {
 
   @Post()
   @ApiCreatedResponse()
-  create(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Body() body: CreatePersonDto) {
+  create(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: CreatePersonDto,
+  ) {
     return this.records.createPerson(ledgerId, (auth as SessionAuthContext).userId, body);
+  }
+
+  @Patch("reorder")
+  @ApiOkResponse()
+  async reorder(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderPeopleDto,
+  ): Promise<void> {
+    await this.records.reorderPeople(ledgerId, (auth as SessionAuthContext).userId, body.ids);
   }
 
   @Patch(":personId")

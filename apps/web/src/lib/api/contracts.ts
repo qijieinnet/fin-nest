@@ -145,6 +145,7 @@ export type Person = {
   name: string;
   icon: string | null;
   isDefault: boolean;
+  sortOrder: number;
   archivedAt: string | null;
 };
 
@@ -187,6 +188,7 @@ export type RecordSetting = {
   visibleFields: Record<string, boolean>;
   acctRequired: boolean;
   personRequired: boolean;
+  continuousEntry: boolean;
   amountDecimalPlaces: number;
 };
 

@@ -1,11 +1,14 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowUpDown,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  MoreHorizontal,
   Plus,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -17,14 +20,23 @@ import {
   IconButtonGroup,
   MobileAppShell,
   MobilePage,
+  PopoverMenu,
   Tabs,
 } from "@/components/ui";
-import { type Category, type Subcategory } from "@/lib/api";
+import {
+  apiRequest,
+  getApiErrorMessage,
+  ledgerApiPath,
+  type Category,
+  type Subcategory,
+} from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { routes } from "@/lib/route/routes";
+import { queryKeys } from "@/lib/query/query-keys";
 import { useCategories } from "@/lib/data/records";
-import { useLedger, useSheetStack } from "@/providers";
+import { useLedger, useSheetStack, useToast } from "@/providers";
 import { CategoryEditorSheet } from "./_components/CategoryEditorSheet";
+import { CategorySortList } from "./_components/CategorySortList";
 
 type CategoryKind = "expense" | "income";
 
@@ -134,19 +146,25 @@ export function CategoriesScreen() {
   const router = useRouter();
   const { ledgerId } = useLedger();
   const categoriesQuery = useCategories(ledgerId);
+  const queryClient = useQueryClient();
   const { push } = useSheetStack();
+  const { showToast } = useToast();
   const [kind, setKind] = useState<CategoryKind>("expense");
   // 记录被手动折叠的分类；默认为空 = 全部展开。
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [sortMode, setSortMode] = useState(false);
 
   const categories = useMemo(
     () => (categoriesQuery.data ?? []).filter((category) => category.type === kind),
     [categoriesQuery.data, kind],
   );
 
-  const anyExpanded = categories.some((category) => !collapsedIds.has(category.id));
-
   const goBack = () => {
+    if (sortMode) {
+      setSortMode(false);
+      return;
+    }
     if (window.history.length > 1) {
       router.back();
     } else {
@@ -166,16 +184,85 @@ export function CategoriesScreen() {
     });
   };
 
-  const toggleAll = () => {
+  const collapseAll = () => {
     setCollapsedIds((current) => {
       const next = new Set(current);
-      if (anyExpanded) {
-        categories.forEach((category) => next.add(category.id));
-      } else {
-        categories.forEach((category) => next.delete(category.id));
-      }
+      categories.forEach((category) => next.add(category.id));
       return next;
     });
+  };
+
+  const expandAll = () => {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      categories.forEach((category) => next.delete(category.id));
+      return next;
+    });
+  };
+
+  const enterSortMode = () => {
+    setSortMode(true);
+  };
+
+  const categoriesKey = queryKeys.categories(ledgerId ?? "none");
+
+  const reorderCategories = useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      apiRequest<void>(ledgerApiPath(ledgerId!, "/categories/reorder"), {
+        method: "PATCH",
+        body: { type: kind, ids: orderedIds },
+      }),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: categoriesKey });
+      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
+    },
+  });
+
+  const reorderSubcategories = useMutation({
+    mutationFn: ({ categoryId, orderedIds }: { categoryId: string; orderedIds: string[] }) =>
+      apiRequest<void>(
+        ledgerApiPath(ledgerId!, `/categories/${categoryId}/subcategories/reorder`),
+        { method: "PATCH", body: { ids: orderedIds } },
+      ),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: categoriesKey });
+      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
+    },
+  });
+
+  const handleReorderCategories = (orderedIds: string[]) => {
+    queryClient.setQueryData<Category[]>(categoriesKey, (prev) => {
+      if (!prev) return prev;
+      const position = new Map(orderedIds.map((id, index) => [id, index]));
+      return prev
+        .map((category) =>
+          position.has(category.id)
+            ? { ...category, sortOrder: position.get(category.id)! }
+            : category,
+        )
+        .sort((a, b) => (a.type === b.type ? a.sortOrder - b.sortOrder : a.type < b.type ? -1 : 1));
+    });
+    reorderCategories.mutate(orderedIds);
+  };
+
+  const handleReorderSubcategories = (categoryId: string, orderedIds: string[]) => {
+    queryClient.setQueryData<Category[]>(categoriesKey, (prev) => {
+      if (!prev) return prev;
+      const position = new Map(orderedIds.map((id, index) => [id, index]));
+      return prev.map((category) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              subcategories: category.subcategories
+                .map((sub) =>
+                  position.has(sub.id) ? { ...sub, sortOrder: position.get(sub.id)! } : sub,
+                )
+                .sort((a, b) => a.sortOrder - b.sortOrder),
+            },
+      );
+    });
+    reorderSubcategories.mutate({ categoryId, orderedIds });
   };
 
   const openPrimaryEditor = (category?: Category) => {
@@ -213,37 +300,64 @@ export function CategoriesScreen() {
     <MobileAppShell>
       <MobilePage
         action={
-          <IconButtonGroup
-            items={[
-              ...(categories.length > 0
-                ? [
+          sortMode ? (
+            <Button onClick={() => setSortMode(false)} variant="primary">
+              完成
+            </Button>
+          ) : (
+            <div className="relative flex justify-end">
+              <IconButtonGroup
+                items={[
+                  {
+                    icon: <Plus size={22} strokeWidth={2.3} />,
+                    label: "新增一级分类",
+                    onClick: () => openPrimaryEditor(),
+                  },
+                  ...(categories.length > 0
+                    ? [
+                        {
+                          icon: <MoreHorizontal size={22} />,
+                          label: "更多选项",
+                          onClick: () => setMoreMenuOpen((open) => !open),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+              <PopoverMenu
+                groups={[
+                  [
                     {
-                      icon: anyExpanded ? (
-                        <ChevronsDownUp size={20} />
-                      ) : (
-                        <ChevronsUpDown size={20} />
-                      ),
-                      label: anyExpanded ? "全部折叠" : "全部展开",
-                      onClick: toggleAll,
+                      icon: <ChevronsDownUp size={18} />,
+                      label: "折叠所有",
+                      onSelect: collapseAll,
                     },
-                  ]
-                : []),
-              {
-                icon: <Plus size={22} strokeWidth={2.3} />,
-                label: "新增一级分类",
-                onClick: () => openPrimaryEditor(),
-              },
-            ]}
-          />
+                    {
+                      icon: <ChevronsUpDown size={18} />,
+                      label: "展开所有",
+                      onSelect: expandAll,
+                    },
+                    {
+                      icon: <ArrowUpDown size={18} />,
+                      label: "排序",
+                      onSelect: enterSortMode,
+                    },
+                  ],
+                ]}
+                onOpenChange={setMoreMenuOpen}
+                open={moreMenuOpen}
+              />
+            </div>
+          )
         }
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={sortMode ? "退出排序" : "返回"}
             onClick={goBack}
           />
         }
-        title="分类管理"
+        title={sortMode ? "拖动排序" : "分类管理"}
       >
         <div className="flex flex-col gap-4 pb-6">
           <Tabs
@@ -264,6 +378,18 @@ export function CategoriesScreen() {
               message={`先添加一个${kind === "income" ? "收入" : "支出"}分类，再按需补充子分类。`}
               title="还没有分类"
             />
+          ) : sortMode ? (
+            <>
+              <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                按住右侧图标拖动分类排序；一级分类连同子分类整体移动，二级分类仅在所属分类内排序。
+              </p>
+              <CategorySortList
+                categories={categories}
+                collapsedIds={collapsedIds}
+                onReorderCategories={handleReorderCategories}
+                onReorderSubcategories={handleReorderSubcategories}
+              />
+            </>
           ) : (
             <div className="flex flex-col gap-2.5">
               {categories.map((category) => (

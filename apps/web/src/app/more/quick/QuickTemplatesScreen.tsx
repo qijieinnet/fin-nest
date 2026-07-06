@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Edit3, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import {
   CategoryIcon,
   EmptyState,
@@ -32,8 +31,7 @@ import {
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack, useToast } from "@/providers";
-import { DeleteQuickTemplateConfirmDialog } from "./_components/DeleteQuickTemplateConfirmDialog";
+import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { QuickTemplateEditorSheet } from "./_components/QuickTemplateEditorSheet";
 
 function categoryDisplay(
@@ -80,6 +78,7 @@ function personDisplay(people: Person[], personId: string | null) {
 export function QuickTemplatesScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { ledgerId } = useLedger();
   const { push } = useSheetStack();
   const { showToast } = useToast();
@@ -89,7 +88,6 @@ export function QuickTemplatesScreen() {
   const peopleQuery = usePeople(ledgerId);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
-  const [templatePendingDelete, setTemplatePendingDelete] = useState<QuickTemplate | null>(null);
 
   const templates = templatesQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
@@ -108,7 +106,6 @@ export function QuickTemplatesScreen() {
       if (ledgerId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.quickTemplates(ledgerId) });
       }
-      setTemplatePendingDelete(null);
       showToast({ tone: "success", message: "快速记账已删除" });
     },
     onError: (error) => {
@@ -138,6 +135,24 @@ export function QuickTemplatesScreen() {
         />
       ),
     });
+  };
+
+  const confirmDelete = async (template: QuickTemplate) => {
+    if (deleteTemplate.isPending) return;
+    const name =
+      template.name ??
+      (template.type === "income"
+        ? "收入模板"
+        : template.type === "transfer"
+          ? "转账模板"
+          : "支出模板");
+    const confirmed = await confirm({
+      title: "删除快速记账？",
+      message: `确定删除「${name}」这个模板吗？已记录的账单不受影响。`,
+      confirmText: "删除",
+      tone: "danger",
+    });
+    if (confirmed) deleteTemplate.mutate(template.id);
   };
 
   const renderRow = (template: QuickTemplate) => {
@@ -176,7 +191,7 @@ export function QuickTemplatesScreen() {
       {
         icon: <Trash2 size={18} />,
         label: `删除${name}`,
-        onClick: () => setTemplatePendingDelete(template),
+        onClick: () => confirmDelete(template),
         tone: "danger",
       },
     ];
@@ -188,7 +203,7 @@ export function QuickTemplatesScreen() {
           onClick={() => openEditor(template)}
           type="button"
         >
-          <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)]">
+          <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[12px]">
             <CategoryIcon icon={display.icon} />
           </span>
           <span className="min-w-0 flex-1">
@@ -221,18 +236,6 @@ export function QuickTemplatesScreen() {
 
   return (
     <MobileAppShell>
-      <DeleteQuickTemplateConfirmDialog
-        deleting={deleteTemplate.isPending}
-        onCancel={() => {
-          if (!deleteTemplate.isPending) setTemplatePendingDelete(null);
-        }}
-        onConfirm={() => {
-          if (templatePendingDelete && !deleteTemplate.isPending) {
-            deleteTemplate.mutate(templatePendingDelete.id);
-          }
-        }}
-        template={templatePendingDelete}
-      />
       <MobilePage
         action={
           <IconButton
@@ -264,15 +267,6 @@ export function QuickTemplatesScreen() {
               <div className="divide-y divide-black/[0.06]">{templates.map(renderRow)}</div>
             </section>
           )}
-
-          <button
-            className="mt-1 flex h-12 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
-            onClick={() => openEditor()}
-            type="button"
-          >
-            <Plus size={17} />
-            新建快速记账
-          </button>
         </div>
       </MobilePage>
     </MobileAppShell>

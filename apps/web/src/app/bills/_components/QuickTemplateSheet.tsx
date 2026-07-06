@@ -8,12 +8,19 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath, type QuickTemplate } fro
 import { useQuickTemplates } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { useLedger, useSheetStack, useToast } from "@/providers";
-import { NewBillFormScreen } from "./NewBillFormScreen";
 
-export function QuickTemplateSheet() {
+type QuickTemplateSheetProps = {
+  directRunEnabled?: boolean;
+  onSelectTemplate?: (template: QuickTemplate) => void;
+};
+
+export function QuickTemplateSheet({
+  directRunEnabled = true,
+  onSelectTemplate,
+}: QuickTemplateSheetProps) {
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
-  const { clear, pop, push } = useSheetStack();
+  const { pop } = useSheetStack();
   const { showToast } = useToast();
   const templatesQuery = useQuickTemplates(ledgerId);
 
@@ -39,14 +46,9 @@ export function QuickTemplateSheet() {
 
   const templates = templatesQuery.data ?? [];
 
-  const openPrefill = (template: QuickTemplate) => {
-    push({
-      className: "ui-bottom-sheet--sheet-form",
-      hideDefaultHeader: true,
-      content: (
-        <NewBillFormScreen embedded onClose={pop} onSaved={clear} templateId={template.id} />
-      ),
-    });
+  const selectTemplate = (template: QuickTemplate) => {
+    onSelectTemplate?.(template);
+    pop();
   };
 
   return (
@@ -67,7 +69,7 @@ export function QuickTemplateSheet() {
             >
               <button
                 className="flex min-w-0 flex-1 flex-col items-start text-left"
-                onClick={() => openPrefill(template)}
+                onClick={() => selectTemplate(template)}
                 type="button"
               >
                 <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
@@ -94,7 +96,7 @@ export function QuickTemplateSheet() {
                   <span className="text-xs text-[var(--color-text-muted)]">点按预填金额</span>
                 )}
               </button>
-              {template.directEnabled && template.amountMicros ? (
+              {directRunEnabled && template.directEnabled && template.amountMicros ? (
                 <button
                   aria-label="直接记一笔"
                   className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-tint)] px-3 py-2 text-xs font-medium text-[var(--color-tint-contrast)] disabled:opacity-50"

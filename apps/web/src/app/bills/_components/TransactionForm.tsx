@@ -376,6 +376,7 @@ export function TransactionForm({
   const order = setting?.fieldOrder?.length ? setting.fieldOrder : DEFAULT_FIELD_ORDER;
   const acctRequired = setting?.acctRequired ?? false;
   const personRequired = setting?.personRequired ?? false;
+  const continuousEntry = setting?.continuousEntry ?? false;
   const showAccountCard = type !== "transfer" && visibleFields.account !== false;
   const showPersonCard = visibleFields.person !== false;
   const showNoteCard = visibleFields.note !== false;
@@ -741,6 +742,11 @@ export function TransactionForm({
       if (!postSaveFailed) {
         showToast({ tone: "success", message: isEdit ? "已保存修改" : "已记一笔" });
       }
+      // 新建且开启连续记账：保留页面继续记下一笔，不触发关闭/返回。
+      if (!isEdit && continuousEntry) {
+        resetForContinuousEntry();
+        return;
+      }
       if (onSaved) onSaved();
       else router.back();
     },
@@ -757,6 +763,33 @@ export function TransactionForm({
       showToast({ tone: "error", message: validationMessage ?? "请先补全必填项" });
     });
   }, [onSubmitBlocked, showToast, validationMessage]);
+
+  // 连续记账：提交成功后不关闭页面，清空本次输入，仅保留日期、分类、人员。
+  function resetForContinuousEntry() {
+    setAmount("");
+    setNote("");
+    setAccountEnabled(false);
+    setAccountSel(null);
+    setFromSel(null);
+    setToSel(null);
+    setPrimaryRelationsEnabled(false);
+    setLinkedRelationsEnabled(false);
+    setPrimaryRelationItems([]);
+    setLinkedRelationItems([]);
+    for (const attachment of attachmentsRef.current) {
+      if (attachment.url) URL.revokeObjectURL(attachment.url);
+    }
+    setAttachments([]);
+    setExistingAttachments([]);
+    setRemovedAttachmentIds([]);
+    setAttachmentsEnabled(false);
+    setInsuranceEnabled(false);
+    setSelectedInsuranceId(null);
+    setItemEnabled(false);
+    setSelectedItemId(null);
+    // 幂等键用于去重，下一笔必须换新键，否则会被服务端判定为重复提交。
+    idempotencyKey.current = createClientId("transaction");
+  }
 
   function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();

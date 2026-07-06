@@ -76,10 +76,10 @@ export function defaultBucketMicros(
 }
 
 export function accountNetWorthMicros(account: Account): bigint {
-  if (account.subAccounts.length === 0) {
-    return account.includeInNetWorth ? accountTotalMicros(account) : 0n;
-  }
-  const defaultBucket = account.includeInNetWorth ? defaultBucketMicros(account) : 0n;
+  if (!account.includeInNetWorth) return 0n;
+  if (account.subAccounts.length === 0) return accountTotalMicros(account);
+
+  const defaultBucket = defaultBucketMicros(account);
   return account.subAccounts.reduce(
     (sum, subAccount) =>
       subAccount.includeInNetWorth === false ? sum : sum + BigInt(subAccount.balanceMicros),

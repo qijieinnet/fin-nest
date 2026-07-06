@@ -53,6 +53,7 @@ export function RecordSettingsScreen() {
         visibleFields: patch.visibleFields,
         acctRequired: patch.acctRequired,
         personRequired: patch.personRequired,
+        continuousEntry: patch.continuousEntry,
       };
       return apiRequest<RecordSetting>(ledgerApiPath(ledgerId!, "/record-setting"), {
         method: "PATCH",
@@ -229,6 +230,23 @@ export function RecordSettingsScreen() {
                     checked={setting.personRequired}
                     label="人员必填"
                     onCheckedChange={(checked) => update.mutate({ personRequired: checked })}
+                  />
+                </div>
+              </section>
+
+              <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+                记账体验
+              </span>
+              <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                开启后，在新建记账页面提交后不自动关闭，并清空金额、备注等输入，保留日期、分类、人员，方便连续记账。
+              </p>
+              <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+                <div className="flex items-center gap-3 px-4 py-[15px]">
+                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">连续记账</span>
+                  <Switch
+                    checked={setting.continuousEntry}
+                    label="连续记账"
+                    onCheckedChange={(checked) => update.mutate({ continuousEntry: checked })}
                   />
                 </div>
               </section>

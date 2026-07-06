@@ -101,7 +101,7 @@ function NetWorthSwitchRow({
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
         <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-          开启后该余额不计入净资产统计
+          开启后该账户及子账户余额不计入净资产统计
         </p>
       </div>
       <Switch

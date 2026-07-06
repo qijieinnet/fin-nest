@@ -1,11 +1,29 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import {
   CreateCategoryDto,
   CreateSubcategoryDto,
+  ReorderCategoriesDto,
+  ReorderSubcategoriesDto,
   UpdateCategoryDto,
   UpdateSubcategoryDto,
 } from "./dto/category.dto";
@@ -20,7 +38,11 @@ export class CategoriesController {
 
   @Get()
   @ApiOkResponse()
-  list(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Query("type") type?: string) {
+  list(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Query("type") type?: string,
+  ) {
     return this.records.listCategories(ledgerId, (auth as SessionAuthContext).userId, type);
   }
 
@@ -34,6 +56,21 @@ export class CategoriesController {
     return this.records.createCategory(ledgerId, (auth as SessionAuthContext).userId, body);
   }
 
+  @Patch("reorder")
+  @ApiOkResponse()
+  async reorder(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderCategoriesDto,
+  ): Promise<void> {
+    await this.records.reorderCategories(
+      ledgerId,
+      (auth as SessionAuthContext).userId,
+      body.type,
+      body.ids,
+    );
+  }
+
   @Patch(":categoryId")
   @ApiOkResponse()
   update(
@@ -42,7 +79,12 @@ export class CategoriesController {
     @Param("categoryId") categoryId: string,
     @Body() body: UpdateCategoryDto,
   ) {
-    return this.records.updateCategory(ledgerId, categoryId, (auth as SessionAuthContext).userId, body);
+    return this.records.updateCategory(
+      ledgerId,
+      categoryId,
+      (auth as SessionAuthContext).userId,
+      body,
+    );
   }
 
   @Delete(":categoryId")
@@ -63,7 +105,28 @@ export class CategoriesController {
     @Param("categoryId") categoryId: string,
     @Body() body: CreateSubcategoryDto,
   ) {
-    return this.records.createSubcategory(ledgerId, categoryId, (auth as SessionAuthContext).userId, body);
+    return this.records.createSubcategory(
+      ledgerId,
+      categoryId,
+      (auth as SessionAuthContext).userId,
+      body,
+    );
+  }
+
+  @Patch(":categoryId/subcategories/reorder")
+  @ApiOkResponse()
+  async reorderSubcategories(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("categoryId") categoryId: string,
+    @Body() body: ReorderSubcategoriesDto,
+  ): Promise<void> {
+    await this.records.reorderSubcategories(
+      ledgerId,
+      categoryId,
+      (auth as SessionAuthContext).userId,
+      body.ids,
+    );
   }
 
   @Patch(":categoryId/subcategories/:subcategoryId")

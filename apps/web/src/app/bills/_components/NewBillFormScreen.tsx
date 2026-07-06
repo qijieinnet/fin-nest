@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, X, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useId, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, ledgerApiPath } from "@/lib/api";
-import { useLedger } from "@/providers";
+import { useLedger, useSheetStack, useToast } from "@/providers";
+import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
 
 type PrefillResponse = {
@@ -43,7 +44,11 @@ export function NewBillFormScreen({
 }: NewBillFormScreenProps) {
   const router = useRouter();
   const { ledgerId } = useLedger();
+  const { push } = useSheetStack();
+  const { showToast } = useToast();
   const formId = useId();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templateId ?? null);
+  const [prefillRevision, setPrefillRevision] = useState(0);
   const [canSubmit, setCanSubmit] = useState(false);
   const [submitBlocked, setSubmitBlocked] = useState<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,12 +57,12 @@ export function NewBillFormScreen({
   }, []);
 
   const prefillQuery = useQuery({
-    queryKey: ["ledger", ledgerId, "quick-template-prefill", templateId],
+    queryKey: ["ledger", ledgerId, "quick-template-prefill", selectedTemplateId, prefillRevision],
     queryFn: () =>
       apiRequest<PrefillResponse>(
-        ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/prefill`),
+        ledgerApiPath(ledgerId!, `/quick-templates/${selectedTemplateId}/prefill`),
       ),
-    enabled: Boolean(ledgerId) && Boolean(templateId),
+    enabled: Boolean(ledgerId) && Boolean(selectedTemplateId),
   });
 
   const seed: TransactionSeed | undefined = prefillQuery.data
@@ -80,7 +85,22 @@ export function NewBillFormScreen({
       }
     : undefined;
 
-  const waitingForPrefill = Boolean(templateId) && prefillQuery.isPending;
+  const waitingForPrefill = Boolean(selectedTemplateId) && prefillQuery.isPending;
+  const openQuickTemplates = useCallback(() => {
+    push({
+      title: "快捷记账",
+      content: (
+        <QuickTemplateSheet
+          directRunEnabled={false}
+          onSelectTemplate={(selected) => {
+            setSelectedTemplateId(selected.id);
+            setPrefillRevision((current) => current + 1);
+            // showToast({ tone: "success", message: "已填充快速记账" });
+          }}
+        />
+      ),
+    });
+  }, [push, showToast]);
   const saveAction = (
     <IconButton
       aria-disabled={!canSubmit || !ledgerId || waitingForPrefill || saving}
@@ -117,7 +137,7 @@ export function NewBillFormScreen({
     ) : (
       <TransactionForm
         formId={formId}
-        key={templateId ?? "blank"}
+        key={selectedTemplateId ? `${selectedTemplateId}:${prefillRevision}` : "blank"}
         ledgerId={ledgerId}
         onCanSubmitChange={setCanSubmit}
         onPendingChange={setSaving}
@@ -145,6 +165,18 @@ export function NewBillFormScreen({
       <MobilePage action={saveAction} leading={closeButton} title="记一笔">
         {body}
       </MobilePage>
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
+        <div className="relative w-[min(100vw,430px)]">
+          <button
+            aria-label="快捷记账"
+            className="pointer-events-auto absolute bottom-[calc(34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] border border-white/50 bg-[rgba(255,255,255,0.62)] text-[var(--color-text-primary)] shadow-[var(--shadow-app)] backdrop-blur-xl"
+            onClick={openQuickTemplates}
+            type="button"
+          >
+            <Zap size={20} />
+          </button>
+        </div>
+      </div>
     </MobileAppShell>
   );
 }
