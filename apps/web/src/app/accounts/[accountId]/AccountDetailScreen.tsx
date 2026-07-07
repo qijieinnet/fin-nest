@@ -18,6 +18,7 @@ import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/reco
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
+import { AccountBalanceCard } from "../_components/AccountBalanceCard";
 import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../_components/BalanceAdjustmentListSheet";
@@ -31,6 +32,7 @@ import { SettleSheet } from "../_components/SettleSheet";
 import {
   accountGroupMeta,
   accountTotalMicros,
+  accountVisibleTotalMicros,
   balanceLabel,
   defaultBucketMicros,
   formatDateLabel,
@@ -100,9 +102,9 @@ function NetWorthSwitchRow({
     <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
-        <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+        {/* <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
           开启后该账户及子账户余额不计入净资产统计
-        </p>
+        </p> */}
       </div>
       <Switch
         checked={checked}
@@ -221,6 +223,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const meta = accountGroupMeta(account.type);
   const liability = isLiability(account.type);
   const total = accountTotalMicros(account);
+  // 头部展示的总额剔除“不计入总资产”的子账户；其余统计（额度/收益/结算）仍用真实总额。
+  const displayTotal = accountVisibleTotalMicros(account);
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
   const hasSplitSubAccounts = account.subAccounts.length > 0;
@@ -247,6 +251,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       content: (
         <BalanceEditSheet
           accountId={account.id}
+          allowNegative={account.type !== "credit"}
           initialBalance={microsToInput(
             subAccount ? subAccount.balanceMicros : account.balanceMicros,
           )}
@@ -318,7 +323,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     if (cost !== null) {
       const profit = total - cost;
       const abs = profit < 0n ? -profit : profit;
-      const color = profit >= 0n ? "var(--color-accent-income)" : "var(--color-accent-expense)";
+      // 账单约定：盈利（正）红、亏损（负）绿。
+      const color = profit >= 0n ? "var(--color-accent-expense)" : "var(--color-accent-income)";
       stats.push({ label: "收益", value: `${profit >= 0n ? "+" : "−"}${formatMoney(abs)}`, color });
       if (cost > 0n) {
         const rate = (Number(profit) / Number(cost)) * 100;
@@ -409,30 +415,24 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           />
         </header>
 
-        <section className="pt-1 text-center">
-          <span className="mx-auto flex h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-[var(--color-bg-surface)] text-[30px] shadow-[var(--shadow-soft)]">
-            {account.icon ?? "💼"}
-          </span>
-          <h1 className="mt-2.5 text-[19px] font-bold text-[var(--color-text-primary)]">
-            {account.name}
-          </h1>
-          <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)]">{meta.name}</p>
-          <p className="mt-4 text-[13px] text-[var(--color-text-muted)]">
-            {balanceLabel(account.type)}
-          </p>
-          <p
-            className={`mt-0.5 text-[36px] font-bold leading-tight tracking-tight [font-variant-numeric:tabular-nums] ${
-              settled
-                ? "text-[var(--color-text-muted)]"
-                : liability
-                  ? "text-[var(--color-accent-expense)]"
-                  : "text-[var(--color-text-primary)]"
-            }`}
-          >
-            {liability && total !== 0n ? "−" : ""}
-            {formatMoney(total)}
-          </p>
-        </section>
+        <AccountBalanceCard
+          accountType={account.type}
+          balanceColor={
+            settled
+              ? "var(--color-text-muted)"
+              : liability
+                ? "var(--color-accent-income)"
+                : "var(--color-text-primary)"
+          }
+          balanceLabel={balanceLabel(account.type)}
+          balanceMicros={displayTotal.toString()}
+          currentBalanceMicros={total.toString()}
+          entries={entriesQuery.data ?? []}
+          icon={account.icon ?? "💼"}
+          name={account.name}
+          negativePrefix={liability}
+          subtitle={meta.name}
+        />
 
         {stats.length > 0 ? (
           <section className="mt-5 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">

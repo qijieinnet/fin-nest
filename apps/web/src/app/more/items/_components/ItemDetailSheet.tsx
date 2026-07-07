@@ -1,13 +1,14 @@
 "use client";
 
 import { Archive, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
-import { LoadingState } from "@/components/business";
+import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
+  type AttachmentRecord,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
-  ledgerApiPath,
   type ItemType,
+  ledgerApiPath,
 } from "@/lib/api";
 import { useAttachments, useItem } from "@/lib/data/records";
 import { useSheetStack, useToast } from "@/providers";
@@ -41,6 +42,15 @@ const STATUS_CLASS: Record<string, string> = {
   reached: "bg-[rgba(31,138,91,0.12)] text-[var(--color-accent-income)]",
   scrapped: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
+
+function toAttachmentItem(attachment: AttachmentRecord): AttachmentItem {
+  return {
+    contentType: attachment.file?.mime,
+    id: attachment.id,
+    name: attachment.file?.originalName ?? `附件 ${attachment.id.slice(0, 6)}`,
+    sizeBytes: attachment.file?.sizeBytes ? Number(attachment.file.sizeBytes) : undefined,
+  };
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -99,7 +109,9 @@ export function ItemDetailSheet({
   const hasPurchaseDate = Boolean(item.purchaseDate);
   const expected = Number(item.expectedYears ?? 0);
   const linked = item.linkedTransactions;
-  const attachments = attachmentsQuery.data ?? [];
+  const attachmentItems = (attachmentsQuery.data ?? []).map((attachment) =>
+    toAttachmentItem(attachment),
+  );
 
   const openLinkedTransactions = () => {
     push({
@@ -115,14 +127,16 @@ export function ItemDetailSheet({
     });
   };
 
-  async function openAttachment(attachmentId: string) {
+  async function openAttachment(attachment: AttachmentItem): Promise<string | void> {
+    if (attachment.url) {
+      return attachment.url;
+    }
     try {
-      const url = await createAuthorizedObjectUrl(
-        ledgerApiPath(ledgerId, `/attachments/${attachmentId}/content`),
+      return await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId, `/attachments/${attachment.id}/content`),
       );
-      window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, "附件暂时无法预览") });
     }
   }
 
@@ -212,28 +226,12 @@ export function ItemDetailSheet({
         </section>
       ) : null}
 
-      {attachments.length > 0 ? (
+      {attachmentItems.length > 0 ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-            附件 · {attachments.length} 个
+            附件 · {attachmentItems.length} 个
           </h3>
-          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
-            {attachments.map((attachment) => (
-              <button
-                className="flex w-full items-center gap-3 px-4 py-3 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-                key={attachment.id}
-                onClick={() => openAttachment(attachment.id)}
-                type="button"
-              >
-                <span aria-hidden className="text-[18px]">
-                  {attachment.file?.mime?.startsWith("image/") ? "🖼️" : "📄"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[14.5px] text-[var(--color-text-primary)]">
-                  {attachment.file?.originalName ?? "附件"}
-                </span>
-              </button>
-            ))}
-          </div>
+          <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
         </section>
       ) : null}
 

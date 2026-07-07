@@ -7,6 +7,7 @@ import {
   parseDateOnly,
   PrismaService,
 } from "@fin-nest/backend";
+import { buildNetWorthSeries, type NetWorthRange } from "../accounts/net-worth";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { StatsQueryDto } from "./dto/stats-query.dto";
 
@@ -57,6 +58,50 @@ function trailingMonths(month: string, count: number): string[] {
     months.push(date.toISOString().slice(0, 7));
   }
   return months;
+}
+
+type CashflowRange = "week" | "month1" | "month6" | "year";
+type CashflowBucket = { key: string; label: string };
+
+/**
+ * 收支走势的分桶（UTC，与 `dateKey` 对齐）：
+ * 近1周/近1个月按天（key = YYYY-MM-DD），近6个月/近1年按月（key = YYYY-MM）。
+ */
+function cashflowBuckets(
+  range: CashflowRange,
+  now: Date,
+): { buckets: CashflowBucket[]; windowStart: Date; windowEnd: Date; monthly: boolean } {
+  if (range === "month6" || range === "year") {
+    const count = range === "month6" ? 6 : 12;
+    const buckets: CashflowBucket[] = [];
+    for (let offset = count - 1; offset >= 0; offset -= 1) {
+      const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+      buckets.push({ key: date.toISOString().slice(0, 7), label: `${date.getUTCMonth() + 1}月` });
+    }
+    return {
+      buckets,
+      windowStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (count - 1), 1)),
+      windowEnd: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)),
+      monthly: true,
+    };
+  }
+
+  const days = range === "week" ? 7 : 30;
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const buckets: CashflowBucket[] = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date(todayUtc.getTime() - offset * 86_400_000);
+    buckets.push({
+      key: date.toISOString().slice(0, 10),
+      label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}`,
+    });
+  }
+  return {
+    buckets,
+    windowStart: new Date(todayUtc.getTime() - (days - 1) * 86_400_000),
+    windowEnd: new Date(todayUtc.getTime() + 86_400_000),
+    monthly: false,
+  };
 }
 
 @Injectable()
@@ -241,6 +286,52 @@ export class StatsService {
       months,
       expense: this.packType(months, trend.expense, buckets.expense),
       income: this.packType(months, trend.income, buckets.income),
+    };
+  }
+
+  async netWorthSeries(ledgerId: string, userId: string, range: NetWorthRange) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    return buildNetWorthSeries(this.prisma, ledgerId, range);
+  }
+
+  /** 收支走势：按 range（近1周/近1个月按天，近6个月/近1年按月）分桶汇总支出与收入。 */
+  async cashflowSeries(ledgerId: string, userId: string, query: StatsQueryDto, range: NetWorthRange) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const now = new Date();
+    const { buckets, windowStart, windowEnd, monthly } = cashflowBuckets(range, now);
+
+    const transactions = await this.prisma.client.transaction.findMany({
+      where: {
+        ledgerId,
+        deletedAt: null,
+        type: { in: ["expense", "income"] },
+        occurredOn: { gte: windowStart, lt: windowEnd },
+        ...this.buildFilterWhere(query),
+      },
+      select: { type: true, occurredOn: true, effectiveAmountMicros: true },
+    });
+
+    const sums = new Map<string, { expense: bigint; income: bigint }>(
+      buckets.map((bucket) => [bucket.key, { expense: 0n, income: 0n }]),
+    );
+    for (const transaction of transactions) {
+      const dayKey = dateKey(transaction.occurredOn);
+      const key = monthly ? dayKey.slice(0, 7) : dayKey;
+      const entry = sums.get(key);
+      if (!entry) continue;
+      if (transaction.type === "expense") entry.expense += transaction.effectiveAmountMicros;
+      else entry.income += transaction.effectiveAmountMicros;
+    }
+
+    return {
+      points: buckets.map((bucket) => {
+        const entry = sums.get(bucket.key)!;
+        return {
+          label: bucket.label,
+          expenseMicros: entry.expense.toString(),
+          incomeMicros: entry.income.toString(),
+        };
+      }),
     };
   }
 

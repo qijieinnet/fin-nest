@@ -15,11 +15,22 @@ import {
 import { DotBadge, IconButton, MobileAppShell, Tabs } from "@/components/ui";
 import type { StatsCategoryEntry, TransactionListQuery } from "@/lib/api";
 import { categoryOptions, moneyAccountOptions, personOptions } from "@/lib/data/options";
-import { useAccounts, useCategories, useLedgerStats, usePeople } from "@/lib/data/records";
+import {
+  useAccounts,
+  useCashflowSeries,
+  useCategories,
+  useLedgerStats,
+  usePeople,
+} from "@/lib/data/records";
 import { cn } from "@/lib/format/class-names";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useDecimalPlaces, useLedger, useSheetStack } from "@/providers";
+import {
+  TREND_RANGE_LABELS,
+  TrendRangeSelect,
+  type TrendRange,
+} from "../accounts/_components/TrendRangeSelect";
 import { filterToQuery, periodLabel, timeRangeFromFilter } from "../bills/_components/bill-utils";
 import { CategoryBillsSheet } from "./_components/CategoryBillsSheet";
 
@@ -40,10 +51,6 @@ type RankEntry = {
 
 // 按账本缓存筛选条件，与账单列表一致，路由往返后仍保留。
 const statsFilterCache = new Map<string, BusinessFilterValue>();
-
-function shortMonthLabel(month: string): string {
-  return `${Number(month.slice(5, 7))}月`;
-}
 
 /** 柱状图顶部的紧凑金额：1.2万 / 3.5k / 860。 */
 function compactYuan(micros: bigint): string {
@@ -74,6 +81,13 @@ function percentOf(amount: bigint, total: bigint): number {
   return Number((amount * 1000n) / total) / 10;
 }
 
+/** 点数较多时（如近1个月的每日柱）稀释 x 轴标签。 */
+function shouldShowTrendLabel(index: number, count: number): boolean {
+  if (count <= 8) return true;
+  const step = Math.ceil(count / 6);
+  return index === 0 || index === count - 1 || index % step === 0;
+}
+
 export function StatsScreen() {
   const router = useRouter();
   const { ledgerId } = useLedger();
@@ -84,6 +98,7 @@ export function StatsScreen() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [type, setType] = useState<StatsType>("expense");
   const [drillId, setDrillId] = useState<string | null>(null);
+  const [trendRange, setTrendRange] = useState<TrendRange>("month6");
 
   useEffect(() => {
     if (ledgerId) statsFilterCache.set(ledgerId, filterValue);
@@ -167,11 +182,16 @@ export function StatsScreen() {
           .join(", ")
       : "var(--color-control-fill-muted) 0% 100%";
 
-  const trend = summary?.trend ?? [];
-  const maxTrendMicros = trend.reduce((max, point) => {
-    const value = BigInt(point.totalMicros);
-    return value > max ? value : max;
-  }, 0n);
+  const cashflowQuery = useCashflowSeries(ledgerId, trendRange, query);
+  const trendPoints = (cashflowQuery.data?.points ?? []).map((point) => ({
+    label: point.label,
+    valueMicros: BigInt(type === "expense" ? point.expenseMicros : point.incomeMicros),
+  }));
+  const maxTrendMicros = trendPoints.reduce(
+    (max, point) => (point.valueMicros > max ? point.valueMicros : max),
+    0n,
+  );
+  const denseTrend = trendPoints.length > 8;
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
@@ -364,32 +384,50 @@ export function StatsScreen() {
             )}
 
             <section className="mt-4 rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
-              <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
-                近 6 个月{type === "expense" ? "支出" : "收入"}
-              </p>
-              <div className="mt-4 flex h-[120px] items-end justify-between gap-2.5">
-                {trend.map((point, index) => {
-                  const value = BigInt(point.totalMicros);
-                  const height = maxTrendMicros > 0n ? Number((value * 72n) / maxTrendMicros) : 0;
-                  const isCurrent = index === trend.length - 1;
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+                  {TREND_RANGE_LABELS[trendRange]}
+                  {type === "expense" ? "支出" : "收入"}
+                </p>
+                <TrendRangeSelect onChange={setTrendRange} value={trendRange} />
+              </div>
+              <div
+                className={cn(
+                  "mt-4 flex h-[120px] items-end justify-between",
+                  denseTrend ? "gap-[3px]" : "gap-2.5",
+                )}
+              >
+                {trendPoints.map((point, index) => {
+                  const height =
+                    maxTrendMicros > 0n ? Number((point.valueMicros * 72n) / maxTrendMicros) : 0;
+                  const isCurrent = index === trendPoints.length - 1;
                   return (
                     <div
                       className="flex h-full flex-1 flex-col items-center justify-end gap-2"
-                      key={point.month}
+                      key={`${point.label}-${index}`}
                     >
-                      <span className="text-[10px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
-                        {compactYuan(value)}
-                      </span>
+                      {denseTrend ? null : (
+                        <span className="text-[10px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
+                          {compactYuan(point.valueMicros)}
+                        </span>
+                      )}
                       <span
-                        className="block w-full max-w-[20px] rounded-t-[6px] rounded-b-[3px] transition-[height] duration-300"
+                        className={cn(
+                          "block w-full rounded-t-[6px] rounded-b-[3px] transition-[height] duration-300",
+                          denseTrend ? "max-w-[10px]" : "max-w-[20px]",
+                        )}
                         style={{
                           height: `${Math.max(height, 2)}%`,
                           background: isCurrent ? "var(--color-tint)" : "rgba(120, 120, 128, 0.22)",
                         }}
                       />
-                      <span className="text-[11px] text-[var(--color-text-secondary)]">
-                        {shortMonthLabel(point.month)}
-                      </span>
+                      {shouldShowTrendLabel(index, trendPoints.length) ? (
+                        <span className="text-[11px] text-[var(--color-text-secondary)]">
+                          {point.label}
+                        </span>
+                      ) : (
+                        <span className="h-[15px]" />
+                      )}
                     </div>
                   );
                 })}

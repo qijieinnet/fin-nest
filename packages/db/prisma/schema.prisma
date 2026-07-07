@@ -211,6 +211,8 @@ model Account {
   defaultSubAccountIcon String?   @map("default_sub_account_icon")
   balanceMicros         BigInt    @default(0) @map("balance_micros")
   includeInNetWorth     Boolean   @default(true) @map("include_in_net_worth")
+  // 默认桶（账户总额 − 各命名子账户）单独的净资产开关，与账户级总开关区分。
+  defaultBucketIncludeInNetWorth Boolean @default(true) @map("default_bucket_include_in_net_worth")
   creditLimitMicros     BigInt?   @map("credit_limit_micros")
   investmentCostMicros  BigInt?   @map("investment_cost_micros")
   counterparty          String?

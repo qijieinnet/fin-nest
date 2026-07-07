@@ -1,11 +1,17 @@
 "use client";
 
 import { Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
-import { LoadingState } from "@/components/business";
+import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import { Button } from "@/components/ui";
-import type { Person } from "@/lib/api";
-import { useInsurance } from "@/lib/data/records";
-import { useSheetStack } from "@/providers";
+import {
+  type AttachmentRecord,
+  createAuthorizedObjectUrl,
+  getApiErrorMessage,
+  ledgerApiPath,
+  type Person,
+} from "@/lib/api";
+import { useAttachments, useInsurance } from "@/lib/data/records";
+import { useSheetStack, useToast } from "@/providers";
 import { InsuranceTransactionList } from "./InsuranceTransactionList";
 import {
   formatDateLabel,
@@ -34,6 +40,15 @@ const STATUS_CLASS: Record<string, string> = {
   terminated: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
 
+function toAttachmentItem(attachment: AttachmentRecord): AttachmentItem {
+  return {
+    contentType: attachment.file?.mime,
+    id: attachment.id,
+    name: attachment.file?.originalName ?? `附件 ${attachment.id.slice(0, 6)}`,
+    sizeBytes: attachment.file?.sizeBytes ? Number(attachment.file.sizeBytes) : undefined,
+  };
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-[48px] items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none">
@@ -56,12 +71,28 @@ export function InsuranceDetailSheet({
   resuming = false,
   terminating = false,
 }: InsuranceDetailSheetProps) {
+  const { showToast } = useToast();
   const { push } = useSheetStack();
   const detailQuery = useInsurance(ledgerId, insuranceId);
+  const attachmentsQuery = useAttachments(ledgerId, "insurance", insuranceId);
+  const attachmentRecords = attachmentsQuery.data ?? [];
   const insurance = detailQuery.data;
 
   if (!insurance) {
     return <LoadingState rows={5} title="加载保单" />;
+  }
+
+  async function openAttachment(item: AttachmentItem): Promise<string | void> {
+    if (item.url) {
+      return item.url;
+    }
+    try {
+      return await createAuthorizedObjectUrl(
+        ledgerApiPath(ledgerId, `/attachments/${item.id}/content`),
+      );
+    } catch (error) {
+      showToast({ tone: "error", message: getApiErrorMessage(error, "附件暂时无法预览") });
+    }
   }
 
   const openLinkedTransactions = () => {
@@ -85,6 +116,7 @@ export function InsuranceDetailSheet({
     .join("、");
   const premiumLabel = insurance.premiumFreq === "single" ? "保费" : premiumFreqLabel(insurance.premiumFreq);
   const linked = insurance.linkedTransactions;
+  const attachmentItems = attachmentRecords.map((attachment) => toAttachmentItem(attachment));
 
   return (
     <div className="flex w-full flex-col gap-4 pb-2">
@@ -152,6 +184,15 @@ export function InsuranceDetailSheet({
           <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {insurance.note}
           </div>
+        </section>
+      ) : null}
+
+      {attachmentItems.length > 0 ? (
+        <section>
+          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+            附件 · {attachmentItems.length} 个
+          </h3>
+          <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
         </section>
       ) : null}
 

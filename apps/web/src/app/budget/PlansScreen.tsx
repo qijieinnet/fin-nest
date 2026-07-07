@@ -120,7 +120,7 @@ export function PlansScreen() {
 
   const toggleForesight = useMutation({
     mutationFn: async (enabled: boolean) => {
-      // 待确认后端按计划存储，这里作为账本级开关批量更新所有计划。
+      // 未到期的自动记账后端按计划存储，这里作为账本级开关批量更新所有计划。
       await Promise.all(
         plans.map((plan) =>
           apiRequest(ledgerApiPath(ledgerId!, `/plans/${plan.id}`), {
@@ -139,7 +139,10 @@ export function PlansScreen() {
           ),
         );
       }
-      showToast({ tone: "success", message: enabled ? "已开启待确认" : "已关闭待确认" });
+      showToast({
+        tone: "success",
+        message: enabled ? "已开启未到期的自动记账" : "已关闭未到期的自动记账",
+      });
     },
     onError: (error) =>
       showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
@@ -332,11 +335,11 @@ export function PlansScreen() {
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]">
             <Eye size={18} />
           </span>
-          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">待确认</span>
+          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
           <Switch
             checked={foresightOn}
             disabled={plans.length === 0 || toggleForesight.isPending}
-            label="待确认"
+            label="未到期的自动记账"
             onCheckedChange={(checked) => toggleForesight.mutate(checked)}
           />
         </div>

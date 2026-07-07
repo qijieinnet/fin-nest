@@ -67,6 +67,27 @@ export function accountTotalMicros(account: Pick<Account, "balanceMicros">): big
   return BigInt(account.balanceMicros);
 }
 
+/**
+ * 详情页展示用的总额：从账户总余额中扣除“不计入总资产”的子账户余额。
+ * 与净资产不同，即使整个账户被排除，这里仍按真实余额展示（只剔除被排除的子账户）。
+ */
+export function accountVisibleTotalMicros(
+  account: Pick<
+    Account,
+    "balanceMicros" | "subAccounts" | "defaultBucketIncludeInNetWorth"
+  >,
+): bigint {
+  let excluded = account.subAccounts.reduce(
+    (sum, sub) => (sub.includeInNetWorth === false ? sum + BigInt(sub.balanceMicros) : sum),
+    0n,
+  );
+  // 有命名子账户时，默认桶才作为独立部分参与“剔除”；无子账户时由账户级开关统管。
+  if (account.subAccounts.length > 0 && account.defaultBucketIncludeInNetWorth === false) {
+    excluded += defaultBucketMicros(account);
+  }
+  return BigInt(account.balanceMicros) - excluded;
+}
+
 /** 默认桶余额 = 总余额 − 各子账户余额。 */
 export function defaultBucketMicros(
   account: Pick<Account, "balanceMicros" | "subAccounts">,
@@ -76,10 +97,13 @@ export function defaultBucketMicros(
 }
 
 export function accountNetWorthMicros(account: Account): bigint {
+  // 账户级总开关：关闭则整户（含所有子账户）都不计入。
   if (!account.includeInNetWorth) return 0n;
   if (account.subAccounts.length === 0) return accountTotalMicros(account);
 
-  const defaultBucket = defaultBucketMicros(account);
+  // 默认桶有自己的开关，与命名子账户各自独立计入。
+  const defaultBucket =
+    account.defaultBucketIncludeInNetWorth === false ? 0n : defaultBucketMicros(account);
   return account.subAccounts.reduce(
     (sum, subAccount) =>
       subAccount.includeInNetWorth === false ? sum : sum + BigInt(subAccount.balanceMicros),
@@ -103,6 +127,14 @@ export function netWorthSummary(accounts: Account[]): NetWorthSummary {
   }
   return { assetsMicros, liabilitiesMicros, netMicros: assetsMicros - liabilitiesMicros };
 }
+
+/**
+ * 金额配色沿用账单约定（`.biz-transaction-row` 里收入用红、支出用绿）：
+ * 正向（收入 / 资产 / 盈利）→ 红；负向（支出 / 负债 / 亏损）→ 绿。
+ * 注意 CSS 变量按语义命名（income=绿、expense=红），这里刻意反用以匹配账单。
+ */
+export const COLOR_MONEY_POSITIVE = "var(--color-accent-expense)";
+export const COLOR_MONEY_NEGATIVE = "var(--color-accent-income)";
 
 export function balanceLabel(type: string): string {
   if (type === "credit") return "已用额度";

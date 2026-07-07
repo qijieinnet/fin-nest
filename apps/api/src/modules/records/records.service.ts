@@ -8,6 +8,7 @@ import {
   PrismaService,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
+import { buildNetWorth } from "../accounts/net-worth";
 import { LedgersService } from "../ledgers/ledgers.service";
 import {
   CreateCategoryDto,
@@ -365,23 +366,7 @@ export class RecordsService {
       },
       orderBy: { occurredOn: "asc" },
     });
-    const accounts = await this.prisma.client.account.findMany({
-      where: { ledgerId, archivedAt: null, includeInNetWorth: true },
-    });
-    // The historical trend must keep accounts that were archived after the fact, otherwise
-    // archiving an account silently rewrites every past month. Archived accounts retain their
-    // last balance, so reconstructing balance_at_month = current - futureDelta stays correct.
-    const trendAccounts = await this.prisma.client.account.findMany({
-      where: { ledgerId, includeInNetWorth: true },
-    });
-    const accountEntries = await this.prisma.client.accountEntry.findMany({
-      where: {
-        ledgerId,
-        accountId: { in: trendAccounts.map((account) => account.id) },
-        occurredAt: { gte: trendStart },
-      },
-      orderBy: { occurredAt: "asc" },
-    });
+    const netWorth = await buildNetWorth(this.prisma, ledgerId, trendMonths);
 
     const monthTransactions = transactions.filter((transaction) => {
       const happenedAt = new Date(transaction.occurredOn);
@@ -397,8 +382,8 @@ export class RecordsService {
       categoryRanking: this.categoryRanking(targetTransactions),
       personRanking: this.personRanking(targetTransactions),
       trend: trendMonths.map((bucket) => this.trendBucket(bucket, transactions)),
-      netWorthMicros: accounts.reduce((sum, account) => sum + account.balanceMicros, 0n).toString(),
-      netWorthTrend: this.netWorthTrend(trendMonths, trendAccounts, accountEntries),
+      netWorthMicros: netWorth.netWorthMicros,
+      netWorthTrend: netWorth.netWorthTrend,
     };
   }
 
@@ -479,22 +464,6 @@ export class RecordsService {
       },
       { month, expenseMicros: 0n, incomeMicros: 0n },
     );
-  }
-
-  private netWorthTrend(
-    months: string[],
-    accounts: Prisma.AccountGetPayload<Record<string, never>>[],
-    entries: Prisma.AccountEntryGetPayload<Record<string, never>>[],
-  ) {
-    const currentNetWorth = accounts.reduce((sum, account) => sum + account.balanceMicros, 0n);
-    return months.map((month) => {
-      const end = monthRange(month).end;
-      const futureDelta = entries.reduce(
-        (sum, entry) => (entry.occurredAt >= end ? sum + entry.amountDeltaMicros : sum),
-        0n,
-      );
-      return { month, netWorthMicros: (currentNetWorth - futureDelta).toString() };
-    });
   }
 
   private async assertCategory(ledgerId: string, categoryId: string) {

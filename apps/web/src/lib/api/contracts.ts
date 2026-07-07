@@ -171,6 +171,8 @@ export type Account = {
   /** 账户总余额（含子账户）。 */
   balanceMicros: string;
   includeInNetWorth: boolean;
+  /** 默认桶（账户总额 − 各命名子账户）是否计入总资产，与账户级总开关区分。 */
+  defaultBucketIncludeInNetWorth: boolean;
   creditLimitMicros: string | null;
   investmentCostMicros: string | null;
   counterparty: string | null;
@@ -421,6 +423,20 @@ export type LedgerStats = {
   months: string[];
   expense: StatsTypeSummary;
   income: StatsTypeSummary;
+};
+
+export type NetWorthRange = "week" | "month1" | "month6" | "year";
+
+export type NetWorthSeries = {
+  /** 当前净资产（资产 − 负债，已按各级开关剔除）。 */
+  netWorthMicros: string;
+  /** 各时段末净资产（旧 → 新），label 已按粒度格式化。 */
+  points: Array<{ label: string; netWorthMicros: string }>;
+};
+
+export type CashflowSeries = {
+  /** 各时段收支合计（旧 → 新），label 已按粒度格式化。 */
+  points: Array<{ label: string; expenseMicros: string; incomeMicros: string }>;
 };
 
 export type QuickTemplate = {

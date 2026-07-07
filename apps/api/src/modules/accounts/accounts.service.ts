@@ -30,7 +30,16 @@ export type AccountEntryInput = {
   createdBy?: string | null;
   // Reversals must be able to undo effects on accounts that were archived after the entry was posted.
   allowArchived?: boolean;
+  // 记账流水（支出/收入/转账）传入的 delta 采用“资产正向”约定：入账为正、出账为负。
+  // 对负债账户（信用卡等）需要反向：消费增加已用额度、还款减少已用额度。
+  // 该标记让 applyEntry 按账户类型自动翻转符号；余额调整/结算按绝对值计算，不设此标记。
+  orientForLiability?: boolean;
 };
+
+/** 负债类账户：余额（balanceMicros）记为正数的“欠款/已用额度”。 */
+export function isLiabilityAccountType(type: string): boolean {
+  return type === "credit" || type === "payable";
+}
 
 @Injectable()
 export class AccountsService {
@@ -181,7 +190,8 @@ export class AccountsService {
               name: oldDefaultName,
               icon: account.defaultSubAccountIcon ?? account.icon,
               balanceMicros: oldDefaultBalance,
-              includeInNetWorth: account.includeInNetWorth,
+              // 旧默认桶转为命名子账户，沿用默认桶自己的净资产开关。
+              includeInNetWorth: account.defaultBucketIncludeInNetWorth,
               createdBy: userId,
               updatedBy: userId,
             },
@@ -200,7 +210,8 @@ export class AccountsService {
           data: {
             defaultSubAccountName: subAccount.name,
             defaultSubAccountIcon: subAccount.icon,
-            includeInNetWorth: subAccount.includeInNetWorth,
+            // 被设为默认的命名子账户，其净资产开关成为新默认桶的开关；账户级总开关不变。
+            defaultBucketIncludeInNetWorth: subAccount.includeInNetWorth,
             updatedBy: userId,
           },
         });
@@ -293,6 +304,7 @@ export class AccountsService {
         defaultSubAccountName: input.defaultSubAccountName,
         defaultSubAccountIcon: input.defaultSubAccountIcon,
         includeInNetWorth: input.includeInNetWorth,
+        defaultBucketIncludeInNetWorth: input.defaultBucketIncludeInNetWorth,
         creditLimitMicros:
           input.creditLimitMicros === undefined ? undefined : BigInt(input.creditLimitMicros),
         investmentCostMicros:
@@ -505,6 +517,12 @@ export class AccountsService {
     });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
 
+    // 负债账户的记账流水需反向：以“已用额度/欠款”为正，消费增加、还款减少。
+    const delta =
+      input.orientForLiability && isLiabilityAccountType(account.type)
+        ? -input.amountDeltaMicros
+        : input.amountDeltaMicros;
+
     if (input.subAccountId) {
       const subAccount = await tx.subAccount.findFirst({
         where: {
@@ -518,14 +536,14 @@ export class AccountsService {
       await tx.subAccount.update({
         where: { id: input.subAccountId },
         data: {
-          balanceMicros: subAccount.balanceMicros + input.amountDeltaMicros,
+          balanceMicros: subAccount.balanceMicros + delta,
           updatedBy: input.createdBy,
         },
       });
     }
 
     const before = account.balanceMicros;
-    const after = before + input.amountDeltaMicros;
+    const after = before + delta;
     await tx.account.update({
       where: { id: input.accountId },
       data: { balanceMicros: after, updatedBy: input.createdBy },
@@ -536,7 +554,7 @@ export class AccountsService {
         accountId: input.accountId,
         subAccountId: input.subAccountId ?? null,
         entryType: input.entryType,
-        amountDeltaMicros: input.amountDeltaMicros,
+        amountDeltaMicros: delta,
         balanceBeforeMicros: before,
         balanceAfterMicros: after,
         transactionId: input.transactionId ?? null,

@@ -366,6 +366,7 @@ export class BackupService {
       defaultSubAccountIcon: row.defaultSubAccountIcon ?? null,
       balanceMicros: bi(row.balanceMicros) ?? 0n,
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
+      defaultBucketIncludeInNetWorth: Boolean(row.defaultBucketIncludeInNetWorth ?? true),
       creditLimitMicros: bi(row.creditLimitMicros),
       investmentCostMicros: bi(row.investmentCostMicros),
       counterparty: row.counterparty ?? null,

@@ -15,8 +15,11 @@ import {
   type ItemAsset,
   type ItemDetail,
   type ItemType,
+  type CashflowSeries,
   ledgerApiPath,
   type LedgerStats,
+  type NetWorthRange,
+  type NetWorthSeries,
   type Person,
   type Plan,
   type PlanProgressResult,
@@ -228,6 +231,34 @@ export function useLedgerStats(ledgerId: string | null, query: StatsQuery) {
   return useQuery({
     queryKey: queryKeys.stats(ledgerId ?? "none", query),
     queryFn: () => apiRequest<LedgerStats>(ledgerApiPath(ledgerId!, "/stats"), { query }),
+    enabled: Boolean(ledgerId),
+    staleTime: 15_000,
+  });
+}
+
+export function useNetWorthSeries(ledgerId: string | null, range: NetWorthRange) {
+  return useQuery({
+    queryKey: queryKeys.netWorth(ledgerId ?? "none", range),
+    queryFn: () =>
+      apiRequest<NetWorthSeries>(ledgerApiPath(ledgerId!, "/stats/net-worth"), {
+        query: { range },
+      }),
+    enabled: Boolean(ledgerId),
+    staleTime: 15_000,
+  });
+}
+
+export function useCashflowSeries(
+  ledgerId: string | null,
+  range: NetWorthRange,
+  query: StatsQuery,
+) {
+  return useQuery({
+    queryKey: queryKeys.cashflow(ledgerId ?? "none", range, query),
+    queryFn: () =>
+      apiRequest<CashflowSeries>(ledgerApiPath(ledgerId!, "/stats/cashflow"), {
+        query: { ...query, range },
+      }),
     enabled: Boolean(ledgerId),
     staleTime: 15_000,
   });

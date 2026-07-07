@@ -533,7 +533,7 @@ export function QuickTemplateEditorSheet({
             </div>
           </FieldCard>
 
-          <div className="auto-transaction-sheet__settings">
+          {/* <div className="auto-transaction-sheet__settings">
             <section className="transaction-form__card">
               <div className="transaction-form__toggle-head">
                 <span>
@@ -548,7 +548,7 @@ export function QuickTemplateEditorSheet({
                 />
               </div>
             </section>
-          </div>
+          </div> */}
         </div>
       </div>
     </form>

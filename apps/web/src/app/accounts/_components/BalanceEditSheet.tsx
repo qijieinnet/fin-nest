@@ -17,6 +17,8 @@ type BalanceEditSheetProps = {
   /** 传入时调整对应子账户余额，否则调整账户总余额。 */
   subAccountId?: string;
   title: string;
+  /** 是否允许输入负数余额；信用账户余额为“已用额度”，不允许负数。 */
+  allowNegative?: boolean;
 };
 
 export function BalanceEditSheet({
@@ -25,6 +27,7 @@ export function BalanceEditSheet({
   ledgerId,
   subAccountId,
   title,
+  allowNegative = true,
 }: BalanceEditSheetProps) {
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
@@ -33,7 +36,7 @@ export function BalanceEditSheet({
 
   const save = useMutation({
     mutationFn: async () => {
-      const parsed = parseMoneyToMicros(balance, { allowNegative: true });
+      const parsed = parseMoneyToMicros(balance, { allowNegative });
       if (!parsed.ok) throw new Error(parsed.error);
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/adjustments`), {
         method: "POST",

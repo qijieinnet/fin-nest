@@ -33,6 +33,10 @@ export const queryKeys = {
   budgetProgress: (ledgerId: string, month: string) =>
     ["ledger", ledgerId, "budget-progress", month] as const,
   stats: (ledgerId: string, range: unknown) => ["ledger", ledgerId, "stats", range ?? null] as const,
+  netWorth: (ledgerId: string, range: string) =>
+    ["ledger", ledgerId, "net-worth", range] as const,
+  cashflow: (ledgerId: string, range: string, filters: unknown) =>
+    ["ledger", ledgerId, "cashflow", range, filters ?? null] as const,
   transactions: (ledgerId: string, filters?: unknown) =>
     ["ledger", ledgerId, "transactions", filters ?? null] as const,
   transaction: (ledgerId: string, transactionId: string) =>

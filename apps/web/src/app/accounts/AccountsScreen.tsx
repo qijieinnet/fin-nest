@@ -2,14 +2,14 @@
 
 import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { EmptyState, LoadingState, MoneyText } from "@/components/business";
+import { EmptyState, LoadingState } from "@/components/business";
 import { EdgeFade, IconButton, MobileAppShell, MobileTabBar } from "@/components/ui";
 import type { Account } from "@/lib/api";
 import { useAccounts } from "@/lib/data/records";
-import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useDecimalPlaces, useLedger, useSheetStack } from "@/providers";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
+import { NetWorthOverviewCard } from "./_components/NetWorthOverviewCard";
 import {
   ACCOUNT_GROUPS,
   accountNetWorthMicros,
@@ -82,7 +82,7 @@ export function AccountsScreen() {
             settled
               ? "text-[var(--color-text-muted)]"
               : liability
-                ? "text-[var(--color-accent-expense)]"
+                ? "text-[var(--color-accent-income)]"
                 : "text-[var(--color-text-primary)]"
           }`}
         >
@@ -109,38 +109,12 @@ export function AccountsScreen() {
           <LoadingState rows={5} title="加载账户" />
         ) : (
           <>
-            <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
-              <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                净资产
-              </p>
-              <p className="mt-1.5 flex items-baseline gap-0.5">
-                <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
-                  ¥
-                </span>
-                <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-                  {formatMicros(netWorth.netMicros, { currencySymbol: "", decimalPlaces })}
-                </span>
-              </p>
-              <div className="mt-3.5 flex gap-7">
-                <div>
-                  <p className="text-[11px] text-[var(--color-text-muted)]">总资产</p>
-                  <MoneyText
-                    amountMicros={netWorth.assetsMicros}
-                    className="mt-0.5 block text-[15px] font-semibold"
-                    tone="neutral"
-                  />
-                </div>
-                <div>
-                  <p className="text-[11px] text-[var(--color-text-muted)]">总负债</p>
-                  <MoneyText
-                    amountMicros={netWorth.liabilitiesMicros}
-                    className="mt-0.5 block text-[15px] font-semibold"
-                    style={{ color: "var(--color-accent-expense)" }}
-                    tone="expense"
-                  />
-                </div>
-              </div>
-            </section>
+            <NetWorthOverviewCard
+              assetsMicros={netWorth.assetsMicros}
+              decimalPlaces={decimalPlaces}
+              liabilitiesMicros={netWorth.liabilitiesMicros}
+              netMicros={netWorth.netMicros}
+            />
 
             {accounts.length === 0 ? (
               <div className="mt-4">

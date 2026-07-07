@@ -15,12 +15,15 @@ import { UpdateBudgetSettingDto, UpsertCategoryBudgetDto } from "./dto/budget.dt
 import { CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
 import { BudgetProgressQueryDto, PlanProgressQueryDto } from "./dto/progress-query.dto";
 import {
+  AutoRuleRow,
   lastPlanPeriods,
+  matchesAutoRule,
   matchesPending,
   matchesPlan,
   PendingRow,
   planPeriod,
   PlanRow,
+  projectAutoRuleOccurrences,
   sumPendingAmount,
   sumTransactionAmount,
   TransactionRow,
@@ -138,20 +141,25 @@ export class PlansService {
         occurredOn: { gte: periods[0]!.start, lt: period.end },
       },
     });
-    const pending = plan.foresightEnabled
-      ? await this.prisma.client.autoPendingTransaction.findMany({
-          where: {
-            ledgerId,
-            status: "pending",
-            type: plan.kind,
-            scheduledFor: { gte: period.start, lt: period.end },
-          },
-        })
-      : [];
+    const [pending, autoRules] = plan.foresightEnabled
+      ? await Promise.all([
+          this.prisma.client.autoPendingTransaction.findMany({
+            where: {
+              ledgerId,
+              status: "pending",
+              type: plan.kind,
+              scheduledFor: { gte: period.start, lt: period.end },
+            },
+          }),
+          this.prisma.client.autoRule.findMany({
+            where: { ledgerId, enabled: true, archivedAt: null, type: plan.kind },
+          }),
+        ])
+      : [[] as PendingRow[], [] as AutoRuleRow[]];
     return {
       plan,
-      period: this.periodProgress(plan, period, transactions, pending, date),
-      history: periods.map((item) => this.periodProgress(plan, item, transactions, [], item.end)),
+      period: this.periodProgress(plan, period, transactions, pending, autoRules, date),
+      history: periods.map((item) => this.periodProgress(plan, item, transactions, [], [], item.end)),
     };
   }
 
@@ -244,6 +252,7 @@ export class PlansService {
     period: { start: Date; end: Date },
     transactions: TransactionRow[],
     pending: PendingRow[],
+    autoRules: AutoRuleRow[],
     today: Date,
   ) {
     const matched = transactions.filter((transaction) => {
@@ -255,10 +264,25 @@ export class PlansService {
       ? matched.filter((transaction) => new Date(transaction.occurredOn) > today)
       : [];
     const pendingMatched = plan.foresightEnabled ? pending.filter((item) => matchesPending(plan, item)) : [];
+    // 未到期的自动记账：尚未生成待确认行、但本周期内还会触发的规则发生额。
+    const projected = plan.foresightEnabled
+      ? autoRules
+          .filter((autoRule) => matchesAutoRule(plan, autoRule))
+          .map((autoRule) => ({
+            count: projectAutoRuleOccurrences(autoRule, period, today),
+            amountMicros: autoRule.amountMicros,
+          }))
+      : [];
+    const projectedAutoAmountMicros = projected.reduce(
+      (sum, item) => sum + item.amountMicros * BigInt(item.count),
+      0n,
+    );
+    const projectedAutoCount = projected.reduce((sum, item) => sum + item.count, 0);
     const actualAmountMicros = sumTransactionAmount(actual);
-    const foresightAmountMicros = sumTransactionAmount(futureConfirmed) + sumPendingAmount(pendingMatched);
+    const foresightAmountMicros =
+      sumTransactionAmount(futureConfirmed) + sumPendingAmount(pendingMatched) + projectedAutoAmountMicros;
     const actualCount = actual.length;
-    const foresightCount = futureConfirmed.length + pendingMatched.length;
+    const foresightCount = futureConfirmed.length + pendingMatched.length + projectedAutoCount;
     return {
       start: period.start.toISOString().slice(0, 10),
       endExclusive: period.end.toISOString().slice(0, 10),

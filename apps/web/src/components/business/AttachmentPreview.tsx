@@ -242,6 +242,7 @@ export function AttachmentPreview({
             <div className="biz-attachment-tile" key={item.id}>
               <button
                 aria-label={`打开 ${item.name}`}
+                className="biz-attachment-tile__open"
                 onClick={() => void handleOpen(item)}
                 type="button"
               >
@@ -262,6 +263,7 @@ export function AttachmentPreview({
               {onRemove ? (
                 <button
                   aria-label={`移除 ${item.name}`}
+                  className="biz-attachment-tile__remove"
                   onClick={() => onRemove(item.id)}
                   type="button"
                 >

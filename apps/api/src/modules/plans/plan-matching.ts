@@ -1,3 +1,4 @@
+import { nextRunDate } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 
 // plans 与 reminders 共用的计划匹配 / 周期计算逻辑，避免两处各维护一份副本。
@@ -5,6 +6,7 @@ import { Prisma } from "@fin-nest/db";
 export type PlanRow = Prisma.PlanGetPayload<Record<string, never>>;
 export type TransactionRow = Prisma.TransactionGetPayload<Record<string, never>>;
 export type PendingRow = Prisma.AutoPendingTransactionGetPayload<Record<string, never>>;
+export type AutoRuleRow = Prisma.AutoRuleGetPayload<Record<string, never>>;
 
 export function matchesPlan(plan: PlanRow, transaction: TransactionRow): boolean {
   const rule = normalizeMatchRule(plan.matchRule);
@@ -26,6 +28,17 @@ export function matchesPending(plan: PlanRow, pending: PendingRow): boolean {
     includesOrEmpty(rule.accountIds, pending.accountId ?? pending.fromAccountId ?? pending.toAccountId) &&
     includesOrEmpty(rule.personIds, pending.personId) &&
     (!rule.noteContains || (pending.note ?? "").includes(rule.noteContains))
+  );
+}
+
+export function matchesAutoRule(plan: PlanRow, autoRule: AutoRuleRow): boolean {
+  const rule = normalizeMatchRule(plan.matchRule);
+  return (
+    includesOrEmpty(rule.categoryIds, autoRule.categoryId) &&
+    includesOrEmpty(rule.subcategoryIds, autoRule.subcategoryId) &&
+    includesOrEmpty(rule.accountIds, autoRule.accountId ?? autoRule.fromAccountId ?? autoRule.toAccountId) &&
+    includesOrEmpty(rule.personIds, autoRule.personId) &&
+    (!rule.noteContains || (autoRule.note ?? "").includes(rule.noteContains))
   );
 }
 
@@ -90,4 +103,25 @@ export function sumTransactionAmount(transactions: TransactionRow[]): bigint {
 
 export function sumPendingAmount(pending: PendingRow[]): bigint {
   return pending.reduce((sum, item) => sum + item.amountMicros, 0n);
+}
+
+// 单条自动记账规则里，晚于 today、早于 period.end 的“未到期”发生次数。
+// nextRunOn 永远指向下一个尚未生成待确认行的发生日，所以从它推算与已有 pending 天然不重叠。
+// MAX_OCCURRENCES 兜底防止异常 repeatRule 造成死循环（日频规则跨年周期也远不到该上限）。
+const MAX_OCCURRENCES = 4000;
+
+export function projectAutoRuleOccurrences(
+  autoRule: AutoRuleRow,
+  period: { start: Date; end: Date },
+  today: Date,
+): number {
+  let cursor = autoRule.nextRunOn;
+  let count = 0;
+  let guard = 0;
+  while (cursor && cursor < period.end && guard < MAX_OCCURRENCES) {
+    if (cursor > today && cursor >= period.start) count += 1;
+    cursor = nextRunDate(cursor, autoRule.repeatRule);
+    guard += 1;
+  }
+  return count;
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Account, AccountType, SubAccount } from "@/lib/api";
-import { accountNetWorthMicros, netWorthSummary } from "./account-utils";
+import {
+  accountNetWorthMicros,
+  accountVisibleTotalMicros,
+  netWorthSummary,
+} from "./account-utils";
 
 function subAccount(overrides: Partial<SubAccount>): SubAccount {
   return {
@@ -27,6 +31,7 @@ function account(overrides: Partial<Account>): Account {
     defaultSubAccountIcon: null,
     balanceMicros: "0",
     includeInNetWorth: true,
+    defaultBucketIncludeInNetWorth: true,
     creditLimitMicros: null,
     investmentCostMicros: null,
     counterparty: null,
@@ -64,6 +69,21 @@ describe("account net worth helpers", () => {
     });
 
     expect(accountNetWorthMicros(includedParent)).toBe(150000000n);
+  });
+
+  it("excludes only the default bucket, keeping named sub-accounts, when its own switch is off", () => {
+    // 总额 350：默认桶 50 + 命名子账户 100 + 200。默认桶关闭后应只剔除 50。
+    const parent = account({
+      balanceMicros: "350000000",
+      defaultBucketIncludeInNetWorth: false,
+      subAccounts: [
+        subAccount({ id: "sub-1", balanceMicros: "100000000", includeInNetWorth: true }),
+        subAccount({ id: "sub-2", balanceMicros: "200000000", includeInNetWorth: true }),
+      ],
+    });
+
+    expect(accountNetWorthMicros(parent)).toBe(300000000n);
+    expect(accountVisibleTotalMicros(parent)).toBe(300000000n);
   });
 
   it("uses the parent exclusion as a group-level switch in the summary", () => {

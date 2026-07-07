@@ -3506,7 +3506,7 @@ select:focus-visible {
   width: 64px;
 }
 
-.biz-attachment-tile > button:first-child {
+.biz-attachment-tile__open {
   align-items: center;
   background: transparent;
   border: 0;
@@ -3534,7 +3534,7 @@ select:focus-visible {
   width: 100%;
 }
 
-.biz-attachment-tile > button:last-child {
+.biz-attachment-tile__remove {
   align-items: center;
   background: #ffffff;
   /* border: 1px solid #ff0000; */

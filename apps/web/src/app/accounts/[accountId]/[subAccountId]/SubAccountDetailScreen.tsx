@@ -17,10 +17,10 @@ import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/reco
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useSheetStack, useToast } from "@/providers";
+import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
 import {
   accountGroupMeta,
   defaultBucketMicros,
-  formatMoney,
   microsToInput,
 } from "../../_components/account-utils";
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
@@ -158,11 +158,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     },
   });
 
-  const updateAccountNetWorth = useMutation({
-    mutationFn: (includeInNetWorth: boolean) =>
+  const updateDefaultBucketNetWorth = useMutation({
+    mutationFn: (defaultBucketIncludeInNetWorth: boolean) =>
       apiRequest<Account>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), {
         method: "PATCH",
-        body: { includeInNetWorth },
+        body: { defaultBucketIncludeInNetWorth },
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
@@ -261,6 +261,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
       content: (
         <BalanceEditSheet
           accountId={account.id}
+          allowNegative={account.type !== "credit"}
           initialBalance={microsToInput(subAccountBalance.toString())}
           ledgerId={ledgerId}
           subAccountId={isDefaultSubAccount ? undefined : subAccount!.id}
@@ -331,24 +332,18 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           <IconButton icon={<Pencil size={20} />} label="编辑子账户" onClick={openRename} />
         </header>
 
-        <section className="pt-1 text-center">
-          <span className="mx-auto flex h-[60px] w-[60px] items-center justify-center rounded-[18px] bg-[var(--color-bg-surface)] text-[30px] shadow-[var(--shadow-soft)]">
-            {subAccountIcon}
-          </span>
-          <h1 className="mt-2.5 text-[19px] font-bold text-[var(--color-text-primary)]">
-            {account.name} · {subAccountName}
-          </h1>
-          <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)]">
-            子账户 · {meta.name}
-          </p>
-          <p className="mt-4 text-[13px] text-[var(--color-text-muted)]">子账户余额</p>
-          <p className="mt-0.5 text-[36px] font-bold leading-tight tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-            {formatMoney(subAccountBalance)}
-          </p>
-        </section>
+        <AccountBalanceCard
+          accountType={account.type}
+          balanceLabel="子账户余额"
+          balanceMicros={subAccountBalance.toString()}
+          entries={entries}
+          icon={subAccountIcon}
+          name={`${account.name} · ${subAccountName}`}
+          subtitle={`子账户 · ${meta.name}`}
+        />
 
         <button
-          className="mt-5 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
+          className="mt-4 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
           onClick={openBalanceEdit}
           type="button"
         >
@@ -359,19 +354,16 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           <NetWorthSwitchRow
             checked={
               isDefaultSubAccount
-                ? !account.includeInNetWorth
+                ? account.defaultBucketIncludeInNetWorth === false
                 : subAccount!.includeInNetWorth === false
             }
-            description={
-              isDefaultSubAccount
-                ? "开启后该账户及子账户余额不计入净资产统计"
-                : undefined
-            }
             disabled={
-              isDefaultSubAccount ? updateAccountNetWorth.isPending : updateSubNetWorth.isPending
+              isDefaultSubAccount
+                ? updateDefaultBucketNetWorth.isPending
+                : updateSubNetWorth.isPending
             }
             onCheckedChange={(checked) => {
-              if (isDefaultSubAccount) updateAccountNetWorth.mutate(!checked);
+              if (isDefaultSubAccount) updateDefaultBucketNetWorth.mutate(!checked);
               else updateSubNetWorth.mutate(!checked);
             }}
           />

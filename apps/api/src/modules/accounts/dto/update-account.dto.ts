@@ -31,6 +31,11 @@ export class UpdateAccountDto {
   @IsBoolean()
   includeInNetWorth?: boolean;
 
+  @ApiPropertyOptional({ description: "默认桶是否计入总资产（与账户级总开关区分）" })
+  @IsOptional()
+  @IsBoolean()
+  defaultBucketIncludeInNetWorth?: boolean;
+
   @ApiPropertyOptional({ example: "300000000" })
   @IsOptional()
   @IsString()
