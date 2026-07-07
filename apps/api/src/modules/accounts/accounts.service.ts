@@ -12,7 +12,6 @@ import { CreateAccountDto } from "./dto/create-account.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
 import { AdjustAccountDto } from "./dto/adjust-account.dto";
 import { CreateSubAccountDto } from "./dto/create-sub-account.dto";
-import { SettleAccountDto } from "./dto/settle-account.dto";
 import { UpdateSubAccountDto } from "./dto/update-sub-account.dto";
 import { LedgersService } from "../ledgers/ledgers.service";
 
@@ -32,13 +31,19 @@ export type AccountEntryInput = {
   allowArchived?: boolean;
   // 记账流水（支出/收入/转账）传入的 delta 采用“资产正向”约定：入账为正、出账为负。
   // 对负债账户（信用卡等）需要反向：消费增加已用额度、还款减少已用额度。
-  // 该标记让 applyEntry 按账户类型自动翻转符号；余额调整/结算按绝对值计算，不设此标记。
+  // 该标记让 applyEntry 按账户类型自动翻转符号；余额调整按绝对值计算，不设此标记。
   orientForLiability?: boolean;
+  // 用于往来冲减，防止并发或错误输入把余额扣成负数。
+  preventNegativeBalance?: boolean;
 };
 
 /** 负债类账户：余额（balanceMicros）记为正数的“欠款/已用额度”。 */
 export function isLiabilityAccountType(type: string): boolean {
   return type === "credit" || type === "payable";
+}
+
+function mustStayNonNegative(type: string): boolean {
+  return type === "credit" || type === "receivable" || type === "payable";
 }
 
 @Injectable()
@@ -267,6 +272,10 @@ export class AccountsService {
 
   async create(ledgerId: string, userId: string, input: CreateAccountDto, idempotencyKey?: string) {
     await this.ledgers.assertMember(ledgerId, userId);
+    const balanceMicros = BigInt(input.balanceMicros ?? "0");
+    if (mustStayNonNegative(input.type) && balanceMicros < 0n) {
+      throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
+    }
     return this.idempotency.run(
       { scope: `account.create:${ledgerId}`, key: idempotencyKey, userId },
       () =>
@@ -276,7 +285,7 @@ export class AccountsService {
             type: input.type,
             name: input.name,
             icon: input.icon,
-            balanceMicros: BigInt(input.balanceMicros ?? "0"),
+            balanceMicros,
             includeInNetWorth: input.includeInNetWorth ?? true,
             creditLimitMicros: input.creditLimitMicros ? BigInt(input.creditLimitMicros) : null,
             investmentCostMicros: input.investmentCostMicros
@@ -379,6 +388,9 @@ export class AccountsService {
           throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
         const before = subAccount?.balanceMicros ?? account.balanceMicros;
         const after = BigInt(input.balanceAfterMicros);
+        if (mustStayNonNegative(account.type) && after < 0n) {
+          throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
+        }
         const delta = after - before;
 
         const adjustment = await tx.accountAdjustment.create({
@@ -421,89 +433,6 @@ export class AccountsService {
     );
   }
 
-  async settle(
-    ledgerId: string,
-    accountId: string,
-    userId: string,
-    input: SettleAccountDto,
-    idempotencyKey?: string,
-  ) {
-    await this.ledgers.assertMember(ledgerId, userId);
-    return this.idempotency.run(
-      { scope: `account.settle:${accountId}`, key: idempotencyKey, userId },
-      () => this.settleInner(ledgerId, accountId, userId, input),
-    );
-  }
-
-  private async settleInner(
-    ledgerId: string,
-    accountId: string,
-    userId: string,
-    input: SettleAccountDto,
-  ) {
-    return this.txs.run(
-      async (tx) => {
-        // settleAll/金额上限校验基于当前余额，读之前锁行，防止并发结算超额。
-        await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
-        const account = await tx.account.findFirst({
-          where: { id: accountId, ledgerId, archivedAt: null },
-        });
-        if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-        if (!["receivable", "payable"].includes(account.type)) {
-          throw new AppError(
-            "SETTLEMENT_ACCOUNT_TYPE_INVALID",
-            "只有可收回/需归还账户可以收款或还款",
-            400,
-          );
-        }
-        const subAccount = input.subAccountId
-          ? await tx.subAccount.findFirst({
-              where: { id: input.subAccountId, accountId, ledgerId, archivedAt: null },
-            })
-          : null;
-        if (input.subAccountId && !subAccount)
-          throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
-
-        const current = subAccount?.balanceMicros ?? account.balanceMicros;
-        const amount = input.settleAll ? current : BigInt(input.amountMicros ?? "0");
-        if (amount <= 0n)
-          throw new AppError("INVALID_SETTLEMENT_AMOUNT", "结算金额必须大于 0", 400);
-        if (amount > current)
-          throw new AppError("SETTLEMENT_AMOUNT_TOO_LARGE", "结算金额不能超过账户余额", 400);
-
-        const entry = await this.applyEntry(tx, {
-          ledgerId,
-          accountId,
-          subAccountId: input.subAccountId,
-          entryType: "settlement",
-          amountDeltaMicros: -amount,
-          note: input.note,
-          occurredAt: input.occurredOn ? parseDateOnly(input.occurredOn) : new Date(),
-          createdBy: userId,
-        });
-        if (entry.balanceAfterMicros === 0n) {
-          await tx.account.update({
-            where: { id: accountId },
-            data: { settledAt: new Date(), updatedBy: userId },
-          });
-        }
-        await this.audit.write(
-          {
-            source: "user",
-            actorUserId: userId,
-            ledgerId,
-            action: "account.settle",
-            entityType: "account_entry",
-            entityId: entry.id,
-          },
-          tx,
-        );
-        return entry;
-      },
-      { timeout: 20_000 },
-    );
-  }
-
   async applyEntry(tx: PrismaTransactionClient, input: AccountEntryInput) {
     // 事务默认 READ COMMITTED，“读余额再写绝对值”会在并发下丢失更新；
     // 先锁账户行，让并发写同一账户的事务串行化，entry 的 before/after 才可信。
@@ -533,6 +462,12 @@ export class AccountsService {
         },
       });
       if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+      if (
+        (input.preventNegativeBalance || mustStayNonNegative(account.type)) &&
+        subAccount.balanceMicros + delta < 0n
+      ) {
+        throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
+      }
       await tx.subAccount.update({
         where: { id: input.subAccountId },
         data: {
@@ -544,9 +479,18 @@ export class AccountsService {
 
     const before = account.balanceMicros;
     const after = before + delta;
+    if ((input.preventNegativeBalance || mustStayNonNegative(account.type)) && after < 0n) {
+      throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
+    }
+    const lendAccountStatusUpdate =
+      account.type === "receivable" || account.type === "payable"
+        ? {
+            settledAt: after === 0n ? (account.settledAt ?? new Date()) : null,
+          }
+        : {};
     await tx.account.update({
       where: { id: input.accountId },
-      data: { balanceMicros: after, updatedBy: input.createdBy },
+      data: { balanceMicros: after, ...lendAccountStatusUpdate, updatedBy: input.createdBy },
     });
     return tx.accountEntry.create({
       data: {

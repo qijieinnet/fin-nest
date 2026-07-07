@@ -67,11 +67,14 @@ export function BalanceEditSheet({
     >
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
-        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>
+        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
+          {title}
+        </h2>
         <IconButton
           disabled={save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存余额"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />

@@ -234,8 +234,7 @@ export class ExcelExportService {
       const relationText = (data.relationsByTransaction.get(transaction.id) ?? [])
         .map((relation) => {
           const account = data.accountById.get(relation.accountId);
-          const kind = relation.relationKind.startsWith("receivable") ? "receivable" : "payable";
-          return `${account?.name ?? ""}/${RELATION_KIND_LABELS[kind]}/${microsToYuanNumber(relation.amountMicros)}`;
+          return `${account?.name ?? ""}/${RELATION_KIND_LABELS[relation.relationKind] ?? relation.relationKind}/${microsToYuanNumber(relation.amountMicros)}`;
         })
         .join("；");
       const linkRows = data.linksByTransaction.get(transaction.id) ?? [];

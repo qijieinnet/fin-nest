@@ -978,6 +978,9 @@ export class ExcelImportService {
     }
     const account = registry.accountByName.get(accountName);
     if (!account) throw new Error(`${label}账户「${accountName}」不存在（可先在账户表新增）`);
+    if (!["savings", "credit", "invest"].includes(account.type)) {
+      throw new Error(`${label}账户只能选择储蓄、信用或投资账户`);
+    }
     if (!subAccountName) return { accountRef: account.ref, subAccountRef: null };
     const subAccount = registry.subAccountByKey.get(`${accountName}:${subAccountName}`);
     if (!subAccount)
@@ -985,7 +988,7 @@ export class ExcelImportService {
     return { accountRef: account.ref, subAccountRef: subAccount };
   }
 
-  /** 往来关联格式：账户名/可收回|需归还/金额元，多条用；分隔。 */
+  /** 往来关联格式：账户名/计入可收回|产生需归还|冲减可收回|冲减需归还/金额元，多条用；分隔。 */
   private parseRelationCell(
     registry: Registry,
     transactionType: string,
@@ -999,20 +1002,37 @@ export class ExcelImportService {
       .map((part) => {
         const segments = part.split("/").map((segment) => segment.trim());
         if (segments.length !== 3)
-          throw new Error(`往来关联「${part}」格式无效，应为 账户名/可收回/金额`);
-        const [accountName, kindLabel, amountText] = segments as [string, string, string];
-        const kind = valueOfLabel(RELATION_KIND_LABELS, kindLabel);
-        if (!kind) throw new Error(`往来关联类型「${kindLabel}」无效，应为 可收回 或 需归还`);
+          throw new Error(`往来关联「${part}」格式无效，应为 账户名/计入可收回/金额`);
+        const [accountName, relationKindLabel, amountText] = segments as [string, string, string];
+        const relationKind = valueOfLabel(RELATION_KIND_LABELS, relationKindLabel);
+        if (!relationKind) {
+          throw new Error(
+            `往来关联类型「${relationKindLabel}」无效，应为 计入可收回、产生需归还、冲减可收回 或 冲减需归还`,
+          );
+        }
+        if (
+          transactionType === "expense" &&
+          !["receivable_from_expense", "payable_from_expense"].includes(relationKind)
+        ) {
+          throw new Error(`支出不支持往来关联类型「${relationKindLabel}」`);
+        }
+        if (
+          transactionType === "income" &&
+          !["payable_from_income", "receivable_from_income"].includes(relationKind)
+        ) {
+          throw new Error(`收入不支持往来关联类型「${relationKindLabel}」`);
+        }
         const account = registry.accountByName.get(accountName);
         if (!account) throw new Error(`往来账户「${accountName}」不存在（可先在账户表新增）`);
-        if (account.type !== kind) {
-          throw new Error(`往来账户「${accountName}」类型应为 ${RELATION_KIND_LABELS[kind]}`);
+        const expectedType = relationKind.startsWith("receivable") ? "receivable" : "payable";
+        if (account.type !== expectedType) {
+          throw new Error(`往来账户「${accountName}」类型与「${relationKindLabel}」不匹配`);
         }
         const amountMicros = cellToMicrosString(amountText);
         if (BigInt(amountMicros) <= 0n) throw new Error("往来关联金额必须大于 0");
         return {
           accountRef: account.ref,
-          relationKind: `${kind}_from_${transactionType}`,
+          relationKind,
           amountMicros,
         };
       });

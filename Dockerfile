@@ -42,8 +42,7 @@ COPY packages/db/package.json           packages/db/package.json
 COPY packages/eslint-config/package.json packages/eslint-config/package.json
 COPY packages/shared/package.json       packages/shared/package.json
 COPY packages/tsconfig/package.json     packages/tsconfig/package.json
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir /pnpm/store
+RUN pnpm install --frozen-lockfile --store-dir /pnpm/store
 
 # ---------------------------------------------------------------------------
 # build：拷入源码，构建所有包与应用（含 `prisma generate`），再产出各应用的精简部署目录。
@@ -65,8 +64,7 @@ RUN pnpm build
 
 # 用 pnpm deploy 生成「仅含运行时所需」的独立目录（解引用 workspace 软链，带上 dist / 生成的 prisma client）。
 # inject-workspace-packages 让 workspace 依赖被实际拷入而非软链。
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm --config.inject-workspace-packages=true --filter @fin-nest/api    deploy --prod --store-dir /pnpm/store /prod/api  \
+RUN pnpm --config.inject-workspace-packages=true --filter @fin-nest/api    deploy --prod --store-dir /pnpm/store /prod/api  \
  && pnpm --config.inject-workspace-packages=true --filter @fin-nest/worker deploy --prod --store-dir /pnpm/store /prod/worker \
  && pnpm --config.inject-workspace-packages=true --filter @fin-nest/db     deploy        --store-dir /pnpm/store /prod/migrate
 

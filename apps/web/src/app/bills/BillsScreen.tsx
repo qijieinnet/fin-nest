@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  WalletCards,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -222,29 +223,20 @@ export function BillsScreen() {
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+60px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
         <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 pb-3">
           <div className="flex min-w-0 justify-start">
-            {showLedgerSwitcher ? (
+            <DotBadge className="min-w-0 max-w-full" show={hasNonTimeFilters(filterValue)}>
               <button
-                className="flex min-w-0 items-center gap-1.5 text-[var(--color-text-primary)]"
-                onClick={() => router.push(routes.ledgers)}
+                className="flex min-w-0 items-center gap-1 text-base font-bold text-[var(--color-text-primary)]"
+                onClick={() => setFilterOpen(true)}
                 type="button"
               >
-                <span className="truncate text-base font-bold">
-                  {currentLedger?.name ?? "账本"}
-                </span>
-                <ChevronDown size={14} className="shrink-0 text-[var(--color-text-muted)]" />
+                <span className="truncate text-base font-bold">{periodLabel(filterValue)}</span>
+                <ChevronDown size={16} className="mt-1 shrink-0 text-[var(--color-text-muted)]" />
               </button>
-            ) : null}
+            </DotBadge>
           </div>
-          <DotBadge className="justify-self-center" show={hasNonTimeFilters(filterValue)}>
-            <button
-              className="flex items-center gap-1 text-base font-bold text-[var(--color-text-primary)]"
-              onClick={() => setFilterOpen(true)}
-              type="button"
-            >
-              {periodLabel(filterValue)}
-              <ChevronDown size={16} className="mt-1 text-[var(--color-text-muted)]" />
-            </button>
-          </DotBadge>
+          <h1 className="justify-self-center text-base font-bold text-[var(--color-text-primary)]">
+            {/* 账单 */}
+          </h1>
           <div className="relative flex justify-end">
             <IconButtonGroup
               items={[
@@ -253,11 +245,11 @@ export function BillsScreen() {
                   label: "统计",
                   onClick: () => router.push(routes.stats),
                 },
-                // 仅在有待确认记录时显示「更多」入口。
-                ...(pendingCount > 0
+                // 有待确认记录或启用账本切换时显示「更多」入口。
+                ...(pendingCount > 0 || showLedgerSwitcher
                   ? [
                       {
-                        dot: true,
+                        dot: pendingCount > 0,
                         icon: <Ellipsis size={22} />,
                         label: "更多",
                         onClick: () => setMoreMenuOpen((open) => !open),
@@ -268,18 +260,32 @@ export function BillsScreen() {
             />
             <PopoverMenu
               groups={[
-                [
-                  {
-                    description: pendingCount > 0 ? `${pendingCount} 条待入账` : undefined,
-                    icon: (
-                      <DotBadge show={pendingCount > 0}>
-                        <ClipboardCheck size={18} />
-                      </DotBadge>
-                    ),
-                    label: "待确认",
-                    onSelect: () => router.push(routes.billsPending),
-                  },
-                ],
+                showLedgerSwitcher
+                  ? [
+                      {
+                        description: currentLedger?.name
+                          ? `当前 · ${currentLedger.name}`
+                          : undefined,
+                        icon: <WalletCards size={18} />,
+                        label: "切换账本",
+                        onSelect: () => router.push(routes.ledgers),
+                      },
+                    ]
+                  : [],
+                pendingCount > 0
+                  ? [
+                      {
+                        description: pendingCount > 0 ? `${pendingCount} 条待入账` : undefined,
+                        icon: (
+                          <DotBadge show={pendingCount > 0}>
+                            <ClipboardCheck size={18} />
+                          </DotBadge>
+                        ),
+                        label: "待确认",
+                        onSelect: () => router.push(routes.billsPending),
+                      },
+                    ]
+                  : [],
               ]}
               onOpenChange={setMoreMenuOpen}
               open={moreMenuOpen}

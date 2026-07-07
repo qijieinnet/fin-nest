@@ -23,6 +23,7 @@ import { CreateQuickTemplateDto, UpdateQuickTemplateDto } from "./dto/quick-temp
 
 type AutoPayload = {
   accountId?: string | null;
+  amountMicros?: string | null;
   categoryId?: string | null;
   fromAccountId?: string | null;
   fromSubAccountId?: string | null;
@@ -47,6 +48,8 @@ type AccountPair = {
   accountId: string | null;
   subAccountId: string | null;
 };
+
+const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
 
 @Injectable()
 export class AutomationService {
@@ -124,6 +127,8 @@ export class AutomationService {
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
     await this.assertAutoPayload(ledgerId, type, {
+      amountMicros:
+        input.amountMicros === undefined ? existing.amountMicros.toString() : input.amountMicros,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -251,6 +256,8 @@ export class AutomationService {
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
     await this.assertAutoPayload(ledgerId, existing.type, {
+      amountMicros:
+        input.amountMicros === undefined ? existing.amountMicros.toString() : input.amountMicros,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -419,6 +426,8 @@ export class AutomationService {
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
     await this.assertAutoPayload(ledgerId, type, {
+      amountMicros:
+        input.amountMicros === undefined ? existing.amountMicros?.toString() : input.amountMicros,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -714,6 +723,7 @@ export class AutomationService {
     }
     if (payload.personId) await this.assertPerson(ledgerId, payload.personId);
     await this.assertRelations(ledgerId, type, payload.relations ?? []);
+    this.assertRelationTotal(payload.amountMicros, payload.relations ?? []);
     if (payload.insuranceId) await this.assertInsurance(ledgerId, payload.insuranceId);
     if (payload.itemId) await this.assertItem(ledgerId, payload.itemId);
   }
@@ -752,6 +762,20 @@ export class AutomationService {
       if (account.type !== expectedType) {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
       }
+    }
+  }
+
+  private assertRelationTotal(
+    amountMicros: string | null | undefined,
+    relations: StoredRelation[],
+  ) {
+    if (!amountMicros || relations.length === 0) return;
+    const relationTotal = relations.reduce(
+      (sum, relation) => sum + BigInt(relation.amountMicros),
+      0n,
+    );
+    if (relationTotal > BigInt(amountMicros)) {
+      throw new AppError("RELATION_AMOUNT_TOO_LARGE", "关联金额不能超过交易金额", 400);
     }
   }
 
@@ -856,6 +880,13 @@ export class AutomationService {
       where: { id: accountId, ledgerId, archivedAt: null },
     });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    if (!MONEY_ACCOUNT_TYPES.includes(account.type)) {
+      throw new AppError(
+        "TRANSACTION_ACCOUNT_TYPE_INVALID",
+        "收付款账户只能选择储蓄、信用或投资账户",
+        400,
+      );
+    }
     if (!subAccountId) return;
     const subAccount = await this.prisma.client.subAccount.findFirst({
       where: { id: subAccountId, ledgerId, accountId, archivedAt: null },

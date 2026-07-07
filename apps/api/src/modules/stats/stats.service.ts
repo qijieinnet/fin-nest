@@ -115,7 +115,10 @@ export class StatsService {
    * 与账单列表一致的筛选条件（分类 / 账户 / 人员 / 金额 / 备注），叠加到统计查询上。
    * 时间范围与类型另行处理，这里不涉及。
    */
-  private buildFilterWhere(query: StatsQueryDto): Prisma.TransactionWhereInput {
+  private async buildFilterWhere(
+    ledgerId: string,
+    query: StatsQueryDto,
+  ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = {};
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.subcategoryId) where.subcategoryId = query.subcategoryId;
@@ -139,13 +142,19 @@ export class StatsService {
         ],
       });
     } else if (query.accountId) {
-      sideFilters.push({
-        OR: [
-          { accountId: query.accountId },
-          { fromAccountId: query.accountId },
-          { toAccountId: query.accountId },
-        ],
-      });
+      const relationTransactionIds = await this.transactionIdsLinkedToAccount(
+        ledgerId,
+        query.accountId,
+      );
+      const accountMatches: Prisma.TransactionWhereInput[] = [
+        { accountId: query.accountId },
+        { fromAccountId: query.accountId },
+        { toAccountId: query.accountId },
+      ];
+      if (relationTransactionIds.length > 0) {
+        accountMatches.push({ id: { in: relationTransactionIds } });
+      }
+      sideFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
       const subAccountId =
         query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
@@ -160,6 +169,17 @@ export class StatsService {
     if (sideFilters.length) where.AND = sideFilters;
     if (query.note) where.note = { contains: query.note };
     return where;
+  }
+
+  private async transactionIdsLinkedToAccount(
+    ledgerId: string,
+    accountId: string,
+  ): Promise<string[]> {
+    const rows = await this.prisma.client.transactionAccountRelation.findMany({
+      where: { ledgerId, accountId },
+      select: { transactionId: true },
+    });
+    return [...new Set(rows.map((row) => row.transactionId))];
   }
 
   /**
@@ -205,7 +225,7 @@ export class StatsService {
           deletedAt: null,
           type: { in: ["expense", "income"] },
           occurredOn: { gte: windowStart, lt: windowEnd },
-          ...this.buildFilterWhere(query),
+          ...(await this.buildFilterWhere(ledgerId, query)),
         },
         select: {
           type: true,
@@ -306,7 +326,7 @@ export class StatsService {
         deletedAt: null,
         type: { in: ["expense", "income"] },
         occurredOn: { gte: windowStart, lt: windowEnd },
-        ...this.buildFilterWhere(query),
+        ...(await this.buildFilterWhere(ledgerId, query)),
       },
       select: { type: true, occurredOn: true, effectiveAmountMicros: true },
     });

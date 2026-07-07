@@ -57,7 +57,7 @@ export function isMoneyAccount(type: string): boolean {
   return type === "savings" || type === "credit" || type === "invest";
 }
 
-/** 可收回 / 需归还两类支持收款、还款结算。 */
+/** 可收回 / 需归还两类是往来项目，支持余额调整和关联记录。 */
 export function isLendAccount(type: string): boolean {
   return type === "receivable" || type === "payable";
 }
@@ -185,15 +185,19 @@ export function accountSubtitle(account: Account): string {
 
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   adjustment: "余额调整",
-  settlement: "收款 / 还款",
+  settlement: "历史收款 / 还款",
   expense: "支出",
   income: "收入",
   transfer_in: "转入",
   transfer_out: "转出",
+  receivable_increase: "可收回增加",
+  receivable_decrease: "可收回减少",
+  payable_increase: "需归还增加",
+  payable_decrease: "需归还减少",
   reversal: "冲正",
 };
 
 export function entryTypeLabel(entryType: string, accountType: string): string {
-  if (entryType === "settlement") return accountType === "receivable" ? "收款" : "还款";
+  if (entryType === "settlement") return accountType === "receivable" ? "历史收款" : "历史还款";
   return ENTRY_TYPE_LABELS[entryType] ?? "变动";
 }

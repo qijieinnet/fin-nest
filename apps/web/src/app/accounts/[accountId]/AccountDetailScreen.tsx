@@ -28,7 +28,6 @@ import {
   DEFAULT_SUB_ACCOUNT_ID,
   RelatedTransactionList,
 } from "../_components/RelatedTransactionList";
-import { SettleSheet } from "../_components/SettleSheet";
 import {
   accountGroupMeta,
   accountTotalMicros,
@@ -227,6 +226,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const displayTotal = accountVisibleTotalMicros(account);
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
+  const canEditBalance = moneyAccount || isLend;
   const hasSplitSubAccounts = account.subAccounts.length > 0;
   const hasMultipleSubAccounts = account.subAccounts.length > 1;
   const showRelatedRecordsLink = !hasSplitSubAccounts;
@@ -251,7 +251,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       content: (
         <BalanceEditSheet
           accountId={account.id}
-          allowNegative={account.type !== "credit"}
+          allowNegative={!["credit", "receivable", "payable"].includes(account.type)}
           initialBalance={microsToInput(
             subAccount ? subAccount.balanceMicros : account.balanceMicros,
           )}
@@ -268,13 +268,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
       content: <AccountEditorSheet ledgerId={ledgerId} parentAccount={account} />,
-    });
-  };
-
-  const openSettle = () => {
-    push({
-      hideDefaultHeader: true,
-      content: <SettleSheet account={account} ledgerId={ledgerId} />,
     });
   };
 
@@ -442,7 +435,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
-        {moneyAccount && !hasSplitSubAccounts ? (
+        {canEditBalance && !hasSplitSubAccounts ? (
           <button
             className="mt-3 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
             onClick={() => openBalanceEdit()}
@@ -490,16 +483,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             onCheckedChange={(checked) => updateNetWorth.mutate(!checked)}
           />
         </div>
-
-        {isLend && !settled && total > 0n ? (
-          <button
-            className="mt-4 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-tint)] text-[15px] font-semibold text-[var(--color-tint-contrast)]"
-            onClick={openSettle}
-            type="button"
-          >
-            {account.type === "receivable" ? "收款" : "还款"}
-          </button>
-        ) : null}
 
         {isLend || showRelatedRecordsLink || showAdjustmentRecordsLink ? (
           <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">

@@ -23,6 +23,23 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
 };
 
 const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
+const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
+
+function relationAccountEntry(relationKind: string, amountMicros: bigint) {
+  if (relationKind === "receivable_from_expense") {
+    return { entryType: "receivable_increase", amountDeltaMicros: amountMicros };
+  }
+  if (relationKind === "payable_from_income") {
+    return { entryType: "payable_increase", amountDeltaMicros: amountMicros };
+  }
+  if (relationKind === "receivable_from_income") {
+    return { entryType: "receivable_decrease", amountDeltaMicros: -amountMicros };
+  }
+  if (relationKind === "payable_from_expense") {
+    return { entryType: "payable_decrease", amountDeltaMicros: -amountMicros };
+  }
+  throw new AppError("RELATION_KIND_MISMATCH", "关联类型与交易类型不匹配", 400);
+}
 
 export type CreateTransactionOptions = {
   source?: "manual" | "quick" | "auto" | "import" | "ai";
@@ -42,10 +59,10 @@ export class TransactionsService {
     private readonly files: FilesService,
   ) {}
 
-  private buildListWhere(
+  private async buildListWhere(
     ledgerId: string,
     query: ListTransactionsQueryDto,
-  ): Prisma.TransactionWhereInput {
+  ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = { ledgerId, deletedAt: null };
     if (query.type) where.type = query.type;
     if (query.categoryId) where.categoryId = query.categoryId;
@@ -77,13 +94,19 @@ export class TransactionsService {
         ],
       });
     } else if (query.accountId) {
-      sideFilters.push({
-        OR: [
-          { accountId: query.accountId },
-          { fromAccountId: query.accountId },
-          { toAccountId: query.accountId },
-        ],
-      });
+      const relationTransactionIds = await this.transactionIdsLinkedToAccount(
+        ledgerId,
+        query.accountId,
+      );
+      const accountMatches: Prisma.TransactionWhereInput[] = [
+        { accountId: query.accountId },
+        { fromAccountId: query.accountId },
+        { toAccountId: query.accountId },
+      ];
+      if (relationTransactionIds.length > 0) {
+        accountMatches.push({ id: { in: relationTransactionIds } });
+      }
+      sideFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
       const subAccountId =
         query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
@@ -100,10 +123,21 @@ export class TransactionsService {
     return where;
   }
 
+  private async transactionIdsLinkedToAccount(
+    ledgerId: string,
+    accountId: string,
+  ): Promise<string[]> {
+    const rows = await this.prisma.client.transactionAccountRelation.findMany({
+      where: { ledgerId, accountId },
+      select: { transactionId: true },
+    });
+    return [...new Set(rows.map((row) => row.transactionId))];
+  }
+
   async list(ledgerId: string, userId: string, query: ListTransactionsQueryDto = {}) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.transaction.findMany({
-      where: this.buildListWhere(ledgerId, query),
+      where: await this.buildListWhere(ledgerId, query),
       orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
       take: query.limit ?? 200,
       skip: query.offset ?? 0,
@@ -115,7 +149,7 @@ export class TransactionsService {
     await this.ledgers.assertMember(ledgerId, userId);
     const grouped = await this.prisma.client.transaction.groupBy({
       by: ["type"],
-      where: this.buildListWhere(ledgerId, query),
+      where: await this.buildListWhere(ledgerId, query),
       _sum: { effectiveAmountMicros: true },
       _count: { _all: true },
     });
@@ -392,16 +426,16 @@ export class TransactionsService {
       throw new AppError("TRANSFER_ASSET_LINK_UNSUPPORTED", "转账不支持关联保险或物品", 400);
     }
     if (input.type !== "transfer" && input.accountId) {
-      await this.accounts.assertActiveAccount(tx, ledgerId, input.accountId, input.subAccountId);
+      await this.assertMoneyAccount(tx, ledgerId, input.accountId, input.subAccountId);
     }
     if (input.type === "transfer") {
-      await this.accounts.assertActiveAccount(
+      await this.assertMoneyAccount(
         tx,
         ledgerId,
         input.fromAccountId!,
         input.fromSubAccountId,
       );
-      await this.accounts.assertActiveAccount(
+      await this.assertMoneyAccount(
         tx,
         ledgerId,
         input.toAccountId!,
@@ -580,6 +614,30 @@ export class TransactionsService {
     }
   }
 
+  private async assertMoneyAccount(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    accountId: string,
+    subAccountId?: string | null,
+  ) {
+    const account = await tx.account.findFirst({
+      where: { id: accountId, ledgerId, archivedAt: null },
+    });
+    if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    if (!MONEY_ACCOUNT_TYPES.includes(account.type)) {
+      throw new AppError(
+        "TRANSACTION_ACCOUNT_TYPE_INVALID",
+        "收付款账户只能选择储蓄、信用或投资账户",
+        400,
+      );
+    }
+    if (!subAccountId) return;
+    const subAccount = await tx.subAccount.findFirst({
+      where: { id: subAccountId, ledgerId, accountId, archivedAt: null },
+    });
+    if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+  }
+
   private async writeRelationsAndEntries(
     tx: PrismaTransactionClient,
     ledgerId: string,
@@ -647,22 +705,23 @@ export class TransactionsService {
     }
 
     for (const relation of input.relations ?? []) {
+      const amountMicros = BigInt(relation.amountMicros);
+      const relationEntry = relationAccountEntry(relation.relationKind, amountMicros);
       await tx.transactionAccountRelation.create({
         data: {
           ledgerId,
           transactionId,
           accountId: relation.accountId,
           relationKind: relation.relationKind,
-          amountMicros: BigInt(relation.amountMicros),
+          amountMicros,
         },
       });
       await this.accounts.applyEntry(tx, {
         ledgerId,
         accountId: relation.accountId,
-        entryType: relation.relationKind.startsWith("receivable")
-          ? "receivable_increase"
-          : "payable_increase",
-        amountDeltaMicros: BigInt(relation.amountMicros),
+        entryType: relationEntry.entryType,
+        amountDeltaMicros: relationEntry.amountDeltaMicros,
+        preventNegativeBalance: relationEntry.amountDeltaMicros < 0n,
         transactionId,
         note: input.note,
         occurredAt,

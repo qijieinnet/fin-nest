@@ -364,6 +364,7 @@ export function AutoRuleEditorSheet({
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
           label="保存自动记账"
+          loading={save.isPending}
           variant="primary"
           type="submit"
         />
@@ -489,11 +490,11 @@ export function AutoRuleEditorSheet({
                 enabled={linkedRelationsEnabled}
                 hint={
                   type === "income"
-                    ? "这笔收入将自动计入选中的可收回项目并参与计算"
-                    : "这笔支出将自动计入选中的需归还项目并参与计算"
+                    ? "这笔收入将自动冲减选中的可收回项目并参与计算"
+                    : "这笔支出将自动冲减选中的需归还项目并参与计算"
                 }
                 items={linkedRelationItems}
-                label={`关联${linkedRelationLabel}项目`}
+                label={`冲减${linkedRelationLabel}项目`}
                 onChange={setLinkedRelationItems}
                 onEnabledChange={setLinkedRelationsEnabled}
               />

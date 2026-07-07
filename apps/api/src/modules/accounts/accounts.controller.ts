@@ -23,7 +23,6 @@ import { AccountsService } from "./accounts.service";
 import { AdjustAccountDto } from "./dto/adjust-account.dto";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { CreateSubAccountDto } from "./dto/create-sub-account.dto";
-import { SettleAccountDto } from "./dto/settle-account.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
 import { UpdateSubAccountDto } from "./dto/update-sub-account.dto";
 
@@ -163,24 +162,6 @@ export class AccountsController {
     @Param("accountId") accountId: string,
   ): Promise<void> {
     await this.accounts.archive(ledgerId, accountId, (auth as SessionAuthContext).userId);
-  }
-
-  @Post(":accountId/settlements")
-  @ApiCreatedResponse()
-  settle(
-    @CurrentAuth() auth: AuthContext,
-    @Param("ledgerId") ledgerId: string,
-    @Param("accountId") accountId: string,
-    @Body() body: SettleAccountDto,
-    @Headers("idempotency-key") idempotencyKey?: string,
-  ) {
-    return this.accounts.settle(
-      ledgerId,
-      accountId,
-      (auth as SessionAuthContext).userId,
-      body,
-      idempotencyKey,
-    );
   }
 
   @Post(":accountId/adjustments")

@@ -497,7 +497,9 @@ income
 transfer_out
 transfer_in
 receivable_increase
+receivable_decrease
 payable_increase
+payable_decrease
 settlement
 adjustment
 reversal
@@ -650,10 +652,12 @@ payable_from_expense
 
 - `receivable_from_expense` 文案为“支出计入可收回”。
 - `payable_from_income` 文案为“收入产生需归还”。
-- `receivable_from_income` 文案为“收入关联可收回”。
-- `payable_from_expense` 文案为“支出关联需归还”。
+- `receivable_from_income` 文案为“收入冲减可收回”。
+- `payable_from_expense` 文案为“支出冲减需归还”。
 - 每条 relation 会产生对应的 account_entries。
 - 每条 relation 的金额都会从交易原始金额中扣减，用于计算交易有效金额。
+- `receivable_from_expense`、`payable_from_income` 会增加对应可收回/需归还余额。
+- `receivable_from_income`、`payable_from_expense` 会减少对应可收回/需归还余额，且不能把余额扣成负数。
 - 交易列表、收支统计、计划命中默认使用交易有效金额。
 - 账户现金流仍按交易原始金额处理。
 

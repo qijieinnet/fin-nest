@@ -161,10 +161,12 @@ export const CATEGORY_TYPE_LABELS: Record<string, string> = {
 
 export const BOOLEAN_LABELS: Record<string, string> = { true: "是", false: "否" };
 
-/** 往来关联里 可收回/需归还 的标记，编码格式：账户名/可收回/金额元，多条用；分隔。 */
+/** 往来关联标记，编码格式：账户名/计入可收回/金额元，多条用；分隔。 */
 export const RELATION_KIND_LABELS: Record<string, string> = {
-  receivable: "可收回",
-  payable: "需归还",
+  receivable_from_expense: "计入可收回",
+  payable_from_income: "产生需归还",
+  receivable_from_income: "冲减可收回",
+  payable_from_expense: "冲减需归还",
 };
 
 export function labelOf(map: Record<string, string>, value: string | null | undefined): string {

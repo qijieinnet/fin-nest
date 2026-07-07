@@ -857,8 +857,8 @@ export function TransactionForm({
     type === "income" ? "这笔收入中需要归还他人的部分" : "这笔支出中可向他人收回的部分";
   const linkedRelationHint =
     type === "income"
-      ? "这笔收入将自动计入选中的可收回项目并参与计算"
-      : "这笔支出将自动计入选中的需归还项目并参与计算";
+      ? "这笔收入将自动冲减选中的可收回项目并参与计算"
+      : "这笔支出将自动冲减选中的需归还项目并参与计算";
 
   const renderOrderedField = (field: string) => {
     switch (field) {
@@ -1011,7 +1011,7 @@ export function TransactionForm({
               enabled={linkedRelationsEnabled}
               hint={linkedRelationHint}
               items={linkedRelationItems}
-              label={`关联${linkedRelationLabel}项目`}
+              label={`冲减${linkedRelationLabel}项目`}
               onChange={setLinkedRelationItems}
               onEnabledChange={setLinkedRelationsEnabled}
             />

@@ -124,7 +124,7 @@ function relationBucket(relationKind: string): RelationBucket {
 
 function relationLabels(type: TransactionDetail["type"]) {
   return {
-    linked: type === "income" ? "关联可收回项目" : "关联需归还项目",
+    linked: type === "income" ? "冲减可收回项目" : "冲减需归还项目",
     primary: type === "income" ? "需归还" : "可收回",
   };
 }

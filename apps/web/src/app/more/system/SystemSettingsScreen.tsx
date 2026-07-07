@@ -36,7 +36,7 @@ export function SystemSettingsScreen() {
                   账单页显示账本切换
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                  开启后账单页顶部显示账本名称，可点击切换账本
+                  开启后账单页「更多」中显示账本切换入口
                 </span>
               </span>
               <Switch
