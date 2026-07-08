@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChartPie,
-  ChevronDown,
   ClipboardCheck,
   Ellipsis,
   Pencil,
@@ -17,7 +16,7 @@ import {
   type BusinessFilterValue,
   defaultFilterValue,
   EmptyState,
-  hasNonTimeFilters,
+  filterButtonItem,
   FilterSheet,
   LoadingState,
   MoneyText,
@@ -32,6 +31,7 @@ import {
   MobileAppShell,
   MobileTabBar,
   PopoverMenu,
+  usePageScrolled,
 } from "@/components/ui";
 import {
   apiRequest,
@@ -111,6 +111,7 @@ export function BillsScreen() {
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const scrolled = usePageScrolled();
   const [transactionPendingDelete, setTransactionPendingDelete] = useState<Transaction | null>(
     null,
   );
@@ -220,26 +221,14 @@ export function BillsScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+60px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
-        <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1 pb-3">
-          <div className="flex min-w-0 justify-start">
-            <DotBadge className="min-w-0 max-w-full" show={hasNonTimeFilters(filterValue)}>
-              <button
-                className="flex min-w-0 items-center gap-1 text-base font-bold text-[var(--color-text-primary)]"
-                onClick={() => setFilterOpen(true)}
-                type="button"
-              >
-                <span className="truncate text-base font-bold">{periodLabel(filterValue)}</span>
-                <ChevronDown size={16} className="mt-1 shrink-0 text-[var(--color-text-muted)]" />
-              </button>
-            </DotBadge>
-          </div>
-          <h1 className="justify-self-center text-base font-bold text-[var(--color-text-primary)]">
-            {/* 账单 */}
-          </h1>
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+60px+env(safe-area-inset-bottom))]">
+        <header
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end gap-2 bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
+        >
           <div className="relative flex justify-end">
             <IconButtonGroup
               items={[
+                filterButtonItem(filterValue, () => setFilterOpen(true)),
                 {
                   icon: <ChartPie size={22} />,
                   label: "统计",

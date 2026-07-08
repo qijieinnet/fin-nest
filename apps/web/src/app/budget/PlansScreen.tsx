@@ -1,10 +1,18 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, ChevronRight, Eye, Plus } from "lucide-react";
+import { Ban, ChevronRight, Plus } from "lucide-react";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
-import { EdgeFade, IconButton, MobileAppShell, MobileTabBar, Switch, Tabs } from "@/components/ui";
+import {
+  EdgeFade,
+  IconButton,
+  MobileAppShell,
+  MobileTabBar,
+  Switch,
+  Tabs,
+  usePageScrolled,
+} from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Plan, type PlanKind } from "@/lib/api";
 import { usePlanProgress, usePlans, useStoppedPlans } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -100,6 +108,7 @@ export function PlansScreen() {
   const { ledgerId } = useLedger();
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
+  const scrolled = usePageScrolled();
   const [tab, setTab] = useState<PlanKind>("expense");
   const plansQuery = usePlans(ledgerId);
   const stoppedPlansQuery = useStoppedPlans(ledgerId);
@@ -270,8 +279,10 @@ export function PlansScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
-        <header className="flex items-center justify-end px-1 pb-3">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))]">
+        <header
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
+        >
           <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建计划"
@@ -332,9 +343,6 @@ export function PlansScreen() {
           预测
         </h2>
         <div className="flex items-center gap-2 rounded-[18px] bg-[var(--color-bg-surface)] px-3 py-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]">
-            <Eye size={18} />
-          </span>
           <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
           <Switch
             checked={foresightOn}

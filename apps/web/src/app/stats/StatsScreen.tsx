@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -8,11 +8,11 @@ import {
   CategoryIcon,
   defaultFilterValue,
   EmptyState,
+  FilterButton,
   FilterSheet,
-  hasNonTimeFilters,
   LoadingState,
 } from "@/components/business";
-import { DotBadge, IconButton, MobileAppShell, Tabs } from "@/components/ui";
+import { IconButton, MobileAppShell, Tabs } from "@/components/ui";
 import type { StatsCategoryEntry, TransactionListQuery } from "@/lib/api";
 import { categoryOptions, moneyAccountOptions, personOptions } from "@/lib/data/options";
 import {
@@ -31,7 +31,7 @@ import {
   TrendRangeSelect,
   type TrendRange,
 } from "../accounts/_components/TrendRangeSelect";
-import { filterToQuery, periodLabel, timeRangeFromFilter } from "../bills/_components/bill-utils";
+import { filterToQuery, timeRangeFromFilter } from "../bills/_components/bill-utils";
 import { CategoryBillsSheet } from "./_components/CategoryBillsSheet";
 
 type StatsType = "expense" | "income";
@@ -257,18 +257,13 @@ export function StatsScreen() {
               </span>
             </div>
           ) : (
-            <DotBadge className="justify-self-center" show={hasNonTimeFilters(filterValue)}>
-              <button
-                className="flex items-center gap-1 text-base font-bold text-[var(--color-text-primary)]"
-                onClick={() => setFilterOpen(true)}
-                type="button"
-              >
-                {periodLabel(filterValue)}
-                <ChevronDown size={16} className="mt-1 text-[var(--color-text-muted)]" />
-              </button>
-            </DotBadge>
+            <div />
           )}
-          <div />
+          <div className="flex justify-end">
+            {drilled ? null : (
+              <FilterButton value={filterValue} onOpen={() => setFilterOpen(true)} />
+            )}
+          </div>
         </header>
 
         {drilled ? null : (

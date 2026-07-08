@@ -4,9 +4,14 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
 
 export type IconButtonGroupItem = {
-  /** 右上角红点提示（如存在待确认记录）。 */
+  /** 右上角提示圆点（如存在待确认记录 / 生效中的筛选项）。 */
   dot?: boolean;
-  icon: ReactNode;
+  /** 圆点颜色：danger 红点（默认），brand 蓝点。 */
+  dotTone?: "danger" | "brand";
+  /** 图标按钮内容，与 text 二选一。 */
+  icon?: ReactNode;
+  /** 直接展示文字（自适应宽度），与 icon 二选一。 */
+  text?: string;
   label: string;
   onClick: () => void;
 };
@@ -30,7 +35,10 @@ export function IconButtonGroup({
         <button
           aria-label={item.label}
           className={cn(
-            "relative flex h-10 w-12 items-center justify-center text-[var(--color-text-primary)] active:bg-[var(--color-control-pressed)]",
+            "relative flex h-10 items-center justify-center text-[var(--color-text-primary)] active:bg-[var(--color-control-pressed)]",
+            item.text
+              ? "px-3.5 text-sm font-semibold"
+              : "w-12",
             index > 0 && "border-l border-[var(--color-border-subtle)]",
           )}
           key={item.label}
@@ -38,11 +46,16 @@ export function IconButtonGroup({
           title={item.label}
           type="button"
         >
-          {item.icon}
+          {item.text ? <span className="whitespace-nowrap">{item.text}</span> : item.icon}
           {item.dot ? (
             <span
               aria-hidden
-              className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-[var(--color-accent-expense)]"
+              className={cn(
+                "absolute right-2 top-1.5 h-2 w-2 rounded-full",
+                item.dotTone === "brand"
+                  ? "bg-[var(--color-tint)]"
+                  : "bg-[var(--color-accent-expense)]",
+              )}
             />
           ) : null}
         </button>

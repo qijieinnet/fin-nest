@@ -101,6 +101,24 @@ select:focus-visible {
   background: var(--color-bg-app);
 }
 
+/* 固定页眉：实底盖住状态栏与按钮，底部用 ::after 渐隐过渡；仅滚动时显示，避免遮住顶部内容（与 .navigation-bar 一致）。 */
+.app-sticky-header::after {
+  background: linear-gradient(180deg, var(--color-bg-app), rgba(254, 254, 254, 0));
+  content: "";
+  height: 20px;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  transition: opacity 180ms ease;
+}
+
+.app-sticky-header--scrolled::after {
+  opacity: 1;
+}
+
 .ui-button,
 .ui-icon-button,
 .ui-menu__item,

@@ -1,5 +1,22 @@
 import type { BusinessFilterValue } from "./filter-types";
 
+const TIME_PRESET_LABELS: Record<NonNullable<BusinessFilterValue["timePreset"]>, string> = {
+  month: "本月",
+  lastmonth: "上月",
+  week: "本周",
+  lastweek: "上周",
+  "30d": "近30天",
+  year: "今年",
+  lastyear: "上年",
+  all: "全部",
+  custom: "自定义",
+};
+
+/** 当前筛选的周期标题，如「本月」「近30天」。 */
+export function periodLabel(value: BusinessFilterValue): string {
+  return TIME_PRESET_LABELS[value.timePreset ?? "month"];
+}
+
 function hasAny(...items: unknown[]): boolean {
   return items.some((item) =>
     Array.isArray(item) ? item.length > 0 : item !== undefined && item !== null && item !== "",

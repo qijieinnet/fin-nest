@@ -3,7 +3,7 @@
 import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { EdgeFade, IconButton, MobileAppShell, MobileTabBar } from "@/components/ui";
+import { EdgeFade, IconButton, MobileAppShell, MobileTabBar, usePageScrolled } from "@/components/ui";
 import type { Account } from "@/lib/api";
 import { useAccounts } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
@@ -25,6 +25,7 @@ export function AccountsScreen() {
   const { ledgerId } = useLedger();
   const { push } = useSheetStack();
   const decimalPlaces = useDecimalPlaces();
+  const scrolled = usePageScrolled();
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
   const netWorth = netWorthSummary(accounts);
@@ -96,8 +97,10 @@ export function AccountsScreen() {
 
   return (
     <MobileAppShell>
-      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
-        <header className="flex items-center justify-end px-1 pb-3">
+      <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))]">
+        <header
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
+        >
           <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建账户"

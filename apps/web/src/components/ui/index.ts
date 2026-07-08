@@ -5,6 +5,7 @@ export { DragHandle } from "./DragHandle";
 export { useDragSort, arrayMove, shiftFor } from "./useDragSort";
 export type { DragSortState } from "./useDragSort";
 export { EdgeFade } from "./EdgeFade";
+export { usePageScrolled } from "./usePageScrolled";
 export { IconButton } from "./IconButton";
 export { IconButtonGroup } from "./IconButtonGroup";
 export type { IconButtonGroupItem } from "./IconButtonGroup";

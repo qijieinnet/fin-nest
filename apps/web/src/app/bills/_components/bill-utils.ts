@@ -1,4 +1,5 @@
 import type { BusinessFilterValue } from "@/components/business";
+import { periodLabel } from "@/components/business";
 import type { Transaction, TransactionListQuery } from "@/lib/api";
 import { resolveFilterAccountOptionId } from "@/lib/data/options";
 import { parseMoneyToMicros } from "@/lib/money";
@@ -21,22 +22,8 @@ function ymd(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-const TIME_PRESET_LABELS: Record<NonNullable<BusinessFilterValue["timePreset"]>, string> = {
-  month: "本月",
-  lastmonth: "上月",
-  week: "本周",
-  lastweek: "上周",
-  "30d": "近30天",
-  year: "今年",
-  lastyear: "上年",
-  all: "全部",
-  custom: "自定义",
-};
-
-/** 汇总卡片的周期标题，如「本月」「近30天」。 */
-export function periodLabel(value: BusinessFilterValue): string {
-  return TIME_PRESET_LABELS[value.timePreset ?? "month"];
-}
+// periodLabel 已迁到 business/filter-utils，供筛选按钮与统计页共用；此处再导出保持既有引用路径。
+export { periodLabel };
 
 /** 把筛选弹层的时间选择（预设或自定义）解析成交易列表的日期范围。 */
 export function timeRangeFromFilter(value: BusinessFilterValue): {

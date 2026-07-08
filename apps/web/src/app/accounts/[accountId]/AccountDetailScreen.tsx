@@ -6,7 +6,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
-import { Button, IconButton, IconButtonGroup, MobileAppShell, Switch } from "@/components/ui";
+import {
+  Button,
+  IconButton,
+  IconButtonGroup,
+  MobileAppShell,
+  Switch,
+  usePageScrolled,
+} from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -121,6 +128,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const { ledgerId } = useLedger();
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
+  const scrolled = usePageScrolled();
   const accountsQuery = useAccounts(ledgerId);
   const transactionsQuery = useTransactions(ledgerId, { accountId });
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -391,8 +399,10 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         }}
         subAccount={pendingDelete?.kind === "sub"}
       />
-      <main className="min-h-dvh px-4 pb-12 pt-[calc(12px+env(safe-area-inset-top))]">
-        <header className="flex items-center justify-between pb-2">
+      <main className="min-h-dvh px-4 pb-12">
+        <header
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-between bg-[var(--color-bg-app)] px-4 pt-[calc(12px+env(safe-area-inset-top))] pb-2`}
+        >
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
             label="返回账户"

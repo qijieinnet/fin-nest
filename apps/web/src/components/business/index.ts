@@ -11,6 +11,7 @@ export { CategoryRingChart } from "./CategoryRingChart";
 export { DateWheelPicker } from "./DateWheelPicker";
 export { EmptyState } from "./EmptyState";
 export { FilterBar } from "./FilterBar";
+export { FilterButton, filterButtonItem } from "./FilterButton";
 export { FilterSheet } from "./FilterSheet";
 export { InlineHint } from "./InlineHint";
 export { LoadingState } from "./LoadingState";
@@ -32,7 +33,7 @@ export {
   ToggleCard,
 } from "./TransactionFieldRows";
 export { TransactionTypeSwitch } from "./TransactionTypeSwitch";
-export { countActiveFilters, hasNonTimeFilters, resetFilterValue } from "./filter-utils";
+export { countActiveFilters, hasNonTimeFilters, periodLabel, resetFilterValue } from "./filter-utils";
 export { defaultFilterValue } from "./filter-types";
 export type { AssetLinkOption } from "./AssetLinkCard";
 export type {
