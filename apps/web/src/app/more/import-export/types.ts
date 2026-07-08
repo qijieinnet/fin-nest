@@ -10,6 +10,16 @@ export type ImportResult = {
   warnings: ImportRowIssue[];
 };
 
+/** dryRun=false 提交后返回的后台任务标识。 */
+export type ImportJobEnqueued = { jobId: string };
+
+/** 后台导入任务状态；succeeded 时 result 为最终 ImportResult。 */
+export type ImportJobStatusResult = {
+  status: "running" | "succeeded" | "failed";
+  result: ImportResult | null;
+  error: string | null;
+};
+
 export type RestoreResult = { counts: Record<string, number> };
 
 /** counts key → 界面展示名，顺序即展示顺序。 */

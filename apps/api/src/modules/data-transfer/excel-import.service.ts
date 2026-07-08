@@ -8,6 +8,7 @@ import {
   PrismaService,
   PrismaTransactionClient,
 } from "@fin-nest/backend";
+import { Prisma } from "@fin-nest/db";
 import ExcelJS from "exceljs";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { TransactionsService } from "../transactions/transactions.service";
@@ -168,6 +169,89 @@ export class ExcelImportService {
     private readonly ledgers: LedgersService,
     private readonly transactions: TransactionsService,
   ) {}
+
+  /** 后台运行中的任务超过此时长视为超时失败，防止 API 重启后 running 行永久卡死。 */
+  private static readonly JOB_STALE_MS = 10 * 60_000;
+
+  /**
+   * 提交导入（dryRun=false）改为后台执行：建任务行后立即返回 jobId，
+   * 实际导入在 API 进程内异步跑完再写回结果，避免长事务占用 HTTP 连接被代理超时切断。
+   */
+  async startImportJob(
+    ledgerId: string,
+    userId: string,
+    file: Buffer,
+  ): Promise<{ jobId: string }> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const job = await this.prisma.client.importJob.create({
+      data: { ledgerId, userId, status: "running" },
+    });
+    // fire-and-forget：脱离 HTTP 请求生命周期，结果写入 import_jobs。
+    void this.runImportJob(job.id, ledgerId, userId, file);
+    return { jobId: job.id };
+  }
+
+  private async runImportJob(
+    jobId: string,
+    ledgerId: string,
+    userId: string,
+    file: Buffer,
+  ): Promise<void> {
+    try {
+      const result = await this.importExcel(ledgerId, userId, file, false);
+      // 条件写回：仅在仍为 running 时更新，避免覆盖已被判超时（stale）的终态而造成状态翻转。
+      await this.prisma.client.importJob.updateMany({
+        where: { id: jobId, status: "running" },
+        data: { status: "succeeded", result: result as unknown as Prisma.InputJsonValue },
+      });
+    } catch (error) {
+      await this.prisma.client.importJob
+        .updateMany({
+          where: { id: jobId, status: "running" },
+          data: { status: "failed", error: messageOf(error).slice(0, 2000) },
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  async getImportJob(
+    ledgerId: string,
+    userId: string,
+    jobId: string,
+  ): Promise<{ status: string; result: ImportResult | null; error: string | null }> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const job = await this.prisma.client.importJob.findFirst({ where: { id: jobId, ledgerId } });
+    if (!job) throw new AppError("IMPORT_JOB_NOT_FOUND", "导入任务不存在", 404);
+    // running 超过阈值多为进程崩溃残留（后台导入受 300s 事务上限约束，健康任务不会到达此时长）。
+    // 条件更新避免覆盖同期刚写入的终态；若未命中则说明任务已完成，读取最新状态返回。
+    if (
+      job.status === "running" &&
+      Date.now() - job.updatedAt.getTime() > ExcelImportService.JOB_STALE_MS
+    ) {
+      const timedOut = await this.prisma.client.importJob.updateMany({
+        where: { id: jobId, status: "running" },
+        data: { status: "failed", error: "导入超时，请重试" },
+      });
+      if (timedOut.count > 0) return { status: "failed", result: null, error: "导入超时，请重试" };
+      const fresh = await this.prisma.client.importJob.findFirstOrThrow({
+        where: { id: jobId, ledgerId },
+      });
+      return this.mapImportJob(fresh);
+    }
+    return this.mapImportJob(job);
+  }
+
+  private mapImportJob(job: {
+    status: string;
+    result: Prisma.JsonValue | null;
+    error: string | null;
+  }): { status: string; result: ImportResult | null; error: string | null } {
+    return {
+      status: job.status,
+      result: (job.result as ImportResult | null) ?? null,
+      error: job.error,
+    };
+  }
 
   async importExcel(
     ledgerId: string,

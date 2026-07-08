@@ -93,7 +93,7 @@ export function FilterSheet({
   personOptions = [],
   value,
 }: FilterSheetProps) {
-  const [tab, setTab] = useState<FilterTab>("分类");
+  const [tab, setTab] = useState<FilterTab>("时间");
   const [draft, setDraft] = useState<BusinessFilterValue>(value);
   const categoryIds = selectedList(draft.categoryId, draft.categoryIds);
   const accountIds = selectedList(draft.accountId, draft.accountIds);
@@ -102,7 +102,9 @@ export function FilterSheet({
   const subcategoryIds = draft.subcategoryIds ?? [];
 
   useEffect(() => {
-    if (open) setDraft(value);
+    if (!open) return;
+    setDraft(value);
+    setTab("时间");
   }, [open, value]);
 
   function patch(next: Partial<BusinessFilterValue>) {
@@ -132,8 +134,8 @@ export function FilterSheet({
 
   const tabs = useMemo(() => {
     const next: FilterTab[] = [];
-    if (hasField(fields, "type") || hasField(fields, "category")) next.push("分类");
     if (hasField(fields, "dateRange")) next.push("时间");
+    if (hasField(fields, "type") || hasField(fields, "category")) next.push("分类");
     if (hasField(fields, "account")) next.push("账户");
     if (
       hasField(fields, "keyword") ||

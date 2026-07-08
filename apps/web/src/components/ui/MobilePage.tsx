@@ -6,7 +6,7 @@ type MobilePageProps = {
   children: ReactNode;
   description?: string;
   leading?: ReactNode;
-  navigationTitleAlign?: "center" | "left";
+  navigationTitleAlign?: "center" | "left" | "right";
   navigationVariant?: "large" | "inline";
   title: string;
 };

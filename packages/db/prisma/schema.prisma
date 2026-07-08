@@ -649,3 +649,19 @@ model IdempotencyKey {
   @@index([createdAt])
   @@map("idempotency_keys")
 }
+
+model ImportJob {
+  id        String   @id @default(uuid()) @db.Uuid
+  ledgerId  String   @map("ledger_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  // running = 后台执行中；succeeded/failed = 已完成。
+  status    String
+  // 成功时存储 ImportResult（counts/errors/warnings）；未完成为 null。
+  result    Json?    @db.JsonB
+  error     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ledgerId])
+  @@map("import_jobs")
+}

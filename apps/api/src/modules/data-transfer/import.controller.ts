@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Post,
   Query,
@@ -71,7 +72,10 @@ export class ImportController {
       properties: { file: { type: "string", format: "binary" } },
     },
   })
-  @ApiOkResponse({ description: "Excel 增量导入；dryRun=true 只返回预览" })
+  @ApiOkResponse({
+    description:
+      "Excel 增量导入。dryRun=true 同步返回预览 ImportResult；dryRun=false 入队后台执行并返回 { jobId }，用状态接口轮询结果",
+  })
   importExcel(
     @CurrentAuth() auth: AuthContext,
     @Param("ledgerId") ledgerId: string,
@@ -79,11 +83,21 @@ export class ImportController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new AppError("IMPORT_FILE_REQUIRED", "缺少上传文件", 400);
-    return this.excelImport.importExcel(
-      ledgerId,
-      (auth as SessionAuthContext).userId,
-      file.buffer,
-      query.dryRun ?? true,
-    );
+    const userId = (auth as SessionAuthContext).userId;
+    // 提交（dryRun=false）耗时长，改为后台执行避免占用 HTTP 连接被代理超时切断。
+    if (query.dryRun ?? true) {
+      return this.excelImport.importExcel(ledgerId, userId, file.buffer, true);
+    }
+    return this.excelImport.startImportJob(ledgerId, userId, file.buffer);
+  }
+
+  @Get("jobs/:jobId")
+  @ApiOkResponse({ description: "查询 Excel 后台导入任务状态与结果" })
+  getImportJob(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("jobId") jobId: string,
+  ) {
+    return this.excelImport.getImportJob(ledgerId, (auth as SessionAuthContext).userId, jobId);
   }
 }

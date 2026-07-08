@@ -9,7 +9,7 @@ type NavigationBarProps = {
   leading?: ReactNode;
   subtitle?: string;
   title: string;
-  titleAlign?: "center" | "left";
+  titleAlign?: "center" | "left" | "right";
   variant?: "large" | "inline";
 };
 

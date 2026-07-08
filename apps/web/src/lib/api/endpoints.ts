@@ -69,6 +69,10 @@ export function ledgerImportExcelPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/import/excel");
 }
 
+export function ledgerImportExcelJobPath(ledgerId: string, jobId: string): string {
+  return ledgerApiPath(ledgerId, `/import/jobs/${encodeURIComponent(jobId)}`);
+}
+
 export function approveJoinRequestPath(ledgerId: string, requestId: string): string {
   return ledgerApiPath(ledgerId, `/join-requests/${encodeURIComponent(requestId)}/approve`);
 }

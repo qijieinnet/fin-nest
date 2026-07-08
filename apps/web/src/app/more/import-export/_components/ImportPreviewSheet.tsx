@@ -4,10 +4,29 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { IconButton } from "@/components/ui";
-import { apiRequest, getApiErrorMessage, ledgerImportExcelPath } from "@/lib/api";
+import {
+  apiRequest,
+  getApiErrorMessage,
+  isApiClientError,
+  ledgerImportExcelJobPath,
+  ledgerImportExcelPath,
+} from "@/lib/api";
 import { isLedgerScopedQueryKey } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
-import { IMPORT_COUNT_LABELS, type ImportResult, type ImportRowIssue } from "../types";
+import {
+  IMPORT_COUNT_LABELS,
+  type ImportJobEnqueued,
+  type ImportJobStatusResult,
+  type ImportResult,
+  type ImportRowIssue,
+} from "../types";
+
+// 轮询直到服务端给出终态。上限必须高于服务端 stale 判定（10min），
+// 否则客户端提前判超时会与仍在跑的后台任务不一致，用户重试可能重复导入。
+const JOB_POLL_INTERVAL_MS = 1500;
+const JOB_POLL_TIMEOUT_MS = 11 * 60_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type ImportPreviewSheetProps = {
   file: File;
@@ -23,14 +42,29 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
   const [result, setResult] = useState<ImportResult>(initial);
 
   const commit = useMutation({
-    mutationFn: () => {
+    // 提交入队后台任务后轮询结果：请求本身秒回，不再受长事务 / 代理超时影响。
+    mutationFn: async (): Promise<ImportResult> => {
       const body = new FormData();
       body.append("file", file);
-      return apiRequest<ImportResult>(ledgerImportExcelPath(ledgerId), {
+      const { jobId } = await apiRequest<ImportJobEnqueued>(ledgerImportExcelPath(ledgerId), {
         method: "POST",
         body,
         query: { dryRun: "false" },
       });
+      const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
+      while (true) {
+        const job = await apiRequest<ImportJobStatusResult>(
+          ledgerImportExcelJobPath(ledgerId, jobId),
+        );
+        if (job.status === "succeeded" && job.result) return job.result;
+        if (job.status === "failed") throw new Error(job.error ?? "导入失败，请稍后重试");
+        // 兜底：正常不会触发（上限高于服务端 stale）。此时后台可能仍在跑，
+        // 提示稍后查看而非直接判失败，避免用户立刻重试导致重复导入。
+        if (Date.now() > deadline) {
+          throw new Error("导入仍在处理，请稍后重新打开导入查看结果，不要重复导入");
+        }
+        await sleep(JOB_POLL_INTERVAL_MS);
+      }
     },
     onSuccess: async (committed) => {
       if (!committed.committed) {
@@ -47,7 +81,13 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
       pop({ force: true });
     },
     onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "导入失败，请稍后重试") });
+      // 后台任务失败信息是普通 Error（getApiErrorMessage 只透传 ApiClientError），单独取 message。
+      const message = isApiClientError(error)
+        ? getApiErrorMessage(error, "导入失败，请稍后重试")
+        : error instanceof Error && error.message
+          ? error.message
+          : "导入失败，请稍后重试";
+      showToast({ tone: "error", message });
     },
   });
 
