@@ -128,7 +128,18 @@ export type DayGroup = {
   items: Transaction[];
 };
 
-export function groupByDay(transactions: Transaction[]): DayGroup[] {
+type GroupAmountMode = "effective" | "gross";
+
+function amountForGroup(transaction: Transaction, mode: GroupAmountMode): bigint {
+  return BigInt(
+    mode === "gross" ? transaction.grossAmountMicros : transaction.effectiveAmountMicros,
+  );
+}
+
+export function groupByDay(
+  transactions: Transaction[],
+  amountMode: GroupAmountMode = "effective",
+): DayGroup[] {
   const map = new Map<string, DayGroup>();
   for (const transaction of transactions) {
     const date = transaction.occurredOn.slice(0, 10);
@@ -138,23 +149,9 @@ export function groupByDay(transactions: Transaction[]): DayGroup[] {
       map.set(date, group);
     }
     group.items.push(transaction);
-    const effective = BigInt(transaction.effectiveAmountMicros);
-    if (transaction.type === "expense") group.expenseMicros += effective;
-    if (transaction.type === "income") group.incomeMicros += effective;
+    const amount = amountForGroup(transaction, amountMode);
+    if (transaction.type === "expense") group.expenseMicros += amount;
+    if (transaction.type === "income") group.incomeMicros += amount;
   }
   return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
-}
-
-export function monthTotals(transactions: Transaction[]): {
-  expenseMicros: bigint;
-  incomeMicros: bigint;
-} {
-  let expenseMicros = 0n;
-  let incomeMicros = 0n;
-  for (const transaction of transactions) {
-    const effective = BigInt(transaction.effectiveAmountMicros);
-    if (transaction.type === "expense") expenseMicros += effective;
-    if (transaction.type === "income") incomeMicros += effective;
-  }
-  return { expenseMicros, incomeMicros };
 }

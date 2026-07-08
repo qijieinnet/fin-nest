@@ -201,6 +201,7 @@ export function ItemsScreen() {
   const openScrapSheet = (item: ItemAsset) => {
     if (!ledgerId) return;
     push({
+      className: "ui-bottom-sheet--sheet-form",
       hideDefaultHeader: true,
       content: <ItemScrapSheet item={item} ledgerId={ledgerId} />,
     });
@@ -340,6 +341,7 @@ export function ItemsScreen() {
             onClick={goBack}
           />
         }
+        navigationTitleAlign="left"
         title="物品管理"
       >
         <div className="flex flex-col gap-3 pb-6">

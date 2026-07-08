@@ -146,13 +146,13 @@ export function QuickTemplatesScreen() {
         : template.type === "transfer"
           ? "转账模板"
           : "支出模板");
-    const confirmed = await confirm({
+    await confirm({
       title: "删除快速记账？",
       message: `确定删除「${name}」这个模板吗？已记录的账单不受影响。`,
       confirmText: "删除",
+      onConfirm: () => deleteTemplate.mutateAsync(template.id),
       tone: "danger",
     });
-    if (confirmed) deleteTemplate.mutate(template.id);
   };
 
   const renderRow = (template: QuickTemplate) => {
@@ -252,6 +252,7 @@ export function QuickTemplatesScreen() {
             onClick={goBack}
           />
         }
+        navigationTitleAlign="left"
         title="快速记账"
       >
         <div className="flex flex-col gap-3 pb-6">

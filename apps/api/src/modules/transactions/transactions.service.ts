@@ -76,7 +76,7 @@ export class TransactionsService {
       };
     }
     if (query.amountMinMicros || query.amountMaxMicros) {
-      where.effectiveAmountMicros = {
+      where.grossAmountMicros = {
         gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
@@ -150,14 +150,14 @@ export class TransactionsService {
     const grouped = await this.prisma.client.transaction.groupBy({
       by: ["type"],
       where: await this.buildListWhere(ledgerId, query),
-      _sum: { effectiveAmountMicros: true },
+      _sum: { grossAmountMicros: true },
       _count: { _all: true },
     });
     let expenseMicros = 0n;
     let incomeMicros = 0n;
     let count = 0;
     for (const row of grouped) {
-      const sum = row._sum.effectiveAmountMicros ?? 0n;
+      const sum = row._sum.grossAmountMicros ?? 0n;
       if (row.type === "expense") expenseMicros = sum;
       else if (row.type === "income") incomeMicros = sum;
       count += row._count._all;

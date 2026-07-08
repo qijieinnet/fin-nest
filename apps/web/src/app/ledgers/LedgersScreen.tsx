@@ -51,7 +51,8 @@ export function LedgersScreen() {
             onClick={goBack}
           />
         }
-        title="账本"
+        navigationTitleAlign="left"
+        title="账本管理"
       >
         <div className="flex flex-col">
           <p className="px-1.5 pb-2.5 text-xs leading-relaxed text-[var(--color-text-muted)]">

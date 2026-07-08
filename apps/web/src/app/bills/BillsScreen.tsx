@@ -85,13 +85,13 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
       categoryName: "转账",
       categoryIcon: TRANSFER_ICON,
       description: from && to ? `${from} → ${to}` : undefined,
-      amountMicros: transaction.effectiveAmountMicros,
+      amountMicros: transaction.grossAmountMicros,
     };
   }
   return {
     type: transaction.type,
     ...categoryRowProps(transaction, categoryLookup),
-    amountMicros: transaction.effectiveAmountMicros,
+    amountMicros: transaction.grossAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
     personName: transaction.personSnapshot?.name,
@@ -150,7 +150,7 @@ export function BillsScreen() {
     }),
     [summaryQuery.data],
   );
-  const groups = useMemo(() => groupByDay(transactions), [transactions]);
+  const groups = useMemo(() => groupByDay(transactions, "gross"), [transactions]);
   const balanceMicros = totals.incomeMicros - totals.expenseMicros;
 
   // 滚动加载：哨兵进入视口 → 防抖 200ms 后拉取下一页。

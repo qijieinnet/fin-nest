@@ -358,6 +358,7 @@ export function InsurancesScreen() {
             onClick={goBack}
           />
         }
+        navigationTitleAlign="left"
         title="保险管理"
       >
         <div className="flex flex-col gap-3 pb-6">

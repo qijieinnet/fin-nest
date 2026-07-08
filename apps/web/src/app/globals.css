@@ -1071,6 +1071,10 @@ select:focus-visible {
   text-align: center;
 }
 
+.navigation-bar--inline.navigation-bar--title-left .navigation-bar__title-group {
+  text-align: left;
+}
+
 .navigation-bar--inline .navigation-bar__title {
   font-size: 17px;
   font-weight: 700;

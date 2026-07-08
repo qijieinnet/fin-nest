@@ -23,7 +23,7 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
   return {
     type: transaction.type,
     ...categoryRowProps(transaction, categoryLookup),
-    amountMicros: transaction.effectiveAmountMicros,
+    amountMicros: transaction.grossAmountMicros,
     accountName: accountName(accounts, transaction.accountId),
     description: transaction.note ?? undefined,
     personName: transaction.personSnapshot?.name,
@@ -47,7 +47,7 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
     () => transactionsQuery.data?.pages.flat() ?? [],
     [transactionsQuery.data],
   );
-  const groups = useMemo(() => groupByDay(transactions), [transactions]);
+  const groups = useMemo(() => groupByDay(transactions, "gross"), [transactions]);
 
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = transactionsQuery;
   const sentinelRef = useRef<HTMLDivElement | null>(null);

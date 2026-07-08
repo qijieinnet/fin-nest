@@ -6,6 +6,7 @@ type MobilePageProps = {
   children: ReactNode;
   description?: string;
   leading?: ReactNode;
+  navigationTitleAlign?: "center" | "left";
   navigationVariant?: "large" | "inline";
   title: string;
 };
@@ -15,6 +16,7 @@ export function MobilePage({
   children,
   description,
   leading,
+  navigationTitleAlign = "center",
   navigationVariant = "inline",
   title,
 }: MobilePageProps) {
@@ -25,6 +27,7 @@ export function MobilePage({
         leading={leading}
         subtitle={description}
         title={title}
+        titleAlign={navigationTitleAlign}
         variant={navigationVariant}
       />
       {children}

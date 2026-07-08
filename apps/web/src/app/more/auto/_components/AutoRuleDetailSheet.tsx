@@ -171,7 +171,12 @@ export function AutoRuleDetailSheet({
       ) : null}
 
       <div className="grid grid-cols-2 gap-2">
-        <Button icon={<Edit3 size={17} />} onClick={onEdit} variant="secondary">
+        <Button
+          className="!bg-white"
+          icon={<Edit3 size={17} />}
+          onClick={onEdit}
+          variant="secondary"
+        >
           编辑规则
         </Button>
         <Button

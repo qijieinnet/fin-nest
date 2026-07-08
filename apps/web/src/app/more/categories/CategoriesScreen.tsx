@@ -357,6 +357,7 @@ export function CategoriesScreen() {
             onClick={goBack}
           />
         }
+        navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "分类管理"}
       >
         <div className="flex flex-col gap-4 pb-6">

@@ -124,7 +124,7 @@ export class StatsService {
     if (query.subcategoryId) where.subcategoryId = query.subcategoryId;
     if (query.personId) where.personId = query.personId;
     if (query.amountMinMicros || query.amountMaxMicros) {
-      where.effectiveAmountMicros = {
+      where.grossAmountMicros = {
         gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
@@ -230,7 +230,7 @@ export class StatsService {
         select: {
           type: true,
           occurredOn: true,
-          effectiveAmountMicros: true,
+          grossAmountMicros: true,
           categoryId: true,
           subcategoryId: true,
           categorySnapshot: true,
@@ -256,7 +256,7 @@ export class StatsService {
 
     for (const transaction of transactions) {
       const type = transaction.type as StatsType;
-      const amount = transaction.effectiveAmountMicros;
+      const amount = transaction.grossAmountMicros;
       const txMonth = dateKey(transaction.occurredOn).slice(0, 7);
       // 趋势只累加落在 6 个月窗口内的月份。
       if (trend[type].has(txMonth))
@@ -328,7 +328,7 @@ export class StatsService {
         occurredOn: { gte: windowStart, lt: windowEnd },
         ...(await this.buildFilterWhere(ledgerId, query)),
       },
-      select: { type: true, occurredOn: true, effectiveAmountMicros: true },
+      select: { type: true, occurredOn: true, grossAmountMicros: true },
     });
 
     const sums = new Map<string, { expense: bigint; income: bigint }>(
@@ -339,8 +339,8 @@ export class StatsService {
       const key = monthly ? dayKey.slice(0, 7) : dayKey;
       const entry = sums.get(key);
       if (!entry) continue;
-      if (transaction.type === "expense") entry.expense += transaction.effectiveAmountMicros;
-      else entry.income += transaction.effectiveAmountMicros;
+      if (transaction.type === "expense") entry.expense += transaction.grossAmountMicros;
+      else entry.income += transaction.grossAmountMicros;
     }
 
     return {

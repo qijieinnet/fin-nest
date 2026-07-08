@@ -24,8 +24,7 @@ import {
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack, useToast } from "@/providers";
-import { useState } from "react";
+import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { PendingTransactionList } from "@/app/bills/pending/PendingTransactionList";
 import { AutoPendingEditorSheet } from "./_components/AutoPendingEditorSheet";
 import { AutoRuleDetailSheet } from "./_components/AutoRuleDetailSheet";
@@ -40,7 +39,6 @@ import {
   transactionTypeLabel,
   transferAccountSummary,
 } from "./_components/auto-utils";
-import { DeleteAutoRuleConfirmDialog } from "./_components/DeleteAutoRuleConfirmDialog";
 
 function sectionTitle(count: number): string {
   return count > 0 ? `进行中 · ${count} 条规则` : "进行中";
@@ -52,7 +50,7 @@ export function AutoScreen() {
   const { ledgerId } = useLedger();
   const { push, pop, stack } = useSheetStack();
   const { showToast } = useToast();
-  const [rulePendingDelete, setRulePendingDelete] = useState<AutoRule | null>(null);
+  const confirm = useConfirm();
 
   const rulesQuery = useAutoRules(ledgerId);
   const pendingQuery = useAutoPending(ledgerId);
@@ -110,7 +108,6 @@ export function AutoScreen() {
       apiRequest<void>(ledgerApiPath(ledgerId!, `/auto-rules/${ruleId}`), { method: "DELETE" }),
     onSuccess: async () => {
       await invalidateAutomation();
-      setRulePendingDelete(null);
       if (stack.length > 0) pop();
       showToast({ tone: "success", message: "自动记账已删除" });
     },
@@ -206,8 +203,30 @@ export function AutoScreen() {
     });
   };
 
+  const requestDeleteRule = async (rule: AutoRule) => {
+    if (deleteRule.isPending) return;
+    const summary =
+      rule.type === "transfer"
+        ? transferAccountSummary(
+            accounts,
+            rule.fromAccountId,
+            rule.fromSubAccountId,
+            rule.toAccountId,
+            rule.toSubAccountId,
+          )
+        : categorySummary(categories, rule.categoryId, rule.subcategoryId);
+    await confirm({
+      title: "删除自动记账？",
+      message: `将停止并归档「${summary.name}」这条规则，已生成的待确认记录和历史账单不会自动删除。`,
+      confirmText: "删除",
+      onConfirm: () => deleteRule.mutateAsync(rule.id),
+      tone: "danger",
+    });
+  };
+
   const openDetail = (rule: AutoRule) => {
     push({
+      className: "ui-bottom-sheet--edge-scroll",
       title: "自动记账详情",
       content: (
         <AutoRuleDetailSheet
@@ -215,7 +234,7 @@ export function AutoScreen() {
           categories={categories}
           insurances={insurances}
           items={items}
-          onDelete={() => setRulePendingDelete(rule)}
+          onDelete={() => void requestDeleteRule(rule)}
           onEdit={() => openEditor(rule)}
           onToggle={() => toggleRule.mutate(rule)}
           pendingToggle={toggleRule.isPending}
@@ -249,7 +268,7 @@ export function AutoScreen() {
       {
         icon: <Trash2 size={18} />,
         label: `删除${summary.name}`,
-        onClick: () => setRulePendingDelete(rule),
+        onClick: () => void requestDeleteRule(rule),
         tone: "danger",
       },
     ];
@@ -305,18 +324,6 @@ export function AutoScreen() {
 
   return (
     <MobileAppShell>
-      <DeleteAutoRuleConfirmDialog
-        accounts={accounts}
-        categories={categories}
-        deleting={deleteRule.isPending}
-        onCancel={() => {
-          if (!deleteRule.isPending) setRulePendingDelete(null);
-        }}
-        onConfirm={() => {
-          if (rulePendingDelete && !deleteRule.isPending) deleteRule.mutate(rulePendingDelete.id);
-        }}
-        rule={rulePendingDelete}
-      />
       <MobilePage
         action={
           <IconButton
@@ -333,6 +340,7 @@ export function AutoScreen() {
             onClick={goBack}
           />
         }
+        navigationTitleAlign="left"
         title="自动记账"
       >
         <div className="flex flex-col gap-3 pb-6">

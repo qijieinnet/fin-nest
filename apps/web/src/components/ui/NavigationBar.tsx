@@ -9,6 +9,7 @@ type NavigationBarProps = {
   leading?: ReactNode;
   subtitle?: string;
   title: string;
+  titleAlign?: "center" | "left";
   variant?: "large" | "inline";
 };
 
@@ -17,6 +18,7 @@ export function NavigationBar({
   leading,
   subtitle,
   title,
+  titleAlign = "center",
   variant = "large",
 }: NavigationBarProps) {
   const scrolled = usePageScrolled();
@@ -26,6 +28,7 @@ export function NavigationBar({
       className={cn(
         "navigation-bar",
         `navigation-bar--${variant}`,
+        `navigation-bar--title-${titleAlign}`,
         scrolled && "navigation-bar--scrolled",
       )}
     >

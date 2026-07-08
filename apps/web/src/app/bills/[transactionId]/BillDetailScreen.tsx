@@ -535,7 +535,7 @@ export function BillDetailScreen({
       <div className="bill-detail">
         <div className="bill-detail__top">
           <span className={`bill-detail__amount bill-detail__amount--${detail.type}`}>
-            {signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces)}
+            {signedAmount(detail, detail.grossAmountMicros, decimalPlaces)}
           </span>
         </div>
 
