@@ -22,16 +22,6 @@ type RelatedTransactionListProps = {
   subAccountId?: string | null;
 };
 
-const DEFAULT_SUB_ACCOUNT_ID = "default";
-
-export function transactionUsesDefaultSubAccount(transaction: Transaction, accountId: string) {
-  return (
-    (transaction.accountId === accountId && !transaction.subAccountId) ||
-    (transaction.fromAccountId === accountId && !transaction.fromSubAccountId) ||
-    (transaction.toAccountId === accountId && !transaction.toSubAccountId)
-  );
-}
-
 function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   if (transaction.type === "transfer") {
     const from = accountName(accounts, transaction.fromAccountId);
@@ -63,11 +53,10 @@ export function RelatedTransactionList({
   subAccountId,
 }: RelatedTransactionListProps) {
   const { pop, push } = useSheetStack();
-  const isDefaultSubAccount = subAccountId === DEFAULT_SUB_ACCOUNT_ID;
-  const transactionsQuery = useTransactions(
-    ledgerId,
-    isDefaultSubAccount ? { accountId } : { accountId, subAccountId: subAccountId ?? undefined },
-  );
+  const transactionsQuery = useTransactions(ledgerId, {
+    accountId,
+    subAccountId: subAccountId ?? undefined,
+  });
   const accountsQuery = useAccounts(ledgerId);
   const accounts = accountsQuery.data ?? [];
   const categoriesQuery = useCategories(ledgerId);
@@ -75,12 +64,7 @@ export function RelatedTransactionList({
     () => buildCategoryLookup(categoriesQuery.data ?? []),
     [categoriesQuery.data],
   );
-  const transactions = useMemo(() => {
-    const items = transactionsQuery.data ?? [];
-    return isDefaultSubAccount
-      ? items.filter((transaction) => transactionUsesDefaultSubAccount(transaction, accountId))
-      : items;
-  }, [accountId, isDefaultSubAccount, transactionsQuery.data]);
+  const transactions = useMemo(() => transactionsQuery.data ?? [], [transactionsQuery.data]);
   const groups = useMemo(() => groupByDay(transactions), [transactions]);
 
   const openBill = (transactionId: string) => {
@@ -124,5 +108,3 @@ export function RelatedTransactionList({
     </div>
   );
 }
-
-export { DEFAULT_SUB_ACCOUNT_ID };

@@ -168,11 +168,6 @@ export function PeopleScreen() {
                       <span className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--color-text-primary)]">
                         {person.name}
                       </span>
-                      {person.isDefault ? (
-                        <span className="shrink-0 text-xs text-[var(--color-text-muted)]">
-                          默认
-                        </span>
-                      ) : null}
                     </button>
                   </li>
                 ))}

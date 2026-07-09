@@ -362,11 +362,9 @@ export class BackupService {
       type: row.type,
       name: row.name,
       icon: row.icon ?? null,
-      defaultSubAccountName: row.defaultSubAccountName ?? null,
-      defaultSubAccountIcon: row.defaultSubAccountIcon ?? null,
       balanceMicros: bi(row.balanceMicros) ?? 0n,
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
-      defaultBucketIncludeInNetWorth: Boolean(row.defaultBucketIncludeInNetWorth ?? true),
+      sortOrder: Number(row.sortOrder ?? 0),
       creditLimitMicros: bi(row.creditLimitMicros),
       investmentCostMicros: bi(row.investmentCostMicros),
       counterparty: row.counterparty ?? null,
@@ -388,6 +386,8 @@ export class BackupService {
       icon: row.icon ?? null,
       balanceMicros: bi(row.balanceMicros) ?? 0n,
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
+      sortOrder: Number(row.sortOrder ?? 0),
+      isDefault: Boolean(row.isDefault),
       archivedAt: dt(row.archivedAt),
       createdBy: userId,
       updatedBy: userId,
@@ -683,7 +683,103 @@ export class BackupService {
       }),
     );
 
+    // 兼容旧备份（无默认子账户、记录 subAccountId 为空）：补建默认子账户并回填历史记录。
+    await this.ensureDefaultSubAccounts(tx, ledgerId);
+
     return counts;
+  }
+
+  /** 为缺少默认子账户的 money 账户补建默认子账户，并把该账户下 subAccountId 为空的记录回填到它。 */
+  private async ensureDefaultSubAccounts(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+  ): Promise<void> {
+    const accounts = await tx.account.findMany({
+      where: { ledgerId, type: { in: ["savings", "credit", "invest"] } },
+    });
+    for (const account of accounts) {
+      const existingDefault = await tx.subAccount.findFirst({
+        where: { ledgerId, accountId: account.id, isDefault: true },
+      });
+      if (existingDefault) continue;
+      const subs = await tx.subAccount.findMany({
+        where: { ledgerId, accountId: account.id, archivedAt: null },
+        select: { balanceMicros: true, name: true },
+      });
+      const namedSum = subs.reduce((sum, sub) => sum + sub.balanceMicros, 0n);
+      const names = new Set(subs.map((sub) => sub.name));
+      const created = await tx.subAccount.create({
+        data: {
+          ledgerId,
+          accountId: account.id,
+          name: names.has("默认") ? `默认-${randomUUID().slice(0, 8)}` : "默认",
+          icon: account.icon,
+          balanceMicros: account.balanceMicros - namedSum,
+          includeInNetWorth: account.includeInNetWorth,
+          isDefault: true,
+        },
+      });
+      const id = created.id;
+      const acc = account.id;
+      await Promise.all([
+        tx.accountEntry.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.accountAdjustment.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.transaction.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.transaction.updateMany({
+          where: { ledgerId, fromAccountId: acc, fromSubAccountId: null },
+          data: { fromSubAccountId: id },
+        }),
+        tx.transaction.updateMany({
+          where: { ledgerId, toAccountId: acc, toSubAccountId: null },
+          data: { toSubAccountId: id },
+        }),
+        tx.autoRule.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.autoRule.updateMany({
+          where: { ledgerId, fromAccountId: acc, fromSubAccountId: null },
+          data: { fromSubAccountId: id },
+        }),
+        tx.autoRule.updateMany({
+          where: { ledgerId, toAccountId: acc, toSubAccountId: null },
+          data: { toSubAccountId: id },
+        }),
+        tx.autoPendingTransaction.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.autoPendingTransaction.updateMany({
+          where: { ledgerId, fromAccountId: acc, fromSubAccountId: null },
+          data: { fromSubAccountId: id },
+        }),
+        tx.autoPendingTransaction.updateMany({
+          where: { ledgerId, toAccountId: acc, toSubAccountId: null },
+          data: { toSubAccountId: id },
+        }),
+        tx.quickTemplate.updateMany({
+          where: { ledgerId, accountId: acc, subAccountId: null },
+          data: { subAccountId: id },
+        }),
+        tx.quickTemplate.updateMany({
+          where: { ledgerId, fromAccountId: acc, fromSubAccountId: null },
+          data: { fromSubAccountId: id },
+        }),
+        tx.quickTemplate.updateMany({
+          where: { ledgerId, toAccountId: acc, toSubAccountId: null },
+          data: { toSubAccountId: id },
+        }),
+      ]);
+    }
   }
 }
 

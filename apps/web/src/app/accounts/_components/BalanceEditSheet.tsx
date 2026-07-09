@@ -19,6 +19,11 @@ type BalanceEditSheetProps = {
   title: string;
   /** 是否允许输入负数余额；信用账户余额为“已用额度”，不允许负数。 */
   allowNegative?: boolean;
+  /**
+   * 编辑默认桶余额时，接口按 subAccountId=null 调整“账户总余额”，
+   * 需把命名子账户余额之和加回来，才能让默认桶变为输入值。默认 "0"。
+   */
+  offsetMicros?: string;
 };
 
 export function BalanceEditSheet({
@@ -28,6 +33,7 @@ export function BalanceEditSheet({
   subAccountId,
   title,
   allowNegative = true,
+  offsetMicros = "0",
 }: BalanceEditSheetProps) {
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
@@ -38,9 +44,10 @@ export function BalanceEditSheet({
     mutationFn: async () => {
       const parsed = parseMoneyToMicros(balance, { allowNegative });
       if (!parsed.ok) throw new Error(parsed.error);
+      const balanceAfterMicros = (BigInt(parsed.amountMicros) + BigInt(offsetMicros)).toString();
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/adjustments`), {
         method: "POST",
-        body: { balanceAfterMicros: parsed.amountMicros, subAccountId },
+        body: { balanceAfterMicros, subAccountId },
         headers: { "idempotency-key": createClientId("adjust") },
       });
     },

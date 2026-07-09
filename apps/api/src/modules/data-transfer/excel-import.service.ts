@@ -1273,13 +1273,14 @@ export class ExcelImportService {
       planned.ref.id = created.id;
     }
     for (const planned of plan.accounts) {
+      const balanceMicros = BigInt(planned.balanceMicros);
       const created = await tx.account.create({
         data: {
           ledgerId,
           type: planned.type,
           name: planned.name,
           icon: planned.icon,
-          balanceMicros: BigInt(planned.balanceMicros),
+          balanceMicros,
           includeInNetWorth: planned.includeInNetWorth,
           creditLimitMicros: planned.creditLimitMicros ? BigInt(planned.creditLimitMicros) : null,
           counterparty: planned.counterparty,
@@ -1290,6 +1291,22 @@ export class ExcelImportService {
         },
       });
       planned.ref.id = created.id;
+      // money 账户自动生成默认子账户，承接未指定子账户的导入记账（与 AccountsService.create 一致）。
+      if (["savings", "credit", "invest"].includes(planned.type)) {
+        await tx.subAccount.create({
+          data: {
+            ledgerId,
+            accountId: created.id,
+            name: "默认",
+            icon: planned.icon,
+            balanceMicros,
+            includeInNetWorth: planned.includeInNetWorth,
+            isDefault: true,
+            createdBy: userId,
+            updatedBy: userId,
+          },
+        });
+      }
     }
     for (const planned of plan.subAccounts) {
       const balanceMicros = BigInt(planned.balanceMicros);

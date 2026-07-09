@@ -98,7 +98,7 @@ export function PlanDetailSheet({
 
   return (
     <div className="flex flex-col gap-4 pb-2">
-      <header className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--color-bg-elevated)] pb-2">
+      <header className="flex items-center gap-2 pb-2">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
         <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[var(--color-text-primary)]">
           {title}

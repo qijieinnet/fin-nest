@@ -73,7 +73,7 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
   };
 
   const handleDelete = async () => {
-    if (!person || person.isDefault || remove.isPending) return;
+    if (!person || remove.isPending) return;
     const confirmed = await confirm({
       title: `删除人员「${person.name}」？`,
       message: "有关联账单时会保留历史记录并归档。",
@@ -124,7 +124,7 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
         </p>
       ) : null}
 
-      {person && !person.isDefault ? (
+      {person ? (
         <Button
           className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           disabled={remove.isPending || save.isPending}

@@ -42,6 +42,8 @@ import {
   relationKindFor,
   resolveAccountSelection,
 } from "@/lib/data/options";
+import { effectiveFieldOrder, orderedFieldsForType } from "@/lib/data/field-order";
+import { useRecordSetting } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -203,6 +205,22 @@ export function AutoRuleEditorSheet({
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
 
+  const setting = useRecordSetting(ledgerId).data;
+  const order = effectiveFieldOrder(setting);
+  const acctRequired = setting?.acctRequired ?? false;
+  const personRequired = setting?.personRequired ?? false;
+
+  // 账户 / 人员被记账设置标记为必填时，强制开启并回填一个默认值（与「记一笔」一致）。
+  useEffect(() => {
+    if (type !== "transfer" && acctRequired && !accountId) {
+      setAccountId(firstSelectableAccountOptionId(acctOptions));
+    }
+    if (personRequired) {
+      setPersonEnabled(true);
+      if (!personId && peopleOptions[0]?.id) setPersonId(peopleOptions[0].id);
+    }
+  }, [acctRequired, accountId, acctOptions, peopleOptions, personId, personRequired, type]);
+
   useEffect(() => {
     if (type === "transfer") return;
     const resolved = resolveCategorySelection(categories, categoryId);
@@ -275,6 +293,8 @@ export function AutoRuleEditorSheet({
       const category = isTransfer ? {} : resolveCategorySelection(categories, categoryId);
       if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
       const account = isTransfer ? {} : resolveAccountSelection(accounts, accountId);
+      if (!isTransfer && acctRequired && !account.accountId) throw new Error("当前账本要求绑定账户");
+      if (!isTransfer && personRequired && !personId) throw new Error("当前账本要求选择人员");
       const fromAccount = isTransfer ? resolveAccountSelection(accounts, fromAccountId) : {};
       const toAccount = isTransfer ? resolveAccountSelection(accounts, toAccountId) : {};
       if (isTransfer && (!fromAccount.accountId || !toAccount.accountId)) {
@@ -339,13 +359,113 @@ export function AutoRuleEditorSheet({
       fromAccount.accountId === toAccount.accountId &&
       (fromAccount.subAccountId ?? null) === (toAccount.subAccountId ?? null)
     );
+  const accountReady = !acctRequired || Boolean(resolveAccountSelection(accounts, accountId).accountId);
+  const personReady = !personRequired || Boolean(personId);
   const canSubmit =
     parsedAmount.ok &&
     BigInt(parsedAmount.amountMicros) > 0n &&
     (type === "transfer"
       ? transferReady
-      : Boolean(resolveCategorySelection(categories, categoryId).categoryId)) &&
+      : Boolean(resolveCategorySelection(categories, categoryId).categoryId) &&
+        accountReady &&
+        personReady) &&
     !save.isPending;
+
+  const renderField = (field: string) => {
+    switch (field) {
+      case "category":
+        if (type === "transfer") return null;
+        return (
+          <FieldCard className="transaction-form__picker-card" key="category" label="分类">
+            <CategorySelectRow
+              onValueChange={setCategoryId}
+              options={catOptions}
+              value={categoryId}
+            />
+          </FieldCard>
+        );
+      case "account":
+        if (type === "transfer") {
+          return (
+            <FieldCard className="transaction-form__picker-card" key="account" label="账户">
+              <AccountSelectRow
+                label="转出账户"
+                onValueChange={setFromAccountId}
+                options={acctOptions}
+                value={fromAccountId}
+              />
+              <span className="transaction-form__divider" />
+              <AccountSelectRow
+                label="转入账户"
+                onValueChange={setToAccountId}
+                options={acctOptions}
+                value={toAccountId}
+              />
+            </FieldCard>
+          );
+        }
+        return (
+          <ToggleCard
+            checked={Boolean(accountId)}
+            disabled={acctRequired}
+            key="account"
+            label="账户"
+            onCheckedChange={(checked) => {
+              setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
+            }}
+          >
+            <AccountSelectRow
+              hideLabel
+              label="选择账户"
+              onValueChange={setAccountId}
+              options={acctOptions}
+              placeholder="不绑定账户"
+              value={accountId}
+            />
+          </ToggleCard>
+        );
+      case "date":
+        return (
+          <FieldCard className="transaction-form__date-card" key="date" label="日期">
+            <DateWheelPicker label="起始日期" onValueChange={setStartDate} value={startDate} />
+          </FieldCard>
+        );
+      case "person":
+        return (
+          <PersonSelectField
+            checked={personEnabled}
+            disabled={personRequired}
+            key="person"
+            label="人员"
+            onCheckedChange={(checked) => {
+              setPersonEnabled(checked);
+              if (!checked) setPersonId(null);
+            }}
+            onValueChange={setPersonId}
+            options={peopleOptions}
+            value={personId}
+          />
+        );
+      case "note":
+        return (
+          <FieldCard className="transaction-form__note-card" key="note" label="备注">
+            <div className="transaction-form__note-row">
+              <span>备注</span>
+              <Input
+                aria-label="备注"
+                label="备注"
+                maxLength={240}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="如：房租 / 视频会员..."
+                value={note}
+              />
+            </div>
+          </FieldCard>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <form
@@ -390,80 +510,7 @@ export function AutoRuleEditorSheet({
         </div>
 
         <div className="transaction-form__cards">
-          {type !== "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="分类">
-              <CategorySelectRow
-                onValueChange={setCategoryId}
-                options={catOptions}
-                value={categoryId}
-              />
-            </FieldCard>
-          ) : null}
-
-          {type === "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="账户">
-              <AccountSelectRow
-                label="转出账户"
-                onValueChange={setFromAccountId}
-                options={acctOptions}
-                value={fromAccountId}
-              />
-              <span className="transaction-form__divider" />
-              <AccountSelectRow
-                label="转入账户"
-                onValueChange={setToAccountId}
-                options={acctOptions}
-                value={toAccountId}
-              />
-            </FieldCard>
-          ) : (
-            <ToggleCard
-              checked={Boolean(accountId)}
-              label="账户"
-              onCheckedChange={(checked) => {
-                setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
-              }}
-            >
-              <AccountSelectRow
-                hideLabel
-                label="选择账户"
-                onValueChange={setAccountId}
-                options={acctOptions}
-                placeholder="不绑定账户"
-                value={accountId}
-              />
-            </ToggleCard>
-          )}
-
-          <FieldCard className="transaction-form__date-card" label="日期">
-            <DateWheelPicker label="起始日期" onValueChange={setStartDate} value={startDate} />
-          </FieldCard>
-
-          <PersonSelectField
-            checked={personEnabled}
-            label="人员"
-            onCheckedChange={(checked) => {
-              setPersonEnabled(checked);
-              if (!checked) setPersonId(null);
-            }}
-            onValueChange={setPersonId}
-            options={peopleOptions}
-            value={personId}
-          />
-
-          <FieldCard className="transaction-form__note-card" label="备注">
-            <div className="transaction-form__note-row">
-              <span>备注</span>
-              <Input
-                aria-label="备注"
-                label="备注"
-                maxLength={240}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="如：房租 / 视频会员..."
-                value={note}
-              />
-            </div>
-          </FieldCard>
+          {orderedFieldsForType(order, type).map(renderField)}
 
           {type !== "transfer" ? (
             <>

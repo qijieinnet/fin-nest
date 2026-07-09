@@ -22,7 +22,6 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
   links: Prisma.TransactionLinkGetPayload<Record<string, never>>[];
 };
 
-const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
 const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
 
 function relationAccountEntry(relationKind: string, amountMicros: bigint) {
@@ -84,8 +83,7 @@ export class TransactionsService {
     // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
     const sideFilters: Prisma.TransactionWhereInput[] = [];
     if (query.accountId && query.subAccountId) {
-      const subAccountId =
-        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      const subAccountId = query.subAccountId;
       sideFilters.push({
         OR: [
           { accountId: query.accountId, subAccountId },
@@ -108,8 +106,7 @@ export class TransactionsService {
       }
       sideFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
-      const subAccountId =
-        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      const subAccountId = query.subAccountId;
       sideFilters.push({
         OR: [
           { subAccountId },
@@ -278,6 +275,7 @@ export class TransactionsService {
         );
         await tx.transactionAccountRelation.deleteMany({ where: { ledgerId, transactionId } });
         const normalized = await this.normalize(tx, ledgerId, input);
+        const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
 
         const updated = await tx.transaction.update({
           where: { id: transactionId },
@@ -294,17 +292,17 @@ export class TransactionsService {
             personId: input.personId ?? null,
             personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
             accountId: input.type === "transfer" ? null : (input.accountId ?? null),
-            subAccountId: input.type === "transfer" ? null : (input.subAccountId ?? null),
+            subAccountId: resolved.subAccountId,
             fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
-            fromSubAccountId: input.type === "transfer" ? (input.fromSubAccountId ?? null) : null,
+            fromSubAccountId: resolved.fromSubAccountId,
             toAccountId: input.type === "transfer" ? input.toAccountId : null,
-            toSubAccountId: input.type === "transfer" ? (input.toSubAccountId ?? null) : null,
+            toSubAccountId: resolved.toSubAccountId,
             note: input.note ?? null,
             updatedBy: userId,
           },
         });
 
-        await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, input, normalized);
+        await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, resolved.input, normalized);
         await this.replaceAssetLinks(tx, ledgerId, updated.id, input);
         await this.audit.write(
           {
@@ -369,6 +367,7 @@ export class TransactionsService {
     options: CreateTransactionOptions = {},
   ) {
     const normalized = await this.normalize(tx, ledgerId, input);
+    const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
     const transaction = await tx.transaction.create({
       data: {
         ledgerId,
@@ -384,11 +383,11 @@ export class TransactionsService {
         personId: input.personId ?? null,
         personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
         accountId: input.type === "transfer" ? null : (input.accountId ?? null),
-        subAccountId: input.type === "transfer" ? null : (input.subAccountId ?? null),
+        subAccountId: resolved.subAccountId,
         fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
-        fromSubAccountId: input.type === "transfer" ? (input.fromSubAccountId ?? null) : null,
+        fromSubAccountId: resolved.fromSubAccountId,
         toAccountId: input.type === "transfer" ? input.toAccountId : null,
-        toSubAccountId: input.type === "transfer" ? (input.toSubAccountId ?? null) : null,
+        toSubAccountId: resolved.toSubAccountId,
         note: input.note ?? null,
         source: options.source ?? "manual",
         sourceId: options.sourceId ?? null,
@@ -396,7 +395,7 @@ export class TransactionsService {
         updatedBy: userId,
       },
     });
-    await this.writeRelationsAndEntries(tx, ledgerId, transaction.id, userId, input, normalized);
+    await this.writeRelationsAndEntries(tx, ledgerId, transaction.id, userId, resolved.input, normalized);
     await this.createAssetLinks(tx, ledgerId, transaction.id, input);
     return transaction;
   }
@@ -612,6 +611,46 @@ export class TransactionsService {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
       }
     }
+  }
+
+  /**
+   * 把“未指定子账户”的 money 账户解析到其默认子账户 id，让每笔记录都落在真实子账户上。
+   * 返回按类型归一后的子账户三元组，以及带上这些解析值的 input（供写分录复用）。
+   */
+  private async resolveSubAccounts(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    input: CreateTransactionDto,
+  ): Promise<{
+    subAccountId: string | null;
+    fromSubAccountId: string | null;
+    toSubAccountId: string | null;
+    input: CreateTransactionDto;
+  }> {
+    const resolve = async (accountId?: string | null, subAccountId?: string | null) => {
+      if (!accountId) return null;
+      if (subAccountId) return subAccountId;
+      return this.accounts.findDefaultSubAccountId(tx, ledgerId, accountId);
+    };
+    const isTransfer = input.type === "transfer";
+    const subAccountId = isTransfer ? null : await resolve(input.accountId, input.subAccountId);
+    const fromSubAccountId = isTransfer
+      ? await resolve(input.fromAccountId, input.fromSubAccountId)
+      : null;
+    const toSubAccountId = isTransfer
+      ? await resolve(input.toAccountId, input.toSubAccountId)
+      : null;
+    return {
+      subAccountId,
+      fromSubAccountId,
+      toSubAccountId,
+      input: {
+        ...input,
+        subAccountId: subAccountId ?? undefined,
+        fromSubAccountId: fromSubAccountId ?? undefined,
+        toSubAccountId: toSubAccountId ?? undefined,
+      },
+    };
   }
 
   private async assertMoneyAccount(

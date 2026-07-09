@@ -24,7 +24,6 @@ type AccountEditorSheetProps = {
   ledgerId: string;
   parentAccount?: Account;
   subAccount?: SubAccount;
-  editDefaultSubAccount?: boolean;
 };
 
 function parseOptionalDay(value: string, label: string): number | undefined {
@@ -168,7 +167,6 @@ function OptionalDateCard({
 
 export function AccountEditorSheet({
   account,
-  editDefaultSubAccount,
   ledgerId,
   parentAccount,
   subAccount,
@@ -177,19 +175,11 @@ export function AccountEditorSheet({
   const { pop } = useSheetStack();
   const { showToast } = useToast();
   const isSubAccountMode = Boolean(parentAccount);
-  const isEditing = Boolean(account || subAccount || editDefaultSubAccount);
+  const isEditing = Boolean(account || subAccount);
 
   const [type, setType] = useState<AccountType>(account?.type ?? "savings");
-  const [name, setName] = useState(
-    editDefaultSubAccount
-      ? (parentAccount?.defaultSubAccountName ?? "默认")
-      : (subAccount?.name ?? account?.name ?? ""),
-  );
-  const [icon, setIcon] = useState(
-    editDefaultSubAccount
-      ? (parentAccount?.defaultSubAccountIcon ?? parentAccount?.icon ?? "💵")
-      : (subAccount?.icon ?? account?.icon ?? "💵"),
-  );
+  const [name, setName] = useState(subAccount?.name ?? account?.name ?? "");
+  const [icon, setIcon] = useState(subAccount?.icon ?? account?.icon ?? "💵");
   const [balance, setBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState(() => microsToInput(account?.creditLimitMicros));
   const [investCost, setInvestCost] = useState(() => microsToInput(account?.investmentCostMicros));
@@ -203,11 +193,9 @@ export function AccountEditorSheet({
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0;
   const title = isSubAccountMode
-    ? editDefaultSubAccount
-      ? "编辑默认账户"
-      : subAccount
-        ? "编辑子账户"
-        : "添加子账户"
+    ? subAccount
+      ? "编辑子账户"
+      : "添加子账户"
     : isEditing
       ? "编辑账户"
       : "新建账户";
@@ -216,12 +204,6 @@ export function AccountEditorSheet({
     mutationFn: async () => {
       if (parentAccount) {
         const shared = { name: trimmedName, icon };
-        if (editDefaultSubAccount) {
-          return apiRequest<Account>(ledgerApiPath(ledgerId, `/accounts/${parentAccount.id}`), {
-            method: "PATCH",
-            body: { defaultSubAccountName: shared.name, defaultSubAccountIcon: shared.icon },
-          });
-        }
         if (subAccount) {
           return apiRequest<SubAccount>(
             ledgerApiPath(ledgerId, `/accounts/${parentAccount.id}/sub-accounts/${subAccount.id}`),

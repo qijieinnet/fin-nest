@@ -20,9 +20,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 /** 直接绑定（资金流动）账户：可收回/需归还账户只通过关联使用，不进主账户选择。 */
 const MONEY_ACCOUNT_TYPES: AccountType[] = ["savings", "credit", "invest"];
 const ACCOUNT_GROUP_OPTION_PREFIX = "__account_group__:";
-const FILTER_DEFAULT_SUB_ACCOUNT_PREFIX = "__filter_default_sub_account__:";
 const FILTER_SUB_ACCOUNT_PREFIX = "__filter_sub_account__:";
-export const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
 
 type MoneyAccountOptionsConfig = {
   /** 筛选场景需要父账户可选；表单选择场景有子账户时只允许选子账户。 */
@@ -31,10 +29,6 @@ type MoneyAccountOptionsConfig = {
 
 function accountGroupOptionId(accountId: string): string {
   return `${ACCOUNT_GROUP_OPTION_PREFIX}${accountId}`;
-}
-
-function filterDefaultSubAccountOptionId(accountId: string): string {
-  return `${FILTER_DEFAULT_SUB_ACCOUNT_PREFIX}${accountId}`;
 }
 
 function filterSubAccountOptionId(accountId: string, subAccountId: string): string {
@@ -146,33 +140,31 @@ export function moneyAccountOptions(
   for (const account of accounts) {
     if (!MONEY_ACCOUNT_TYPES.includes(account.type)) continue;
     const subAccounts = account.subAccounts.filter((sub) => !sub.archivedAt);
-    const showSubAccounts = subAccounts.length > 0;
-    const parentId =
-      parentSelectable || !showSubAccounts ? account.id : accountGroupOptionId(account.id);
+    // 只有存在“命名子账户”（默认子账户以外）时才展示子账户层级；否则账户作为整体可选。
+    const namedSubs = subAccounts.filter((sub) => !sub.isDefault);
+    const defaultSub = subAccounts.find((sub) => sub.isDefault);
+    if (namedSubs.length === 0) {
+      // 简单账户：整体可选。表单选项 id 用默认子账户 id，使记账落到默认子账户且编辑可正确回填；
+      // 筛选场景用账户 id（等价于筛选该账户全部记录）。
+      options.push({
+        id: !parentSelectable && defaultSub ? defaultSub.id : account.id,
+        label: account.name,
+        icon: account.icon ?? undefined,
+      });
+      continue;
+    }
+    // 有命名子账户：父账户作为分组，列出全部子账户（含默认子账户，默认排最前）。
+    const parentId = parentSelectable ? account.id : accountGroupOptionId(account.id);
     options.push({
       id: parentId,
       label: account.name,
       icon: account.icon ?? undefined,
-      disabled: showSubAccounts && !parentSelectable,
+      disabled: !parentSelectable,
     });
-    if (showSubAccounts && !parentSelectable) {
-      options.push({
-        id: account.id,
-        label: account.defaultSubAccountName ?? "默认",
-        icon: account.defaultSubAccountIcon ?? account.icon ?? undefined,
-        parentId,
-      });
-    }
-    if (showSubAccounts && parentSelectable) {
-      options.push({
-        id: filterDefaultSubAccountOptionId(account.id),
-        label: account.defaultSubAccountName ?? "默认",
-        icon: account.defaultSubAccountIcon ?? account.icon ?? undefined,
-        parentId,
-      });
-    }
-    for (const sub of subAccounts) {
-      if (sub.archivedAt) continue;
+    const ordered = [...subAccounts].sort(
+      (a, b) => a.sortOrder - b.sortOrder || (a.isDefault ? -1 : b.isDefault ? 1 : 0),
+    );
+    for (const sub of ordered) {
       options.push({
         id: parentSelectable ? filterSubAccountOptionId(account.id, sub.id) : sub.id,
         label: sub.name,
@@ -193,12 +185,6 @@ export function resolveFilterAccountOptionId(selectedId: string | null | undefin
   subAccountId?: string;
 } {
   if (!selectedId) return {};
-  if (selectedId.startsWith(FILTER_DEFAULT_SUB_ACCOUNT_PREFIX)) {
-    return {
-      accountId: selectedId.slice(FILTER_DEFAULT_SUB_ACCOUNT_PREFIX.length),
-      subAccountId: DEFAULT_SUB_ACCOUNT_QUERY_VALUE,
-    };
-  }
   if (selectedId.startsWith(FILTER_SUB_ACCOUNT_PREFIX)) {
     const rest = selectedId.slice(FILTER_SUB_ACCOUNT_PREFIX.length);
     const [accountId, subAccountId] = rest.split(":");

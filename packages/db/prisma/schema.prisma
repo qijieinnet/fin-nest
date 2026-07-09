@@ -207,12 +207,10 @@ model Account {
   type                  String
   name                  String
   icon                  String?
-  defaultSubAccountName String?   @map("default_sub_account_name")
-  defaultSubAccountIcon String?   @map("default_sub_account_icon")
   balanceMicros         BigInt    @default(0) @map("balance_micros")
   includeInNetWorth     Boolean   @default(true) @map("include_in_net_worth")
-  // 默认桶（账户总额 − 各命名子账户）单独的净资产开关，与账户级总开关区分。
-  defaultBucketIncludeInNetWorth Boolean @default(true) @map("default_bucket_include_in_net_worth")
+  // 同一分类内的手动排序序号，列表按其升序排列。
+  sortOrder             Int       @default(0) @map("sort_order")
   creditLimitMicros     BigInt?   @map("credit_limit_micros")
   investmentCostMicros  BigInt?   @map("investment_cost_micros")
   counterparty          String?
@@ -238,6 +236,10 @@ model SubAccount {
   icon              String?
   balanceMicros     BigInt    @default(0) @map("balance_micros")
   includeInNetWorth Boolean   @default(true) @map("include_in_net_worth")
+  // 同一账户内子账户的手动排序序号，列表按其升序排列。
+  sortOrder         Int       @default(0) @map("sort_order")
+  // 默认子账户：money 账户创建时自动生成、承接未指定子账户的记账，不可删除、无“设为默认”动作。
+  isDefault         Boolean   @default(false) @map("is_default")
   archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
   createdBy         String?   @map("created_by") @db.Uuid
   updatedBy         String?   @map("updated_by") @db.Uuid

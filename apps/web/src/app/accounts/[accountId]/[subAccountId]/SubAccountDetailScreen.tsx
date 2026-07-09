@@ -1,35 +1,23 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
-import { Button, IconButton, MobileAppShell, Switch } from "@/components/ui";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type Account,
-  type SubAccount,
-} from "@/lib/api";
+import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
+import type { MenuItem } from "@/components/ui";
+import { apiRequest, getApiErrorMessage, ledgerApiPath, type SubAccount } from "@/lib/api";
 import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
-import {
-  accountGroupMeta,
-  defaultBucketMicros,
-  microsToInput,
-} from "../../_components/account-utils";
+import { accountGroupMeta, microsToInput } from "../../_components/account-utils";
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
-import {
-  DEFAULT_SUB_ACCOUNT_ID,
-  RelatedTransactionList,
-  transactionUsesDefaultSubAccount,
-} from "../../_components/RelatedTransactionList";
+import { RelatedTransactionList } from "../../_components/RelatedTransactionList";
 
 type SubAccountDetailScreenProps = {
   accountId: string;
@@ -87,30 +75,6 @@ function NetWorthSwitchRow({
   );
 }
 
-function DefaultAccountSwitchRow({
-  checked,
-  disabled,
-  onCheckedChange,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-      <div className="min-w-0 flex-1">
-        <p className="text-[15px] text-[var(--color-text-primary)]">设为默认账户</p>
-      </div>
-      <Switch
-        checked={checked}
-        disabled={disabled}
-        label="设为默认账户"
-        onCheckedChange={onCheckedChange}
-      />
-    </div>
-  );
-}
-
 export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDetailScreenProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -118,17 +82,14 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const confirm = useConfirm();
+  const [menuOpen, setMenuOpen] = useState(false);
   const accountsQuery = useAccounts(ledgerId);
-  const transactionsQuery = useTransactions(
-    ledgerId,
-    subAccountId === DEFAULT_SUB_ACCOUNT_ID ? { accountId } : { accountId, subAccountId },
-  );
+  const transactionsQuery = useTransactions(ledgerId, { accountId, subAccountId });
   const entriesQuery = useAccountEntries(ledgerId, accountId);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
-  const isDefaultSubAccount = subAccountId === DEFAULT_SUB_ACCOUNT_ID;
   const subAccount = account?.subAccounts.find((item) => item.id === subAccountId) ?? null;
-  const hasSubAccount = isDefaultSubAccount || Boolean(subAccount);
+  const isDefaultSubAccount = Boolean(subAccount?.isDefault);
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
@@ -165,21 +126,6 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     if (accepted && !removeSub.isPending) removeSub.mutate();
   };
 
-  const updateDefaultBucketNetWorth = useMutation({
-    mutationFn: (defaultBucketIncludeInNetWorth: boolean) =>
-      apiRequest<Account>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), {
-        method: "PATCH",
-        body: { defaultBucketIncludeInNetWorth },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "success", message: "设置已更新" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
-  });
-
   const updateSubNetWorth = useMutation({
     mutationFn: (includeInNetWorth: boolean) =>
       apiRequest<SubAccount>(
@@ -198,25 +144,6 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     },
   });
 
-  const makeDefault = useMutation({
-    mutationFn: () =>
-      apiRequest<Account>(
-        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}/default`),
-        { method: "POST" },
-      ),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId!, accountId) }),
-      ]);
-      showToast({ tone: "success", message: "已设为默认账户" });
-      router.replace(routes.subAccount(accountId, DEFAULT_SUB_ACCOUNT_ID));
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "设置失败，请稍后重试") });
-    },
-  });
-
   if (!ledgerId || accountsQuery.isPending) {
     return (
       <MobileAppShell>
@@ -227,7 +154,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     );
   }
 
-  if (!account || !hasSubAccount) {
+  if (!account || !subAccount) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
@@ -245,20 +172,12 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   }
 
   const meta = accountGroupMeta(account.type);
-  const subAccountName = isDefaultSubAccount
-    ? (account.defaultSubAccountName ?? "默认")
-    : subAccount!.name;
-  const subAccountIcon = isDefaultSubAccount
-    ? (account.defaultSubAccountIcon ?? account.icon ?? "💼")
-    : (subAccount!.icon ?? "💵");
-  const subAccountBalance = isDefaultSubAccount
-    ? defaultBucketMicros(account)
-    : BigInt(subAccount!.balanceMicros);
-  const transactions = (transactionsQuery.data ?? []).filter((transaction) =>
-    isDefaultSubAccount ? transactionUsesDefaultSubAccount(transaction, account.id) : true,
-  );
-  const entries = (entriesQuery.data ?? []).filter((entry) =>
-    isDefaultSubAccount ? !entry.subAccountId : entry.subAccountId === subAccount!.id,
+  const subAccountName = subAccount.name;
+  const subAccountIcon = subAccount.icon ?? "💵";
+  const subAccountBalance = BigInt(subAccount.balanceMicros);
+  const transactions = transactionsQuery.data ?? [];
+  const entries = (entriesQuery.data ?? []).filter(
+    (entry) => entry.subAccountId === subAccount.id,
   );
   const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
 
@@ -271,7 +190,8 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           allowNegative={account.type !== "credit"}
           initialBalance={microsToInput(subAccountBalance.toString())}
           ledgerId={ledgerId}
-          subAccountId={isDefaultSubAccount ? undefined : subAccount!.id}
+          offsetMicros="0"
+          subAccountId={subAccount.id}
           title={`修改余额 · ${subAccountName}`}
         />
       ),
@@ -283,12 +203,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
       className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
       content: (
-        <AccountEditorSheet
-          editDefaultSubAccount={isDefaultSubAccount}
-          ledgerId={ledgerId}
-          parentAccount={account}
-          subAccount={isDefaultSubAccount ? undefined : subAccount!}
-        />
+        <AccountEditorSheet ledgerId={ledgerId} parentAccount={account} subAccount={subAccount} />
       ),
     });
   };
@@ -301,7 +216,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           accountId={account.id}
           emptyText="还没有使用该子账户的记账"
           ledgerId={ledgerId}
-          subAccountId={isDefaultSubAccount ? DEFAULT_SUB_ACCOUNT_ID : subAccount!.id}
+          subAccountId={subAccount.id}
         />
       ),
     });
@@ -316,6 +231,22 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     });
   };
 
+  const subMenuGroups: MenuItem[][] = [
+    [{ icon: <Pencil size={18} />, label: "编辑子账户", onSelect: openRename }],
+    ...(!isDefaultSubAccount
+      ? [
+          [
+            {
+              danger: true,
+              icon: <Trash2 size={18} />,
+              label: "删除子账户",
+              onSelect: () => void requestDeleteSub(),
+            },
+          ],
+        ]
+      : []),
+  ];
+
   return (
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-12 pt-[calc(12px+env(safe-area-inset-top))]">
@@ -325,7 +256,18 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
             label={`返回${account.name}`}
             onClick={goBack}
           />
-          <IconButton icon={<Pencil size={20} />} label="编辑子账户" onClick={openRename} />
+          <div className="relative flex justify-end">
+            <IconButtonGroup
+              items={[
+                {
+                  icon: <Ellipsis size={22} />,
+                  label: "更多",
+                  onClick: () => setMenuOpen((open) => !open),
+                },
+              ]}
+            />
+            <PopoverMenu groups={subMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+          </div>
         </header>
 
         <AccountBalanceCard
@@ -338,40 +280,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           subtitle={`子账户 · ${meta.name}`}
         />
 
-        <button
-          className="mt-4 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
-          onClick={openBalanceEdit}
-          type="button"
-        >
-          修改余额
-        </button>
-
         <div className="mt-4">
           <NetWorthSwitchRow
-            checked={
-              isDefaultSubAccount
-                ? account.defaultBucketIncludeInNetWorth === false
-                : subAccount!.includeInNetWorth === false
-            }
-            disabled={
-              isDefaultSubAccount
-                ? updateDefaultBucketNetWorth.isPending
-                : updateSubNetWorth.isPending
-            }
-            onCheckedChange={(checked) => {
-              if (isDefaultSubAccount) updateDefaultBucketNetWorth.mutate(!checked);
-              else updateSubNetWorth.mutate(!checked);
-            }}
-          />
-        </div>
-
-        <div className="mt-3">
-          <DefaultAccountSwitchRow
-            checked={isDefaultSubAccount || makeDefault.isPending}
-            disabled={isDefaultSubAccount || makeDefault.isPending}
-            onCheckedChange={(checked) => {
-              if (!isDefaultSubAccount && checked) makeDefault.mutate();
-            }}
+            checked={subAccount.includeInNetWorth === false}
+            disabled={updateSubNetWorth.isPending}
+            onCheckedChange={(checked) => updateSubNetWorth.mutate(!checked)}
           />
         </div>
 
@@ -388,24 +301,15 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           />
         </section>
 
-        {!isDefaultSubAccount ? (
-          <>
-            <section className="bill-detail__delete">
-              <Button
-                className="bill-detail__delete-button"
-                disabled={removeSub.isPending}
-                icon={<Trash2 size={18} />}
-                onClick={() => void requestDeleteSub()}
-                variant="danger"
-              >
-                删除子账户
-              </Button>
-            </section>
-            <p className="mt-2 px-2 text-center text-xs leading-5 text-[var(--color-text-muted)]">
-              删除前需先将子账户余额调整为 0
-            </p>
-          </>
-        ) : null}
+        <section className="mt-6">
+          <button
+            className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
+            onClick={openBalanceEdit}
+            type="button"
+          >
+            修改余额
+          </button>
+        </section>
       </main>
     </MobileAppShell>
   );

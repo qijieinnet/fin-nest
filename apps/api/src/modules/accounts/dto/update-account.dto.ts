@@ -16,25 +16,8 @@ export class UpdateAccountDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  @Length(1, 80)
-  defaultSubAccountName?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @Length(1, 40)
-  defaultSubAccountIcon?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
   @IsBoolean()
   includeInNetWorth?: boolean;
-
-  @ApiPropertyOptional({ description: "默认桶是否计入总资产（与账户级总开关区分）" })
-  @IsOptional()
-  @IsBoolean()
-  defaultBucketIncludeInNetWorth?: boolean;
 
   @ApiPropertyOptional({ example: "300000000" })
   @IsOptional()

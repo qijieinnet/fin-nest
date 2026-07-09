@@ -157,6 +157,9 @@ export type SubAccount = {
   icon: string | null;
   balanceMicros: string;
   includeInNetWorth: boolean;
+  sortOrder: number;
+  /** money 账户创建时自动生成的默认子账户：承接未指定子账户的记账，不可删除。 */
+  isDefault: boolean;
   archivedAt: string | null;
 };
 
@@ -166,13 +169,9 @@ export type Account = {
   type: AccountType;
   name: string;
   icon: string | null;
-  defaultSubAccountName: string | null;
-  defaultSubAccountIcon: string | null;
-  /** 账户总余额（含子账户）。 */
+  /** 账户总余额（含子账户，等于各子账户余额之和）。 */
   balanceMicros: string;
   includeInNetWorth: boolean;
-  /** 默认桶（账户总额 − 各命名子账户）是否计入总资产，与账户级总开关区分。 */
-  defaultBucketIncludeInNetWorth: boolean;
   creditLimitMicros: string | null;
   investmentCostMicros: string | null;
   counterparty: string | null;
@@ -180,6 +179,7 @@ export type Account = {
   billDay: number | null;
   repayDay: number | null;
   settledAt: string | null;
+  sortOrder: number;
   archivedAt: string | null;
   subAccounts: SubAccount[];
 };

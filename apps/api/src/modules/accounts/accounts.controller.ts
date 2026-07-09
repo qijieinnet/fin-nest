@@ -23,6 +23,7 @@ import { AccountsService } from "./accounts.service";
 import { AdjustAccountDto } from "./dto/adjust-account.dto";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { CreateSubAccountDto } from "./dto/create-sub-account.dto";
+import { ReorderAccountsDto, ReorderSubAccountsDto } from "./dto/reorder-accounts.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
 import { UpdateSubAccountDto } from "./dto/update-sub-account.dto";
 
@@ -53,6 +54,16 @@ export class AccountsController {
       body,
       idempotencyKey,
     );
+  }
+
+  @Patch("reorder")
+  @ApiOkResponse()
+  async reorder(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderAccountsDto,
+  ): Promise<void> {
+    await this.accounts.reorderAccounts(ledgerId, (auth as SessionAuthContext).userId, body.ids);
   }
 
   @Patch(":accountId")
@@ -104,6 +115,22 @@ export class AccountsController {
     );
   }
 
+  @Patch(":accountId/sub-accounts/reorder")
+  @ApiOkResponse()
+  async reorderSubAccounts(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("accountId") accountId: string,
+    @Body() body: ReorderSubAccountsDto,
+  ): Promise<void> {
+    await this.accounts.reorderSubAccounts(
+      ledgerId,
+      accountId,
+      (auth as SessionAuthContext).userId,
+      body.ids,
+    );
+  }
+
   @Patch(":accountId/sub-accounts/:subAccountId")
   @ApiOkResponse()
   updateSubAccount(
@@ -138,21 +165,6 @@ export class AccountsController {
     );
   }
 
-  @Post(":accountId/sub-accounts/:subAccountId/default")
-  @ApiOkResponse()
-  makeSubAccountDefault(
-    @CurrentAuth() auth: AuthContext,
-    @Param("ledgerId") ledgerId: string,
-    @Param("accountId") accountId: string,
-    @Param("subAccountId") subAccountId: string,
-  ) {
-    return this.accounts.makeSubAccountDefault(
-      ledgerId,
-      accountId,
-      subAccountId,
-      (auth as SessionAuthContext).userId,
-    );
-  }
 
   @Delete(":accountId")
   @ApiNoContentResponse()

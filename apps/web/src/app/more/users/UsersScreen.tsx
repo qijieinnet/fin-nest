@@ -105,7 +105,7 @@ export function UsersScreen() {
         <div className="flex flex-col gap-3.5 pb-6">
           <Input
             aria-label="搜索用户"
-            className="bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]"
+            className="bg-white shadow-[var(--shadow-soft)]"
             label=""
             name="search"
             onChange={(event) => setSearch(event.target.value)}

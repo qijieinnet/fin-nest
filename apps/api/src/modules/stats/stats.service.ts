@@ -13,7 +13,6 @@ import { StatsQueryDto } from "./dto/stats-query.dto";
 
 const TREND_MONTHS = 6;
 const UNCATEGORIZED_KEY = "__uncategorized__";
-const DEFAULT_SUB_ACCOUNT_QUERY_VALUE = "default";
 // 「全部」时间预设不传日期范围，用一个足够宽的窗口覆盖所有历史交易。
 const EPOCH = new Date(Date.UTC(1970, 0, 1));
 const FAR_FUTURE = new Date(Date.UTC(9999, 0, 1));
@@ -132,8 +131,7 @@ export class StatsService {
     // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
     const sideFilters: Prisma.TransactionWhereInput[] = [];
     if (query.accountId && query.subAccountId) {
-      const subAccountId =
-        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      const subAccountId = query.subAccountId;
       sideFilters.push({
         OR: [
           { accountId: query.accountId, subAccountId },
@@ -156,8 +154,7 @@ export class StatsService {
       }
       sideFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
-      const subAccountId =
-        query.subAccountId === DEFAULT_SUB_ACCOUNT_QUERY_VALUE ? null : query.subAccountId;
+      const subAccountId = query.subAccountId;
       sideFilters.push({
         OR: [
           { subAccountId },

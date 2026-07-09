@@ -292,9 +292,7 @@ export class RecordsService {
 
   async deletePerson(ledgerId: string, personId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
-    const person = await this.assertPerson(ledgerId, personId);
-    if (person.isDefault)
-      throw new AppError("DEFAULT_PERSON_CANNOT_BE_DELETED", "默认人员不能删除", 400);
+    await this.assertPerson(ledgerId, personId);
     const [hasTransactions, templateRefs, ruleRefs, pendingRefs, insuredRefs] = await Promise.all([
       this.prisma.client.transaction.count({ where: { ledgerId, personId, deletedAt: null } }),
       this.prisma.client.quickTemplate.count({ where: { ledgerId, personId, archivedAt: null } }),

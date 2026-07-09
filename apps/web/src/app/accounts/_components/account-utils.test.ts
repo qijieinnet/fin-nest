@@ -15,6 +15,8 @@ function subAccount(overrides: Partial<SubAccount>): SubAccount {
     icon: null,
     balanceMicros: "0",
     includeInNetWorth: true,
+    sortOrder: 0,
+    isDefault: false,
     archivedAt: null,
     ...overrides,
   };
@@ -27,11 +29,8 @@ function account(overrides: Partial<Account>): Account {
     type: "savings",
     name: "账户",
     icon: null,
-    defaultSubAccountName: null,
-    defaultSubAccountIcon: null,
     balanceMicros: "0",
     includeInNetWorth: true,
-    defaultBucketIncludeInNetWorth: true,
     creditLimitMicros: null,
     investmentCostMicros: null,
     counterparty: null,
@@ -39,6 +38,7 @@ function account(overrides: Partial<Account>): Account {
     billDay: null,
     repayDay: null,
     settledAt: null,
+    sortOrder: 0,
     archivedAt: null,
     subAccounts: [],
     ...overrides,
@@ -60,9 +60,11 @@ describe("account net worth helpers", () => {
   });
 
   it("respects child account exclusions when the parent is included", () => {
+    // 总额 350 = 默认子账户 50 + 命名子账户 100（计入）+ 200（不计入）。
     const includedParent = account({
       balanceMicros: "350000000",
       subAccounts: [
+        subAccount({ id: "default", balanceMicros: "50000000", isDefault: true }),
         subAccount({ id: "sub-1", balanceMicros: "100000000", includeInNetWorth: true }),
         subAccount({ id: "sub-2", balanceMicros: "200000000", includeInNetWorth: false }),
       ],
@@ -71,12 +73,12 @@ describe("account net worth helpers", () => {
     expect(accountNetWorthMicros(includedParent)).toBe(150000000n);
   });
 
-  it("excludes only the default bucket, keeping named sub-accounts, when its own switch is off", () => {
-    // 总额 350：默认桶 50 + 命名子账户 100 + 200。默认桶关闭后应只剔除 50。
+  it("excludes only the default sub-account when its own switch is off", () => {
+    // 总额 350：默认子账户 50（关闭计入）+ 命名子账户 100 + 200。应只剔除 50。
     const parent = account({
       balanceMicros: "350000000",
-      defaultBucketIncludeInNetWorth: false,
       subAccounts: [
+        subAccount({ id: "default", balanceMicros: "50000000", isDefault: true, includeInNetWorth: false }),
         subAccount({ id: "sub-1", balanceMicros: "100000000", includeInNetWorth: true }),
         subAccount({ id: "sub-2", balanceMicros: "200000000", includeInNetWorth: true }),
       ],

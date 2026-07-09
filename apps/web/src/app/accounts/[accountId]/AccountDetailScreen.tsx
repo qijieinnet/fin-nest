@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
 import {
+  Button,
   IconButton,
   IconButtonGroup,
   MobileAppShell,
@@ -31,22 +32,20 @@ import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../_components/BalanceEditSheet";
-import {
-  DEFAULT_SUB_ACCOUNT_ID,
-  RelatedTransactionList,
-} from "../_components/RelatedTransactionList";
+import { RelatedTransactionList } from "../_components/RelatedTransactionList";
+import { SubAccountsSortList } from "../_components/SubAccountsSortList";
 import {
   accountGroupMeta,
   accountTotalMicros,
   accountVisibleTotalMicros,
   balanceLabel,
-  defaultBucketMicros,
   formatDateLabel,
   formatMoney,
   isLendAccount,
   isLiability,
   isMoneyAccount,
   microsToInput,
+  orderedSubAccountRows,
 } from "../_components/account-utils";
 
 type AccountDetailScreenProps = {
@@ -129,6 +128,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const accountsQuery = useAccounts(ledgerId);
   const transactionsQuery = useTransactions(ledgerId, { accountId });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sortMode, setSortMode] = useState(false);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const isLend = account ? isLendAccount(account.type) : false;
@@ -188,7 +188,41 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     },
   });
 
+  const reorderSubAccounts = useMutation({
+    mutationFn: (orderedIds: string[]) =>
+      apiRequest<void>(
+        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/reorder`),
+        { method: "PATCH", body: { ids: orderedIds } },
+      ),
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
+      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
+    },
+  });
+
+  const handleReorderSub = (orderedIds: string[]) => {
+    // 序号落到各子账户（含默认子账户）上，列表按 sortOrder 重新排序。
+    const position = new Map(orderedIds.map((id, index) => [id, index]));
+    queryClient.setQueryData<Account[]>(queryKeys.accounts(ledgerId!), (prev) => {
+      if (!prev) return prev;
+      return prev.map((item) => {
+        if (item.id !== accountId) return item;
+        return {
+          ...item,
+          subAccounts: item.subAccounts.map((sub) =>
+            position.has(sub.id) ? { ...sub, sortOrder: position.get(sub.id)! } : sub,
+          ),
+        };
+      });
+    });
+    reorderSubAccounts.mutate(orderedIds);
+  };
+
   const goBack = () => {
+    if (sortMode) {
+      setSortMode(false);
+      return;
+    }
     if (window.history.length > 1) router.back();
     else router.push(routes.accounts);
   };
@@ -228,12 +262,16 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
   const canEditBalance = moneyAccount || isLend;
-  const hasSplitSubAccounts = account.subAccounts.length > 0;
-  const hasMultipleSubAccounts = account.subAccounts.length > 1;
+  // 命名子账户（默认子账户之外）：有命名子账户时才把账户视为“已拆分”，展示子账户列表。
+  const namedSubAccounts = account.subAccounts.filter((sub) => !sub.isDefault);
+  const hasSplitSubAccounts = namedSubAccounts.length > 0;
+  const hasMultipleSubAccounts = namedSubAccounts.length > 1;
   const showRelatedRecordsLink = !hasSplitSubAccounts;
   const showAdjustmentRecordsLink = !hasMultipleSubAccounts;
-  const defaultSubAccountName = account.defaultSubAccountName ?? "默认";
-  const defaultSubAccountIcon = account.defaultSubAccountIcon ?? account.icon ?? "💼";
+  // 默认子账户 + 至少 1 个命名子账户（共 ≥2 项）才可拖拽排序。
+  const canSortSubAccounts = hasSplitSubAccounts;
+  // 子账户（含默认子账户）按排序序号排列，供列表渲染与排序共用。
+  const subAccountRows = orderedSubAccountRows(account);
   const entries = (entriesQuery.data ?? []).filter((entry) => entry.entryType !== "reversal");
   const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
   const transactions = transactionsQuery.data ?? [];
@@ -363,7 +401,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       color: settled ? "var(--color-text-muted)" : "var(--color-tint)",
     });
   }
-  const subRows = account.subAccounts.map((subAccount) => {
+  // 默认子账户与命名子账户统一渲染；默认子账户可改余额/改名，但不提供删除。
+  const renderSubRow = (subAccount: SubAccount) => {
     const actions: SwipeAction[] = [
       {
         icon: <Pencil size={18} />,
@@ -371,12 +410,16 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         onClick: () => openBalanceEdit(subAccount),
         tone: "neutral",
       },
-      {
-        icon: <Trash2 size={18} />,
-        label: `删除${subAccount.name}`,
-        onClick: () => void requestDeleteSub(subAccount),
-        tone: "danger",
-      },
+      ...(subAccount.isDefault
+        ? []
+        : [
+            {
+              icon: <Trash2 size={18} />,
+              label: `删除${subAccount.name}`,
+              onClick: () => void requestDeleteSub(subAccount),
+              tone: "danger" as const,
+            },
+          ]),
     ];
     return (
       <SwipeActionRow actions={actions} key={subAccount.id}>
@@ -396,12 +439,15 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         </button>
       </SwipeActionRow>
     );
-  });
+  };
 
   const accountMenuGroups: MenuItem[][] = [
     [
       ...(moneyAccount
         ? [{ icon: <Plus size={18} />, label: "添加子账户", onSelect: openSubAdd }]
+        : []),
+      ...(canSortSubAccounts
+        ? [{ icon: <ArrowUpDown size={18} />, label: "子账户排序", onSelect: () => setSortMode(true) }]
         : []),
       { icon: <Pencil size={18} />, label: "编辑账户", onSelect: openEditor },
     ],
@@ -423,22 +469,43 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         >
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回账户"
+            label={sortMode ? "退出排序" : "返回账户"}
             onClick={goBack}
           />
           <div className="relative flex justify-end">
-            <IconButtonGroup
-              items={[
-                {
-                  icon: <Ellipsis size={22} />,
-                  label: "更多",
-                  onClick: () => setMenuOpen((open) => !open),
-                },
-              ]}
-            />
-            <PopoverMenu groups={accountMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+            {sortMode ? (
+              <Button onClick={() => setSortMode(false)} variant="primary">
+                完成
+              </Button>
+            ) : (
+              <>
+                <IconButtonGroup
+                  items={[
+                    {
+                      icon: <Ellipsis size={22} />,
+                      label: "更多",
+                      onClick: () => setMenuOpen((open) => !open),
+                    },
+                  ]}
+                />
+                <PopoverMenu groups={accountMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+              </>
+            )}
           </div>
         </header>
+
+        {sortMode ? (
+          <section className="mt-6">
+            <div className="flex items-center justify-between px-1 pb-2">
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
+            </div>
+            <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
+              按住右侧图标拖动排序，默认子账户也可调整位置。
+            </p>
+            <SubAccountsSortList onReorder={handleReorderSub} rows={subAccountRows} />
+          </section>
+        ) : (
+          <>
 
         <AccountBalanceCard
           accountType={account.type}
@@ -467,34 +534,16 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
-        {moneyAccount ? (
+        {moneyAccount && hasSplitSubAccounts ? (
           <section className="mt-6">
             <div className="flex items-center justify-between px-1 pb-2">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
             </div>
-            {account.subAccounts.length > 0 ? (
-              <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-                <button
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
-                  onClick={() => router.push(routes.subAccount(account.id, DEFAULT_SUB_ACCOUNT_ID))}
-                  type="button"
-                >
-                  <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
-                    <span className="mr-2">{defaultSubAccountIcon}</span>
-                    {defaultSubAccountName}
-                  </span>
-                  <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-                    {formatMoney(defaultBucketMicros(account))}
-                  </span>
-                  <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
-                </button>
-                <div className="divide-y divide-black/[0.06]">{subRows}</div>
+            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+              <div className="divide-y divide-black/[0.06]">
+                {subAccountRows.map((row) => renderSubRow(row.sub))}
               </div>
-            ) : (
-              <p className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-4 text-center text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
-                还没有子账户，可按用途拆分余额（如应急金、房租）
-              </p>
-            )}
+            </div>
           </section>
         ) : null}
 
@@ -543,6 +592,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             </button>
           </section>
         ) : null}
+          </>
+        )}
       </main>
     </MobileAppShell>
   );

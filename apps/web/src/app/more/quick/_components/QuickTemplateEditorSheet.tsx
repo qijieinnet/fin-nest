@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AccountSelectRow,
   AmountInput,
@@ -32,12 +32,15 @@ import { cn } from "@/lib/format/class-names";
 import {
   accountSelectionId,
   categoryOptions,
+  firstSelectableAccountOptionId,
   moneyAccountOptions,
   personOptions,
   relationAccountOptions,
   relationKindFor,
   resolveAccountSelection,
 } from "@/lib/data/options";
+import { effectiveFieldOrder, orderedFieldsForType } from "@/lib/data/field-order";
+import { useRecordSetting } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -205,6 +208,23 @@ export function QuickTemplateEditorSheet({
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
 
+  const setting = useRecordSetting(ledgerId).data;
+  const order = effectiveFieldOrder(setting);
+  const acctRequired = setting?.acctRequired ?? false;
+  const personRequired = setting?.personRequired ?? false;
+
+  // 账户 / 人员被记账设置标记为必填时，强制开启并回填一个默认值（与「记一笔」一致）。
+  useEffect(() => {
+    if (type !== "transfer" && acctRequired) {
+      setAccountEnabled(true);
+      if (!accountId) setAccountId(firstSelectableAccountOptionId(acctOptions));
+    }
+    if (personRequired) {
+      setPersonEnabled(true);
+      if (!personId && peopleOptions[0]?.id) setPersonId(peopleOptions[0].id);
+    }
+  }, [acctRequired, accountId, acctOptions, peopleOptions, personId, personRequired, type]);
+
   function handleTypeChange(nextType: TransactionType) {
     if (nextType === type) return;
     setType(nextType);
@@ -266,8 +286,13 @@ export function QuickTemplateEditorSheet({
       fromAccount.accountId === toAccount.accountId &&
       (fromAccount.subAccountId ?? null) === (toAccount.subAccountId ?? null)
     );
+  const accountReady =
+    !acctRequired || Boolean(accountEnabled && resolveAccountSelection(accounts, accountId).accountId);
+  const personReady = !personRequired || Boolean(personEnabled && personId);
   const canSubmit =
-    (type === "transfer" ? transferReady : Boolean(category.categoryId)) &&
+    (type === "transfer"
+      ? transferReady
+      : Boolean(category.categoryId) && accountReady && personReady) &&
     (!hasAmount || parsedAmount.ok);
 
   const save = useMutation({
@@ -275,6 +300,12 @@ export function QuickTemplateEditorSheet({
       const isTransfer = type === "transfer";
       if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
       if (isTransfer && !transferReady) throw new Error("请选择转出和转入账户");
+      if (!isTransfer && acctRequired && !(accountEnabled && resolveAccountSelection(accounts, accountId).accountId)) {
+        throw new Error("当前账本要求绑定账户");
+      }
+      if (!isTransfer && personRequired && !(personEnabled && personId)) {
+        throw new Error("当前账本要求选择人员");
+      }
       if (hasAmount && (!parsedAmount.ok || BigInt(parsedAmount.amountMicros) <= 0n)) {
         throw new Error("请输入有效金额");
       }
@@ -328,6 +359,100 @@ export function QuickTemplateEditorSheet({
       showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
     },
   });
+
+  const renderField = (field: string) => {
+    switch (field) {
+      case "category":
+        if (type === "transfer") return null;
+        return (
+          <FieldCard className="transaction-form__picker-card" key="category" label="分类">
+            <CategorySelectRow
+              onValueChange={setCategoryId}
+              options={catOptions}
+              value={categoryId}
+            />
+          </FieldCard>
+        );
+      case "account":
+        if (type === "transfer") {
+          return (
+            <FieldCard className="transaction-form__picker-card" key="account" label="账户">
+              <AccountSelectRow
+                label="转出账户"
+                onValueChange={setFromAccountId}
+                options={acctOptions}
+                placeholder="选择账户"
+                value={fromAccountId}
+              />
+              <span className="transaction-form__divider" />
+              <AccountSelectRow
+                label="转入账户"
+                onValueChange={setToAccountId}
+                options={acctOptions}
+                placeholder="选择账户"
+                value={toAccountId}
+              />
+            </FieldCard>
+          );
+        }
+
+        return (
+          <ToggleCard
+            checked={accountEnabled}
+            disabled={acctRequired}
+            key="account"
+            label="账户"
+            onCheckedChange={(checked) => {
+              setAccountEnabled(checked);
+              if (!checked) setAccountId(null);
+            }}
+          >
+            <AccountSelectRow
+              hideLabel
+              label="选择账户"
+              onValueChange={setAccountId}
+              options={acctOptions}
+              placeholder="不绑定账户"
+              value={accountId}
+            />
+          </ToggleCard>
+        );
+      case "person":
+        return (
+          <PersonSelectField
+            checked={personEnabled}
+            disabled={personRequired}
+            key="person"
+            label="人员"
+            onCheckedChange={(checked) => {
+              setPersonEnabled(checked);
+              if (!checked) setPersonId(null);
+            }}
+            onValueChange={setPersonId}
+            options={peopleOptions}
+            value={personId}
+          />
+        );
+      case "note":
+        return (
+          <FieldCard className="transaction-form__note-card" key="note" label="备注">
+            <div className="transaction-form__note-row">
+              <span>备注</span>
+              <Input
+                aria-label="备注"
+                label="备注"
+                maxLength={240}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="选填…"
+                value={note}
+              />
+            </div>
+          </FieldCard>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <form
@@ -387,65 +512,7 @@ export function QuickTemplateEditorSheet({
             </div>
           </FieldCard>
 
-          {type !== "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="分类">
-              <CategorySelectRow
-                onValueChange={setCategoryId}
-                options={catOptions}
-                value={categoryId}
-              />
-            </FieldCard>
-          ) : null}
-
-          {type === "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="账户">
-              <AccountSelectRow
-                label="转出账户"
-                onValueChange={setFromAccountId}
-                options={acctOptions}
-                placeholder="选择账户"
-                value={fromAccountId}
-              />
-              <span className="transaction-form__divider" />
-              <AccountSelectRow
-                label="转入账户"
-                onValueChange={setToAccountId}
-                options={acctOptions}
-                placeholder="选择账户"
-                value={toAccountId}
-              />
-            </FieldCard>
-          ) : (
-            <ToggleCard
-              checked={accountEnabled}
-              label="账户"
-              onCheckedChange={(checked) => {
-                setAccountEnabled(checked);
-                if (!checked) setAccountId(null);
-              }}
-            >
-              <AccountSelectRow
-                hideLabel
-                label="选择账户"
-                onValueChange={setAccountId}
-                options={acctOptions}
-                placeholder="不绑定账户"
-                value={accountId}
-              />
-            </ToggleCard>
-          )}
-
-          <PersonSelectField
-            checked={personEnabled}
-            label="人员"
-            onCheckedChange={(checked) => {
-              setPersonEnabled(checked);
-              if (!checked) setPersonId(null);
-            }}
-            onValueChange={setPersonId}
-            options={peopleOptions}
-            value={personId}
-          />
+          {orderedFieldsForType(order, type).map(renderField)}
 
           {type !== "transfer" ? (
             <>
@@ -518,20 +585,6 @@ export function QuickTemplateEditorSheet({
               />
             </>
           ) : null}
-
-          <FieldCard className="transaction-form__note-card" label="备注">
-            <div className="transaction-form__note-row">
-              <span>备注</span>
-              <Input
-                aria-label="备注"
-                label="备注"
-                maxLength={240}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="选填…"
-                value={note}
-              />
-            </div>
-          </FieldCard>
 
           {/* <div className="auto-transaction-sheet__settings">
             <section className="transaction-form__card">

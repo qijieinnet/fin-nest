@@ -1,4 +1,4 @@
-import type { Account, AccountType } from "@/lib/api";
+import type { Account, AccountType, SubAccount } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
 
 export type AccountGroupMeta = {
@@ -72,42 +72,49 @@ export function accountTotalMicros(account: Pick<Account, "balanceMicros">): big
  * 与净资产不同，即使整个账户被排除，这里仍按真实余额展示（只剔除被排除的子账户）。
  */
 export function accountVisibleTotalMicros(
-  account: Pick<
-    Account,
-    "balanceMicros" | "subAccounts" | "defaultBucketIncludeInNetWorth"
-  >,
+  account: Pick<Account, "balanceMicros" | "subAccounts">,
 ): bigint {
-  let excluded = account.subAccounts.reduce(
+  if (account.subAccounts.length === 0) return BigInt(account.balanceMicros);
+  const excluded = account.subAccounts.reduce(
     (sum, sub) => (sub.includeInNetWorth === false ? sum + BigInt(sub.balanceMicros) : sum),
     0n,
   );
-  // 有命名子账户时，默认桶才作为独立部分参与“剔除”；无子账户时由账户级开关统管。
-  if (account.subAccounts.length > 0 && account.defaultBucketIncludeInNetWorth === false) {
-    excluded += defaultBucketMicros(account);
-  }
   return BigInt(account.balanceMicros) - excluded;
 }
 
-/** 默认桶余额 = 总余额 − 各子账户余额。 */
-export function defaultBucketMicros(
-  account: Pick<Account, "balanceMicros" | "subAccounts">,
-): bigint {
-  const subs = account.subAccounts.reduce((sum, sub) => sum + BigInt(sub.balanceMicros), 0n);
-  return BigInt(account.balanceMicros) - subs;
+/** 子账户列表的展示项（含默认子账户），供列表渲染与排序共用。 */
+export type SubAccountRow = {
+  id: string;
+  isDefault: boolean;
+  name: string;
+  icon: string;
+  balanceMicros: string;
+  sub: SubAccount;
+};
+
+/** 按 sortOrder 排列子账户（含默认子账户）；序号相等时默认子账户优先。 */
+export function orderedSubAccountRows(account: Account): SubAccountRow[] {
+  return [...account.subAccounts]
+    .sort((a, b) => a.sortOrder - b.sortOrder || (a.isDefault ? -1 : b.isDefault ? 1 : 0))
+    .map((sub) => ({
+      id: sub.id,
+      isDefault: sub.isDefault,
+      name: sub.name,
+      icon: sub.icon ?? "💵",
+      balanceMicros: sub.balanceMicros,
+      sub,
+    }));
 }
 
 export function accountNetWorthMicros(account: Account): bigint {
   // 账户级总开关：关闭则整户（含所有子账户）都不计入。
   if (!account.includeInNetWorth) return 0n;
+  // 无子账户的往来账户用账户余额；money 账户余额已按不变式拆到各子账户（含默认子账户）。
   if (account.subAccounts.length === 0) return accountTotalMicros(account);
-
-  // 默认桶有自己的开关，与命名子账户各自独立计入。
-  const defaultBucket =
-    account.defaultBucketIncludeInNetWorth === false ? 0n : defaultBucketMicros(account);
   return account.subAccounts.reduce(
     (sum, subAccount) =>
       subAccount.includeInNetWorth === false ? sum : sum + BigInt(subAccount.balanceMicros),
-    defaultBucket,
+    0n,
   );
 }
 

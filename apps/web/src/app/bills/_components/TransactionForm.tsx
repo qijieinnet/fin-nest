@@ -58,8 +58,7 @@ import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../more/insurances/_components/insurance-utils";
 import { ItemEditorSheet } from "../../more/items/_components/ItemEditorSheet";
 import { typeGlyph } from "../../more/items/_components/item-utils";
-
-const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
+import { effectiveFieldOrder, orderedFieldsForType } from "@/lib/data/field-order";
 
 const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
   { label: "支出", value: "expense" },
@@ -154,20 +153,6 @@ function formatDateLabel(value: string): string {
   if (!year || !month || !day) return value.replaceAll("-", ".");
   if (year === new Date().getFullYear()) return `${month}.${day}`;
   return `${year}.${String(month).padStart(2, "0")}.${String(day).padStart(2, "0")}`;
-}
-
-function orderedFieldsForType(order: string[], type: TransactionType): string[] {
-  const fields = order.filter((field) => field !== "type" && field !== "amount");
-  if (type !== "transfer") return fields;
-
-  const withoutAccount = fields.filter((field) => field !== "account");
-  const dateIndex = withoutAccount.indexOf("date");
-  if (dateIndex === -1) return [...withoutAccount, "account"];
-  return [
-    ...withoutAccount.slice(0, dateIndex + 1),
-    "account",
-    ...withoutAccount.slice(dateIndex + 1),
-  ];
 }
 
 async function uploadAttachment(ledgerId: string, transactionId: string, item: PendingAttachment) {
@@ -373,7 +358,7 @@ export function TransactionForm({
   );
 
   const visibleFields = setting?.visibleFields ?? {};
-  const order = setting?.fieldOrder?.length ? setting.fieldOrder : DEFAULT_FIELD_ORDER;
+  const order = effectiveFieldOrder(setting);
   const acctRequired = setting?.acctRequired ?? false;
   const personRequired = setting?.personRequired ?? false;
   const continuousEntry = setting?.continuousEntry ?? false;

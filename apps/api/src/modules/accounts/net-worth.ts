@@ -10,7 +10,6 @@ type NetWorthAccount = {
   type: string;
   balanceMicros: bigint;
   includeInNetWorth: boolean;
-  defaultBucketIncludeInNetWorth: boolean;
 };
 
 type NetWorthSub = {
@@ -31,30 +30,25 @@ export function isLiabilityAccountType(type: string): boolean {
   return type === "credit" || type === "payable";
 }
 
-/** 单个账户对净资产的有符号贡献。 */
+/**
+ * 单个账户对净资产的有符号贡献。
+ * money 账户的余额已按“account.balanceMicros = Σ子账户余额”的不变式拆到各子账户（含默认子账户），
+ * 因此直接对计入净资产的子账户求和；无子账户的往来账户用账户余额。
+ */
 export function accountNetWorthMicros(account: NetWorthAccount, subs: NetWorthSub[]): bigint {
   if (!account.includeInNetWorth) return 0n;
-  let included: bigint;
-  if (subs.length === 0) {
-    included = account.balanceMicros;
-  } else {
-    const namedSum = subs.reduce(
-      (sum, sub) => (sub.includeInNetWorth ? sum + sub.balanceMicros : sum),
-      0n,
-    );
-    const totalSubs = subs.reduce((sum, sub) => sum + sub.balanceMicros, 0n);
-    const defaultBucket = account.balanceMicros - totalSubs;
-    included = (account.defaultBucketIncludeInNetWorth ? defaultBucket : 0n) + namedSum;
-  }
+  const included =
+    subs.length === 0
+      ? account.balanceMicros
+      : subs.reduce((sum, sub) => (sub.includeInNetWorth ? sum + sub.balanceMicros : sum), 0n);
   return isLiabilityAccountType(account.type) ? -included : included;
 }
 
-/** 单笔流水对净资产的有符号变化：目标部分未计入净资产则为 0，负债账户符号取反。 */
+/** 单笔流水对净资产的有符号变化：目标子账户未计入净资产则为 0，负债账户符号取反。 */
 function entryNetWorthDeltaMicros(
   entry: NetWorthEntry,
   accountsById: Map<string, NetWorthAccount>,
   subsById: Map<string, NetWorthSub>,
-  subsByAccount: Map<string, NetWorthSub[]>,
 ): bigint {
   const account = accountsById.get(entry.accountId);
   if (!account || !account.includeInNetWorth) return 0n;
@@ -63,8 +57,8 @@ function entryNetWorthDeltaMicros(
     const sub = subsById.get(entry.subAccountId);
     included = sub ? sub.includeInNetWorth : false;
   } else {
-    const hasNamedSubs = (subsByAccount.get(account.id)?.length ?? 0) > 0;
-    included = hasNamedSubs ? account.defaultBucketIncludeInNetWorth : true;
+    // 无子账户的往来账户：整户计入（已在上面判过账户级开关）。
+    included = true;
   }
   if (!included) return 0n;
   return isLiabilityAccountType(account.type) ? -entry.amountDeltaMicros : entry.amountDeltaMicros;
@@ -129,7 +123,7 @@ function netWorthAt(ctx: NetWorthContext, end: Date): bigint {
   const futureDelta = ctx.entries.reduce(
     (sum, entry) =>
       entry.occurredAt >= end
-        ? sum + entryNetWorthDeltaMicros(entry, ctx.accountsById, ctx.subsById, ctx.subsByAccount)
+        ? sum + entryNetWorthDeltaMicros(entry, ctx.accountsById, ctx.subsById)
         : sum,
     0n,
   );
