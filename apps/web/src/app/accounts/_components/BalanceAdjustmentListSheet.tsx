@@ -29,7 +29,7 @@ export function BalanceAdjustmentListSheet({
         const delta = BigInt(entry.amountDeltaMicros);
         return (
           <div
-            className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 shadow-[var(--shadow-soft)]"
+            className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3"
             key={entry.id}
           >
             <div className="flex items-start justify-between gap-3">

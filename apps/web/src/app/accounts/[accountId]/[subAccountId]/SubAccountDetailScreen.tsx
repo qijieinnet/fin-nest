@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { Button, IconButton, MobileAppShell, Switch } from "@/components/ui";
 import {
@@ -16,7 +15,7 @@ import {
 import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack, useToast } from "@/providers";
+import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
 import {
   accountGroupMeta,
@@ -26,7 +25,6 @@ import {
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
-import { DeleteAccountConfirmDialog } from "../../_components/DeleteAccountConfirmDialog";
 import {
   DEFAULT_SUB_ACCOUNT_ID,
   RelatedTransactionList,
@@ -119,13 +117,13 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const { ledgerId } = useLedger();
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const accountsQuery = useAccounts(ledgerId);
   const transactionsQuery = useTransactions(
     ledgerId,
     subAccountId === DEFAULT_SUB_ACCOUNT_ID ? { accountId } : { accountId, subAccountId },
   );
   const entriesQuery = useAccountEntries(ledgerId, accountId);
-  const [pendingDelete, setPendingDelete] = useState(false);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const isDefaultSubAccount = subAccountId === DEFAULT_SUB_ACCOUNT_ID;
@@ -147,16 +145,25 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      setPendingDelete(false);
       clear();
       showToast({ tone: "success", message: "子账户已删除" });
       router.replace(routes.account(accountId));
     },
     onError: (error) => {
-      setPendingDelete(false);
       showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
+
+  const requestDeleteSub = async () => {
+    if (removeSub.isPending || !subAccount) return;
+    const accepted = await confirm({
+      title: "删除子账户？",
+      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
+      confirmText: "删除",
+      tone: "danger",
+    });
+    if (accepted && !removeSub.isPending) removeSub.mutate();
+  };
 
   const updateDefaultBucketNetWorth = useMutation({
     mutationFn: (defaultBucketIncludeInNetWorth: boolean) =>
@@ -311,17 +318,6 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
   return (
     <MobileAppShell>
-      <DeleteAccountConfirmDialog
-        deleting={removeSub.isPending}
-        name={pendingDelete && subAccount ? subAccount.name : null}
-        onCancel={() => {
-          if (!removeSub.isPending) setPendingDelete(false);
-        }}
-        onConfirm={() => {
-          if (!removeSub.isPending) removeSub.mutate();
-        }}
-        subAccount
-      />
       <main className="min-h-dvh px-4 pb-12 pt-[calc(12px+env(safe-area-inset-top))]">
         <header className="flex items-center justify-between pb-2">
           <IconButton
@@ -399,7 +395,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
                 className="bill-detail__delete-button"
                 disabled={removeSub.isPending}
                 icon={<Trash2 size={18} />}
-                onClick={() => setPendingDelete(true)}
+                onClick={() => void requestDeleteSub()}
                 variant="danger"
               >
                 删除子账户

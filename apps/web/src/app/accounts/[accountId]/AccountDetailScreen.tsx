@@ -1,19 +1,20 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
 import {
-  Button,
   IconButton,
   IconButtonGroup,
   MobileAppShell,
+  PopoverMenu,
   Switch,
   usePageScrolled,
 } from "@/components/ui";
+import type { MenuItem } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -24,13 +25,12 @@ import {
 import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack, useToast } from "@/providers";
+import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { AccountBalanceCard } from "../_components/AccountBalanceCard";
 import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../_components/BalanceEditSheet";
-import { DeleteAccountConfirmDialog } from "../_components/DeleteAccountConfirmDialog";
 import {
   DEFAULT_SUB_ACCOUNT_ID,
   RelatedTransactionList,
@@ -52,10 +52,6 @@ import {
 type AccountDetailScreenProps = {
   accountId: string;
 };
-
-type PendingDelete =
-  | { kind: "account"; name: string }
-  | { kind: "sub"; name: string; subAccountId: string };
 
 function StatRow({ color, label, value }: { color?: string; label: string; value: string }) {
   return (
@@ -128,10 +124,11 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const { ledgerId } = useLedger();
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const scrolled = usePageScrolled();
   const accountsQuery = useAccounts(ledgerId);
   const transactionsQuery = useTransactions(ledgerId, { accountId });
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const isLend = account ? isLendAccount(account.type) : false;
@@ -150,13 +147,11 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), { method: "DELETE" }),
     onSuccess: async () => {
       await invalidate();
-      setPendingDelete(null);
       clear();
       showToast({ tone: "success", message: "账户已删除" });
       router.replace(routes.accounts);
     },
     onError: (error) => {
-      setPendingDelete(null);
       showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
@@ -171,11 +166,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       ),
     onSuccess: async () => {
       await invalidate();
-      setPendingDelete(null);
       showToast({ tone: "success", message: "子账户已删除" });
     },
     onError: (error) => {
-      setPendingDelete(null);
       showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
@@ -251,6 +244,28 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       hideDefaultHeader: true,
       content: <AccountEditorSheet account={account} ledgerId={ledgerId} />,
     });
+  };
+
+  const requestDeleteAccount = async () => {
+    if (removeAccount.isPending) return;
+    const accepted = await confirm({
+      title: "删除账户？",
+      message: `确定删除「${account.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
+      confirmText: "删除",
+      tone: "danger",
+    });
+    if (accepted && !removeAccount.isPending) removeAccount.mutate();
+  };
+
+  const requestDeleteSub = async (subAccount: SubAccount) => {
+    if (removeSub.isPending) return;
+    const accepted = await confirm({
+      title: "删除子账户？",
+      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
+      confirmText: "删除",
+      tone: "danger",
+    });
+    if (accepted && !removeSub.isPending) removeSub.mutate(subAccount.id);
   };
 
   const openBalanceEdit = (subAccount?: SubAccount) => {
@@ -359,8 +374,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       {
         icon: <Trash2 size={18} />,
         label: `删除${subAccount.name}`,
-        onClick: () =>
-          setPendingDelete({ kind: "sub", name: subAccount.name, subAccountId: subAccount.id }),
+        onClick: () => void requestDeleteSub(subAccount),
         tone: "danger",
       },
     ];
@@ -384,21 +398,25 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     );
   });
 
+  const accountMenuGroups: MenuItem[][] = [
+    [
+      ...(moneyAccount
+        ? [{ icon: <Plus size={18} />, label: "添加子账户", onSelect: openSubAdd }]
+        : []),
+      { icon: <Pencil size={18} />, label: "编辑账户", onSelect: openEditor },
+    ],
+    [
+      {
+        danger: true,
+        icon: <Trash2 size={18} />,
+        label: "删除账户",
+        onSelect: () => void requestDeleteAccount(),
+      },
+    ],
+  ];
+
   return (
     <MobileAppShell>
-      <DeleteAccountConfirmDialog
-        deleting={removeAccount.isPending || removeSub.isPending}
-        name={pendingDelete?.name ?? null}
-        onCancel={() => {
-          if (!removeAccount.isPending && !removeSub.isPending) setPendingDelete(null);
-        }}
-        onConfirm={() => {
-          if (!pendingDelete || removeAccount.isPending || removeSub.isPending) return;
-          if (pendingDelete.kind === "account") removeAccount.mutate();
-          else removeSub.mutate(pendingDelete.subAccountId);
-        }}
-        subAccount={pendingDelete?.kind === "sub"}
-      />
       <main className="min-h-dvh px-4 pb-12">
         <header
           className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-between bg-[var(--color-bg-app)] px-4 pt-[calc(12px+env(safe-area-inset-top))] pb-2`}
@@ -408,14 +426,18 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             label="返回账户"
             onClick={goBack}
           />
-          <IconButtonGroup
-            items={[
-              { icon: <Pencil size={20} />, label: "编辑账户", onClick: openEditor },
-              ...(moneyAccount
-                ? [{ icon: <Plus size={20} />, label: "添加子账户", onClick: openSubAdd }]
-                : []),
-            ]}
-          />
+          <div className="relative flex justify-end">
+            <IconButtonGroup
+              items={[
+                {
+                  icon: <Ellipsis size={22} />,
+                  label: "更多",
+                  onClick: () => setMenuOpen((open) => !open),
+                },
+              ]}
+            />
+            <PopoverMenu groups={accountMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+          </div>
         </header>
 
         <AccountBalanceCard
@@ -443,16 +465,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
               <StatRow color={stat.color} key={stat.label} label={stat.label} value={stat.value} />
             ))}
           </section>
-        ) : null}
-
-        {canEditBalance && !hasSplitSubAccounts ? (
-          <button
-            className="mt-3 flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
-            onClick={() => openBalanceEdit()}
-            type="button"
-          >
-            修改余额
-          </button>
         ) : null}
 
         {moneyAccount ? (
@@ -520,17 +532,17 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           </section>
         ) : null}
 
-        <section className="bill-detail__delete">
-          <Button
-            className="bill-detail__delete-button"
-            disabled={removeAccount.isPending}
-            icon={<Trash2 size={18} />}
-            onClick={() => setPendingDelete({ kind: "account", name: account.name })}
-            variant="danger"
-          >
-            删除账户
-          </Button>
-        </section>
+        {canEditBalance && !hasSplitSubAccounts ? (
+          <section className="mt-6">
+            <button
+              className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
+              onClick={() => openBalanceEdit()}
+              type="button"
+            >
+              修改余额
+            </button>
+          </section>
+        ) : null}
       </main>
     </MobileAppShell>
   );

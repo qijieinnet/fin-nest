@@ -74,12 +74,26 @@ function includesOrEmpty(values: string[] | undefined, target: string | null): b
   return !values || values.length === 0 || (target ? values.includes(target) : false);
 }
 
+// 分类命中与账单筛选一致：选中父级分类命中其下所有子级，父级与子级之间取「或」。
+function matchesCategory(
+  rule: PlanMatchRule,
+  categoryId: string | null,
+  subcategoryId: string | null,
+): boolean {
+  const categoryIds = rule.categoryIds ?? [];
+  const subcategoryIds = rule.subcategoryIds ?? [];
+  if (categoryIds.length === 0 && subcategoryIds.length === 0) return true;
+  return (
+    (categoryId !== null && categoryIds.includes(categoryId)) ||
+    (subcategoryId !== null && subcategoryIds.includes(subcategoryId))
+  );
+}
+
 /** 与后端 plan-matching 相同的命中规则，用于渲染「命中的记账」明细。 */
 export function matchesPlanRule(rule: PlanMatchRule | null, transaction: Transaction): boolean {
   if (!rule) return true;
   return (
-    includesOrEmpty(rule.categoryIds, transaction.categoryId) &&
-    includesOrEmpty(rule.subcategoryIds, transaction.subcategoryId) &&
+    matchesCategory(rule, transaction.categoryId, transaction.subcategoryId) &&
     includesOrEmpty(
       rule.accountIds,
       transaction.accountId ?? transaction.fromAccountId ?? transaction.toAccountId,

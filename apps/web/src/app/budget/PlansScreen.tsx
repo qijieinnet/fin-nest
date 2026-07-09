@@ -206,9 +206,7 @@ export function PlansScreen() {
   const openEditor = (plan?: Plan) => {
     if (!ledgerId) return;
     push({
-      className: plan
-        ? "ui-bottom-sheet--full-height ui-bottom-sheet--sheet-form"
-        : "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
+      className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
       hideDefaultHeader: true,
       content: <PlanEditorSheet defaultKind={tab} ledgerId={ledgerId} plan={plan} />,
     });
@@ -250,7 +248,7 @@ export function PlansScreen() {
     if (!ledgerId) return;
     push({
       className: "ui-bottom-sheet--edge-scroll",
-      title: plan.name,
+      hideDefaultHeader: true,
       content: (
         <PlanDetailSheet
           ledgerId={ledgerId}
@@ -258,6 +256,7 @@ export function PlansScreen() {
           onRestore={(target) => void requestRestorePlan(target)}
           onStop={(target) => void requestStopPlan(target)}
           planId={plan.id}
+          title={plan.name}
         />
       ),
     });

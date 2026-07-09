@@ -11,8 +11,7 @@ export type AutoRuleRow = Prisma.AutoRuleGetPayload<Record<string, never>>;
 export function matchesPlan(plan: PlanRow, transaction: TransactionRow): boolean {
   const rule = normalizeMatchRule(plan.matchRule);
   return (
-    includesOrEmpty(rule.categoryIds, transaction.categoryId) &&
-    includesOrEmpty(rule.subcategoryIds, transaction.subcategoryId) &&
+    matchesCategory(rule, transaction.categoryId, transaction.subcategoryId) &&
     includesOrEmpty(rule.accountIds, transaction.accountId ?? transaction.fromAccountId ?? transaction.toAccountId) &&
     includesOrEmpty(rule.personIds, transaction.personId) &&
     includesOrEmpty(rule.createdByIds, transaction.createdBy) &&
@@ -23,8 +22,7 @@ export function matchesPlan(plan: PlanRow, transaction: TransactionRow): boolean
 export function matchesPending(plan: PlanRow, pending: PendingRow): boolean {
   const rule = normalizeMatchRule(plan.matchRule);
   return (
-    includesOrEmpty(rule.categoryIds, pending.categoryId) &&
-    includesOrEmpty(rule.subcategoryIds, pending.subcategoryId) &&
+    matchesCategory(rule, pending.categoryId, pending.subcategoryId) &&
     includesOrEmpty(rule.accountIds, pending.accountId ?? pending.fromAccountId ?? pending.toAccountId) &&
     includesOrEmpty(rule.personIds, pending.personId) &&
     (!rule.noteContains || (pending.note ?? "").includes(rule.noteContains))
@@ -34,8 +32,7 @@ export function matchesPending(plan: PlanRow, pending: PendingRow): boolean {
 export function matchesAutoRule(plan: PlanRow, autoRule: AutoRuleRow): boolean {
   const rule = normalizeMatchRule(plan.matchRule);
   return (
-    includesOrEmpty(rule.categoryIds, autoRule.categoryId) &&
-    includesOrEmpty(rule.subcategoryIds, autoRule.subcategoryId) &&
+    matchesCategory(rule, autoRule.categoryId, autoRule.subcategoryId) &&
     includesOrEmpty(rule.accountIds, autoRule.accountId ?? autoRule.fromAccountId ?? autoRule.toAccountId) &&
     includesOrEmpty(rule.personIds, autoRule.personId) &&
     (!rule.noteContains || (autoRule.note ?? "").includes(rule.noteContains))
@@ -56,6 +53,22 @@ function normalizeMatchRule(value: Prisma.JsonValue | null) {
 
 function includesOrEmpty(values: string[] | undefined, target: string | null): boolean {
   return !values || values.length === 0 || (target ? values.includes(target) : false);
+}
+
+// 分类命中与账单筛选保持一致：选中的父级分类命中其下所有子级，父级与子级之间取「或」。
+// 交易的 categoryId 恒为父级、subcategoryId 为具体子级，因此命中父级即覆盖该父级全部子级。
+function matchesCategory(
+  rule: { categoryIds?: string[]; subcategoryIds?: string[] },
+  categoryId: string | null,
+  subcategoryId: string | null,
+): boolean {
+  const categoryIds = rule.categoryIds ?? [];
+  const subcategoryIds = rule.subcategoryIds ?? [];
+  if (categoryIds.length === 0 && subcategoryIds.length === 0) return true;
+  return (
+    (categoryId !== null && categoryIds.includes(categoryId)) ||
+    (subcategoryId !== null && subcategoryIds.includes(subcategoryId))
+  );
 }
 
 export function planPeriod(plan: PlanRow, date: Date): { start: Date; end: Date } {

@@ -1,8 +1,10 @@
 "use client";
 
-import { Ban, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { Ban, Edit3, Ellipsis, RotateCcw, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import { LoadingState } from "@/components/business";
-import { Button } from "@/components/ui";
+import { IconButton, IconButtonGroup, PopoverMenu } from "@/components/ui";
+import type { MenuItem } from "@/components/ui";
 import type { Plan, PlanPeriodProgress } from "@/lib/api";
 import { usePlanProgress } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
@@ -17,23 +19,23 @@ type PlanDetailSheetProps = {
   onRestore?: (plan: Plan) => void;
   onStop?: (plan: Plan) => void;
   planId: string;
+  title: string;
 };
 
-export function PlanDetailSheet({ ledgerId, onDelete, onRestore, onStop, planId }: PlanDetailSheetProps) {
-  const { push } = useSheetStack();
+export function PlanDetailSheet({
+  ledgerId,
+  onDelete,
+  onRestore,
+  onStop,
+  planId,
+  title,
+}: PlanDetailSheetProps) {
+  const { pop, push } = useSheetStack();
+  const [menuOpen, setMenuOpen] = useState(false);
   const progressQuery = usePlanProgress(ledgerId, planId);
   const result = progressQuery.data;
 
-  if (!result) {
-    return <LoadingState rows={4} title="加载计划" />;
-  }
-
-  const { history, period, plan } = result;
-  const past = history
-    .filter((item) => item.start !== period.start)
-    .sort((a, b) => (a.start < b.start ? 1 : -1));
-
-  const openMatchedList = (target: PlanPeriodProgress) => {
+  const openMatchedList = (target: PlanPeriodProgress, plan: Plan) => {
     push({
       className: "ui-bottom-sheet--edge-scroll",
       title: periodShortLabel(plan, target.start, target.endExclusive),
@@ -48,92 +50,126 @@ export function PlanDetailSheet({ ledgerId, onDelete, onRestore, onStop, planId 
     });
   };
 
-  const openEditor = () => {
+  const openEditor = (plan: Plan) => {
     push({
-      className: "ui-bottom-sheet--full-height ui-bottom-sheet--sheet-form",
+      className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
       hideDefaultHeader: true,
       content: <PlanEditorSheet ledgerId={ledgerId} plan={plan} />,
     });
   };
 
+  const menuGroups: MenuItem[][] = result
+    ? [
+        [
+          ...(result.plan.stoppedAt && onRestore
+            ? [
+                {
+                  icon: <RotateCcw size={18} />,
+                  label: "恢复计划",
+                  onSelect: () => onRestore(result.plan),
+                },
+              ]
+            : []),
+          ...(!result.plan.stoppedAt && onStop
+            ? [
+                {
+                  icon: <Ban size={18} />,
+                  label: "停止计划",
+                  onSelect: () => onStop(result.plan),
+                },
+              ]
+            : []),
+          {
+            icon: <Edit3 size={18} />,
+            label: "编辑计划",
+            onSelect: () => openEditor(result.plan),
+          },
+        ],
+        [
+          {
+            danger: true,
+            icon: <Trash2 size={18} />,
+            label: "删除计划",
+            onSelect: onDelete,
+          },
+        ],
+      ]
+    : [];
+
   return (
     <div className="flex flex-col gap-4 pb-2">
-      {/* <p className="px-1 text-[13px] text-[var(--color-text-muted)]">
-        {plan.kind === "income" ? "收入目标" : "支出限额"} · {planLimitText(plan)} ·{" "}
-        {periodRangeText(period.start, period.endExclusive)}
-      </p> */}
-
-      <section className="flex flex-col gap-2">
-        <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">本期</h3>
-        <PlanPeriodCard
-          onTap={() => openMatchedList(period)}
-          plan={plan}
-          progress={period}
-          showMatchedFooter
-          title={periodShortLabel(plan, period.start, period.endExclusive)}
-        />
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">以往周期</h3>
-        {past.length === 0 ? (
-          <p className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
-            暂无以往周期
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            {past.map((item) => (
-              <PlanPeriodCard
-                key={item.start}
-                onTap={() => openMatchedList(item)}
-                plan={plan}
-                progress={item}
-                showMatchedFooter
-                title={periodShortLabel(plan, item.start, item.endExclusive)}
-              />
-            ))}
+      <header className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--color-bg-elevated)] pb-2">
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[var(--color-text-primary)]">
+          {title}
+        </h2>
+        {result ? (
+          <div className="relative flex justify-end">
+            <IconButtonGroup
+              items={[
+                {
+                  icon: <Ellipsis size={22} />,
+                  label: "更多",
+                  onClick: () => setMenuOpen((open) => !open),
+                },
+              ]}
+            />
+            <PopoverMenu groups={menuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
           </div>
-        )}
-      </section>
+        ) : null}
+      </header>
 
-      <div className="mt-1 flex flex-col gap-2">
-        {plan.stoppedAt && onRestore ? (
-          <Button
-            className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
-            icon={<RotateCcw size={17} />}
-            onClick={() => onRestore(plan)}
-            variant="plain"
-          >
-            恢复计划
-          </Button>
-        ) : null}
-        {!plan.stoppedAt && onStop ? (
-          <Button
-            className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
-            icon={<Ban size={17} />}
-            onClick={() => onStop(plan)}
-            variant="plain"
-          >
-            停止计划
-          </Button>
-        ) : null}
-        <Button
-          className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)]"
-          icon={<Edit3 size={17} />}
-          onClick={openEditor}
-          variant="plain"
-        >
-          编辑计划
-        </Button>
-        <Button
-          className="!border !border-black/[0.06] !bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
-          icon={<Trash2 size={17} />}
-          onClick={onDelete}
-          variant="danger"
-        >
-          删除计划
-        </Button>
-      </div>
+      {!result ? (
+        <LoadingState rows={4} title="加载计划" />
+      ) : (
+        (() => {
+          const { history, period, plan } = result;
+          const past = history
+            .filter((item) => item.start !== period.start)
+            .sort((a, b) => (a.start < b.start ? 1 : -1));
+
+          return (
+            <>
+              <section className="flex flex-col gap-2">
+                <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+                  本期
+                </h3>
+                <PlanPeriodCard
+                  onTap={() => openMatchedList(period, plan)}
+                  plan={plan}
+                  progress={period}
+                  showMatchedFooter
+                  title={periodShortLabel(plan, period.start, period.endExclusive)}
+                />
+              </section>
+
+              <section className="flex flex-col gap-2">
+                <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+                  以往周期
+                </h3>
+                {past.length === 0 ? (
+                  <p className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
+                    暂无以往周期
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {past.map((item) => (
+                      <PlanPeriodCard
+                        key={item.start}
+                        onTap={() => openMatchedList(item, plan)}
+                        plan={plan}
+                        progress={item}
+                        showMatchedFooter
+                        title={periodShortLabel(plan, item.start, item.endExclusive)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          );
+        })()
+      )}
     </div>
   );
 }

@@ -26,7 +26,7 @@ export function AccountEntryListSheet({ accountType, entries }: AccountEntryList
         const abs = positive ? delta : -delta;
         return (
           <div
-            className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 shadow-[var(--shadow-soft)]"
+            className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3"
             key={entry.id}
           >
             <div className="flex items-center gap-3">

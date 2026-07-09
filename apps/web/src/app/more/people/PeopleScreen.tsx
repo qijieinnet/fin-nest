@@ -132,7 +132,7 @@ export function PeopleScreen() {
             onClick={goBack}
           />
         }
-        navigationTitleAlign="right"
+        navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "人员管理"}
       >
         <div className="flex flex-col gap-3 pb-6">
