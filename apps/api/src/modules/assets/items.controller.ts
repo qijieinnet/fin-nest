@@ -13,6 +13,8 @@ import { AssetsService } from "./assets.service";
 import {
   CreateItemDto,
   CreateItemTypeDto,
+  ReorderItemsDto,
+  ReorderItemTypesDto,
   ScrapItemDto,
   UpdateItemDto,
   UpdateItemTypeDto,
@@ -40,6 +42,16 @@ export class ItemsController {
     @Body() body: CreateItemTypeDto,
   ) {
     return this.assets.createItemType(ledgerId, (auth as SessionAuthContext).userId, body);
+  }
+
+  @Patch("item-types/reorder")
+  @ApiNoContentResponse()
+  async reorderTypes(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderItemTypesDto,
+  ): Promise<void> {
+    await this.assets.reorderItemTypes(ledgerId, (auth as SessionAuthContext).userId, body.ids);
   }
 
   @Patch("item-types/:typeId")
@@ -87,6 +99,16 @@ export class ItemsController {
     @Body() body: CreateItemDto,
   ) {
     return this.assets.createItem(ledgerId, (auth as SessionAuthContext).userId, body);
+  }
+
+  @Patch("items/reorder")
+  @ApiNoContentResponse()
+  async reorderItems(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderItemsDto,
+  ): Promise<void> {
+    await this.assets.reorderItems(ledgerId, (auth as SessionAuthContext).userId, body.ids);
   }
 
   @Patch("items/:itemId")

@@ -106,12 +106,15 @@ export class AssetsService {
 
   async createItemType(ledgerId: string, userId: string, input: CreateItemTypeDto) {
     await this.ledgers.assertMember(ledgerId, userId);
+    const count = await this.prisma.client.itemType.count({
+      where: { ledgerId, archivedAt: null },
+    });
     return this.prisma.client.itemType.create({
       data: {
         ledgerId,
         name: input.name,
         icon: input.icon ?? null,
-        sortOrder: input.sortOrder ?? 0,
+        sortOrder: input.sortOrder ?? count,
       },
     });
   }
@@ -139,11 +142,28 @@ export class AssetsService {
     });
   }
 
+  async reorderItemTypes(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.prisma.client.itemType.findMany({
+      where: { ledgerId, archivedAt: null },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((type) => type.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("ITEM_TYPE_ORDER_MISMATCH", "物品类型顺序与当前类型不一致", 400);
+    }
+    await this.prisma.client.$transaction(
+      ids.map((id, index) =>
+        this.prisma.client.itemType.update({ where: { id }, data: { sortOrder: index } }),
+      ),
+    );
+  }
+
   async listItems(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     const items = await this.prisma.client.item.findMany({
       where: { ledgerId, deletedAt: null },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ typeId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     });
     if (!items.length) return items;
     const links = await this.prisma.client.transactionLink.findMany({
@@ -185,7 +205,12 @@ export class AssetsService {
   async createItem(ledgerId: string, userId: string, input: CreateItemDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     if (input.typeId) await this.assertItemType(ledgerId, input.typeId);
-    return this.prisma.client.item.create({ data: this.itemData(ledgerId, userId, input) });
+    const sortOrder = await this.prisma.client.item.count({
+      where: { ledgerId, deletedAt: null, typeId: input.typeId ?? null },
+    });
+    return this.prisma.client.item.create({
+      data: this.itemData(ledgerId, userId, input, sortOrder),
+    });
   }
 
   async updateItem(ledgerId: string, itemId: string, userId: string, input: UpdateItemDto) {
@@ -196,6 +221,39 @@ export class AssetsService {
       where: { id: itemId },
       data: this.itemUpdateData(userId, input),
     });
+  }
+
+  async reorderItems(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const items = await this.prisma.client.item.findMany({
+      where: { ledgerId, id: { in: ids }, deletedAt: null, scrappedAt: null },
+      select: { id: true, typeId: true },
+    });
+    const existingIds = new Set(items.map((item) => item.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("ITEM_ORDER_MISMATCH", "物品顺序与当前物品不一致", 400);
+    }
+    const [first] = items;
+    const typeId = first?.typeId ?? null;
+    if (items.some((item) => item.typeId !== typeId)) {
+      throw new AppError("ITEM_ORDER_CROSS_TYPE", "只能在同一物品类型内排序", 400);
+    }
+    const groupItems = await this.prisma.client.item.findMany({
+      where: { ledgerId, deletedAt: null, scrappedAt: null, typeId },
+      select: { id: true },
+    });
+    const groupIds = new Set(groupItems.map((item) => item.id));
+    if (ids.length !== groupIds.size || ids.some((id) => !groupIds.has(id))) {
+      throw new AppError("ITEM_ORDER_MISMATCH", "物品顺序与当前物品不一致", 400);
+    }
+    await this.prisma.client.$transaction(
+      ids.map((id, index) =>
+        this.prisma.client.item.update({
+          where: { id },
+          data: { sortOrder: index, updatedBy: userId },
+        }),
+      ),
+    );
   }
 
   async scrapItem(ledgerId: string, itemId: string, userId: string, input: ScrapItemDto) {
@@ -309,6 +367,7 @@ export class AssetsService {
     ledgerId: string,
     userId: string,
     input: CreateItemDto,
+    sortOrder: number,
   ): Prisma.ItemUncheckedCreateInput {
     return {
       ledgerId,
@@ -318,6 +377,7 @@ export class AssetsService {
       purchaseDate: input.purchaseDate ? parseDateOnly(input.purchaseDate) : null,
       expectedYears: input.expectedYears ? new Prisma.Decimal(input.expectedYears) : null,
       note: input.note,
+      sortOrder,
       createdBy: userId,
       updatedBy: userId,
     };

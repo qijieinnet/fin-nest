@@ -570,6 +570,7 @@ export type ItemAsset = {
   purchaseDate: string | null;
   expectedYears: string | null;
   note: string | null;
+  sortOrder: number;
   scrappedAt: string | null;
   scrapDate: string | null;
   sellPriceMicros: string | null;

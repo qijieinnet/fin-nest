@@ -560,6 +560,7 @@ model Item {
   purchaseDate        DateTime? @map("purchase_date") @db.Date
   expectedYears       Decimal?  @map("expected_years") @db.Decimal(6, 2)
   note                String?
+  sortOrder           Int       @default(0) @map("sort_order")
   scrappedAt          DateTime? @map("scrapped_at") @db.Timestamptz(6)
   scrapDate           DateTime? @map("scrap_date") @db.Date
   sellPriceMicros     BigInt?   @map("sell_price_micros")

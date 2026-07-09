@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Min,
+} from "class-validator";
 
 export class CreateItemTypeDto {
   @ApiProperty()
@@ -71,4 +80,20 @@ export class ScrapItemDto {
   @IsString()
   @Matches(/^(0|[1-9]\d*)$/)
   sellPriceMicros?: string;
+}
+
+export class ReorderItemTypesDto {
+  @ApiProperty({ type: [String], description: "物品类型 id 按目标顺序排列" })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  ids!: string[];
+}
+
+export class ReorderItemsDto {
+  @ApiProperty({ type: [String], description: "同一物品类型内的物品 id 按目标顺序排列" })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  ids!: string[];
 }

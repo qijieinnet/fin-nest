@@ -19,6 +19,7 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
 
 /** 直接绑定（资金流动）账户：可收回/需归还账户只通过关联使用，不进主账户选择。 */
 const MONEY_ACCOUNT_TYPES: AccountType[] = ["savings", "credit", "invest"];
+const ACCOUNT_TYPE_ORDER: AccountType[] = ["savings", "credit", "invest", "receivable", "payable"];
 const ACCOUNT_GROUP_OPTION_PREFIX = "__account_group__:";
 const FILTER_SUB_ACCOUNT_PREFIX = "__filter_sub_account__:";
 
@@ -33,6 +34,26 @@ function accountGroupOptionId(accountId: string): string {
 
 function filterSubAccountOptionId(accountId: string, subAccountId: string): string {
   return `${FILTER_SUB_ACCOUNT_PREFIX}${accountId}:${subAccountId}`;
+}
+
+function accountOrderIndex(type: AccountType): number {
+  const index = ACCOUNT_TYPE_ORDER.indexOf(type);
+  return index === -1 ? ACCOUNT_TYPE_ORDER.length : index;
+}
+
+function orderedAccounts(accounts: Account[]): Account[] {
+  return [...accounts].sort(
+    (a, b) =>
+      accountOrderIndex(a.type) - accountOrderIndex(b.type) ||
+      a.sortOrder - b.sortOrder ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+function orderedSubAccounts(account: Account) {
+  return account.subAccounts
+    .filter((sub) => !sub.archivedAt)
+    .sort((a, b) => a.sortOrder - b.sortOrder || (a.isDefault ? -1 : b.isDefault ? 1 : 0));
 }
 
 export function categoryOptions(
@@ -101,7 +122,13 @@ export function resolveCategoryDisplay(
   lookup: CategoryLookup,
 ): ResolvedCategory {
   if (!snapshot) {
-    return { name: null, icon: null, subcategoryName: null, subcategoryIcon: null, displayIcon: null };
+    return {
+      name: null,
+      icon: null,
+      subcategoryName: null,
+      subcategoryIcon: null,
+      displayIcon: null,
+    };
   }
   const liveCat = lookup.get(snapshot.id);
   const name = liveCat?.name ?? snapshot.name ?? null;
@@ -137,9 +164,9 @@ export function moneyAccountOptions(
 ): BusinessOption[] {
   const parentSelectable = config.parentSelectable ?? false;
   const options: BusinessOption[] = [];
-  for (const account of accounts) {
+  for (const account of orderedAccounts(accounts)) {
     if (!MONEY_ACCOUNT_TYPES.includes(account.type)) continue;
-    const subAccounts = account.subAccounts.filter((sub) => !sub.archivedAt);
+    const subAccounts = orderedSubAccounts(account);
     // 只有存在“命名子账户”（默认子账户以外）时才展示子账户层级；否则账户作为整体可选。
     const namedSubs = subAccounts.filter((sub) => !sub.isDefault);
     const defaultSub = subAccounts.find((sub) => sub.isDefault);
@@ -161,10 +188,7 @@ export function moneyAccountOptions(
       icon: account.icon ?? undefined,
       disabled: !parentSelectable,
     });
-    const ordered = [...subAccounts].sort(
-      (a, b) => a.sortOrder - b.sortOrder || (a.isDefault ? -1 : b.isDefault ? 1 : 0),
-    );
-    for (const sub of ordered) {
+    for (const sub of subAccounts) {
       options.push({
         id: parentSelectable ? filterSubAccountOptionId(account.id, sub.id) : sub.id,
         label: sub.name,
@@ -197,7 +221,7 @@ export function relationAccountOptions(
   accounts: Account[],
   kind: "receivable" | "payable",
 ): BusinessOption[] {
-  return accounts
+  return orderedAccounts(accounts)
     .filter((account) => account.type === kind)
     .map((account) => ({ id: account.id, label: account.name }));
 }
