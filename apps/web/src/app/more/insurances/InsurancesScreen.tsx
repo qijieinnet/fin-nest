@@ -124,6 +124,7 @@ export function InsurancesScreen() {
         insurance.insurer,
         insurance.policyNo,
         insurance.method,
+        insurance.paymentMethod,
         insurance.coverageDesc,
         insurance.note,
         meta.label,

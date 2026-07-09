@@ -158,6 +158,9 @@ export function InsuranceDetailSheet({
           {insurance.insurer ? <DetailRow label="保险公司" value={insurance.insurer} /> : null}
           {insuredNames ? <DetailRow label="被保人" value={insuredNames} /> : null}
           {insurance.method ? <DetailRow label="投保方式" value={insurance.method} /> : null}
+          {insurance.paymentMethod ? (
+            <DetailRow label="缴费方式" value={insurance.paymentMethod} />
+          ) : null}
           {insurance.policyNo ? <DetailRow label="保单号" value={insurance.policyNo} /> : null}
           <DetailRow label="缴费周期" value={premiumFreqLabel(insurance.premiumFreq)} />
           {insurance.periods ? <DetailRow label="缴费期数" value={`${insurance.periods} 期`} /> : null}

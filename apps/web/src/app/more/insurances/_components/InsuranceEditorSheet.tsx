@@ -249,6 +249,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const [insurer, setInsurer] = useState(insurance?.insurer ?? "");
   const [policyNo, setPolicyNo] = useState(insurance?.policyNo ?? "");
   const [method, setMethod] = useState(insurance?.method ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(insurance?.paymentMethod ?? "");
   const [insuredIds, setInsuredIds] = useState<string[]>([]);
   const [coverage, setCoverage] = useState(() => microsToInput(insurance?.coverageMicros));
   const [premium, setPremium] = useState(() => microsToInput(insurance?.premiumMicros));
@@ -334,6 +335,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         insurer: insurer.trim() || undefined,
         policyNo: policyNo.trim() || undefined,
         method: method.trim() || undefined,
+        paymentMethod: paymentMethod.trim() || undefined,
         insuredPersonIds: insuredIds,
         coverageMicros: coverageParsed?.amountMicros,
         premiumMicros: premiumParsed?.amountMicros,
@@ -488,6 +490,14 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
               placeholder="线上自助 / 代理人"
               value={method}
             />
+            <span className="transaction-form__divider" />
+            <FieldRow
+              label="缴费方式"
+              maxLength={40}
+              onChange={(event) => setPaymentMethod(event.target.value)}
+              placeholder="银行卡自动扣款 / 支付宝"
+              value={paymentMethod}
+            />
           </div>
 
           <MultiSelectRow
@@ -577,7 +587,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
               className="min-h-[52px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
               maxLength={240}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="选填，如 含三者险 / 缴费方式…"
+              placeholder="选填，如 含三者险 / 续保提醒…"
               value={note}
             />
           </LabeledCard>

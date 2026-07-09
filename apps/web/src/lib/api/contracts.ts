@@ -533,6 +533,7 @@ export type Insurance = {
   name: string;
   insurer: string | null;
   method: string | null;
+  paymentMethod: string | null;
   policyNo: string | null;
   coverageMicros: string | null;
   premiumMicros: string | null;

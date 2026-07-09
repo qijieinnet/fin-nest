@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { ArrayMaxSize, IsArray, IsInt, IsOptional, IsString, Length, Matches, Min } from "class-validator";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Min,
+} from "class-validator";
 
 export class CreateInsuranceDto {
   @ApiProperty()
@@ -21,6 +30,11 @@ export class CreateInsuranceDto {
   @IsOptional()
   @IsString()
   method?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

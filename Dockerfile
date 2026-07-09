@@ -110,6 +110,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 # standalone 以仓库根为追踪根，故其内部结构为 apps/web/server.js + 根级 node_modules。
 COPY --from=build /app/apps/web/.next/standalone ./
+# Next standalone 在 pnpm 布局下可能漏追踪 @swc/helpers 的实际包目录；server.js 启动时仍会通过 next 的 require hook 访问它。
+COPY --from=build /app/node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers ./node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 EXPOSE 4001
 ENTRYPOINT ["/usr/bin/tini", "--"]

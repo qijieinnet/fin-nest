@@ -94,6 +94,7 @@ export const INSURANCE_COLUMNS: ColumnDef[] = [
   { key: "type", header: "险种", width: 10 },
   { key: "insurer", header: "保险公司", width: 14 },
   { key: "method", header: "投保方式", width: 10 },
+  { key: "paymentMethod", header: "缴费方式", width: 12 },
   { key: "policyNo", header: "保单号", width: 16 },
   { key: "coverage", header: "保额(元)", width: 12 },
   { key: "premium", header: "保费(元)", width: 12 },

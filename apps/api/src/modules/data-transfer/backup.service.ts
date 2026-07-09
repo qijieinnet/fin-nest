@@ -428,6 +428,7 @@ export class BackupService {
       name: row.name,
       insurer: row.insurer ?? null,
       method: row.method ?? null,
+      paymentMethod: row.paymentMethod ?? null,
       policyNo: row.policyNo ?? null,
       coverageMicros: bi(row.coverageMicros),
       premiumMicros: bi(row.premiumMicros),

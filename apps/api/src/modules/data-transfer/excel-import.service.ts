@@ -101,6 +101,7 @@ type PlannedInsurance = {
   type: string;
   insurer: string | null;
   method: string | null;
+  paymentMethod: string | null;
   policyNo: string | null;
   coverageMicros: string | null;
   premiumMicros: string | null;
@@ -768,6 +769,7 @@ export class ExcelImportService {
           type,
           insurer: cellToText(value("insurer")) || null,
           method: cellToText(value("method")) || null,
+          paymentMethod: cellToText(value("paymentMethod")) || null,
           policyNo: cellToText(value("policyNo")) || null,
           coverageMicros: hasCellValue(value("coverage"))
             ? cellToMicrosString(value("coverage"))
@@ -1339,6 +1341,7 @@ export class ExcelImportService {
           name: planned.name,
           insurer: planned.insurer,
           method: planned.method,
+          paymentMethod: planned.paymentMethod,
           policyNo: planned.policyNo,
           coverageMicros: planned.coverageMicros ? BigInt(planned.coverageMicros) : null,
           premiumMicros: planned.premiumMicros ? BigInt(planned.premiumMicros) : null,

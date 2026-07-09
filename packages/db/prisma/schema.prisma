@@ -510,6 +510,7 @@ model Insurance {
   name           String
   insurer        String?
   method         String?
+  paymentMethod  String?   @map("payment_method")
   policyNo       String?   @map("policy_no")
   coverageMicros BigInt?   @map("coverage_micros")
   premiumMicros  BigInt?   @map("premium_micros")

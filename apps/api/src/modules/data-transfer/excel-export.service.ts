@@ -371,6 +371,7 @@ export class ExcelExportService {
         type: insurance.type,
         insurer: insurance.insurer ?? "",
         method: insurance.method ?? "",
+        paymentMethod: insurance.paymentMethod ?? "",
         policyNo: insurance.policyNo ?? "",
         coverage: microsToYuanNumber(insurance.coverageMicros),
         premium: microsToYuanNumber(insurance.premiumMicros),
