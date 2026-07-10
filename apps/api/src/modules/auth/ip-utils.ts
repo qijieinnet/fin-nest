@@ -1,5 +1,24 @@
 import { isIP } from "node:net";
 
+type RequestLike = {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+  socket?: { remoteAddress?: string };
+};
+
+/**
+ * 提取客户端 IP。仅当部署在可信反向代理后（TRUST_PROXY=true）才读 X-Forwarded-For，
+ * 否则该头可被调用方伪造（登录限速、service token IP 白名单都会被绕过），只信 socket 地址。
+ */
+export function clientIpFromRequest(request: RequestLike, trustProxy: boolean): string | null {
+  if (trustProxy) {
+    const header = request.headers["x-forwarded-for"];
+    const value = Array.isArray(header) ? header[0] : header;
+    if (value) return normalizeIp(value);
+  }
+  return normalizeIp(request.ip ?? request.socket?.remoteAddress);
+}
+
 export function normalizeIp(value: string | undefined): string | null {
   if (!value) return null;
   // x-forwarded-for 前部由客户端可控（可伪造），最后一跳才是最近的可信代理追加的地址。

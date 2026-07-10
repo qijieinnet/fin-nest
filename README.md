@@ -1,6 +1,6 @@
 # Fin Nest
 
-个人/家庭记账 Web 应用（移动端优先 PWA）。技术方向与边界见 [`docs/`](docs) 下设计文档，开发任务分解见 [`DEVELOPMENT_PLAN.md`](docs/product/DEVELOPMENT_PLAN.md)。
+个人/家庭记账 Web 应用（移动端优先 PWA）。**项目现状、功能清单与开发指引见 [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md)**。
 
 ## 仓库结构
 
@@ -18,10 +18,9 @@ packages/
   tsconfig/       # 共享 TypeScript 配置
 infra/
   compose/  # 本地依赖 docker-compose（postgres + minio）
-  docker/   # Dockerfile（I3 阶段补充）
+  docker/   # Dockerfile 与部署说明
 docs/
-  architecture/  # ARCHITECTURE / *_ENGINEERING / *_DESIGN / DATABASE_DESIGN / TESTING_STRATEGY
-  product/       # FUNCTION_BOUNDARIES、DEVELOPMENT_PLAN
+  PROJECT_GUIDE.md  # 项目权威入口：功能清单、核心约束、工作流、部署
 ```
 
 ## 环境要求

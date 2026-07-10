@@ -2,8 +2,9 @@ import { Injectable } from "@nestjs/common";
 import { AppError, AuditLogService, PrismaService } from "@fin-nest/backend";
 import { RequestWithAuth, ServiceAuthContext, SessionAuthContext } from "./auth.types";
 import { CreateServiceTokenDto } from "./dto/create-service-token.dto";
+import { loadConfig } from "@fin-nest/config";
 import { createOpaqueToken, hashOpaqueToken } from "./token-utils";
-import { ipMatchesAllowedCidrs, normalizeIp } from "./ip-utils";
+import { clientIpFromRequest, ipMatchesAllowedCidrs } from "./ip-utils";
 
 export type ServiceTokenSummary = {
   id: string;
@@ -26,6 +27,8 @@ export type CreatedServiceToken = ServiceTokenSummary & {
 
 @Injectable()
 export class ServiceTokenService {
+  private readonly config = loadConfig();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
@@ -111,7 +114,8 @@ export class ServiceTokenService {
       throw new AppError("SERVICE_TOKEN_SCOPE_DENIED", "service token scope 不足", 403);
     }
 
-    const ip = normalizeIp(request.ip ?? request.socket?.remoteAddress);
+    // 代理后 socket 地址是代理 IP，白名单需要按真实客户端 IP 匹配（TRUST_PROXY 控制是否信 XFF）。
+    const ip = clientIpFromRequest(request, this.config.TRUST_PROXY);
     if (!ipMatchesAllowedCidrs(ip, serviceToken.allowedIps)) {
       throw new AppError("SERVICE_TOKEN_IP_DENIED", "来源 IP 不允许", 403);
     }

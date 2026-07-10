@@ -2,8 +2,8 @@
  * 前端使用的后端契约类型。
  *
  * OpenAPI 类型生成管线（`pnpm --filter @fin-nest/web generate:api`）需要 API 在线，
- * 当前 `lib/generated/api-types.ts` 仍为占位。F3 涉及的鉴权/账本接口字段在此手写镜像，
- * 与 `apps/api` 的 service 返回结构保持一致；生成管线可用后应迁移到生成类型。
+ * 当前 `lib/generated/api-types.ts` 仍为占位。后端接口字段在此手写镜像，
+ * 与 `apps/api` 的 service 返回结构保持一致（改后端契约必须同步改这里）；生成管线可用后应迁移到生成类型。
  */
 
 export type LedgerRole = "owner" | "member";

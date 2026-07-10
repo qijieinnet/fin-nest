@@ -1,5 +1,7 @@
 # fin-nest 线上前置 nginx 示例：同一域名下 /api 转发到 API 服务，其余转发到 Next。
 # 复制到 /etc/nginx/conf.d/ 后按实际域名、端口、证书调整。
+# 使用本配置时给 API 设 TRUST_PROXY=true（客户端 IP 从 X-Forwarded-For 取），
+# 并确保 API 端口（4000）只监听内网/本机，不被绕过 nginx 直连。
 server {
     listen 80;
     server_name fin-nest.example.com;

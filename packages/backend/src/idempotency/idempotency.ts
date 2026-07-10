@@ -5,8 +5,12 @@ export function normalizeIdempotencyKey(value: string): string {
   return value.trim().replace(/\s+/g, " ");
 }
 
-export function hashIdempotencyKey(scope: string, key: string): string {
-  return createHash("sha256").update(`${scope}:${normalizeIdempotencyKey(key)}`).digest("hex");
+// userId 参与哈希：同账本不同成员用相同 key 时各自独立执行，
+// 否则后来者会直接拿到他人的存量响应、自己的操作被静默吞掉。
+export function hashIdempotencyKey(scope: string, key: string, userId?: string | null): string {
+  return createHash("sha256")
+    .update(`${scope}:${userId ?? ""}:${normalizeIdempotencyKey(key)}`)
+    .digest("hex");
 }
 
 export function assertIdempotencyKey(key: string | undefined): string | undefined {

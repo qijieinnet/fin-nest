@@ -33,7 +33,7 @@ export class IdempotencyService {
     const normalized = assertIdempotencyKey(context.key);
     if (!normalized) return fn();
 
-    const keyHash = hashIdempotencyKey(context.scope, normalized);
+    const keyHash = hashIdempotencyKey(context.scope, normalized, context.userId);
     const reservation = await this.reserve<T>(keyHash, context);
     if (reservation.kind === "replay") return reservation.response;
 

@@ -74,6 +74,7 @@ export class ExportController {
 
 /** 文件名含中文，用 RFC 5987 filename* 编码，另给纯 ASCII 的 filename 兜底。 */
 function contentDisposition(filename: string): string {
-  const fallback = filename.replace(/[^\x20-\x7e]/g, "_");
+  // 引号/反斜杠会破坏 header 的 quoted-string 格式（账本名用户可控），一并替换。
+  const fallback = filename.replace(/["\r\n\\]/g, "_").replace(/[^\x20-\x7e]/g, "_");
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

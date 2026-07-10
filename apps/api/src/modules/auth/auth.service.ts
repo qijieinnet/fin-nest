@@ -5,8 +5,9 @@ import { SESSION_TTL_DAYS } from "./auth.constants";
 import { RequestWithAuth, SessionAuthContext } from "./auth.types";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { loadConfig } from "@fin-nest/config";
 import { addDays, createOpaqueToken, hashOpaqueToken, hashPassword, verifyPassword } from "./token-utils";
-import { normalizeIp } from "./ip-utils";
+import { clientIpFromRequest } from "./ip-utils";
 import { initializeLedgerDefaults } from "../ledgers/ledger-defaults";
 
 export type PublicUser = {
@@ -33,18 +34,20 @@ export type AdminUser = {
   createdAt: Date;
 };
 
-// 登录失败限速：同一 登录名+IP 在窗口期内最多失败 N 次。
+// 登录失败限速：同一 登录名+IP 在窗口期内最多失败 N 次；
+// 另按登录名单独设更高上限，防止换 IP（或伪造 XFF）绕过对单一账号的爆破限制。
 // 内存实现，适用于单实例自部署；多实例部署需换成共享存储。
 const LOGIN_MAX_FAILURES = 5;
+const LOGIN_MAX_FAILURES_PER_ACCOUNT = 20;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 class LoginRateLimiter {
   private readonly failures = new Map<string, { count: number; resetAt: number }>();
 
-  assertAllowed(key: string): void {
+  assertAllowed(key: string, maxFailures: number): void {
     this.prune();
     const entry = this.failures.get(key);
-    if (entry && entry.count >= LOGIN_MAX_FAILURES && entry.resetAt > Date.now()) {
+    if (entry && entry.count >= maxFailures && entry.resetAt > Date.now()) {
       throw new AppError("TOO_MANY_LOGIN_ATTEMPTS", "登录失败次数过多，请 15 分钟后再试", 429);
     }
   }
@@ -144,8 +147,11 @@ export class AuthService {
   private readonly loginRateLimiter = new LoginRateLimiter();
 
   async login(input: LoginDto, request: RequestWithAuth): Promise<AuthResult> {
-    const rateKey = `${input.login.toLowerCase()}|${this.requestIp(request) ?? "unknown"}`;
-    this.loginRateLimiter.assertAllowed(rateKey);
+    const login = input.login.toLowerCase();
+    const ipKey = `ip:${login}|${this.requestIp(request) ?? "unknown"}`;
+    const accountKey = `acct:${login}`;
+    this.loginRateLimiter.assertAllowed(ipKey, LOGIN_MAX_FAILURES);
+    this.loginRateLimiter.assertAllowed(accountKey, LOGIN_MAX_FAILURES_PER_ACCOUNT);
 
     const user = await this.prisma.client.user.findFirst({
       where: {
@@ -153,11 +159,13 @@ export class AuthService {
       },
     });
     if (!user || user.disabledAt || !(await verifyPassword(input.password, user.passwordHash))) {
-      this.loginRateLimiter.recordFailure(rateKey);
+      this.loginRateLimiter.recordFailure(ipKey);
+      this.loginRateLimiter.recordFailure(accountKey);
       throw new AppError("INVALID_CREDENTIALS", "账号或密码错误", 401);
     }
 
-    this.loginRateLimiter.recordSuccess(rateKey);
+    this.loginRateLimiter.recordSuccess(ipKey);
+    this.loginRateLimiter.recordSuccess(accountKey);
     return this.createSessionForUser(user, input.deviceName, request);
   }
 
@@ -376,8 +384,10 @@ export class AuthService {
     return { user: this.toPublicUser(user), token, expiresAt };
   }
 
+  private readonly config = loadConfig();
+
   private requestIp(request: RequestWithAuth): string | null {
-    return normalizeIp(this.getHeader(request, "x-forwarded-for") ?? request.ip ?? request.socket?.remoteAddress);
+    return clientIpFromRequest(request, this.config.TRUST_PROXY);
   }
 
   // 会话凭证只从 Authorization 头读取，不再支持 cookie。

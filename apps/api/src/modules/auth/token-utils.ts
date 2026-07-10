@@ -1,5 +1,14 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { createHash } from "node:crypto";
+import { promisify } from "node:util";
+
+// scrypt 是 CPU 密集操作，同步版会阻塞事件循环（登录接口可被并发打挂），统一走异步版。
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: string,
+  keylen: number,
+  options: { N: number; r: number; p: number },
+) => Promise<Buffer>;
 
 const SCRYPT_N = 16_384;
 const SCRYPT_R = 8;
@@ -16,7 +25,7 @@ export function hashOpaqueToken(token: string): string {
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("base64url");
-  const key = scryptSync(password, salt, KEY_LENGTH, {
+  const key = await scryptAsync(password, salt, KEY_LENGTH, {
     N: SCRYPT_N,
     r: SCRYPT_R,
     p: SCRYPT_P,
@@ -28,7 +37,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const [scheme, n, r, p, salt, hash] = stored.split("$");
   if (scheme !== "scrypt" || !n || !r || !p || !salt || !hash) return false;
 
-  const actual = scryptSync(password, salt, Buffer.from(hash, "base64url").length, {
+  const actual = await scryptAsync(password, salt, Buffer.from(hash, "base64url").length, {
     N: Number(n),
     r: Number(r),
     p: Number(p),

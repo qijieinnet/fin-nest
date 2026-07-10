@@ -49,6 +49,13 @@ const EnvSchema = z.object({
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
+  // API 前面有可信反向代理（nginx 等）时置 true：客户端 IP 取 X-Forwarded-For 的最后一跳。
+  // 默认 false：API 直接对外时 XFF 头可被伪造，只信 socket 地址（登录限速、service token IP 白名单都依赖它）。
+  TRUST_PROXY: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+
   MINIO_ENDPOINT: z.string().default("localhost"),
   MINIO_PORT: z.coerce.number().int().positive().default(9000),
   MINIO_USE_SSL: z
@@ -64,6 +71,16 @@ const EnvSchema = z.object({
 
   // worker 常驻轮询间隔；后台任务（自动记账生成、文件删除重试）依赖 worker 持续运行。
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
+}).superRefine((config, ctx) => {
+  // 生产环境禁止 MinIO 弱凭证：secret 是附件存储的唯一门禁，默认值等于对外裸奔。
+  const weakSecrets = new Set(["minioadmin", "change-me-please"]);
+  if (config.NODE_ENV === "production" && weakSecrets.has(config.MINIO_SECRET_KEY)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["MINIO_SECRET_KEY"],
+      message: "production 环境必须显式设置强 MINIO_SECRET_KEY（不能用 minioadmin / change-me-please）",
+    });
+  }
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

@@ -21,6 +21,7 @@ x-app-env: &app-env
   DATABASE_URL: ${DATABASE_URL}
   WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:4001}
   APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+  TRUST_PROXY: ${TRUST_PROXY:-false}
   MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
   MINIO_PORT: ${MINIO_PORT:-9000}
   MINIO_USE_SSL: ${MINIO_USE_SSL:-false}

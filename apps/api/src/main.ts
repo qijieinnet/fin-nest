@@ -21,15 +21,19 @@ async function bootstrap(): Promise<void> {
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle("Fin Nest API")
-    .setDescription("Fin Nest REST API")
-    .setVersion("0.1.0")
-    .build();
-  SwaggerModule.setup("docs", app, SwaggerModule.createDocument(app, swaggerConfig));
+  // Swagger 无鉴权且经 /api 代理对外可达，生产环境不暴露 API 结构。
+  const docsEnabled = config.NODE_ENV !== "production";
+  if (docsEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle("Fin Nest API")
+      .setDescription("Fin Nest REST API")
+      .setVersion("0.1.0")
+      .build();
+    SwaggerModule.setup("docs", app, SwaggerModule.createDocument(app, swaggerConfig));
+  }
 
   await app.listen(config.API_PORT);
-  console.log(`fin-nest-api listening on :${config.API_PORT} (docs at /docs)`);
+  console.log(`fin-nest-api listening on :${config.API_PORT}${docsEnabled ? " (docs at /docs)" : ""}`);
 }
 
 void bootstrap();
