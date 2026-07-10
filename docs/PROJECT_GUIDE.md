@@ -6,7 +6,7 @@
 
 ## 1. 项目是什么
 
-个人/家庭自部署记账 Web 应用（移动端优先 PWA，PC 居中展示移动容器）。多用户、多账本、成员协作；覆盖记账、账户与净资产、计划与预算、自动/快捷记账、保险与物品档案、附件、统计、导入导出。
+个人/家庭自部署记账 Web 应用（移动端优先 PWA，双形态响应式：<1024px 移动壳，≥1024px 桌面壳/侧边栏 + 弹层转 Modal，方案见 [`docs/DESKTOP_UI_PLAN.md`](DESKTOP_UI_PLAN.md)）。多用户、多账本、成员协作；覆盖记账、账户与净资产、计划与预算、自动/快捷记账、保险与物品档案、附件、统计、导入导出。
 
 技术栈：Next.js 16（App Router）+ Tailwind 4 + TanStack Query；NestJS 11（API + Worker 两个进程）；Prisma 6 + PostgreSQL 17；MinIO 对象存储；pnpm monorepo。不用 Redis、不拆微服务、REST + OpenAPI 注解、opaque token 鉴权（非 JWT）。
 
@@ -130,6 +130,7 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 | 文档 | 用途 |
 |---|---|
 | `docs/PROJECT_GUIDE.md`（本文件） | 项目权威入口 |
+| `docs/DESKTOP_UI_PLAN.md` | 桌面端 UI 改造方案与多智能体执行任务书 |
 | `AGENTS.md` / `CLAUDE.md` | AI 协作须知（精简硬规则 + 指向本文件） |
 | `README.md` | 快速上手（安装/脚本） |
 | `infra/docker/README.md` | 部署细节 |

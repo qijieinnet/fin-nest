@@ -2,6 +2,7 @@
 
 import { CalendarDays, Home, MoreHorizontal, WalletCards } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { routes } from "@/lib/route/routes";
 import { TabBar } from "./TabBar";
 
@@ -21,7 +22,11 @@ function activeTab(pathname: string): string {
 export function MobileTabBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const isDesktop = useIsDesktop();
   const value = activeTab(pathname);
+
+  // 桌面断点由 DesktopSidebar 承担导航，底部 TabBar 不渲染。
+  if (isDesktop) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">

@@ -5,9 +5,16 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import {
+  DesktopDialog,
+  type DesktopDialogVariant,
+} from "@/components/desktop/DesktopDialog";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 
 type SheetShellProps = {
   children: ReactNode;
+  /** 桌面断点下的弹层形态：居中 Modal（默认）或右侧 Drawer。 */
+  desktopVariant?: DesktopDialogVariant;
   hideDefaultHeader?: boolean;
   onClose: () => void;
   open: boolean;
@@ -22,6 +29,7 @@ let restoreBodyOverflow = "";
 
 export function SheetShell({
   children,
+  desktopVariant = "modal",
   hideDefaultHeader = false,
   onClose,
   open,
@@ -29,14 +37,16 @@ export function SheetShell({
   title,
 }: SheetShellProps) {
   const [mounted, setMounted] = useState(false);
+  const isDesktop = useIsDesktop();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   // 打开时锁定底层页面滚动，避免弹层滚动穿透到背景。
+  // 桌面分支由 DesktopDialog 自行锁定，这里跳过以免重复计数。
   useEffect(() => {
-    if (!open) return;
+    if (!open || isDesktop) return;
     if (openSheetCount === 0) {
       restoreBodyOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
@@ -46,8 +56,34 @@ export function SheetShell({
       openSheetCount -= 1;
       if (openSheetCount === 0) document.body.style.overflow = restoreBodyOverflow;
     };
-  }, [open]);
+  }, [open, isDesktop]);
 
+  const panelContent = renderPanel(
+    <>
+      {hideDefaultHeader ? null : (
+        <div className="sheet-header">
+          <h2>{title}</h2>
+          <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
+            <X size={18} />
+          </button>
+        </div>
+      )}
+      <div className="sheet-body">{children}</div>
+    </>,
+  );
+
+  if (!mounted) return null;
+
+  // 桌面：居中 Modal / 右侧 Drawer，面板视觉仍由 renderPanel 的 Surface 提供。
+  if (isDesktop) {
+    return (
+      <DesktopDialog onClose={onClose} open={open} title={title} variant={desktopVariant}>
+        {panelContent}
+      </DesktopDialog>
+    );
+  }
+
+  // 移动：底部弹层（行为与改造前完全一致）。
   const sheet = (
     <AnimatePresence>
       {open ? (
@@ -68,31 +104,12 @@ export function SheetShell({
             exit={{ x: "-50%", y: "105%" }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            {renderPanel(
-              <>
-                {hideDefaultHeader ? null : (
-                  <div className="sheet-header">
-                    <h2>{title}</h2>
-                    <button
-                      aria-label="关闭"
-                      className="sheet-close"
-                      onClick={onClose}
-                      type="button"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                )}
-                <div className="sheet-body">{children}</div>
-              </>,
-            )}
+            {panelContent}
           </motion.div>
         </div>
       ) : null}
     </AnimatePresence>
   );
-
-  if (!mounted) return null;
 
   return createPortal(sheet, document.body);
 }

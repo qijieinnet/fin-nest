@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/format/class-names";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { usePageScrolled } from "./usePageScrolled";
 
 /**
@@ -10,6 +11,10 @@ import { usePageScrolled } from "./usePageScrolled";
  */
 export function EdgeFade() {
   const scrolled = usePageScrolled();
+  const isDesktop = useIsDesktop();
+
+  // 桌面无底部 TabBar，边缘渐隐蒙层（锚定 430 容器）不适用。
+  if (isDesktop) return null;
 
   return (
     <>

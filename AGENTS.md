@@ -18,9 +18,9 @@
 4. 统计/预算/计划用有效金额（原始 − 关联合计），账户流水用原始金额。
 5. 金额写操作保留 `Idempotency-Key` 支持；财务多表写放在 `DatabaseTransactionService.run` 事务内。
 6. 自动记账/快捷模板/AI 不直接写交易表，只生成待确认或调用 `TransactionsService`。
-7. 改后端响应结构时，同步更新前端手写契约 `apps/web/src/lib/api/contracts.ts`（无编译期保护，靠自查）。
+7. 改后端响应结构时，同步更新前端手写契约 `apps/web/src/lib/api/contracts.ts`（无编译期保护，靠自查）。桌面端双 UI 后，改后端响应需同步检查三处：`contracts.ts` + 移动 UI + 桌面 UI。
 8. 迁移显式执行（`pnpm db:migrate`），禁止启动时自动迁移；软删/归档优先，有关联数据禁硬删。
-9. 前端弹出选择统一 `PopoverMenu + Menu`，弹层用 `Surface` 风格；不引入第三方视觉特效类库。
+9. 前端弹出选择统一 `PopoverMenu + Menu`、弹层用 `Surface` 风格；允许按需引入 headless 行为库（白名单见 [`docs/DESKTOP_UI_PLAN.md`](docs/DESKTOP_UI_PLAN.md) §2 D3），**禁止**引入 AntD / MUI / Chakra 等带视觉体系的组件库或视觉特效类库。
 
 ## 验证
 

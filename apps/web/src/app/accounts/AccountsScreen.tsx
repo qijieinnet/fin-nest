@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, ChevronRight, Ellipsis, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -14,91 +13,39 @@ import {
   PopoverMenu,
   usePageScrolled,
 } from "@/components/ui";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type Account,
-} from "@/lib/api";
-import { useAccounts } from "@/lib/data/records";
-import { queryKeys } from "@/lib/query/query-keys";
+import type { Account } from "@/lib/api";
 import { routes } from "@/lib/route/routes";
-import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
 import { AccountsSortList } from "./_components/AccountsSortList";
 import { NetWorthOverviewCard } from "./_components/NetWorthOverviewCard";
 import {
-  ACCOUNT_GROUPS,
-  accountNetWorthMicros,
   accountSubtitle,
   accountTotalMicros,
   formatMoney,
   isLiability,
-  netWorthSummary,
 } from "./_components/account-utils";
+import { useAccountsModel } from "./_model/useAccountsModel";
 
 export function AccountsScreen() {
   const router = useRouter();
-  const { ledgerId } = useLedger();
   const { push } = useSheetStack();
-  const queryClient = useQueryClient();
-  const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
   const scrolled = usePageScrolled();
-  const accountsQuery = useAccounts(ledgerId);
-  const accounts = accountsQuery.data ?? [];
-  const netWorth = netWorthSummary(accounts);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [sortMode, setSortMode] = useState(false);
 
+  const model = useAccountsModel();
+  const { accounts, accountsQuery, groups, netWorth, canSort } = model;
+
   const openEditor = () => {
-    if (!ledgerId) return;
+    if (!model.ledgerId) return;
     push({
       className: "ui-bottom-sheet--account-form",
       hideDefaultHeader: true,
-      content: <AccountEditorSheet ledgerId={ledgerId} />,
+      content: <AccountEditorSheet ledgerId={model.ledgerId} />,
     });
   };
-
-  const accountsKey = queryKeys.accounts(ledgerId ?? "none");
-
-  const reorderAccounts = useMutation({
-    mutationFn: (orderedIds: string[]) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, "/accounts/reorder"), {
-        method: "PATCH",
-        body: { ids: orderedIds },
-      }),
-    onError: (error) => {
-      queryClient.invalidateQueries({ queryKey: accountsKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
-    },
-  });
-
-  // 分类内排序：把该分类账户在缓存数组中占据的位置按新顺序原地填回，其余账户不动。
-  const handleReorder = (_type: string, orderedIds: string[]) => {
-    queryClient.setQueryData<Account[]>(accountsKey, (prev) => {
-      if (!prev) return prev;
-      const idSet = new Set(orderedIds);
-      const ordered = orderedIds
-        .map((id, index) => {
-          const found = prev.find((account) => account.id === id);
-          return found ? { ...found, sortOrder: index } : null;
-        })
-        .filter((account): account is Account => account !== null);
-      if (ordered.length !== orderedIds.length) return prev;
-      let cursor = 0;
-      return prev.map((account) => (idSet.has(account.id) ? ordered[cursor++]! : account));
-    });
-    reorderAccounts.mutate(orderedIds);
-  };
-
-  const groups = ACCOUNT_GROUPS.map((group) => {
-    const list = accounts.filter((account) => account.type === group.key);
-    const total = list.reduce((sum, account) => sum + accountNetWorthMicros(account), 0n);
-    return { ...group, list, total };
-  }).filter((group) => group.list.length > 0);
-
-  const canSort = accounts.length > 1;
 
   const renderRow = (account: Account) => {
     const liability = isLiability(account.type);
@@ -204,7 +151,7 @@ export function AccountsScreen() {
             <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
               按住右侧图标拖动排序，仅可在同一分类内调整。
             </p>
-            <AccountsSortList groups={groups} onReorder={handleReorder} />
+            <AccountsSortList groups={groups} onReorder={model.handleReorder} />
           </>
         ) : (
           <>

@@ -2,12 +2,15 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
+import type { DesktopDialogVariant } from "@/components/desktop/DesktopDialog";
 import { SheetShell } from "./SheetShell";
 import { Surface } from "./Surface";
 
 type BottomSheetProps = {
   children: ReactNode;
   className?: string;
+  /** 桌面断点下渲染为居中 Modal（默认）或右侧 Drawer。 */
+  desktopVariant?: DesktopDialogVariant;
   hideDefaultHeader?: boolean;
   onClose: () => void;
   open: boolean;
@@ -17,6 +20,7 @@ type BottomSheetProps = {
 export function BottomSheet({
   children,
   className,
+  desktopVariant,
   hideDefaultHeader = false,
   onClose,
   open,
@@ -24,6 +28,7 @@ export function BottomSheet({
 }: BottomSheetProps) {
   return (
     <SheetShell
+      desktopVariant={desktopVariant}
       hideDefaultHeader={hideDefaultHeader}
       onClose={onClose}
       open={open}

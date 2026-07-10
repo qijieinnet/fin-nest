@@ -4389,3 +4389,211 @@ select:focus-visible {
     max-width: 42%;
   }
 }
+
+/* ============================================================
+   ===== desktop =====
+   桌面端（≥1024px）增量样式。仅新增，不修改既有规则（DESKTOP_UI_PLAN.md §5.6）。
+   各 WP 追加样式请在本区块内按 WP 注释分段。
+   ============================================================ */
+
+/* --- A3：视觉辅助 --- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- A3：桌面外壳与侧边栏 --- */
+.desktop-shell {
+  display: flex;
+  align-items: flex-start;
+  min-height: 100dvh;
+}
+
+.desktop-sidebar {
+  position: sticky;
+  top: 0;
+  flex: 0 0 240px;
+  width: 240px;
+  height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 12px;
+  overflow-y: auto;
+  background: var(--color-bg-app);
+  border-right: 1px solid var(--color-border-subtle);
+}
+
+.desktop-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 16px;
+}
+
+.desktop-sidebar__brand-mark {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.desktop-sidebar__brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.desktop-sidebar__brand-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.desktop-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  text-align: left;
+  color: var(--color-text-secondary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.desktop-nav-item--sub {
+  padding: 9px 12px 9px 18px;
+  font-size: 14px;
+}
+
+.desktop-nav-item--active {
+  background: var(--color-tint-soft);
+  color: var(--color-tint);
+  font-weight: 600;
+}
+
+.desktop-sidebar__section {
+  margin-top: 12px;
+}
+
+.desktop-sidebar__section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 4px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.desktop-sidebar__section-head--active {
+  color: var(--color-text-secondary);
+}
+
+.desktop-sidebar__subnav {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 桌面内容区：单列限宽居中；核心页（B 阶段）可在内容区内自行放宽。 */
+.desktop-shell__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.desktop-shell__content {
+  width: 100%;
+  max-width: 720px;
+  box-sizing: border-box;
+  padding: 0 24px;
+}
+
+/* 移动页面的底部 TabBar 占位在桌面归零（无底部导航）。 */
+.desktop-shell main {
+  padding-bottom: 40px;
+}
+
+/* --- A3：桌面弹层（Modal / Drawer）底座 --- */
+.desktop-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.desktop-dialog-root--modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.desktop-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: rgba(26, 33, 31, 0.28);
+}
+
+.desktop-dialog-panel {
+  position: relative;
+}
+
+.desktop-dialog-panel--modal {
+  width: min(92vw, 460px);
+}
+
+.desktop-dialog-panel--drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: min(92vw, 480px);
+}
+
+/* 面板视觉沿用 Surface(sheet)，桌面下改为居中卡片 / 右侧全高抽屉。 */
+.desktop-dialog-panel .ui-surface--sheet {
+  width: 100%;
+  box-shadow: var(--shadow-floating);
+}
+
+.desktop-dialog-panel--modal .ui-surface--sheet {
+  border-radius: 24px;
+  max-height: calc(100dvh - 48px);
+}
+
+.desktop-dialog-panel--drawer .ui-surface--sheet {
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 20px 0 0 20px;
+}
+
+/* --- A3：桌面 hover / focus-visible 基线（触屏不触发；C2 继续打磨） --- */
+@media (hover: hover) {
+  .desktop-nav-item:hover {
+    background: var(--color-control-fill-muted);
+    color: var(--color-text-primary);
+  }
+
+  .desktop-nav-item--active:hover {
+    background: var(--color-tint-soft);
+    color: var(--color-tint);
+  }
+}

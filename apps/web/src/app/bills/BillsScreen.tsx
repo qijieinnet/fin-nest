@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChartPie,
   ClipboardCheck,
@@ -11,9 +10,8 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import {
-  type BusinessFilterValue,
   defaultFilterValue,
   EmptyState,
   filterButtonItem,
@@ -33,47 +31,19 @@ import {
   PopoverMenu,
   usePageScrolled,
 } from "@/components/ui";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type Account,
-  type Transaction,
-} from "@/lib/api";
+import type { Account, Transaction } from "@/lib/api";
 import {
   accountName,
-  buildCategoryLookup,
   type CategoryLookup,
-  categoryOptions,
   categoryRowProps,
-  moneyAccountOptions,
-  personOptions,
   TRANSFER_ICON,
 } from "@/lib/data/options";
-import {
-  useAccounts,
-  useAutoPending,
-  useBudgetProgress,
-  useCategories,
-  useInfiniteTransactions,
-  usePeople,
-  useTransactionSummary,
-} from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
-import { useDecimalPlaces, useLedger, usePreferences, useToast } from "@/providers";
+import { useDecimalPlaces, useLedger, usePreferences } from "@/providers";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
-import {
-  currentMonthKey,
-  dayLabel,
-  filterToQuery,
-  groupByDay,
-  periodLabel,
-  timeRangeFromFilter,
-} from "./_components/bill-utils";
-
-// 按账本缓存筛选条件，进出详情页（路由跳转会重挂载）后仍保留。模块级变量在客户端导航间不清空。
-const billsFilterCache = new Map<string, BusinessFilterValue>();
+import { dayLabel, periodLabel } from "./_components/bill-utils";
+import { useBillsModel } from "./_model/useBillsModel";
 
 function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   if (transaction.type === "transfer") {
@@ -100,124 +70,17 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
 
 export function BillsScreen() {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const { currentLedger, ledgerId } = useLedger();
-  const { showToast } = useToast();
+  const { currentLedger } = useLedger();
   const { preferences } = usePreferences();
   const showLedgerSwitcher = preferences.showLedgerSwitcherOnBills;
-  const [month] = useState(currentMonthKey());
-  const [filterValue, setFilterValue] = useState<BusinessFilterValue>(
-    () => (ledgerId ? billsFilterCache.get(ledgerId) : undefined) ?? defaultFilterValue,
-  );
+  const decimalPlaces = useDecimalPlaces();
+  const scrolled = usePageScrolled();
   const [filterOpen, setFilterOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const scrolled = usePageScrolled();
-  const [transactionPendingDelete, setTransactionPendingDelete] = useState<Transaction | null>(
-    null,
-  );
 
-  // 记住当前筛选，返回详情页后恢复。
-  useEffect(() => {
-    if (ledgerId) billsFilterCache.set(ledgerId, filterValue);
-  }, [ledgerId, filterValue]);
-
-  const decimalPlaces = useDecimalPlaces();
-
-  const query = useMemo(
-    () => ({ ...filterToQuery(filterValue, decimalPlaces), ...timeRangeFromFilter(filterValue) }),
-    [filterValue, decimalPlaces],
-  );
-
-  const transactionsQuery = useInfiniteTransactions(ledgerId, query);
-  const summaryQuery = useTransactionSummary(ledgerId, query);
-  const budgetQuery = useBudgetProgress(ledgerId, month);
-  const categoriesQuery = useCategories(ledgerId);
-  const accountsQuery = useAccounts(ledgerId);
-  const peopleQuery = usePeople(ledgerId);
-  const autoPendingQuery = useAutoPending(ledgerId);
-  const pendingCount = autoPendingQuery.data?.length ?? 0;
-
-  const accounts = accountsQuery.data ?? [];
-  const transactions = useMemo(
-    () => transactionsQuery.data?.pages.flat() ?? [],
-    [transactionsQuery.data],
-  );
-  // 汇总合计来自独立聚合接口（覆盖整个周期），不受列表分页影响。
-  const totals = useMemo(
-    () => ({
-      expenseMicros: BigInt(summaryQuery.data?.expenseMicros ?? "0"),
-      incomeMicros: BigInt(summaryQuery.data?.incomeMicros ?? "0"),
-      count: summaryQuery.data?.count ?? 0,
-    }),
-    [summaryQuery.data],
-  );
-  const groups = useMemo(() => groupByDay(transactions, "gross"), [transactions]);
-  const balanceMicros = totals.incomeMicros - totals.expenseMicros;
-
-  // 滚动加载：哨兵进入视口 → 防抖 200ms 后拉取下一页。
-  const { fetchNextPage, hasNextPage, isFetchingNextPage } = transactionsQuery;
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
-          clearTimeout(timer);
-          timer = setTimeout(() => fetchNextPage(), 200);
-        }
-      },
-      { rootMargin: "300px" },
-    );
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-      clearTimeout(timer);
-    };
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
-
-  const filterCategoryOptions = useMemo(
-    () => [
-      ...categoryOptions(categoriesQuery.data ?? [], "expense"),
-      ...categoryOptions(categoriesQuery.data ?? [], "income"),
-    ],
-    [categoriesQuery.data],
-  );
-  const categoryLookup = useMemo(
-    () => buildCategoryLookup(categoriesQuery.data ?? []),
-    [categoriesQuery.data],
-  );
-  const filterAccountOptions = useMemo(
-    () => moneyAccountOptions(accounts, { parentSelectable: true }),
-    [accounts],
-  );
-  const filterPersonOptions = useMemo(
-    () => personOptions(peopleQuery.data ?? []),
-    [peopleQuery.data],
-  );
-
-  const budget = budgetQuery.data;
-  const showBudget = Boolean(
-    budget?.enabled && budget.total.budgetMicros && budget.total.budgetMicros !== "0",
-  );
-  const deleteMutation = useMutation({
-    mutationFn: (transactionId: string) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/transactions/${transactionId}`), {
-        method: "DELETE",
-      }),
-    onSuccess: async (_result, transactionId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
-        queryClient.removeQueries({ queryKey: ["ledger", ledgerId, "transaction", transactionId] }),
-      ]);
-      showToast({ tone: "success", message: "已删除" });
-      setTransactionPendingDelete(null);
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+  const model = useBillsModel();
+  const { totals, budget } = model;
+  const balanceMicros = model.balanceMicros;
 
   return (
     <MobileAppShell>
@@ -228,17 +91,17 @@ export function BillsScreen() {
           <div className="relative flex justify-end">
             <IconButtonGroup
               items={[
-                filterButtonItem(filterValue, () => setFilterOpen(true)),
+                filterButtonItem(model.filterValue, () => setFilterOpen(true)),
                 {
                   icon: <ChartPie size={22} />,
                   label: "统计",
                   onClick: () => router.push(routes.stats),
                 },
                 // 有待确认记录或启用账本切换时显示「更多」入口。
-                ...(pendingCount > 0 || showLedgerSwitcher
+                ...(model.pendingCount > 0 || showLedgerSwitcher
                   ? [
                       {
-                        dot: pendingCount > 0,
+                        dot: model.pendingCount > 0,
                         icon: <Ellipsis size={22} />,
                         label: "更多",
                         onClick: () => setMoreMenuOpen((open) => !open),
@@ -261,12 +124,13 @@ export function BillsScreen() {
                       },
                     ]
                   : [],
-                pendingCount > 0
+                model.pendingCount > 0
                   ? [
                       {
-                        description: pendingCount > 0 ? `${pendingCount} 条待入账` : undefined,
+                        description:
+                          model.pendingCount > 0 ? `${model.pendingCount} 条待入账` : undefined,
                         icon: (
-                          <DotBadge show={pendingCount > 0}>
+                          <DotBadge show={model.pendingCount > 0}>
                             <ClipboardCheck size={18} />
                           </DotBadge>
                         ),
@@ -284,7 +148,7 @@ export function BillsScreen() {
 
         <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
           <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-            {periodLabel(filterValue)}支出
+            {periodLabel(model.filterValue)}支出
           </p>
           <p className="mt-1.5 flex items-baseline gap-0.5">
             <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
@@ -320,7 +184,7 @@ export function BillsScreen() {
             </div>
           </div>
 
-          {showBudget ? (
+          {model.showBudget ? (
             <div className="mt-4 border-t border-[var(--color-border-subtle)] pt-4">
               <div className="mb-2 flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
                 <span>
@@ -354,18 +218,18 @@ export function BillsScreen() {
           ) : null}
         </section>
 
-        {transactionsQuery.isPending ? (
+        {model.transactionsQuery.isPending ? (
           <div className="mt-5">
             <LoadingState rows={4} title="加载账单" />
           </div>
-        ) : groups.length === 0 ? (
+        ) : model.groups.length === 0 ? (
           <div className="mt-10">
             <EmptyState title="暂无数据" />
           </div>
         ) : (
           <div className="mt-5">
             <div className="bill-list-shell flex flex-col gap-5">
-              {groups.map((group) => (
+              {model.groups.map((group) => (
                 <TransactionGroup
                   dateLabel={dayLabel(group.date)}
                   incomeMicros={group.incomeMicros > 0n ? group.incomeMicros : undefined}
@@ -384,8 +248,8 @@ export function BillsScreen() {
                           icon: <Trash2 size={20} />,
                           label: "删除",
                           onClick: () => {
-                            if (deleteMutation.isPending) return;
-                            setTransactionPendingDelete(transaction);
+                            if (model.deleteMutation.isPending) return;
+                            model.setTransactionPendingDelete(transaction);
                           },
                           tone: "danger",
                         },
@@ -394,7 +258,7 @@ export function BillsScreen() {
                     >
                       <TransactionRow
                         onClick={() => router.push(routes.bill(transaction.id))}
-                        {...rowProps(transaction, accounts, categoryLookup)}
+                        {...rowProps(transaction, model.accounts, model.categoryLookup)}
                       />
                     </SwipeActionRow>
                   ))}
@@ -403,12 +267,12 @@ export function BillsScreen() {
             </div>
 
             {/* 滚动加载哨兵 + 状态提示 */}
-            <div ref={sentinelRef} />
-            {isFetchingNextPage ? (
+            <div ref={model.sentinelRef} />
+            {model.isFetchingNextPage ? (
               <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
                 加载中…
               </p>
-            ) : !hasNextPage ? (
+            ) : !model.hasNextPage ? (
               <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
                 没有更多了
               </p>
@@ -438,29 +302,29 @@ export function BillsScreen() {
       <MobileTabBar />
 
       <FilterSheet
-        accountOptions={filterAccountOptions}
-        categoryOptions={filterCategoryOptions}
+        accountOptions={model.filterAccountOptions}
+        categoryOptions={model.filterCategoryOptions}
         fields={["type", "dateRange", "category", "account", "person", "amountRange", "keyword"]}
         onApply={() => undefined}
-        onChange={setFilterValue}
+        onChange={model.setFilterValue}
         onOpenChange={setFilterOpen}
-        onReset={() => setFilterValue(defaultFilterValue)}
+        onReset={() => model.setFilterValue(defaultFilterValue)}
         open={filterOpen}
-        personOptions={filterPersonOptions}
-        value={filterValue}
+        personOptions={model.filterPersonOptions}
+        value={model.filterValue}
       />
 
       <DeleteBillConfirmDialog
-        deleting={deleteMutation.isPending}
+        deleting={model.deleteMutation.isPending}
         onCancel={() => {
-          if (!deleteMutation.isPending) setTransactionPendingDelete(null);
+          if (!model.deleteMutation.isPending) model.setTransactionPendingDelete(null);
         }}
         onConfirm={() => {
-          if (transactionPendingDelete && !deleteMutation.isPending) {
-            deleteMutation.mutate(transactionPendingDelete.id);
+          if (model.transactionPendingDelete && !model.deleteMutation.isPending) {
+            model.deleteMutation.mutate(model.transactionPendingDelete.id);
           }
         }}
-        transaction={transactionPendingDelete}
+        transaction={model.transactionPendingDelete}
       />
     </MobileAppShell>
   );

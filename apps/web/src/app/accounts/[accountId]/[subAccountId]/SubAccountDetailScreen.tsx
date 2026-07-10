@@ -1,17 +1,14 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
 import type { MenuItem } from "@/components/ui";
-import { apiRequest, getApiErrorMessage, ledgerApiPath, type SubAccount } from "@/lib/api";
-import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
-import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { useSheetStack } from "@/providers";
+import { useSubAccountDetailModel } from "./_model/useSubAccountDetailModel";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
 import { accountGroupMeta, microsToInput } from "../../_components/account-utils";
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
@@ -77,74 +74,19 @@ function NetWorthSwitchRow({
 
 export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDetailScreenProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const { ledgerId } = useLedger();
-  const { clear, push } = useSheetStack();
-  const { showToast } = useToast();
-  const confirm = useConfirm();
+  const { push } = useSheetStack();
   const [menuOpen, setMenuOpen] = useState(false);
-  const accountsQuery = useAccounts(ledgerId);
-  const transactionsQuery = useTransactions(ledgerId, { accountId, subAccountId });
-  const entriesQuery = useAccountEntries(ledgerId, accountId);
 
-  const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
-  const subAccount = account?.subAccounts.find((item) => item.id === subAccountId) ?? null;
-  const isDefaultSubAccount = Boolean(subAccount?.isDefault);
+  const model = useSubAccountDetailModel(accountId, subAccountId);
+  const { ledgerId, account, subAccount, isDefaultSubAccount, transactions, entries, adjustmentEntries } =
+    model;
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
     else router.push(routes.account(accountId));
   };
 
-  const removeSub = useMutation({
-    mutationFn: () =>
-      apiRequest<void>(
-        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`),
-        {
-          method: "DELETE",
-        },
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      clear();
-      showToast({ tone: "success", message: "子账户已删除" });
-      router.replace(routes.account(accountId));
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
-  });
-
-  const requestDeleteSub = async () => {
-    if (removeSub.isPending || !subAccount) return;
-    const accepted = await confirm({
-      title: "删除子账户？",
-      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
-      confirmText: "删除",
-      tone: "danger",
-    });
-    if (accepted && !removeSub.isPending) removeSub.mutate();
-  };
-
-  const updateSubNetWorth = useMutation({
-    mutationFn: (includeInNetWorth: boolean) =>
-      apiRequest<SubAccount>(
-        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`),
-        {
-          method: "PATCH",
-          body: { includeInNetWorth },
-        },
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "success", message: "设置已更新" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
-  });
-
-  if (!ledgerId || accountsQuery.isPending) {
+  if (!ledgerId || model.isLoading) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
@@ -175,11 +117,6 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const subAccountName = subAccount.name;
   const subAccountIcon = subAccount.icon ?? "💵";
   const subAccountBalance = BigInt(subAccount.balanceMicros);
-  const transactions = transactionsQuery.data ?? [];
-  const entries = (entriesQuery.data ?? []).filter(
-    (entry) => entry.subAccountId === subAccount.id,
-  );
-  const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
 
   const openBalanceEdit = () => {
     push({
@@ -240,7 +177,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
               danger: true,
               icon: <Trash2 size={18} />,
               label: "删除子账户",
-              onSelect: () => void requestDeleteSub(),
+              onSelect: () => void model.requestDeleteSub(),
             },
           ],
         ]
@@ -283,8 +220,8 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         <div className="mt-4">
           <NetWorthSwitchRow
             checked={subAccount.includeInNetWorth === false}
-            disabled={updateSubNetWorth.isPending}
-            onCheckedChange={(checked) => updateSubNetWorth.mutate(!checked)}
+            disabled={model.updateSubNetWorth.isPending}
+            onCheckedChange={(checked) => model.updateSubNetWorth.mutate(!checked)}
           />
         </div>
 

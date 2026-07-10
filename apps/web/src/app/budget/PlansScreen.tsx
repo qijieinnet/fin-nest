@@ -1,9 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, ChevronRight, Plus } from "lucide-react";
-import { useState } from "react";
-import { EmptyState, LoadingState } from "@/components/business";
 import {
   EdgeFade,
   IconButton,
@@ -13,13 +10,14 @@ import {
   Tabs,
   usePageScrolled,
 } from "@/components/ui";
-import { apiRequest, getApiErrorMessage, ledgerApiPath, type Plan, type PlanKind } from "@/lib/api";
-import { usePlanProgress, usePlans, useStoppedPlans } from "@/lib/data/records";
-import { queryKeys } from "@/lib/query/query-keys";
-import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { EmptyState, LoadingState } from "@/components/business";
+import { type Plan, type PlanKind } from "@/lib/api";
+import { usePlanProgress, useStoppedPlans } from "@/lib/data/records";
+import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
 import { PlanPeriodCard } from "./_components/PlanPeriodCard";
+import { useBudgetModel } from "./_model/useBudgetModel";
 
 function PlanCardWithProgress({
   ledgerId,
@@ -103,105 +101,11 @@ function StoppedPlansSheet({
 }
 
 export function PlansScreen() {
-  const queryClient = useQueryClient();
-  const confirm = useConfirm();
-  const { ledgerId } = useLedger();
-  const { clear, push } = useSheetStack();
-  const { showToast } = useToast();
+  const { push } = useSheetStack();
   const scrolled = usePageScrolled();
-  const [tab, setTab] = useState<PlanKind>("expense");
-  const plansQuery = usePlans(ledgerId);
-  const stoppedPlansQuery = useStoppedPlans(ledgerId);
 
-  const plans = plansQuery.data ?? [];
-  const stoppedPlans = stoppedPlansQuery.data ?? [];
-  const stoppedTabPlans = stoppedPlans.filter((plan) => plan.kind === tab);
-  const tabPlans = plans.filter((plan) => plan.kind === tab);
-  const foresightOn = plans.length > 0 && plans.every((plan) => plan.foresightEnabled);
-
-  const invalidatePlans = async () => {
-    if (!ledgerId) return;
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.plans(ledgerId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.stoppedPlans(ledgerId) }),
-    ]);
-  };
-
-  const toggleForesight = useMutation({
-    mutationFn: async (enabled: boolean) => {
-      // 未到期的自动记账后端按计划存储，这里作为账本级开关批量更新所有计划。
-      await Promise.all(
-        plans.map((plan) =>
-          apiRequest(ledgerApiPath(ledgerId!, `/plans/${plan.id}`), {
-            method: "PATCH",
-            body: { foresightEnabled: enabled },
-          }),
-        ),
-      );
-    },
-    onSuccess: async (_data, enabled) => {
-      await invalidatePlans();
-      if (ledgerId) {
-        await Promise.all(
-          plans.map((plan) =>
-            queryClient.invalidateQueries({ queryKey: queryKeys.planProgress(ledgerId, plan.id) }),
-          ),
-        );
-      }
-      showToast({
-        tone: "success",
-        message: enabled ? "已开启未到期的自动记账" : "已关闭未到期的自动记账",
-      });
-    },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
-  });
-
-  const removePlan = useMutation({
-    mutationFn: (planId: string) =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/plans/${planId}`), { method: "DELETE" }),
-    onSuccess: async () => {
-      await invalidatePlans();
-      clear();
-      showToast({ tone: "success", message: "计划已删除" });
-    },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
-  });
-
-  const stopPlan = useMutation({
-    mutationFn: (planId: string) =>
-      apiRequest<Plan>(ledgerApiPath(ledgerId!, `/plans/${planId}/stop`), { method: "POST" }),
-    onSuccess: async (stopped) => {
-      await Promise.all([
-        invalidatePlans(),
-        ledgerId
-          ? queryClient.invalidateQueries({ queryKey: queryKeys.planProgress(ledgerId, stopped.id) })
-          : Promise.resolve(),
-      ]);
-      clear();
-      showToast({ tone: "success", message: "计划已停止" });
-    },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "停止失败，请稍后重试") }),
-  });
-
-  const restorePlan = useMutation({
-    mutationFn: (planId: string) =>
-      apiRequest<Plan>(ledgerApiPath(ledgerId!, `/plans/${planId}/restore`), { method: "POST" }),
-    onSuccess: async (restored) => {
-      await Promise.all([
-        invalidatePlans(),
-        ledgerId
-          ? queryClient.invalidateQueries({ queryKey: queryKeys.planProgress(ledgerId, restored.id) })
-          : Promise.resolve(),
-      ]);
-      clear();
-      showToast({ tone: "success", message: "计划已恢复" });
-    },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "恢复失败，请稍后重试") }),
-  });
+  const model = useBudgetModel();
+  const { ledgerId, tab, plans, tabPlans, stoppedTabPlans, foresightOn } = model;
 
   const openEditor = (plan?: Plan) => {
     if (!ledgerId) return;
@@ -212,38 +116,6 @@ export function PlansScreen() {
     });
   };
 
-  const requestDeletePlan = async (plan: Plan) => {
-    if (removePlan.isPending) return;
-    const accepted = await confirm({
-      title: "删除计划？",
-      message: `确定删除「${plan.name}」吗？记账记录会保留，仅移除该计划。`,
-      confirmText: "删除",
-      tone: "danger",
-    });
-    if (accepted && !removePlan.isPending) removePlan.mutate(plan.id);
-  };
-
-  const requestStopPlan = async (plan: Plan) => {
-    if (stopPlan.isPending) return;
-    const accepted = await confirm({
-      title: "停止计划？",
-      message: `停止后「${plan.name}」将不再出现在计划列表中，可在已停止计划里查看。`,
-      confirmText: "停止",
-      tone: "danger",
-    });
-    if (accepted && !stopPlan.isPending) stopPlan.mutate(plan.id);
-  };
-
-  const requestRestorePlan = async (plan: Plan) => {
-    if (restorePlan.isPending) return;
-    const accepted = await confirm({
-      title: "恢复计划？",
-      message: `恢复后「${plan.name}」会重新出现在计划列表中，并继续统计命中的记账。`,
-      confirmText: "恢复",
-    });
-    if (accepted && !restorePlan.isPending) restorePlan.mutate(plan.id);
-  };
-
   const openPlanDetail = (plan: Plan) => {
     if (!ledgerId) return;
     push({
@@ -252,9 +124,9 @@ export function PlansScreen() {
       content: (
         <PlanDetailSheet
           ledgerId={ledgerId}
-          onDelete={() => void requestDeletePlan(plan)}
-          onRestore={(target) => void requestRestorePlan(target)}
-          onStop={(target) => void requestStopPlan(target)}
+          onDelete={() => void model.requestDeletePlan(plan)}
+          onRestore={(target) => void model.requestRestorePlan(target)}
+          onStop={(target) => void model.requestStopPlan(target)}
           planId={plan.id}
           title={plan.name}
         />
@@ -294,11 +166,11 @@ export function PlansScreen() {
             { value: "expense", label: "支出限额" },
             { value: "income", label: "收入目标" },
           ]}
-          onValueChange={(value) => setTab(value as PlanKind)}
+          onValueChange={(value) => model.setTab(value as PlanKind)}
           value={tab}
         />
 
-        {plansQuery.isPending ? (
+        {model.plansQuery.isPending ? (
           <div className="mt-4">
             <LoadingState rows={3} title="加载计划" />
           </div>
@@ -332,7 +204,7 @@ export function PlansScreen() {
               已停止计划
             </span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {stoppedPlansQuery.isPending ? "加载中" : `${stoppedTabPlans.length} 个`}
+              {model.stoppedPlansQuery.isPending ? "加载中" : `${stoppedTabPlans.length} 个`}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
@@ -345,9 +217,9 @@ export function PlansScreen() {
           <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
           <Switch
             checked={foresightOn}
-            disabled={plans.length === 0 || toggleForesight.isPending}
+            disabled={plans.length === 0 || model.toggleForesight.isPending}
             label="未到期的自动记账"
-            onCheckedChange={(checked) => toggleForesight.mutate(checked)}
+            onCheckedChange={(checked) => model.toggleForesight.mutate(checked)}
           />
         </div>
       </main>

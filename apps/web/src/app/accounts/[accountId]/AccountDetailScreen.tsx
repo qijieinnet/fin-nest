@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Ellipsis, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,17 +15,10 @@ import {
   usePageScrolled,
 } from "@/components/ui";
 import type { MenuItem } from "@/components/ui";
-import {
-  apiRequest,
-  getApiErrorMessage,
-  ledgerApiPath,
-  type Account,
-  type SubAccount,
-} from "@/lib/api";
-import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
-import { queryKeys } from "@/lib/query/query-keys";
+import type { SubAccount } from "@/lib/api";
 import { routes } from "@/lib/route/routes";
-import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { useLedger, useSheetStack } from "@/providers";
+import { useAccountDetailModel } from "./_model/useAccountDetailModel";
 import { AccountBalanceCard } from "../_components/AccountBalanceCard";
 import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
 import { AccountEditorSheet } from "../_components/AccountEditorSheet";
@@ -41,7 +33,6 @@ import {
   balanceLabel,
   formatDateLabel,
   formatMoney,
-  isLendAccount,
   isLiability,
   isMoneyAccount,
   microsToInput,
@@ -119,104 +110,14 @@ function NetWorthSwitchRow({
 
 export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
-  const { clear, push } = useSheetStack();
-  const { showToast } = useToast();
-  const confirm = useConfirm();
+  const { push } = useSheetStack();
   const scrolled = usePageScrolled();
-  const accountsQuery = useAccounts(ledgerId);
-  const transactionsQuery = useTransactions(ledgerId, { accountId });
   const [menuOpen, setMenuOpen] = useState(false);
   const [sortMode, setSortMode] = useState(false);
 
-  const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
-  const isLend = account ? isLendAccount(account.type) : false;
-  const entriesQuery = useAccountEntries(ledgerId, accountId);
-
-  const invalidate = async () => {
-    if (!ledgerId) return;
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
-    ]);
-  };
-
-  const removeAccount = useMutation({
-    mutationFn: () =>
-      apiRequest<void>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), { method: "DELETE" }),
-    onSuccess: async () => {
-      await invalidate();
-      clear();
-      showToast({ tone: "success", message: "账户已删除" });
-      router.replace(routes.accounts);
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
-  });
-
-  const removeSub = useMutation({
-    mutationFn: (subAccountId: string) =>
-      apiRequest<void>(
-        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/${subAccountId}`),
-        {
-          method: "DELETE",
-        },
-      ),
-    onSuccess: async () => {
-      await invalidate();
-      showToast({ tone: "success", message: "子账户已删除" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
-  });
-
-  const updateNetWorth = useMutation({
-    mutationFn: (includeInNetWorth: boolean) =>
-      apiRequest<Account>(ledgerApiPath(ledgerId!, `/accounts/${accountId}`), {
-        method: "PATCH",
-        body: { includeInNetWorth },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "success", message: "设置已更新" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
-  });
-
-  const reorderSubAccounts = useMutation({
-    mutationFn: (orderedIds: string[]) =>
-      apiRequest<void>(
-        ledgerApiPath(ledgerId!, `/accounts/${accountId}/sub-accounts/reorder`),
-        { method: "PATCH", body: { ids: orderedIds } },
-      ),
-    onError: (error) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
-    },
-  });
-
-  const handleReorderSub = (orderedIds: string[]) => {
-    // 序号落到各子账户（含默认子账户）上，列表按 sortOrder 重新排序。
-    const position = new Map(orderedIds.map((id, index) => [id, index]));
-    queryClient.setQueryData<Account[]>(queryKeys.accounts(ledgerId!), (prev) => {
-      if (!prev) return prev;
-      return prev.map((item) => {
-        if (item.id !== accountId) return item;
-        return {
-          ...item,
-          subAccounts: item.subAccounts.map((sub) =>
-            position.has(sub.id) ? { ...sub, sortOrder: position.get(sub.id)! } : sub,
-          ),
-        };
-      });
-    });
-    reorderSubAccounts.mutate(orderedIds);
-  };
+  const model = useAccountDetailModel(accountId);
+  const { account, isLend, entries, adjustmentEntries, transactions } = model;
 
   const goBack = () => {
     if (sortMode) {
@@ -227,7 +128,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     else router.push(routes.accounts);
   };
 
-  if (!ledgerId || accountsQuery.isPending) {
+  if (!ledgerId || model.isLoading) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
@@ -272,9 +173,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const canSortSubAccounts = hasSplitSubAccounts;
   // 子账户（含默认子账户）按排序序号排列，供列表渲染与排序共用。
   const subAccountRows = orderedSubAccountRows(account);
-  const entries = (entriesQuery.data ?? []).filter((entry) => entry.entryType !== "reversal");
-  const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
-  const transactions = transactionsQuery.data ?? [];
 
   const openEditor = () => {
     push({
@@ -282,28 +180,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
       hideDefaultHeader: true,
       content: <AccountEditorSheet account={account} ledgerId={ledgerId} />,
     });
-  };
-
-  const requestDeleteAccount = async () => {
-    if (removeAccount.isPending) return;
-    const accepted = await confirm({
-      title: "删除账户？",
-      message: `确定删除「${account.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
-      confirmText: "删除",
-      tone: "danger",
-    });
-    if (accepted && !removeAccount.isPending) removeAccount.mutate();
-  };
-
-  const requestDeleteSub = async (subAccount: SubAccount) => {
-    if (removeSub.isPending) return;
-    const accepted = await confirm({
-      title: "删除子账户？",
-      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
-      confirmText: "删除",
-      tone: "danger",
-    });
-    if (accepted && !removeSub.isPending) removeSub.mutate(subAccount.id);
   };
 
   const openBalanceEdit = (subAccount?: SubAccount) => {
@@ -416,7 +292,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             {
               icon: <Trash2 size={18} />,
               label: `删除${subAccount.name}`,
-              onClick: () => void requestDeleteSub(subAccount),
+              onClick: () => void model.requestDeleteSub(subAccount),
               tone: "danger" as const,
             },
           ]),
@@ -456,7 +332,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         danger: true,
         icon: <Trash2 size={18} />,
         label: "删除账户",
-        onSelect: () => void requestDeleteAccount(),
+        onSelect: () => void model.requestDeleteAccount(),
       },
     ],
   ];
@@ -502,7 +378,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
               按住右侧图标拖动排序，默认子账户也可调整位置。
             </p>
-            <SubAccountsSortList onReorder={handleReorderSub} rows={subAccountRows} />
+            <SubAccountsSortList onReorder={model.handleReorderSub} rows={subAccountRows} />
           </section>
         ) : (
           <>
@@ -519,7 +395,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           balanceLabel={balanceLabel(account.type)}
           balanceMicros={displayTotal.toString()}
           currentBalanceMicros={total.toString()}
-          entries={entriesQuery.data ?? []}
+          entries={model.entriesQuery.data ?? []}
           icon={account.icon ?? "💼"}
           name={account.name}
           negativePrefix={liability}
@@ -550,8 +426,8 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         <div className="mt-4">
           <NetWorthSwitchRow
             checked={!account.includeInNetWorth}
-            disabled={updateNetWorth.isPending}
-            onCheckedChange={(checked) => updateNetWorth.mutate(!checked)}
+            disabled={model.updateNetWorth.isPending}
+            onCheckedChange={(checked) => model.updateNetWorth.mutate(!checked)}
           />
         </div>
 
