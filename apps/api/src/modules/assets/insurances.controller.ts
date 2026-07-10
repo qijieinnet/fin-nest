@@ -1,10 +1,21 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import { AssetsService } from "./assets.service";
-import { CreateInsuranceDto, UpdateInsuranceDto } from "./dto/insurance.dto";
+import {
+  CreateInsuranceDto,
+  ReorderInsurancesDto,
+  ReorderInsuranceTypesDto,
+  UpdateInsuranceDto,
+} from "./dto/insurance.dto";
 import { LinkTransactionDto } from "./dto/link-transaction.dto";
 
 @ApiTags("insurances")
@@ -22,14 +33,46 @@ export class InsurancesController {
 
   @Get(":insuranceId")
   @ApiOkResponse()
-  get(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Param("insuranceId") insuranceId: string) {
+  get(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("insuranceId") insuranceId: string,
+  ) {
     return this.assets.getInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId);
   }
 
   @Post()
   @ApiCreatedResponse()
-  create(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Body() body: CreateInsuranceDto) {
+  create(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: CreateInsuranceDto,
+  ) {
     return this.assets.createInsurance(ledgerId, (auth as SessionAuthContext).userId, body);
+  }
+
+  @Patch("reorder")
+  @ApiNoContentResponse()
+  async reorder(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderInsurancesDto,
+  ): Promise<void> {
+    await this.assets.reorderInsurances(ledgerId, (auth as SessionAuthContext).userId, body.ids);
+  }
+
+  @Patch("reorder-types")
+  @ApiNoContentResponse()
+  async reorderTypes(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: ReorderInsuranceTypesDto,
+  ): Promise<void> {
+    await this.assets.reorderInsuranceTypes(
+      ledgerId,
+      (auth as SessionAuthContext).userId,
+      body.types,
+    );
   }
 
   @Patch(":insuranceId")
@@ -40,7 +83,12 @@ export class InsurancesController {
     @Param("insuranceId") insuranceId: string,
     @Body() body: UpdateInsuranceDto,
   ) {
-    return this.assets.updateInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId, body);
+    return this.assets.updateInsurance(
+      ledgerId,
+      insuranceId,
+      (auth as SessionAuthContext).userId,
+      body,
+    );
   }
 
   @Post(":insuranceId/terminate")
@@ -50,7 +98,11 @@ export class InsurancesController {
     @Param("ledgerId") ledgerId: string,
     @Param("insuranceId") insuranceId: string,
   ) {
-    return this.assets.terminateInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId);
+    return this.assets.terminateInsurance(
+      ledgerId,
+      insuranceId,
+      (auth as SessionAuthContext).userId,
+    );
   }
 
   @Post(":insuranceId/resume")
@@ -71,12 +123,22 @@ export class InsurancesController {
     @Param("insuranceId") insuranceId: string,
     @Body() body: LinkTransactionDto,
   ) {
-    return this.assets.linkTransaction(ledgerId, "insurance", insuranceId, body.transactionId, (auth as SessionAuthContext).userId);
+    return this.assets.linkTransaction(
+      ledgerId,
+      "insurance",
+      insuranceId,
+      body.transactionId,
+      (auth as SessionAuthContext).userId,
+    );
   }
 
   @Delete(":insuranceId")
   @ApiNoContentResponse()
-  async delete(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Param("insuranceId") insuranceId: string): Promise<void> {
+  async delete(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("insuranceId") insuranceId: string,
+  ): Promise<void> {
     await this.assets.deleteInsurance(ledgerId, insuranceId, (auth as SessionAuthContext).userId);
   }
 }

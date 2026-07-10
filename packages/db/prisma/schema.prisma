@@ -521,6 +521,7 @@ model Insurance {
   startDate      DateTime? @map("start_date") @db.Date
   endDate        DateTime? @map("end_date") @db.Date
   note           String?
+  sortOrder      Int       @default(0) @map("sort_order")
   terminatedAt   DateTime? @map("terminated_at") @db.Timestamptz(6)
   createdBy      String    @map("created_by") @db.Uuid
   updatedBy      String?   @map("updated_by") @db.Uuid
@@ -537,6 +538,17 @@ model InsuranceInsuredPerson {
 
   @@id([insuranceId, personId])
   @@map("insurance_insured_people")
+}
+
+model InsuranceTypeOrder {
+  ledgerId  String   @map("ledger_id") @db.Uuid
+  type      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([ledgerId, type])
+  @@index([ledgerId, sortOrder])
+  @@map("insurance_type_orders")
 }
 
 model ItemType {

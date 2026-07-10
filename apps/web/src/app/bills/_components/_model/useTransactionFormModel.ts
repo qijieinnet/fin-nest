@@ -216,15 +216,23 @@ export function useTransactionFormModel({
     () => relationAccountOptions(accounts, relationAccountKind(type, "linked")),
     [accounts, type],
   );
-  const insuranceOptions = useMemo(
-    () =>
-      (insurancesQuery.data ?? []).map((insurance) => ({
-        id: insurance.id,
-        icon: insuranceTypeMeta(insurance.type).icon,
-        name: insurance.name,
-      })),
-    [insurancesQuery.data],
-  );
+  const insuranceOptions = useMemo(() => {
+    const personById = new Map((peopleQuery.data ?? []).map((person) => [person.id, person.name]));
+    return (insurancesQuery.data ?? [])
+      .filter((insurance) => !insurance.terminatedAt)
+      .map((insurance) => {
+        const meta = insuranceTypeMeta(insurance.type);
+        const insuredNames = (insurance.insuredPeople ?? [])
+          .map((entry) => personById.get(entry.personId))
+          .filter((name): name is string => Boolean(name));
+        return {
+          description: `${insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人"} · ${meta.label}`,
+          id: insurance.id,
+          icon: meta.icon,
+          name: insurance.name,
+        };
+      });
+  }, [insurancesQuery.data, peopleQuery.data]);
   const itemTypeById = useMemo(
     () => new Map((itemTypesQuery.data ?? []).map((itemType) => [itemType.id, itemType])),
     [itemTypesQuery.data],
@@ -563,8 +571,7 @@ export function useTransactionFormModel({
     setItemEnabled(true);
   }
 
-  const isLoading =
-    settingQuery.isPending || categoriesQuery.isPending || accountsQuery.isPending;
+  const isLoading = settingQuery.isPending || categoriesQuery.isPending || accountsQuery.isPending;
 
   return {
     // 加载态

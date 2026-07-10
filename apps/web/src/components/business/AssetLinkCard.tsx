@@ -7,6 +7,7 @@ import { ToggleCard } from "./TransactionFieldRows";
 import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 
 export type AssetLinkOption = {
+  description?: string;
   id: string;
   icon: string;
   name: string;
@@ -44,6 +45,7 @@ export function AssetLinkCard({
         id: item.id,
         icon: item.icon,
         label: item.name,
+        description: item.description,
       })),
     [items],
   );

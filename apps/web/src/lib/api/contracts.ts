@@ -544,10 +544,13 @@ export type Insurance = {
   startDate: string | null;
   endDate: string | null;
   note: string | null;
+  sortOrder: number;
+  typeSortOrder?: number;
   terminatedAt: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  insuredPeople?: InsuranceInsuredPerson[];
 };
 
 export type InsuranceInsuredPerson = {

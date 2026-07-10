@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
+  ArrayNotEmpty,
   ArrayMaxSize,
   IsArray,
   IsInt,
@@ -100,3 +101,19 @@ export class CreateInsuranceDto {
 }
 
 export class UpdateInsuranceDto extends PartialType(CreateInsuranceDto) {}
+
+export class ReorderInsurancesDto {
+  @ApiProperty({ type: [String], description: "同一保险类型内的保单 id 按目标顺序排列" })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  ids!: string[];
+}
+
+export class ReorderInsuranceTypesDto {
+  @ApiProperty({ type: [String], description: "保险分类值按目标顺序排列" })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  types!: string[];
+}

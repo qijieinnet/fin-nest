@@ -48,6 +48,7 @@ import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
+import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
 import {
   dateOnly,
   formatDateLabel,
@@ -193,10 +194,23 @@ export function AutoRuleEditorSheet({
     () => relationAccountOptions(accounts, relationAccountKind(type, "linked")),
     [accounts, type],
   );
-  const insuranceOptions = useMemo(
-    () => insurances.map((insurance) => ({ id: insurance.id, icon: "保", name: insurance.name })),
-    [insurances],
-  );
+  const insuranceOptions = useMemo(() => {
+    const personById = new Map(people.map((person) => [person.id, person.name]));
+    return insurances
+      .filter((insurance) => !insurance.terminatedAt)
+      .map((insurance) => {
+        const meta = insuranceTypeMeta(insurance.type);
+        const insuredNames = (insurance.insuredPeople ?? [])
+          .map((entry) => personById.get(entry.personId))
+          .filter((name): name is string => Boolean(name));
+        return {
+          description: `${insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人"} · ${meta.label}`,
+          id: insurance.id,
+          icon: meta.icon,
+          name: insurance.name,
+        };
+      });
+  }, [insurances, people]);
   const itemOptions = useMemo(
     () => items.map((item) => ({ id: item.id, icon: "物", name: item.name })),
     [items],
@@ -293,7 +307,8 @@ export function AutoRuleEditorSheet({
       const category = isTransfer ? {} : resolveCategorySelection(categories, categoryId);
       if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
       const account = isTransfer ? {} : resolveAccountSelection(accounts, accountId);
-      if (!isTransfer && acctRequired && !account.accountId) throw new Error("当前账本要求绑定账户");
+      if (!isTransfer && acctRequired && !account.accountId)
+        throw new Error("当前账本要求绑定账户");
       if (!isTransfer && personRequired && !personId) throw new Error("当前账本要求选择人员");
       const fromAccount = isTransfer ? resolveAccountSelection(accounts, fromAccountId) : {};
       const toAccount = isTransfer ? resolveAccountSelection(accounts, toAccountId) : {};
@@ -359,7 +374,8 @@ export function AutoRuleEditorSheet({
       fromAccount.accountId === toAccount.accountId &&
       (fromAccount.subAccountId ?? null) === (toAccount.subAccountId ?? null)
     );
-  const accountReady = !acctRequired || Boolean(resolveAccountSelection(accounts, accountId).accountId);
+  const accountReady =
+    !acctRequired || Boolean(resolveAccountSelection(accounts, accountId).accountId);
   const personReady = !personRequired || Boolean(personId);
   const canSubmit =
     parsedAmount.ok &&

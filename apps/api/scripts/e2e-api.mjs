@@ -79,6 +79,7 @@ async function main() {
     person,
   });
 
+  const transactionStartBalance = BigInt(await accountBalance(ledger.id, account.id, owner.token));
   const idempotencyKey = `${prefix}-transaction-create`;
   const transactionBody = {
     type: "expense",
@@ -103,18 +104,27 @@ async function main() {
     body: transactionBody,
   });
   assert.equal(repeatedTransaction.id, firstTransaction.id);
-  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "90000000");
+  assert.equal(
+    await accountBalance(ledger.id, account.id, owner.token),
+    (transactionStartBalance - 10_000_000n).toString(),
+  );
 
   await api("PATCH", `/ledgers/${ledger.id}/transactions/${firstTransaction.id}`, {
     token: owner.token,
     body: { ...transactionBody, grossAmountMicros: "15000000", note: "e2e edited" },
   });
-  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "85000000");
+  assert.equal(
+    await accountBalance(ledger.id, account.id, owner.token),
+    (transactionStartBalance - 15_000_000n).toString(),
+  );
 
   await api("DELETE", `/ledgers/${ledger.id}/transactions/${firstTransaction.id}`, {
     token: owner.token,
   });
-  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "100000000");
+  assert.equal(
+    await accountBalance(ledger.id, account.id, owner.token),
+    transactionStartBalance.toString(),
+  );
 
   await api("POST", `/ledgers/${ledger.id}/accounts/${account.id}/adjustments`, {
     token: owner.token,
@@ -294,6 +304,48 @@ async function assertPartialPatchRegressions({
   assert.equal(updatedInsurance.coverageMicros, "500000000");
   assert.equal(updatedInsurance.premiumMicros, "12000000");
   assert.equal(updatedInsurance.endDate.slice(0, 10), addDaysIso(60));
+
+  const secondMedicalInsurance = await api("POST", `/ledgers/${ledgerId}/insurances`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "medical",
+      name: `E2E Second Medical Insurance ${stamp}`,
+      insuredPersonIds: [person.id],
+    },
+  });
+  const lifeInsurance = await api("POST", `/ledgers/${ledgerId}/insurances`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "life",
+      name: `E2E Life Insurance ${stamp}`,
+      insuredPersonIds: [person.id],
+    },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/insurances/reorder`, {
+    token: owner.token,
+    body: { ids: [secondMedicalInsurance.id, insurance.id] },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/insurances/reorder-types`, {
+    token: owner.token,
+    body: { types: ["life", "medical"] },
+  });
+  const sortedInsurances = await api("GET", `/ledgers/${ledgerId}/insurances`, {
+    token: owner.token,
+  });
+  const sortedOriginal = sortedInsurances.find((entry) => entry.id === insurance.id);
+  const sortedSecondMedical = sortedInsurances.find(
+    (entry) => entry.id === secondMedicalInsurance.id,
+  );
+  const sortedLife = sortedInsurances.find((entry) => entry.id === lifeInsurance.id);
+  assert.equal(sortedOriginal.sortOrder, 1);
+  assert.equal(sortedSecondMedical.sortOrder, 0);
+  assert.equal(sortedSecondMedical.typeSortOrder, 1);
+  assert.equal(sortedLife.typeSortOrder, 0);
+  assert.deepEqual(sortedOriginal.insuredPeople, [
+    { insuranceId: insurance.id, personId: person.id },
+  ]);
 
   const itemType = await api("POST", `/ledgers/${ledgerId}/item-types`, {
     token: owner.token,

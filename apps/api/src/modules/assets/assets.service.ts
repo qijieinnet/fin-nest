@@ -22,10 +22,32 @@ export class AssetsService {
 
   async listInsurances(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.insurance.findMany({
+    const insurances = await this.prisma.client.insurance.findMany({
       where: { ledgerId, deletedAt: null },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
+    if (!insurances.length) return insurances;
+    const types = Array.from(new Set(insurances.map((insurance) => insurance.type)));
+    const [insuredPeople, typeOrders] = await Promise.all([
+      this.prisma.client.insuranceInsuredPerson.findMany({
+        where: { insuranceId: { in: insurances.map((insurance) => insurance.id) } },
+      }),
+      this.prisma.client.insuranceTypeOrder.findMany({
+        where: { ledgerId, type: { in: types } },
+      }),
+    ]);
+    const typeOrderByType = new Map(typeOrders.map((entry) => [entry.type, entry.sortOrder]));
+    const peopleByInsuranceId = new Map<string, typeof insuredPeople>();
+    for (const entry of insuredPeople) {
+      const entries = peopleByInsuranceId.get(entry.insuranceId) ?? [];
+      entries.push(entry);
+      peopleByInsuranceId.set(entry.insuranceId, entries);
+    }
+    return insurances.map((insurance) => ({
+      ...insurance,
+      insuredPeople: peopleByInsuranceId.get(insurance.id) ?? [],
+      typeSortOrder: typeOrderByType.get(insurance.type) ?? 0,
+    }));
   }
 
   async getInsurance(ledgerId: string, insuranceId: string, userId: string) {
@@ -41,8 +63,12 @@ export class AssetsService {
   async createInsurance(ledgerId: string, userId: string, input: CreateInsuranceDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.$transaction(async (tx) => {
+      await this.ensureInsuranceTypeOrder(tx, ledgerId, input.type);
+      const sortOrder = await tx.insurance.count({
+        where: { ledgerId, deletedAt: null, type: input.type },
+      });
       const insurance = await tx.insurance.create({
-        data: this.insuranceData(ledgerId, userId, input),
+        data: this.insuranceData(ledgerId, userId, input, sortOrder),
       });
       await this.replaceInsuredPeople(tx, ledgerId, insurance.id, input.insuredPersonIds ?? []);
       return insurance;
@@ -56,11 +82,19 @@ export class AssetsService {
     input: UpdateInsuranceDto,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertInsurance(ledgerId, insuranceId);
+    const existing = await this.assertInsurance(ledgerId, insuranceId);
     return this.prisma.client.$transaction(async (tx) => {
+      const changingType = Boolean(input.type && input.type !== existing.type);
+      if (changingType) await this.ensureInsuranceTypeOrder(tx, ledgerId, input.type!);
+      const updateData = this.insuranceUpdateData(userId, input);
+      if (changingType) {
+        updateData.sortOrder = await tx.insurance.count({
+          where: { ledgerId, deletedAt: null, type: input.type! },
+        });
+      }
       const insurance = await tx.insurance.update({
         where: { id: insuranceId },
-        data: this.insuranceUpdateData(userId, input),
+        data: updateData,
       });
       if (input.insuredPersonIds)
         await this.replaceInsuredPeople(tx, ledgerId, insuranceId, input.insuredPersonIds);
@@ -83,6 +117,76 @@ export class AssetsService {
     return this.prisma.client.insurance.update({
       where: { id: insuranceId },
       data: { terminatedAt: null, updatedBy: userId },
+    });
+  }
+
+  async reorderInsurances(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const insurances = await this.prisma.client.insurance.findMany({
+      where: { ledgerId, id: { in: ids }, deletedAt: null, terminatedAt: null },
+      select: { id: true, type: true },
+    });
+    const existingIds = new Set(insurances.map((insurance) => insurance.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("INSURANCE_ORDER_MISMATCH", "保单顺序与当前保单不一致", 400);
+    }
+    const [first] = insurances;
+    const type = first?.type;
+    if (insurances.some((insurance) => insurance.type !== type)) {
+      throw new AppError("INSURANCE_ORDER_CROSS_TYPE", "只能在同一保险类型内排序", 400);
+    }
+    const groupInsurances = await this.prisma.client.insurance.findMany({
+      where: { ledgerId, deletedAt: null, terminatedAt: null, type },
+      select: { id: true },
+    });
+    const groupIds = new Set(groupInsurances.map((insurance) => insurance.id));
+    if (ids.length !== groupIds.size || ids.some((id) => !groupIds.has(id))) {
+      throw new AppError("INSURANCE_ORDER_MISMATCH", "保单顺序与当前保单不一致", 400);
+    }
+    await this.prisma.client.$transaction(
+      ids.map((id, index) =>
+        this.prisma.client.insurance.update({
+          where: { id },
+          data: { sortOrder: index, updatedBy: userId },
+        }),
+      ),
+    );
+  }
+
+  async reorderInsuranceTypes(ledgerId: string, userId: string, types: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const activeInsurances = await this.prisma.client.insurance.findMany({
+      where: { ledgerId, deletedAt: null, terminatedAt: null },
+      distinct: ["type"],
+      select: { type: true },
+    });
+    const activeTypes = new Set(activeInsurances.map((insurance) => insurance.type));
+    if (
+      types.length !== activeTypes.size ||
+      new Set(types).size !== types.length ||
+      types.some((type) => !activeTypes.has(type))
+    ) {
+      throw new AppError("INSURANCE_TYPE_ORDER_MISMATCH", "保险分类顺序与当前分类不一致", 400);
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      for (const type of types) await this.ensureInsuranceTypeOrder(tx, ledgerId, type);
+      const existingOrders = await tx.insuranceTypeOrder.findMany({
+        where: { ledgerId },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      });
+      const inactiveTypes = existingOrders
+        .map((entry) => entry.type)
+        .filter((type) => !activeTypes.has(type));
+      const orderedTypes = [...types, ...inactiveTypes];
+      await Promise.all(
+        orderedTypes.map((type, index) =>
+          tx.insuranceTypeOrder.update({
+            where: { ledgerId_type: { ledgerId, type } },
+            data: { sortOrder: index },
+          }),
+        ),
+      );
     });
   }
 
@@ -316,6 +420,7 @@ export class AssetsService {
     ledgerId: string,
     userId: string,
     input: CreateInsuranceDto,
+    sortOrder: number,
   ): Prisma.InsuranceUncheckedCreateInput {
     return {
       ledgerId,
@@ -334,6 +439,7 @@ export class AssetsService {
       startDate: input.startDate ? parseDateOnly(input.startDate) : null,
       endDate: input.endDate ? parseDateOnly(input.endDate) : null,
       note: input.note,
+      sortOrder,
       createdBy: userId,
       updatedBy: userId,
     };
@@ -361,6 +467,23 @@ export class AssetsService {
       note: input.note,
       updatedBy: userId,
     };
+  }
+
+  private async ensureInsuranceTypeOrder(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    type: string,
+  ) {
+    const existing = await tx.insuranceTypeOrder.findUnique({
+      where: { ledgerId_type: { ledgerId, type } },
+    });
+    if (existing) return existing;
+    const sortOrder = await tx.insuranceTypeOrder.count({ where: { ledgerId } });
+    return tx.insuranceTypeOrder.upsert({
+      where: { ledgerId_type: { ledgerId, type } },
+      create: { ledgerId, type, sortOrder },
+      update: {},
+    });
   }
 
   private itemData(
