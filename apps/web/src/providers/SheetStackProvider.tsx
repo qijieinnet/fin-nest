@@ -11,12 +11,15 @@ import {
   useState,
 } from "react";
 import { BottomSheet } from "@/components/ui";
+import type { DesktopDialogVariant } from "@/components/desktop/DesktopDialog";
 import { createClientId } from "@/lib/id/client-id";
 
 type SheetStackEntry = {
   className?: string;
   closeDisabled?: boolean;
   content: ReactNode;
+  /** 桌面断点下渲染为居中 Modal（默认）或右侧 Drawer。移动端无影响。 */
+  desktopVariant?: DesktopDialogVariant;
   hideDefaultHeader?: boolean;
   id?: string;
   title?: string;
@@ -123,6 +126,7 @@ export function SheetStackProvider({ children }: { children: ReactNode }) {
       {children}
       <BottomSheet
         className={activeSheet?.className}
+        desktopVariant={activeSheet?.desktopVariant}
         hideDefaultHeader={activeSheet?.hideDefaultHeader}
         onClose={pop}
         open={Boolean(activeSheet)}

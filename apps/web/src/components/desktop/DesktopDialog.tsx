@@ -102,8 +102,10 @@ export function DesktopDialog({
         firstEl.focus();
       }
     }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
+    // 冒泡阶段监听：内层弹出控件（如 FormSelect 下拉）可在其内部 stopPropagation
+    // 拦下 Esc/Tab，避免一次 Esc 关掉整个弹层。嵌套弹层仍由 dialogStack 栈顶判定。
+    document.addEventListener("keydown", onKeyDown, false);
+    return () => document.removeEventListener("keydown", onKeyDown, false);
   }, [open, onClose, dialogId]);
 
   const dialog = (

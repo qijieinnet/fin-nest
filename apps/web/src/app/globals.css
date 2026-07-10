@@ -4597,3 +4597,535 @@ select:focus-visible {
     color: var(--color-tint);
   }
 }
+
+/* --- B5：桌面表单控件（FormSelect / DesktopDatePicker）与桌面交易表单 --- */
+.form-select {
+  position: relative;
+  width: 100%;
+}
+
+.form-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--color-control-fill-muted);
+  border: 1px solid transparent;
+  font-size: 15px;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.form-select-trigger:disabled {
+  opacity: 0.6;
+}
+
+.form-select-trigger__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.form-select-trigger__placeholder {
+  color: var(--color-text-muted);
+}
+
+.form-select-trigger .truncate {
+  flex: 1 1 auto;
+}
+
+.form-select-chevron {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.form-select-clear {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+}
+
+.form-select-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  border: 0;
+  background: transparent;
+}
+
+.form-select-panel {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-floating);
+  overflow: hidden;
+}
+
+.form-select-search {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: var(--color-control-fill-muted);
+  border: 0;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.form-select-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.form-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.form-select-option:disabled {
+  opacity: 0.45;
+}
+
+.form-select-option--active {
+  background: var(--color-control-fill-muted);
+}
+
+.form-select-option--selected {
+  color: var(--color-tint);
+  font-weight: 600;
+}
+
+.form-select-option__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.form-select-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.desktop-datepicker-panel {
+  position: fixed;
+  z-index: 70;
+  width: 280px;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-floating);
+}
+
+.desktop-datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.desktop-datepicker-head button {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+}
+
+.desktop-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.desktop-datepicker-weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.desktop-datepicker-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-datepicker-day--today {
+  color: var(--color-tint);
+  font-weight: 600;
+}
+
+.desktop-datepicker-day--selected {
+  background: var(--color-tint);
+  color: var(--color-tint-contrast);
+  font-weight: 600;
+}
+
+.desktop-datepicker-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.desktop-datepicker-foot button {
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-tint);
+}
+
+/* 桌面交易表单：两列版式 */
+.transaction-form-desktop {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.transaction-form-desktop__top {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.transaction-form-desktop__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.transaction-form-desktop__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.transaction-form-desktop__field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.transaction-form-desktop__advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+@media (hover: hover) {
+  .form-select-option:hover:not(:disabled) {
+    background: var(--color-control-fill-muted);
+  }
+
+  .desktop-datepicker-day:hover {
+    background: var(--color-control-fill-muted);
+  }
+
+  .desktop-datepicker-head button:hover {
+    background: var(--color-control-fill-muted);
+  }
+}
+
+/* --- B2：accounts 桌面主从布局 --- */
+/* 主从/宽屏页面放宽内容区限宽（长尾页仍保持 720）。 */
+.desktop-shell__content:has(.desktop-page--wide) {
+  max-width: 1180px;
+}
+
+.desktop-page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.desktop-accounts {
+  display: grid;
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+  gap: 28px;
+  padding: 24px 0 48px;
+  align-items: start;
+}
+
+.desktop-accounts__list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.desktop-accounts__detail {
+  position: sticky;
+  top: 24px;
+}
+
+.desktop-empty-pane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  border-radius: 18px;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.desktop-detail-scroll {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.desktop-account-row--selected {
+  background: var(--color-tint-soft);
+}
+
+.desktop-subaccount-row__actions {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+@media (hover: hover) {
+  .desktop-account-row:hover:not(.desktop-account-row--selected) {
+    background: var(--color-control-fill-muted);
+  }
+
+  .desktop-subaccount-row:hover .desktop-subaccount-row__actions {
+    opacity: 1;
+  }
+}
+
+/* --- B3：stats 桌面 dashboard --- */
+.desktop-stats {
+  padding: 24px 0 48px;
+}
+
+.desktop-stats__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.desktop-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.desktop-card {
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.desktop-stats__donut {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+/* 分类排行跨两列 */
+.desktop-stats__ranking {
+  grid-column: 1 / -1;
+  padding: 16px 8px;
+}
+
+@media (hover: hover) {
+  .desktop-stats__ranking button:not(:disabled):hover {
+    background: var(--color-control-fill-muted);
+    border-radius: 12px;
+  }
+}
+
+/* --- B4：budget 桌面卡片网格 --- */
+.desktop-budget {
+  padding: 24px 0 48px;
+}
+
+.desktop-budget__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.desktop-budget__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* --- B1：bills 桌面主从布局（表格 + 详情） --- */
+.desktop-bills {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 0 32px;
+  height: 100dvh;
+  box-sizing: border-box;
+}
+
+.desktop-bills__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex: 0 0 auto;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.desktop-bills__summary-figures {
+  display: flex;
+  gap: 36px;
+}
+
+.desktop-bills__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.desktop-bills__figure-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.desktop-bills__figure-value {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.desktop-kbd {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.28);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.desktop-bills__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.desktop-bills__table-wrap {
+  min-width: 0;
+  border-radius: 18px;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.desktop-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.desktop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.desktop-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 -1px 0 var(--color-border-subtle);
+}
+
+.desktop-table__amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.desktop-table__row {
+  cursor: pointer;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+}
+
+.desktop-table__row td {
+  padding: 12px 14px;
+  color: var(--color-text-primary);
+  max-width: 220px;
+}
+
+.desktop-table__row--selected {
+  background: var(--color-tint-soft);
+}
+
+.desktop-table__date {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.desktop-table__muted {
+  color: var(--color-text-secondary);
+}
+
+.desktop-bills__detail {
+  min-width: 0;
+}
+
+@media (hover: hover) {
+  .desktop-table__row:hover:not(.desktop-table__row--selected) {
+    background: var(--color-control-fill-muted);
+  }
+}

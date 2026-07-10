@@ -163,6 +163,7 @@ export function useBillsModel() {
     accounts: accounts as Account[],
     categoryLookup,
     transactionsQuery,
+    transactions,
     groups,
     totals,
     balanceMicros,

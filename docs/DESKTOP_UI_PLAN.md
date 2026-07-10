@@ -183,11 +183,13 @@ A4 文档与规则更新（随 A3 一起）                                    C
 | A2 | 四核心页视图模型抽取 | – | 已完成 | pc-ui | useBillsModel/useAccountsModel/useStatsModel/useBudgetModel + 账户详情/子账户详情模型（useAccountDetailModel/useSubAccountDetailModel）；筛选默认值迁 `lib/data/filter-types`（D5）；UI 弹层开关留在组件 |
 | A3 | 桌面壳/断点/弹层底座 | – | 已完成 | pc-ui | B 阶段总闸门。弹层焦点圈禁改用自建 DesktopDialog（见 §2 D3 备注），未引入 radix；嵌套弹层用弹层栈保证一次 Esc 只关栈顶 |
 | A4 | AGENTS/GUIDE 文档更新 | 随 A3 | 已完成 | pc-ui | |
-| B5 | 桌面表单控件 + 交易表单桌面版 | A1, A3 | 待认领 | | |
-| B1 | bills 桌面主从布局 | A2, A3, B5 | 待认领 | | |
-| B2 | accounts 桌面版 | A2, A3 | 待认领 | | |
-| B3 | stats 桌面版 | A2, A3 | 待认领 | | |
-| B4 | budget 桌面版 | A2, A3 | 待认领 | | |
+| B5 | 桌面表单控件 + 交易表单桌面版 | A1, A3 | 已完成 | pc-ui | FormSelect（过滤+键盘）/DesktopDatePicker（自建日历，未用 react-day-picker，见 D3）；TransactionForm 拆调度层+移动/桌面渲染层，共享 A1 模型；控件已浏览器实测 |
+| B1 | bills 桌面主从布局 | A2, A3, B5 | 已完成 | pc-ui | 左表格(自建，未用 tanstack)+右详情，?tx 同步，记一笔 Modal + N 快捷键；仅编译级验证(无后端) |
+| B2 | accounts 桌面版 | A2, A3 | 已完成 | pc-ui | 左账户列表+右详情，复用 useAccountDetailModel，子账户/余额调整走 Modal；仅编译级验证 |
+| B3 | stats 桌面版 | A2, A3 | 已完成 | pc-ui | 2 列 dashboard，分类下钻走右侧 Drawer(SheetStack 加 desktopVariant)；仅编译级验证 |
+| B4 | budget 桌面版 | A2, A3 | 已完成 | pc-ui | 计划卡片网格，详情/编辑走 Modal，复用 PlanCardWithProgress；仅编译级验证 |
+
+> B 阶段落地说明：各页 `page.tsx` 保持不变，改为 `XxxScreen.tsx` 断点分发（`useIsDesktop`）→ `XxxScreen.mobile.tsx`（原实现）/ `XxxScreen.desktop.tsx`（新增），共享 A2 视图模型。桌面页面均只做了 `pnpm typecheck` + `pnpm lint` + `pnpm build`（`/bills`/`/accounts`/`/stats`/`/budget` 成功静态预渲染）+ 路由编译验证；**真实数据下的页面级视觉/交互回归待本机后端可用后补**（Docker 当前不可用）。桌面表格因 pnpm store 不匹配未用 `@tanstack/react-table`，改自建 `<table>`（见 D3 备注）。
 | C1 | 长尾页自适应走查 | A3 | 待认领 | | 可与 B 并行 |
 | C2 | 键盘/悬停打磨 | B1-B5 | 待认领 | | |
 | C3 | 双端回归验证 | 全部 | 待认领 | | |

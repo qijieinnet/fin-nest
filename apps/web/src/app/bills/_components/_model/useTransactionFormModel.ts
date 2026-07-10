@@ -644,3 +644,11 @@ export function useTransactionFormModel({
     mutationState: { isPending: mutation.isPending },
   };
 }
+
+export type TransactionFormModel = ReturnType<typeof useTransactionFormModel>;
+
+/** 双端渲染层共享的 props：视图模型 + 由外层受控的「新建物品」弹层动作（含 JSX，留在组件层）。 */
+export type TransactionFormRenderProps = {
+  model: TransactionFormModel;
+  openCreateItemSheet: () => void;
+};
