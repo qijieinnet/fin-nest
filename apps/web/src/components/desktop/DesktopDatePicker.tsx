@@ -8,6 +8,8 @@ import { useMounted } from "@/lib/hooks/useMounted";
 
 type DesktopDatePickerProps = {
   className?: string;
+  /** 可选标签：提供时触发器显示「标签 / 日期」两行（用于复用到带标签的编辑弹层）。 */
+  label?: string;
   onChange: (value: string) => void;
   value: string; // YYYY-MM-DD
 };
@@ -37,7 +39,7 @@ function triggerLabel(value: string): string {
 }
 
 /** 桌面日期选择：日历面板替代滚轮。Portal + fixed 定位，避免被滚动容器裁剪。 */
-export function DesktopDatePicker({ className, onChange, value }: DesktopDatePickerProps) {
+export function DesktopDatePicker({ className, label, onChange, value }: DesktopDatePickerProps) {
   const mounted = useMounted();
   const [open, setOpen] = useState(false);
   const parsed = parseKey(value);
@@ -163,7 +165,14 @@ export function DesktopDatePicker({ className, onChange, value }: DesktopDatePic
     <div className={cn("form-select", className)} ref={anchorRef}>
       <button className="form-select-trigger" onClick={() => setOpen((v) => !v)} type="button">
         <CalendarDays className="form-select-trigger__icon" size={16} />
-        <span className="truncate">{triggerLabel(value)}</span>
+        {label ? (
+          <span className="form-select-trigger__stack">
+            <span className="form-select-trigger__sublabel">{label}</span>
+            <span className="truncate">{triggerLabel(value)}</span>
+          </span>
+        ) : (
+          <span className="truncate">{triggerLabel(value)}</span>
+        )}
       </button>
       {mounted ? createPortal(panel, document.body) : null}
     </div>

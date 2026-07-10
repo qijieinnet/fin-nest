@@ -131,6 +131,7 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 |---|---|
 | `docs/PROJECT_GUIDE.md`（本文件） | 项目权威入口 |
 | `docs/DESKTOP_UI_PLAN.md` | 桌面端 UI 改造方案与多智能体执行任务书 |
+| `docs/DESKTOP_UI_CHECKLIST.md` | 桌面端双端走查清单（WP-C3） |
 | `AGENTS.md` / `CLAUDE.md` | AI 协作须知（精简硬规则 + 指向本文件） |
 | `README.md` | 快速上手（安装/脚本） |
 | `infra/docker/README.md` | 部署细节 |

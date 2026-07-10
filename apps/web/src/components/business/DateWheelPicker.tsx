@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays } from "lucide-react";
+import { DesktopDatePicker } from "@/components/desktop/DesktopDatePicker";
 import { Surface } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 
 type DateWheelPickerProps = {
   label?: string;
@@ -43,6 +45,7 @@ function isIOSLike(): boolean {
 }
 
 export function DateWheelPicker({ label = "日期", onValueChange, value }: DateWheelPickerProps) {
+  const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const yearRef = useRef<HTMLDivElement | null>(null);
   const monthRef = useRef<HTMLDivElement | null>(null);
@@ -188,6 +191,11 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
         document.body,
       )
     : null;
+
+  // 桌面：用日历面板替代滚轮/原生输入（标签保留），移动端逻辑不变（C2）。
+  if (isDesktop) {
+    return <DesktopDatePicker label={label} onChange={onValueChange} value={value} />;
+  }
 
   return (
     <>

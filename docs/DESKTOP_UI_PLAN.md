@@ -190,9 +190,9 @@ A4 文档与规则更新（随 A3 一起）                                    C
 | B4 | budget 桌面版 | A2, A3 | 已完成 | pc-ui | 计划卡片网格，详情/编辑走 Modal，复用 PlanCardWithProgress；仅编译级验证 |
 
 > B 阶段落地说明：各页 `page.tsx` 保持不变，改为 `XxxScreen.tsx` 断点分发（`useIsDesktop`）→ `XxxScreen.mobile.tsx`（原实现）/ `XxxScreen.desktop.tsx`（新增），共享 A2 视图模型。桌面页面均只做了 `pnpm typecheck` + `pnpm lint` + `pnpm build`（`/bills`/`/accounts`/`/stats`/`/budget` 成功静态预渲染）+ 路由编译验证；**真实数据下的页面级视觉/交互回归待本机后端可用后补**（Docker 当前不可用）。桌面表格因 pnpm store 不匹配未用 `@tanstack/react-table`，改自建 `<table>`（见 D3 备注）。
-| C1 | 长尾页自适应走查 | A3 | 待认领 | | 可与 B 并行 |
-| C2 | 键盘/悬停打磨 | B1-B5 | 待认领 | | |
-| C3 | 双端回归验证 | 全部 | 待认领 | | |
+| C1 | 长尾页自适应走查 | A3 | 部分完成 | pc-ui | 登录/注册桌面居中卡片（去 app 侧栏）已实测；long-tail 单列限宽由 A3 覆盖；导入预览 overflow 待后端走查 |
+| C2 | 键盘/悬停打磨 | B1-B5 | 部分完成 | pc-ui | SwipeActionRow hover 显操作、N/`/` 快捷键、Esc 栈联动就绪；wheel picker 残留已审计（见清单） |
+| C3 | 双端回归验证 | 全部 | 部分完成 | pc-ui | typecheck/lint/test/build 全绿；走查清单见 [`DESKTOP_UI_CHECKLIST.md`](DESKTOP_UI_CHECKLIST.md)；e2e:api + 真实数据走查待后端 |
 
 ## 7. 风险与应对
 

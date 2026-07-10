@@ -5129,3 +5129,74 @@ select:focus-visible {
     background: var(--color-control-fill-muted);
   }
 }
+
+/* --- C1：登录/注册桌面居中卡片（不套 app 侧边栏） --- */
+.auth-main--desktop {
+  align-items: center;
+}
+
+.auth-main--desktop > * {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* --- C2：桌面 hover 显示滑动操作（触屏保留滑动，hover:none 不触发） --- */
+@media (hover: hover) {
+  .biz-swipe-row__actions--trailing {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .biz-swipe-row:hover .biz-swipe-row__actions--trailing,
+  .biz-swipe-row--open .biz-swipe-row__actions--trailing {
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 3;
+  }
+}
+
+/* --- C2：DesktopDatePicker 带标签触发器（复用到编辑弹层的日期字段） --- */
+.form-select-trigger__stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+}
+
+.form-select-trigger__sublabel {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* --- C1：桌面 Modal 内导入预览等宽内容横向滚动，避免撑破弹层 --- */
+.desktop-dialog-panel .import-preview-sheet__scroll {
+  overflow-x: auto;
+}
+
+/* --- B1：bills 桌面汇总条内的预算进度 --- */
+.desktop-bills__budget {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-width: 160px;
+}
+
+.desktop-bills__budget-track {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-control-fill-muted);
+}
+
+.desktop-bills__budget-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-tint);
+  transition: width 0.3s;
+}

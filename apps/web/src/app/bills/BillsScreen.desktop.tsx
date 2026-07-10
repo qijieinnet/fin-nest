@@ -113,10 +113,12 @@ export function BillsScreenDesktop() {
     [push, clear],
   );
 
-  // 全局快捷键 N：呼出记一笔 Modal（输入态与已有弹层时忽略）。
+  // 全局快捷键：N 记一笔、/ 打开筛选（输入态与已有弹层时忽略）。
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "n" && event.key !== "N") return;
+      const isRecord = event.key === "n" || event.key === "N";
+      const isFilter = event.key === "/";
+      if (!isRecord && !isFilter) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
@@ -125,7 +127,8 @@ export function BillsScreenDesktop() {
       }
       if (document.querySelector(".desktop-dialog-root")) return;
       event.preventDefault();
-      openRecord();
+      if (isRecord) openRecord();
+      else setFilterOpen(true);
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -147,6 +150,29 @@ export function BillsScreenDesktop() {
                 {totals.count}
               </span>
             </div>
+            {model.showBudget && model.budget ? (
+              <div className="desktop-bills__budget">
+                <span className="desktop-bills__figure-label">
+                  本月预算剩余{" "}
+                  <MoneyText
+                    amountMicros={model.budget.total.remainingMicros ?? "0"}
+                    className="text-[11px]"
+                    tone={
+                      model.budget.total.remainingMicros &&
+                      BigInt(model.budget.total.remainingMicros) < 0n
+                        ? "expense"
+                        : "muted"
+                    }
+                  />
+                </span>
+                <span className="desktop-bills__budget-track">
+                  <span
+                    className="desktop-bills__budget-fill"
+                    style={{ width: `${Math.min(model.budget.total.percent, 100)}%` }}
+                  />
+                </span>
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <IconButtonGroup items={[filterButtonItem(model.filterValue, () => setFilterOpen(true))]} />

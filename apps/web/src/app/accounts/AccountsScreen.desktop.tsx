@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { Button, IconButton, MobileAppShell, Switch } from "@/components/ui";
@@ -8,6 +8,7 @@ import type { Account, SubAccount } from "@/lib/api";
 import { useSheetStack } from "@/providers";
 import { AccountBalanceCard } from "./_components/AccountBalanceCard";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
+import { AccountsSortList } from "./_components/AccountsSortList";
 import { AccountEntryListSheet } from "./_components/AccountEntryListSheet";
 import { BalanceAdjustmentListSheet } from "./_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "./_components/BalanceEditSheet";
@@ -35,8 +36,9 @@ export function AccountsScreenDesktop() {
   const { push } = useSheetStack();
   const decimalPlaces = useDecimalPlaces();
   const model = useAccountsModel();
-  const { accounts, accountsQuery, groups, netWorth } = model;
+  const { accounts, accountsQuery, groups, netWorth, canSort } = model;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState(false);
 
   // 默认选中第一个账户；选中项被删除后回退到第一个。
   useEffect(() => {
@@ -64,13 +66,37 @@ export function AccountsScreenDesktop() {
       <aside className="desktop-accounts__list">
         <div className="desktop-accounts__list-head">
           <h1 className="desktop-page-title">账户</h1>
-          <Button icon={<Plus size={16} />} onClick={openEditor} variant="secondary">
-            添加账户
-          </Button>
+          {sortMode ? (
+            <Button onClick={() => setSortMode(false)} variant="primary">
+              完成
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              {canSort ? (
+                <Button
+                  icon={<ArrowUpDown size={16} />}
+                  onClick={() => setSortMode(true)}
+                  variant="secondary"
+                >
+                  排序
+                </Button>
+              ) : null}
+              <Button icon={<Plus size={16} />} onClick={openEditor} variant="secondary">
+                添加账户
+              </Button>
+            </div>
+          )}
         </div>
 
         {accountsQuery.isPending ? (
           <LoadingState rows={5} title="加载账户" />
+        ) : sortMode ? (
+          <>
+            <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
+              按住右侧图标拖动排序，仅可在同一分类内调整。
+            </p>
+            <AccountsSortList groups={groups} onReorder={model.handleReorder} />
+          </>
         ) : (
           <>
             <NetWorthOverviewCard
