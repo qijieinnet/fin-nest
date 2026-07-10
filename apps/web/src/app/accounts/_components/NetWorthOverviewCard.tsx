@@ -60,16 +60,27 @@ export function NetWorthOverviewCard({
     label: point.label,
     valueMicros: BigInt(point.netWorthMicros),
   }));
+  // 首次请求期间先画一条基于当前净资产的水平线，避免数据返回后卡片突然增高。
+  const chartPoints =
+    points.length > 1
+      ? points
+      : [
+          { label: "", valueMicros: netMicros },
+          { label: "", valueMicros: netMicros },
+        ];
 
-  const values = points.map((point) => point.valueMicros);
+  const values = chartPoints.map((point) => point.valueMicros);
   const max = values.reduce((acc, value) => (value > acc ? value : acc), values[0] ?? 0n);
   const min = values.reduce((acc, value) => (value < acc ? value : acc), values[0] ?? 0n);
   const span = max - min;
 
   const plotW = WIDTH - PAD_X * 2;
   const plotH = HEIGHT - PAD_TOP - PAD_BOTTOM;
-  const coords = points.map((point, index) => {
-    const x = points.length > 1 ? PAD_X + (index / (points.length - 1)) * plotW : WIDTH / 2;
+  const coords = chartPoints.map((point, index) => {
+    const x =
+      chartPoints.length > 1
+        ? PAD_X + (index / (chartPoints.length - 1)) * plotW
+        : WIDTH / 2;
     const ratio = span > 0n ? Number(((point.valueMicros - min) * 1000n) / span) / 1000 : 0.5;
     return { x, y: PAD_TOP + (1 - ratio) * plotH };
   });
@@ -82,7 +93,7 @@ export function NetWorthOverviewCard({
       ? `${line} L ${lastCoord.x} ${baseY} L ${firstCoord.x} ${baseY} Z`
       : "";
 
-  const startValue = values[0] ?? netMicros;
+  const startValue = points[0]?.valueMicros ?? netMicros;
   const delta = netMicros - startValue;
   const deltaAbs = delta < 0n ? -delta : delta;
   // 账单约定：净资产上升（正）红、下降（负）绿。
@@ -139,54 +150,53 @@ export function NetWorthOverviewCard({
         </div>
       </div>
 
-      {hasTrend ? (
-        <svg
-          aria-label="净资产走势"
-          className="mt-4 w-full"
-          height={HEIGHT}
-          preserveAspectRatio="none"
-          role="img"
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        >
-          <defs>
-            <linearGradient id="net-worth-overview-gradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-tint)" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="var(--color-tint)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {area ? <path d={area} fill="url(#net-worth-overview-gradient)" /> : null}
-          {line ? (
-            <path
-              d={line}
-              fill="none"
-              stroke="var(--color-tint)"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              vectorEffect="non-scaling-stroke"
-            />
-          ) : null}
-          {lastCoord ? (
-            <circle cx={lastCoord.x} cy={lastCoord.y} fill="var(--color-tint)" r={3} />
-          ) : null}
-          {points.map((point, index) =>
-            shouldShowLabel(index, points.length) ? (
-              <text
-                fill="var(--color-text-muted)"
-                fontSize="9"
-                key={`${point.label}-${index}`}
-                textAnchor={
-                  index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"
-                }
-                x={coords[index]?.x ?? 0}
-                y={HEIGHT - 4}
-              >
-                {point.label}
-              </text>
-            ) : null,
-          )}
-        </svg>
-      ) : null}
+      <svg
+        aria-busy={seriesQuery.isPending || undefined}
+        aria-label="净资产走势"
+        className="mt-4 w-full"
+        height={HEIGHT}
+        preserveAspectRatio="none"
+        role="img"
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      >
+        <defs>
+          <linearGradient id="net-worth-overview-gradient" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-tint)" stopOpacity="0.24" />
+            <stop offset="100%" stopColor="var(--color-tint)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {area ? <path d={area} fill="url(#net-worth-overview-gradient)" /> : null}
+        {line ? (
+          <path
+            d={line}
+            fill="none"
+            stroke="var(--color-tint)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+        {lastCoord ? (
+          <circle cx={lastCoord.x} cy={lastCoord.y} fill="var(--color-tint)" r={3} />
+        ) : null}
+        {chartPoints.map((point, index) =>
+          point.label && shouldShowLabel(index, chartPoints.length) ? (
+            <text
+              fill="var(--color-text-muted)"
+              fontSize="9"
+              key={`${point.label}-${index}`}
+              textAnchor={
+                index === 0 ? "start" : index === chartPoints.length - 1 ? "end" : "middle"
+              }
+              x={coords[index]?.x ?? 0}
+              y={HEIGHT - 4}
+            >
+              {point.label}
+            </text>
+          ) : null,
+        )}
+      </svg>
     </section>
   );
 }

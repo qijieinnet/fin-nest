@@ -1,12 +1,13 @@
 "use client";
 
 import { ChevronRight, Plus } from "lucide-react";
-import { EmptyState, LoadingState } from "@/components/business";
+import { EmptyState } from "@/components/business";
 import { Button, MobileAppShell, Switch, Tabs } from "@/components/ui";
 import { type Plan, type PlanKind } from "@/lib/api";
 import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
+import { PlanPeriodCardSkeleton } from "./_components/PlanPeriodCard";
 import { PlanCardWithProgress, StoppedPlansSheet } from "./PlansScreen.mobile";
 import { useBudgetModel } from "./_model/useBudgetModel";
 
@@ -73,7 +74,11 @@ export function PlansScreenDesktop() {
         </header>
 
         {model.plansQuery.isPending ? (
-          <LoadingState rows={3} title="加载计划" />
+          <div className="desktop-budget__grid">
+            {Array.from({ length: 3 }, (_, index) => (
+              <PlanPeriodCardSkeleton key={index} />
+            ))}
+          </div>
         ) : tabPlans.length === 0 ? (
           <EmptyState
             message={`还没有${tab === "income" ? "收入目标" : "支出限额"}计划，点击右上角新建一个。`}

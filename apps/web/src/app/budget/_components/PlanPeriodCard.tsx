@@ -21,6 +21,57 @@ type PlanPeriodCardProps = {
   showMatchedFooter?: boolean;
 };
 
+export function PlanPeriodCardSkeleton({ title = "加载计划" }: { title?: string }) {
+  const skeleton = "animate-pulse rounded-full bg-[var(--color-control-fill-muted)]";
+
+  return (
+    <div
+      aria-busy="true"
+      aria-label={title}
+      className="w-full overflow-hidden rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)]"
+      role="status"
+    >
+      <div className="p-4 pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className={`${skeleton} h-[23px] w-2/5`} />
+          <span className={`${skeleton} h-[13px] w-1/4`} />
+        </div>
+
+        <div className="mt-2 flex items-end justify-between gap-4">
+          <span className="min-w-0 flex-1">
+            <span className={`${skeleton} block h-3 w-14`} />
+            <span className={`${skeleton} mt-2 block h-7 w-2/3`} />
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-2">
+            <span className={`${skeleton} block h-3 w-8`} />
+            <span className={`${skeleton} block h-4 w-16`} />
+          </span>
+        </div>
+
+        <div className="mt-3">
+          <span className={`${skeleton} block h-2 w-full`} />
+          <div className="mt-2 flex justify-between">
+            <span className={`${skeleton} h-3 w-10`} />
+            <span className={`${skeleton} h-3 w-16`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 border-t border-black/[0.06]">
+        {Array.from({ length: 2 }, (_, index) => (
+          <span
+            className="flex items-center justify-between border-r border-black/[0.06] px-4 py-3 last:border-r-0"
+            key={index}
+          >
+            <span className={`${skeleton} h-3 w-8`} />
+            <span className={`${skeleton} h-4 w-14`} />
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function statMoney(micros: bigint, decimalPlaces: number): string {
   return formatMicros(micros, { currencySymbol: "", decimalPlaces, trimTrailingZeros: true });
 }

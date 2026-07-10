@@ -16,7 +16,7 @@ import { usePlanProgress, useStoppedPlans } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
-import { PlanPeriodCard } from "./_components/PlanPeriodCard";
+import { PlanPeriodCard, PlanPeriodCardSkeleton } from "./_components/PlanPeriodCard";
 import { useBudgetModel } from "./_model/useBudgetModel";
 
 export function PlanCardWithProgress({
@@ -30,12 +30,15 @@ export function PlanCardWithProgress({
 }) {
   const progressQuery = usePlanProgress(ledgerId, plan.id);
   const progress = progressQuery.data?.period;
+  if (progressQuery.isPending) {
+    return <PlanPeriodCardSkeleton title={`加载${plan.name}`} />;
+  }
   if (!progress) {
     return (
       <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-5">
         <p className="text-[20px] font-bold text-[var(--color-text-primary)]">{plan.name}</p>
         <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-          {progressQuery.isError ? "进度加载失败" : "加载进度…"}
+          进度加载失败
         </p>
       </div>
     );
@@ -171,8 +174,10 @@ export function PlansScreenMobile() {
         />
 
         {model.plansQuery.isPending ? (
-          <div className="mt-4">
-            <LoadingState rows={3} title="加载计划" />
+          <div className="mt-3.5 flex flex-col gap-3.5">
+            {Array.from({ length: 3 }, (_, index) => (
+              <PlanPeriodCardSkeleton key={index} />
+            ))}
           </div>
         ) : tabPlans.length === 0 ? (
           <div className="mt-6">
