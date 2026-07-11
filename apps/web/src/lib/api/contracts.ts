@@ -327,6 +327,33 @@ export type TransactionSummary = {
   count: number;
 };
 
+/** 可批量修改的单个字段（一次只能改一项）。金额不在内。 */
+export type BatchUpdateField = "category" | "account" | "person" | "occurredOn" | "note";
+
+/** 批量修改多笔交易的单个字段；转账对 category/account 不适用会被跳过。 */
+export type BatchUpdateTransactionsInput = {
+  transactionIds: string[];
+  field: BatchUpdateField;
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  subAccountId?: string;
+  /** 转账改账户时使用（可只改一侧）。 */
+  fromAccountId?: string;
+  fromSubAccountId?: string;
+  toAccountId?: string;
+  toSubAccountId?: string;
+  personId?: string;
+  occurredOn?: string;
+  note?: string;
+};
+
+/** 批量修改结果：实际更新条数与跳过条数（转账/已删除）。 */
+export type BatchUpdateResult = {
+  updated: number;
+  skipped: number;
+};
+
 export type BudgetProgressItem = {
   budgetMicros: string | null;
   usedMicros: string;

@@ -3,6 +3,7 @@ import {
   AppError,
   AuditLogService,
   DatabaseTransactionService,
+  dateKey,
   IdempotencyService,
   parseDateOnly,
   PrismaService,
@@ -12,6 +13,7 @@ import { Prisma } from "@fin-nest/db";
 import { AccountsService } from "../accounts/accounts.service";
 import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
+import { BatchUpdateTransactionsDto } from "./dto/batch-update-transactions.dto";
 import { CreateTransactionDto, TransactionAccountRelationDto } from "./dto/create-transaction.dto";
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
 import { UpdateTransactionDto } from "./dto/update-transaction.dto";
@@ -319,6 +321,143 @@ export class TransactionsService {
       },
       { timeout: 20_000 },
     );
+  }
+
+  /**
+   * 批量修改多笔交易的单个字段（一次只能改一项）。逐笔以现有数据（含关联/资产链接）重建
+   * 完整 DTO，仅覆盖目标字段后复用 update()，保持冲正流水/快照等不变式。
+   * 转账无分类、账户分转出/转入两侧，故 category/account 对转账不适用会被跳过。
+   */
+  async batchUpdate(ledgerId: string, userId: string, dto: BatchUpdateTransactionsDto) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    if (dto.field === "category" && !dto.categoryId) {
+      throw new AppError("BATCH_FIELD_REQUIRED", "缺少分类", 400);
+    }
+    if (
+      dto.field === "account" &&
+      !dto.accountId &&
+      !dto.fromAccountId &&
+      !dto.toAccountId
+    ) {
+      throw new AppError("BATCH_FIELD_REQUIRED", "缺少账户", 400);
+    }
+    if (dto.field === "occurredOn" && !dto.occurredOn) {
+      throw new AppError("BATCH_FIELD_REQUIRED", "缺少日期", 400);
+    }
+
+    let updated = 0;
+    let skipped = 0;
+    for (const transactionId of dto.transactionIds) {
+      const existing = await this.prisma.client.transaction.findFirst({
+        where: { id: transactionId, ledgerId, deletedAt: null },
+      });
+      if (!existing) {
+        skipped += 1;
+        continue;
+      }
+      // 转账无分类；转账改账户需指定转出/转入，非转账改账户需指定 accountId，否则跳过。
+      const isTransfer = existing.type === "transfer";
+      if (dto.field === "category" && isTransfer) {
+        skipped += 1;
+        continue;
+      }
+      if (dto.field === "account") {
+        const applicable = isTransfer
+          ? Boolean(dto.fromAccountId || dto.toAccountId)
+          : Boolean(dto.accountId);
+        if (!applicable) {
+          skipped += 1;
+          continue;
+        }
+      }
+      const [relations, links] = await Promise.all([
+        this.prisma.client.transactionAccountRelation.findMany({
+          where: { ledgerId, transactionId },
+          orderBy: { createdAt: "asc" },
+        }),
+        this.prisma.client.transactionLink.findMany({
+          where: { ledgerId, transactionId },
+          orderBy: { createdAt: "asc" },
+        }),
+      ]);
+      const input = this.reconstructUpdateInput(existing, relations, links);
+      this.applyBatchField(input, dto);
+      await this.update(ledgerId, transactionId, userId, input);
+      updated += 1;
+    }
+    return { updated, skipped };
+  }
+
+  /** 以现有交易（含关联与资产链接）重建完整的 create/update DTO，用于批量改单个字段。 */
+  private reconstructUpdateInput(
+    existing: Prisma.TransactionGetPayload<Record<string, never>>,
+    relations: Prisma.TransactionAccountRelationGetPayload<Record<string, never>>[],
+    links: Prisma.TransactionLinkGetPayload<Record<string, never>>[],
+  ): CreateTransactionDto {
+    const input: CreateTransactionDto = {
+      type: existing.type,
+      grossAmountMicros: existing.grossAmountMicros.toString(),
+      occurredOn: dateKey(existing.occurredOn),
+      currency: existing.currency,
+      categoryId: existing.categoryId ?? undefined,
+      subcategoryId: existing.subcategoryId ?? undefined,
+      personId: existing.personId ?? undefined,
+      accountId: existing.accountId ?? undefined,
+      subAccountId: existing.subAccountId ?? undefined,
+      fromAccountId: existing.fromAccountId ?? undefined,
+      fromSubAccountId: existing.fromSubAccountId ?? undefined,
+      toAccountId: existing.toAccountId ?? undefined,
+      toSubAccountId: existing.toSubAccountId ?? undefined,
+      note: existing.note ?? undefined,
+      relations: relations.map((relation) => ({
+        accountId: relation.accountId,
+        relationKind: relation.relationKind,
+        amountMicros: relation.amountMicros.toString(),
+      })),
+    };
+    const insuranceLink = links.find((link) => link.linkedType === "insurance");
+    if (insuranceLink) input.insuranceId = insuranceLink.linkedId;
+    const itemLink = links.find((link) => link.linkedType === "item");
+    if (itemLink) {
+      input.itemId = itemLink.linkedId;
+      input.itemLinkKind = itemLink.linkKind as "consumable" | "purchase";
+    }
+    return input;
+  }
+
+  /** 仅覆盖批量目标字段；person/note 留空表示清除。 */
+  private applyBatchField(input: CreateTransactionDto, dto: BatchUpdateTransactionsDto) {
+    switch (dto.field) {
+      case "category":
+        input.categoryId = dto.categoryId ?? undefined;
+        input.subcategoryId = dto.subcategoryId ?? undefined;
+        break;
+      case "account":
+        if (input.type === "transfer") {
+          // 转账可只改一侧；被改的一侧同步覆盖子账户（清除旧账户的子账户）。
+          if (dto.fromAccountId) {
+            input.fromAccountId = dto.fromAccountId;
+            input.fromSubAccountId = dto.fromSubAccountId;
+          }
+          if (dto.toAccountId) {
+            input.toAccountId = dto.toAccountId;
+            input.toSubAccountId = dto.toSubAccountId;
+          }
+        } else {
+          input.accountId = dto.accountId ?? undefined;
+          input.subAccountId = dto.subAccountId ?? undefined;
+        }
+        break;
+      case "person":
+        input.personId = dto.personId?.trim() ? dto.personId : undefined;
+        break;
+      case "occurredOn":
+        if (dto.occurredOn) input.occurredOn = dto.occurredOn;
+        break;
+      case "note":
+        input.note = dto.note?.trim() ? dto.note : undefined;
+        break;
+    }
   }
 
   async delete(ledgerId: string, transactionId: string, userId: string): Promise<void> {

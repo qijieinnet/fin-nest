@@ -4839,6 +4839,34 @@ select:focus-visible {
   color: var(--color-text-secondary);
 }
 
+/* 备注：整行左右布局（label 左 / 输入右），沿用控件盒式外观，不再单独占一格标题。 */
+.transaction-form-desktop__note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--color-control-fill-muted);
+}
+
+.transaction-form-desktop__note-label {
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.transaction-form-desktop__note-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
 .transaction-form-desktop__advanced {
   display: flex;
   flex-direction: column;
@@ -4919,6 +4947,15 @@ select:focus-visible {
   transition: opacity 0.15s ease;
 }
 
+/* 子账户弹窗：直接列出行、行间分隔线，卡片不带阴影。 */
+.desktop-subaccount-list > .desktop-subaccount-row {
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+}
+
+.desktop-subaccount-list > .desktop-subaccount-row:last-child {
+  box-shadow: none;
+}
+
 @media (hover: hover) {
   .desktop-account-row:hover:not(.desktop-account-row--selected) {
     background: var(--color-control-fill-muted);
@@ -4946,7 +4983,8 @@ select:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  align-items: start;
+  /* 环形图卡片与「近 N 个月」趋势卡片同排等高（两者拉伸到同一高度）。 */
+  align-items: stretch;
 }
 
 .desktop-card {
@@ -5124,10 +5162,119 @@ select:focus-visible {
   min-width: 0;
 }
 
+/* 未选中记账时详情面板隐藏，表格占满整行；点击某行才拆分主从布局。 */
+.desktop-bills__body--full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 金额配色与移动端记账行一致：支出绿色 / 收入红色 / 转账黄色。 */
+.desktop-amount.biz-money--expense {
+  color: var(--color-accent-income);
+}
+
+.desktop-amount.biz-money--income {
+  color: var(--color-accent-expense);
+}
+
+.desktop-amount.biz-money--transfer {
+  color: var(--color-accent-transfer);
+}
+
 @media (hover: hover) {
   .desktop-table__row:hover:not(.desktop-table__row--selected) {
     background: var(--color-control-fill-muted);
   }
+}
+
+/* --- 批量修改：多选列 + 批量操作条 + 弹窗 --- */
+.desktop-table__check {
+  width: 44px;
+  padding-right: 0 !important;
+}
+
+.desktop-table__check input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-tint);
+}
+
+.desktop-table__row--checked {
+  background: var(--color-tint-soft);
+}
+
+.desktop-batch-op {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.desktop-batch-op__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.desktop-batch-op__button {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--color-control-fill-muted);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+@media (hover: hover) {
+  .desktop-batch-op__button:hover {
+    background: var(--color-control-fill);
+  }
+}
+
+.batch-edit-modal .sheet-header {
+  padding: 18px 20px 8px;
+}
+
+.batch-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 320px;
+  padding: 4px 20px 20px;
+}
+
+.batch-edit__hint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.batch-edit__control {
+  min-height: 44px;
+}
+
+.batch-edit__pair {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-edit__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batch-edit__field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.batch-edit__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 /* --- C1：登录/注册桌面居中卡片（不套 app 侧边栏） --- */

@@ -284,6 +284,15 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
       title: "资金变动记录",
       content: <AccountEntryListSheet accountType={account.type} entries={entries} />,
     });
+  const openSubList = () =>
+    push({
+      title: "子账户",
+      content: (
+        <div className="desktop-subaccount-list">
+          {subAccountRows.map((row) => renderSubRow(row.sub))}
+        </div>
+      ),
+    });
 
   const stats: Array<{ label: string; value: string; color?: string }> = [];
   if (account.type === "credit") {
@@ -414,13 +423,8 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
       ) : null}
 
       {moneyAccount && hasSplitSubAccounts ? (
-        <section className="mt-6">
-          <h3 className="px-1 pb-2 text-sm font-semibold text-[var(--color-text-primary)]">子账户</h3>
-          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-            <div className="divide-y divide-black/[0.06]">
-              {subAccountRows.map((row) => renderSubRow(row.sub))}
-            </div>
-          </div>
+        <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <DetailLinkRow count={subAccountRows.length} label="子账户" onClick={openSubList} />
         </section>
       ) : null}
 

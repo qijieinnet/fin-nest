@@ -21,11 +21,13 @@ export { OptionPicker } from "./OptionPicker";
 export { PersonSelectField } from "./PersonSelectField";
 export { PlanLimitCard } from "./PlanLimitCard";
 export { PlanProgress } from "./PlanProgress";
+export { CategorySelectionList } from "./CategorySelectionList";
 export { RecoverablePayableEditor } from "./RecoverablePayableEditor";
 export { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 export { SwipeActionRow } from "./SwipeActionRow";
 export { TransactionGroup, TransactionRow } from "./TransactionRow";
 export {
+  AccountSelectionList,
   AccountSelectRow,
   CategorySelectRow,
   FieldCard,

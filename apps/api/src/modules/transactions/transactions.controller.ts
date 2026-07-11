@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
+import { BatchUpdateTransactionsDto } from "./dto/batch-update-transactions.dto";
 import { CreateTransactionDto } from "./dto/create-transaction.dto";
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
 import { UpdateTransactionDto } from "./dto/update-transaction.dto";
@@ -54,6 +55,17 @@ export class TransactionsController {
     @Headers("idempotency-key") idempotencyKey?: string,
   ) {
     return this.transactions.create(ledgerId, (auth as SessionAuthContext).userId, body, idempotencyKey);
+  }
+
+  @Post("batch")
+  @HttpCode(200)
+  @ApiOkResponse({ description: "批量修改多笔交易的单个字段" })
+  batchUpdate(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: BatchUpdateTransactionsDto,
+  ) {
+    return this.transactions.batchUpdate(ledgerId, (auth as SessionAuthContext).userId, body);
   }
 
   @Patch(":transactionId")

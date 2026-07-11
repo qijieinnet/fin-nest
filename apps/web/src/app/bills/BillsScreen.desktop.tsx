@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   defaultFilterValue,
@@ -10,8 +10,8 @@ import {
   LoadingState,
   MoneyText,
 } from "@/components/business";
-import { Button, IconButton, IconButtonGroup, MobileAppShell } from "@/components/ui";
-import type { Account, Transaction } from "@/lib/api";
+import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu } from "@/components/ui";
+import type { Account, BatchUpdateField, Transaction } from "@/lib/api";
 import {
   accountName,
   type CategoryLookup,
@@ -22,13 +22,25 @@ import { formatMicros } from "@/lib/money";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
 import { EditBillScreen } from "./[transactionId]/edit/EditBillScreen";
+import { BatchEditDialog, type BatchFieldPatch } from "./_components/BatchEditDialog";
 import { NewBillFormScreen } from "./_components/NewBillFormScreen";
 import { useBillsModel } from "./_model/useBillsModel";
+
+const BATCH_FIELD_ITEMS: Array<{ field: BatchUpdateField; label: string }> = [
+  { field: "category", label: "分类" },
+  { field: "account", label: "账户" },
+  { field: "person", label: "人员" },
+  { field: "occurredOn", label: "日期" },
+  { field: "note", label: "备注" },
+];
 
 type Row = {
   dateLabel: string;
   categoryIcon: string;
-  categoryName: string;
+  /** 小类（子分类，无子分类时回退父分类）。 */
+  subcategoryName: string;
+  /** 大类（父分类）。 */
+  parentCategoryName: string;
   note: string;
   personName: string;
   accountLabel: string;
@@ -48,7 +60,8 @@ function toRow(
     return {
       dateLabel,
       categoryIcon: TRANSFER_ICON,
-      categoryName: "转账",
+      subcategoryName: "转账",
+      parentCategoryName: "转账",
       note: transaction.note ?? "",
       personName: "",
       accountLabel: from && to ? `${from} → ${to}` : "",
@@ -60,7 +73,8 @@ function toRow(
   return {
     dateLabel,
     categoryIcon: cat.categoryIcon ?? "🧾",
-    categoryName: cat.categoryName ?? "未分类",
+    subcategoryName: cat.title || "未分类",
+    parentCategoryName: cat.categoryName || "未分类",
     note: transaction.note ?? "",
     personName: transaction.personSnapshot?.name ?? "",
     accountLabel: accountName(accounts, transaction.accountId) ?? "",
@@ -83,6 +97,23 @@ export function BillsScreenDesktop() {
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("tx"),
   );
+
+  // 批量修改：多选行 + 当前打开的字段编辑弹窗。
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [batchField, setBatchField] = useState<BatchUpdateField | null>(null);
+  const [batchMenuOpen, setBatchMenuOpen] = useState(false);
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setBatchMenuOpen(false);
+  }, []);
+  const toggleRow = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // 选中项写回 URL（?tx=<id>），不做整页跳转。
   const selectTx = useCallback((id: string | null) => {
@@ -136,6 +167,38 @@ export function BillsScreenDesktop() {
 
   const selected = transactions.find((t) => t.id === selectedId) ?? null;
 
+  const allLoadedSelected =
+    transactions.length > 0 && transactions.every((t) => selectedIds.has(t.id));
+  const someSelected = selectedIds.size > 0 && !allLoadedSelected;
+  // 勾选是否全为转账：决定操作菜单是否显示「修改分类」、账户改为转出/转入两侧。
+  const selectedAllTransfer =
+    selectedIds.size > 0 &&
+    transactions.filter((t) => selectedIds.has(t.id)).every((t) => t.type === "transfer");
+  const batchFieldItems = selectedAllTransfer
+    ? BATCH_FIELD_ITEMS.filter((item) => item.field !== "category")
+    : BATCH_FIELD_ITEMS;
+  const toggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (transactions.length > 0 && transactions.every((t) => prev.has(t.id))) return new Set();
+      return new Set(transactions.map((t) => t.id));
+    });
+  }, [transactions]);
+
+  const submitBatch = useCallback(
+    (patch: BatchFieldPatch) => {
+      model.batchUpdateMutation.mutate(
+        { transactionIds: [...selectedIds], ...patch },
+        {
+          onSuccess: () => {
+            setBatchField(null);
+            clearSelection();
+          },
+        },
+      );
+    },
+    [model.batchUpdateMutation, selectedIds, clearSelection],
+  );
+
   return (
     <MobileAppShell>
       <div className="desktop-bills desktop-page--wide">
@@ -175,14 +238,48 @@ export function BillsScreenDesktop() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
+            {selectedIds.size > 0 ? (
+              <div className="desktop-batch-op">
+                <span className="desktop-batch-op__count">已选 {selectedIds.size} 笔</span>
+                <div className="relative">
+                  <button
+                    className="desktop-batch-op__button"
+                    onClick={() => setBatchMenuOpen((open) => !open)}
+                    type="button"
+                  >
+                    操作
+                  </button>
+                  <PopoverMenu
+                    groups={[
+                      batchFieldItems.map((item) => ({
+                        label: `修改${item.label}`,
+                        onSelect: () => {
+                          setBatchField(item.field);
+                          setBatchMenuOpen(false);
+                        },
+                      })),
+                      [{ label: "取消选择", onSelect: clearSelection }],
+                    ]}
+                    onOpenChange={setBatchMenuOpen}
+                    open={batchMenuOpen}
+                  />
+                </div>
+              </div>
+            ) : null}
             <IconButtonGroup items={[filterButtonItem(model.filterValue, () => setFilterOpen(true))]} />
-            <Button icon={<Plus size={16} />} onClick={openRecord} variant="primary">
-              记一笔 <kbd className="desktop-kbd">N</kbd>
-            </Button>
+            <button
+              aria-label="记一笔"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-tint)] text-[var(--color-tint-contrast)] shadow-[var(--shadow-soft)]"
+              onClick={openRecord}
+              title="记一笔（N）"
+              type="button"
+            >
+              <Plus size={20} />
+            </button>
           </div>
         </header>
 
-        <div className="desktop-bills__body">
+        <div className={`desktop-bills__body${selected ? "" : " desktop-bills__body--full"}`}>
           <section className="desktop-bills__table-wrap">
             {model.transactionsQuery.isPending ? (
               <LoadingState rows={6} title="加载账单" />
@@ -193,35 +290,61 @@ export function BillsScreenDesktop() {
                 <table className="desktop-table">
                   <thead>
                     <tr>
+                      <th className="desktop-table__check">
+                        <input
+                          aria-label="全选当前加载的记账"
+                          checked={allLoadedSelected}
+                          onChange={toggleAll}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someSelected;
+                          }}
+                          type="checkbox"
+                        />
+                      </th>
                       <th>日期</th>
-                      <th>分类</th>
-                      <th>备注</th>
+                      <th>小类</th>
+                      <th>大类</th>
                       <th>人员</th>
                       <th>账户</th>
+                      <th>备注</th>
                       <th className="desktop-table__amount">金额</th>
                     </tr>
                   </thead>
                   <tbody>
                     {transactions.map((transaction) => {
                       const row = toRow(transaction, accounts, categoryLookup);
+                      const checked = selectedIds.has(transaction.id);
                       return (
                         <tr
-                          className={`desktop-table__row${transaction.id === selectedId ? " desktop-table__row--selected" : ""}`}
+                          className={`desktop-table__row${transaction.id === selectedId ? " desktop-table__row--selected" : ""}${checked ? " desktop-table__row--checked" : ""}`}
                           key={transaction.id}
                           onClick={() => selectTx(transaction.id)}
                         >
+                          <td
+                            className="desktop-table__check"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <input
+                              aria-label="选择该记账"
+                              checked={checked}
+                              onChange={() => toggleRow(transaction.id)}
+                              type="checkbox"
+                            />
+                          </td>
                           <td className="desktop-table__date">{row.dateLabel}</td>
                           <td>
                             <span className="mr-1.5">{row.categoryIcon}</span>
-                            {row.categoryName}
+                            {row.subcategoryName}
                           </td>
-                          <td className="desktop-table__muted truncate">{row.note || "—"}</td>
+                          <td className="desktop-table__muted">{row.parentCategoryName || "—"}</td>
                           <td className="desktop-table__muted">{row.personName || "—"}</td>
                           <td className="desktop-table__muted truncate">{row.accountLabel || "—"}</td>
+                          <td className="desktop-table__muted truncate">{row.note || "—"}</td>
                           <td className="desktop-table__amount">
                             <MoneyText
                               amountMicros={row.amountMicros}
-                              tone={row.isTransfer ? "neutral" : transaction.type === "income" ? "income" : "expense"}
+                              className="desktop-amount"
+                              tone={transaction.type}
                             />
                           </td>
                         </tr>
@@ -239,22 +362,19 @@ export function BillsScreenDesktop() {
             )}
           </section>
 
-          <aside className="desktop-bills__detail">
-            {selected ? (
+          {selected ? (
+            <aside className="desktop-bills__detail">
               <TxDetailPanel
                 accounts={accounts}
                 categoryLookup={categoryLookup}
                 decimalPlaces={decimalPlaces}
+                onClose={() => selectTx(null)}
                 onDelete={() => model.setTransactionPendingDelete(selected)}
                 onEdit={() => openEdit(selected.id)}
                 transaction={selected}
               />
-            ) : (
-              <div className="desktop-empty-pane">
-                <EmptyState title="选择左侧交易查看详情" />
-              </div>
-            )}
-          </aside>
+            </aside>
+          ) : null}
         </div>
       </div>
 
@@ -285,6 +405,18 @@ export function BillsScreenDesktop() {
         }}
         transaction={model.transactionPendingDelete}
       />
+
+      <BatchEditDialog
+        accounts={accounts}
+        allTransfer={selectedAllTransfer}
+        categoryOptions={model.filterCategoryOptions}
+        count={selectedIds.size}
+        field={batchField}
+        onClose={() => setBatchField(null)}
+        onSubmit={submitBatch}
+        personOptions={model.filterPersonOptions}
+        submitting={model.batchUpdateMutation.isPending}
+      />
     </MobileAppShell>
   );
 }
@@ -305,7 +437,7 @@ function Figure({
       <span className="desktop-bills__figure-label">{label}</span>
       <MoneyText
         amountMicros={micros}
-        className="desktop-bills__figure-value"
+        className="desktop-amount desktop-bills__figure-value"
         showPositiveSign={tone === "neutral"}
         tone={tone}
       />
@@ -317,6 +449,7 @@ function Figure({
 function TxDetailPanel({
   accounts,
   categoryLookup,
+  onClose,
   onDelete,
   onEdit,
   transaction,
@@ -324,6 +457,7 @@ function TxDetailPanel({
   accounts: Account[];
   categoryLookup: CategoryLookup;
   decimalPlaces: number;
+  onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
   transaction: Transaction;
@@ -331,7 +465,8 @@ function TxDetailPanel({
   const row = toRow(transaction, accounts, categoryLookup);
   const rows: Array<{ label: string; value: string }> = [
     { label: "日期", value: (transaction.occurredOn ?? "").slice(0, 10) },
-    { label: "分类", value: `${row.categoryIcon} ${row.categoryName}` },
+    { label: "小类", value: `${row.categoryIcon} ${row.subcategoryName}` },
+    { label: "大类", value: row.parentCategoryName || "—" },
     { label: "账户", value: row.accountLabel || "—" },
     ...(row.isTransfer ? [] : [{ label: "人员", value: row.personName || "—" }]),
     { label: "备注", value: row.note || "—" },
@@ -341,12 +476,13 @@ function TxDetailPanel({
       <div className="mb-4 flex items-start justify-between gap-3">
         <MoneyText
           amountMicros={transaction.grossAmountMicros}
-          className="text-[28px] font-bold [font-variant-numeric:tabular-nums]"
-          tone={row.isTransfer ? "neutral" : transaction.type === "income" ? "income" : "expense"}
+          className="desktop-amount text-[28px] font-bold [font-variant-numeric:tabular-nums]"
+          tone={transaction.type}
         />
         <div className="flex items-center gap-1">
           <IconButton icon={<Pencil size={18} />} label="编辑" onClick={onEdit} />
           <IconButton icon={<Trash2 size={18} />} label="删除" onClick={onDelete} />
+          <IconButton icon={<X size={18} />} label="关闭" onClick={onClose} />
         </div>
       </div>
       <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">

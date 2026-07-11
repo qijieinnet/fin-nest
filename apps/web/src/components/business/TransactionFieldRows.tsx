@@ -94,7 +94,7 @@ type AccountSelectionListProps = {
   selectedId: string | null;
 };
 
-function AccountSelectionList({ onSelect, options, selectedId }: AccountSelectionListProps) {
+export function AccountSelectionList({ onSelect, options, selectedId }: AccountSelectionListProps) {
   const primaryOptions = options.filter((option) => !option.parentId);
 
   return (

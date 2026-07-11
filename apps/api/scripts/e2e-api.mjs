@@ -165,6 +165,15 @@ async function main() {
   assert.equal(summary.items.budgetOverLimit, 2);
   assert.equal(summary.total, 6);
 
+  await assertBatchUpdate({
+    ledgerId: ledger.id,
+    owner,
+    account,
+    transferAccount,
+    category,
+    person,
+  });
+
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
   console.log(
@@ -179,6 +188,7 @@ async function main() {
           "balance_adjustment",
           "attachment_auth",
           "reminder_summary",
+          "batch_update",
           "idempotency",
         ],
       },
@@ -186,6 +196,145 @@ async function main() {
       2,
     ),
   );
+}
+
+/** 批量修改单字段：备注/分类/人员/账户/日期，并验证转账对分类/账户被跳过、余额冲正正确。 */
+async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, category, person }) {
+  const token = owner.token;
+  const category2 = await api("POST", `/ledgers/${ledgerId}/categories`, {
+    token,
+    expected: 201,
+    body: { type: "expense", name: `E2E Batch Cat ${stamp}` },
+  });
+  const person2 = await api("POST", `/ledgers/${ledgerId}/people`, {
+    token,
+    expected: 201,
+    body: { name: `E2E Batch Person ${stamp}` },
+  });
+
+  const makeExpense = (note) =>
+    api("POST", `/ledgers/${ledgerId}/transactions`, {
+      token,
+      expected: 201,
+      body: {
+        type: "expense",
+        grossAmountMicros: "3000000",
+        occurredOn: todayIso(),
+        currency: "CNY",
+        categoryId: category.id,
+        personId: person.id,
+        accountId: account.id,
+        note,
+      },
+    });
+  const t1 = await makeExpense("batch a");
+  const t2 = await makeExpense("batch b");
+  const transfer = await api("POST", `/ledgers/${ledgerId}/transactions`, {
+    token,
+    expected: 201,
+    body: {
+      type: "transfer",
+      grossAmountMicros: "1000000",
+      occurredOn: todayIso(),
+      currency: "CNY",
+      fromAccountId: account.id,
+      toAccountId: transferAccount.id,
+      note: "batch transfer",
+    },
+  });
+  const ids = [t1.id, t2.id, transfer.id];
+  const get = (id) => api("GET", `/ledgers/${ledgerId}/transactions/${id}`, { token });
+  const batch = (body) =>
+    api("POST", `/ledgers/${ledgerId}/transactions/batch`, { token, expected: 200, body });
+
+  // 备注：全部类型适用
+  const noteRes = await batch({ transactionIds: ids, field: "note", note: "batched-note" });
+  assert.equal(noteRes.updated, 3);
+  assert.equal(noteRes.skipped, 0);
+  assert.equal((await get(t1.id)).note, "batched-note");
+  assert.equal((await get(transfer.id)).note, "batched-note");
+
+  // 分类：转账无分类 → 跳过
+  const catRes = await batch({ transactionIds: ids, field: "category", categoryId: category2.id });
+  assert.equal(catRes.updated, 2);
+  assert.equal(catRes.skipped, 1);
+  assert.equal((await get(t1.id)).categoryId, category2.id);
+
+  // 人员：转账也可改人员 → 不跳过
+  const personRes = await batch({ transactionIds: ids, field: "person", personId: person2.id });
+  assert.equal(personRes.updated, 3);
+  assert.equal((await get(t1.id)).personId, person2.id);
+
+  // 账户：两笔支出从 account 迁到 transferAccount，转账跳过；验证余额冲正
+  const accBefore = BigInt(await accountBalance(ledgerId, account.id, token));
+  const targetBefore = BigInt(await accountBalance(ledgerId, transferAccount.id, token));
+  const accRes = await batch({ transactionIds: ids, field: "account", accountId: transferAccount.id });
+  assert.equal(accRes.updated, 2);
+  assert.equal(accRes.skipped, 1);
+  assert.equal(
+    await accountBalance(ledgerId, account.id, token),
+    (accBefore + 6_000_000n).toString(),
+  );
+  assert.equal(
+    await accountBalance(ledgerId, transferAccount.id, token),
+    (targetBefore - 6_000_000n).toString(),
+  );
+  // 重建校验：未改字段（分类/人员/备注）应保留
+  const afterAccount = await get(t1.id);
+  assert.equal(afterAccount.accountId, transferAccount.id);
+  assert.equal(afterAccount.categoryId, category2.id);
+  assert.equal(afterAccount.personId, person2.id);
+  assert.equal(afterAccount.note, "batched-note");
+
+  // 日期：全部类型适用
+  const dateRes = await batch({ transactionIds: ids, field: "occurredOn", occurredOn: "2020-01-15" });
+  assert.equal(dateRes.updated, 3);
+  assert.equal((await get(t1.id)).occurredOn.slice(0, 10), "2020-01-15");
+
+  // 转账账户批量：只改转出账户，验证单侧余额冲正、另一侧保留。
+  const third = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Batch Third ${stamp}`, balanceMicros: "0" },
+  });
+  const mkTransfer = () =>
+    api("POST", `/ledgers/${ledgerId}/transactions`, {
+      token,
+      expected: 201,
+      body: {
+        type: "transfer",
+        grossAmountMicros: "2000000",
+        occurredOn: todayIso(),
+        currency: "CNY",
+        fromAccountId: account.id,
+        toAccountId: transferAccount.id,
+        note: "batch transfer acct",
+      },
+    });
+  const tfA = await mkTransfer();
+  const tfB = await mkTransfer();
+  const accBefore2 = BigInt(await accountBalance(ledgerId, account.id, token));
+  const thirdBefore = BigInt(await accountBalance(ledgerId, third.id, token));
+  const targetBefore2 = BigInt(await accountBalance(ledgerId, transferAccount.id, token));
+  const tfRes = await batch({
+    transactionIds: [tfA.id, tfB.id],
+    field: "account",
+    fromAccountId: third.id,
+  });
+  assert.equal(tfRes.updated, 2);
+  assert.equal(tfRes.skipped, 0);
+  assert.equal(
+    await accountBalance(ledgerId, account.id, token),
+    (accBefore2 + 4_000_000n).toString(),
+  );
+  assert.equal(
+    await accountBalance(ledgerId, third.id, token),
+    (thirdBefore - 4_000_000n).toString(),
+  );
+  assert.equal(await accountBalance(ledgerId, transferAccount.id, token), targetBefore2.toString());
+  const tfAAfter = await get(tfA.id);
+  assert.equal(tfAAfter.fromAccountId, third.id);
+  assert.equal(tfAAfter.toAccountId, transferAccount.id);
 }
 
 async function ensureApi() {

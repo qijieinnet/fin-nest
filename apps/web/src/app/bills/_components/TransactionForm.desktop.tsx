@@ -6,8 +6,8 @@ import {
   AttachmentPicker,
   RecoverablePayableEditor,
 } from "@/components/business";
-import { DesktopDatePicker, FormSelect } from "@/components/desktop";
-import { Input, Tabs } from "@/components/ui";
+import { AccountSelect, CategorySelect, DesktopDatePicker, FormSelect } from "@/components/desktop";
+import { Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
 
@@ -69,18 +69,18 @@ export function TransactionFormDesktop({
         {type === "transfer" ? (
           <>
             <Field label="转出账户">
-              <FormSelect
+              <AccountSelect
                 onChange={model.setFromSel}
                 options={model.acctOptions}
-                placeholder="选择账户"
+                title="选择转出账户"
                 value={model.fromSel}
               />
             </Field>
             <Field label="转入账户">
-              <FormSelect
+              <AccountSelect
                 onChange={model.setToSel}
                 options={model.acctOptions}
-                placeholder="选择账户"
+                title="选择转入账户"
                 value={model.toSel}
               />
             </Field>
@@ -88,16 +88,15 @@ export function TransactionFormDesktop({
         ) : (
           <>
             <Field label="分类">
-              <FormSelect
+              <CategorySelect
                 onChange={model.setCategoryId}
                 options={model.catOptions}
-                placeholder="选择分类"
                 value={model.categoryId}
               />
             </Field>
             {model.showAccountCard ? (
               <Field label="账户">
-                <FormSelect
+                <AccountSelect
                   allowClear={!model.acctRequired}
                   onChange={(v) => {
                     model.setAccountSel(v);
@@ -132,16 +131,17 @@ export function TransactionFormDesktop({
         </Field>
 
         {model.showNoteCard ? (
-          <Field label="备注">
-            <Input
+          <label className="transaction-form-desktop__note">
+            <span className="transaction-form-desktop__note-label">备注</span>
+            <input
               aria-label="备注"
-              label="备注"
+              className="transaction-form-desktop__note-input"
               maxLength={240}
               onChange={(event) => model.setNote(event.target.value)}
               placeholder="添加备注…"
               value={model.note}
             />
-          </Field>
+          </label>
         ) : null}
       </div>
 
