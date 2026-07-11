@@ -193,7 +193,7 @@ export function AccountBalanceCard({
   const deltaColor = favorable ? COLOR_MONEY_POSITIVE : COLOR_MONEY_NEGATIVE;
 
   return (
-    <section className="rounded-[20px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
+    <section className="rounded-[20px] bg-[var(--color-bg-surface)] p-5">
       <div className="flex items-center gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[var(--color-control-fill-muted)] text-[24px]">
           {icon}

@@ -12,17 +12,21 @@ import { useLedger, useSheetStack, useToast } from "@/providers";
 type QuickTemplateSheetProps = {
   directRunEnabled?: boolean;
   onSelectTemplate?: (template: QuickTemplate) => void;
+  /** 关闭本弹层的方式。用于桌面「记一笔」内嵌本地 BottomSheet 时不误关底层弹层；缺省用 sheet-stack pop。 */
+  onRequestClose?: () => void;
 };
 
 export function QuickTemplateSheet({
   directRunEnabled = true,
   onSelectTemplate,
+  onRequestClose,
 }: QuickTemplateSheetProps) {
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
   const templatesQuery = useQuickTemplates(ledgerId);
+  const close = onRequestClose ?? pop;
 
   // 直接记账成功后 sheet 会关闭，因此每次打开 sheet 用同一个幂等键即可挡住双击/重试造成的重复记账。
   const idempotencyKey = useRef(createClientId("quick-run"));
@@ -39,7 +43,7 @@ export function QuickTemplateSheet({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
       ]);
       showToast({ tone: "success", message: "已按模板记一笔" });
-      pop();
+      close();
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });
@@ -48,7 +52,7 @@ export function QuickTemplateSheet({
 
   const selectTemplate = (template: QuickTemplate) => {
     onSelectTemplate?.(template);
-    pop();
+    close();
   };
 
   return (

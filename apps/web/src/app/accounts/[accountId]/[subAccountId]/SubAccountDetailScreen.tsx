@@ -57,7 +57,7 @@ function NetWorthSwitchRow({
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4">
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
         <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">{description}</p>
@@ -225,7 +225,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           />
         </div>
 
-        <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+        <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailLinkRow
             count={transactions.length}
             label="关联记录"
@@ -240,7 +240,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
         <section className="mt-6">
           <button
-            className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
+            className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)]"
             onClick={openBalanceEdit}
             type="button"
           >

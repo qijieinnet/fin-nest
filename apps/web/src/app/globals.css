@@ -4729,83 +4729,54 @@ select:focus-visible {
   color: var(--color-text-muted);
 }
 
-.desktop-datepicker-panel {
-  position: fixed;
-  z-index: 70;
-  width: 280px;
-  padding: 12px;
-  border-radius: 16px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  box-shadow: var(--shadow-floating);
-}
-
-.desktop-datepicker-head {
+/* 桌面日期字段：原生 input[type=date]，沿用控件盒式外观（与过滤弹窗自定义时间一致的交互）。 */
+.desktop-date-native {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--color-control-fill-muted);
+  border: 1px solid transparent;
+  cursor: text;
 }
 
-.desktop-datepicker-head button {
-  display: inline-flex;
-  padding: 4px;
-  border-radius: 8px;
-  color: var(--color-text-secondary);
+.desktop-date-native--labeled {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+  padding: 6px 12px;
 }
 
-.desktop-datepicker-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-}
-
-.desktop-datepicker-weekday {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px;
+.desktop-date-native__label {
   font-size: 11px;
   color: var(--color-text-muted);
 }
 
-.desktop-datepicker-day {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 1;
-  border-radius: 9px;
-  font-size: 13px;
+.desktop-date-native__input {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
   color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
+  outline: none;
+  color-scheme: light;
 }
 
-.desktop-datepicker-day--today {
-  color: var(--color-tint);
-  font-weight: 600;
+.desktop-date-native__input:focus,
+.desktop-date-native__input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
-.desktop-datepicker-day--selected {
-  background: var(--color-tint);
-  color: var(--color-tint-contrast);
-  font-weight: 600;
-}
-
-.desktop-datepicker-foot {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 8px;
-}
-
-.desktop-datepicker-foot button {
-  padding: 6px 12px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-tint);
+/* 空值时占位文案（未选日期）淡化显示。 */
+.desktop-date-native__input:not(:focus)::-webkit-datetime-edit {
+  color: var(--color-text-primary);
 }
 
 /* 桌面交易表单：两列版式 */
@@ -4878,14 +4849,6 @@ select:focus-visible {
 
 @media (hover: hover) {
   .form-select-option:hover:not(:disabled) {
-    background: var(--color-control-fill-muted);
-  }
-
-  .desktop-datepicker-day:hover {
-    background: var(--color-control-fill-muted);
-  }
-
-  .desktop-datepicker-head button:hover {
     background: var(--color-control-fill-muted);
   }
 }
@@ -5271,21 +5234,6 @@ select:focus-visible {
   .biz-swipe-row--desktop-clickable .biz-swipe-row__content {
     cursor: pointer;
   }
-}
-
-/* --- C2：DesktopDatePicker 带标签触发器（复用到编辑弹层的日期字段） --- */
-.form-select-trigger__stack {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-  text-align: left;
-}
-
-.form-select-trigger__sublabel {
-  font-size: 11px;
-  color: var(--color-text-muted);
 }
 
 /* --- C1：桌面 Modal 内导入预览等宽内容横向滚动，避免撑破弹层 --- */

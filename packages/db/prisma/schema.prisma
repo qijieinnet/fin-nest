@@ -246,7 +246,9 @@ model SubAccount {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  @@unique([accountId, name])
+  // 同一账户内“活跃”子账户名唯一：归档（archivedAt 非空）的行不参与唯一性，
+  // 允许把子账户改名成已删除子账户的名字。Prisma 无法表达部分唯一索引，
+  // 由迁移 25 手写的 partial unique index (WHERE archived_at IS NULL) 保证。
   @@index([accountId, archivedAt])
   @@map("sub_accounts")
 }

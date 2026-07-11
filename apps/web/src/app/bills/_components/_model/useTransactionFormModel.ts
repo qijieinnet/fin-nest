@@ -56,6 +56,8 @@ import {
 
 export type TransactionSeed = {
   type?: TransactionType;
+  /** 记账日期（YYYY-MM-DD）。选择快捷模板时用于保留用户已选日期，不随模板重置为今天。 */
+  occurredOn?: string | null;
   grossAmountMicros?: string | null;
   categoryId?: string | null;
   subcategoryId?: string | null;
@@ -80,6 +82,8 @@ export type UseTransactionFormModelParams = {
   onSaved?: () => void;
   onSubmitBlocked?: (submitBlocked: () => void) => void;
   onPendingChange?: (pending: boolean) => void;
+  /** 记账日期变化时回调，父层据此在选择快捷模板（表单重挂载）时保留用户已选日期。 */
+  onOccurredOnChange?: (occurredOn: string) => void;
   pending?: AutoPendingTransaction;
   seed?: TransactionSeed;
 };
@@ -92,6 +96,7 @@ export function useTransactionFormModel({
   initial,
   ledgerId,
   onCanSubmitChange,
+  onOccurredOnChange,
   onPendingChange,
   onSaved,
   onSubmitBlocked,
@@ -139,7 +144,10 @@ export function useTransactionFormModel({
     seedAmountMicros ? microsToInput(seedAmountMicros, decimalPlaces) : "",
   );
   const [occurredOn, setOccurredOn] = useState(
-    initial?.occurredOn?.slice(0, 10) ?? pending?.scheduledFor?.slice(0, 10) ?? todayKey(),
+    initial?.occurredOn?.slice(0, 10) ??
+      pending?.scheduledFor?.slice(0, 10) ??
+      seed?.occurredOn?.slice(0, 10) ??
+      todayKey(),
   );
   const [categoryId, setCategoryId] = useState<string | null>(
     initial?.subcategoryId ??
@@ -481,6 +489,10 @@ export function useTransactionFormModel({
       showToast({ tone: "error", message: validationMessage ?? "请先补全必填项" });
     });
   }, [onSubmitBlocked, showToast, validationMessage]);
+
+  useEffect(() => {
+    onOccurredOnChange?.(occurredOn);
+  }, [occurredOn, onOccurredOnChange]);
 
   // 连续记账：提交成功后不关闭页面，清空本次输入，仅保留日期、分类、人员。
   function resetForContinuousEntry() {

@@ -91,7 +91,7 @@ function NetWorthSwitchRow({
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+    <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4">
       <div className="min-w-0 flex-1">
         <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
         {/* <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
@@ -403,7 +403,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         />
 
         {stats.length > 0 ? (
-          <section className="mt-5 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <section className="mt-5 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
             {stats.map((stat) => (
               <StatRow color={stat.color} key={stat.label} label={stat.label} value={stat.value} />
             ))}
@@ -415,7 +415,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             <div className="flex items-center justify-between px-1 pb-2">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
             </div>
-            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
               <div className="divide-y divide-black/[0.06]">
                 {subAccountRows.map((row) => renderSubRow(row.sub))}
               </div>
@@ -432,7 +432,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         </div>
 
         {isLend || showRelatedRecordsLink || showAdjustmentRecordsLink ? (
-          <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
             {isLend ? (
               <DetailLinkRow
                 count={entries.length}
@@ -460,7 +460,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         {canEditBalance && !hasSplitSubAccounts ? (
           <section className="mt-6">
             <button
-              className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)] shadow-[var(--shadow-soft)]"
+              className="flex h-[46px] w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-tint)]"
               onClick={() => openBalanceEdit()}
               type="button"
             >
