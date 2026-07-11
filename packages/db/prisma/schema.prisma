@@ -375,6 +375,7 @@ model AutoRule {
   relationPayload  Json?     @map("relation_payload") @db.JsonB
   insuranceId      String?   @map("insurance_id") @db.Uuid
   itemId           String?   @map("item_id") @db.Uuid
+  subscriptionId   String?   @map("subscription_id") @db.Uuid
   repeatRule       String    @map("repeat_rule")
   startDate        DateTime  @map("start_date") @db.Date
   nextRunOn        DateTime? @map("next_run_on") @db.Date
@@ -409,6 +410,7 @@ model AutoPendingTransaction {
   relationPayload        Json?     @map("relation_payload") @db.JsonB
   insuranceId            String?   @map("insurance_id") @db.Uuid
   itemId                 String?   @map("item_id") @db.Uuid
+  subscriptionId         String?   @map("subscription_id") @db.Uuid
   confirmedTransactionId String?   @map("confirmed_transaction_id") @db.Uuid
   confirmedBy            String?   @map("confirmed_by") @db.Uuid
   confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(6)
@@ -442,6 +444,7 @@ model QuickTemplate {
   relationPayload  Json?     @map("relation_payload") @db.JsonB
   insuranceId      String?   @map("insurance_id") @db.Uuid
   itemId           String?   @map("item_id") @db.Uuid
+  subscriptionId   String?   @map("subscription_id") @db.Uuid
   directEnabled    Boolean   @default(false) @map("direct_enabled")
   sortOrder        Int       @default(0) @map("sort_order")
   createdBy        String    @map("created_by") @db.Uuid
@@ -583,6 +586,43 @@ model Item {
   deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   @@map("items")
+}
+
+model SubscriptionCategory {
+  id         String    @id @default(uuid()) @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  name       String
+  icon       String?
+  sortOrder  Int       @default(0) @map("sort_order")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  @@map("subscription_categories")
+}
+
+model Subscription {
+  id              String    @id @default(uuid()) @db.Uuid
+  ledgerId        String    @map("ledger_id") @db.Uuid
+  categoryId      String?   @map("category_id") @db.Uuid
+  name            String
+  provider        String?
+  planName        String?   @map("plan_name")
+  priceMicros     BigInt?   @map("price_micros")
+  billingCycle    String?   @map("billing_cycle")
+  paymentMethod   String?   @map("payment_method")
+  autoRenew       Boolean   @default(false) @map("auto_renew")
+  startDate       DateTime? @map("start_date") @db.Date
+  nextRenewalDate DateTime? @map("next_renewal_date") @db.Date
+  note            String?
+  sortOrder       Int       @default(0) @map("sort_order")
+  terminatedAt    DateTime? @map("terminated_at") @db.Timestamptz(6)
+  createdBy       String    @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@map("subscriptions")
 }
 
 model File {

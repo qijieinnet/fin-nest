@@ -128,6 +128,11 @@ export class CreateTransactionDto {
   @IsIn(["consumable", "purchase"])
   itemLinkKind?: "consumable" | "purchase";
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string | null;
+
   @ApiPropertyOptional({ type: [TransactionAccountRelationDto] })
   @IsOptional()
   @IsArray()

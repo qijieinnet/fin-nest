@@ -28,6 +28,7 @@ import {
   useItems,
   usePeople,
   useQuickTemplates,
+  useSubscriptions,
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -88,6 +89,7 @@ export function QuickTemplatesScreen() {
   const peopleQuery = usePeople(ledgerId);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
+  const subscriptionsQuery = useSubscriptions(ledgerId);
 
   const templates = templatesQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
@@ -95,6 +97,7 @@ export function QuickTemplatesScreen() {
   const people = peopleQuery.data ?? [];
   const insurances = insurancesQuery.data ?? [];
   const items = itemsQuery.data ?? [];
+  const subscriptions = subscriptionsQuery.data ?? [];
   const loading = templatesQuery.isPending || categoriesQuery.isPending || accountsQuery.isPending;
 
   const deleteTemplate = useMutation({
@@ -131,6 +134,7 @@ export function QuickTemplatesScreen() {
           items={items}
           ledgerId={ledgerId}
           people={people}
+          subscriptions={subscriptions}
           template={template}
         />
       ),

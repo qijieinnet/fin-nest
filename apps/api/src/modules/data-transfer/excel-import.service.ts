@@ -16,6 +16,7 @@ import { BULK_TX_OPTIONS } from "./backup.service";
 import {
   ACCOUNT_COLUMNS,
   ACCOUNT_TYPE_LABELS,
+  BILLING_CYCLE_LABELS,
   CATEGORY_COLUMNS,
   CATEGORY_TYPE_LABELS,
   cellToDateText,
@@ -32,6 +33,8 @@ import {
   SHEET_NAMES,
   SUB_ACCOUNT_COLUMNS,
   SUBCATEGORY_COLUMNS,
+  SUBSCRIPTION_CATEGORY_COLUMNS,
+  SUBSCRIPTION_COLUMNS,
   TRANSACTION_COLUMNS,
   TRANSACTION_TYPE_LABELS,
   valueOfLabel,
@@ -114,6 +117,21 @@ type PlannedInsurance = {
   insuredPeopleRefs: Ref[];
   note: string | null;
 };
+type PlannedSubscriptionCategory = { ref: Ref; name: string; icon: string | null; sortOrder: number };
+type PlannedSubscription = {
+  ref: Ref;
+  name: string;
+  categoryRef: Ref | null;
+  provider: string | null;
+  planName: string | null;
+  priceMicros: string | null;
+  billingCycle: string | null;
+  paymentMethod: string | null;
+  autoRenew: boolean;
+  startDate: string | null;
+  nextRenewalDate: string | null;
+  note: string | null;
+};
 type PlannedTransaction = {
   row: number;
   type: string;
@@ -130,6 +148,7 @@ type PlannedTransaction = {
   personRef: Ref | null;
   insuranceRefs: Ref[];
   itemRefs: Ref[];
+  subscriptionRefs: Ref[];
   relations: { accountRef: Ref; relationKind: string; amountMicros: string }[];
   note: string | null;
 };
@@ -146,6 +165,8 @@ type Registry = {
   insuranceByName: Map<string, Ref>;
   itemByName: Map<string, Ref>;
   itemTypeByName: Map<string, Ref>;
+  subscriptionByName: Map<string, Ref>;
+  subscriptionCategoryByName: Map<string, Ref>;
   existingIds: Set<string>;
 };
 
@@ -158,6 +179,8 @@ type Plan = {
   itemTypes: PlannedItemType[];
   items: PlannedItem[];
   insurances: PlannedInsurance[];
+  subscriptionCategories: PlannedSubscriptionCategory[];
+  subscriptions: PlannedSubscription[];
   transactions: PlannedTransaction[];
 };
 
@@ -282,6 +305,8 @@ export class ExcelImportService {
       itemTypes: [],
       items: [],
       insurances: [],
+      subscriptionCategories: [],
+      subscriptions: [],
       transactions: [],
     };
 
@@ -294,6 +319,8 @@ export class ExcelImportService {
     this.parseSubAccounts(workbook, registry, plan, counts, errors, warnings);
     this.parseInsurances(workbook, registry, plan, counts, errors, warnings);
     this.parseItems(workbook, registry, plan, counts, errors, warnings);
+    this.parseSubscriptionCategories(workbook, registry, plan, counts, errors, warnings);
+    this.parseSubscriptions(workbook, registry, plan, counts, errors, warnings);
     await this.parseTransactions(ledgerId, workbook, registry, plan, counts, errors, warnings);
 
     if (errors.length > 0 || dryRun) {
@@ -325,6 +352,8 @@ export class ExcelImportService {
       insurances,
       items,
       itemTypes,
+      subscriptions,
+      subscriptionCategories,
       transactions,
     ] = await Promise.all([
       client.category.findMany({ where: { ...where, archivedAt: null } }),
@@ -335,6 +364,8 @@ export class ExcelImportService {
       client.insurance.findMany({ where: { ...where, deletedAt: null } }),
       client.item.findMany({ where: { ...where, deletedAt: null } }),
       client.itemType.findMany({ where }),
+      client.subscription.findMany({ where: { ...where, deletedAt: null } }),
+      client.subscriptionCategory.findMany({ where }),
       client.transaction.findMany({ where, select: { id: true } }),
     ]);
 
@@ -365,6 +396,10 @@ export class ExcelImportService {
       insuranceByName: new Map(insurances.map((row) => [row.name, { id: row.id }])),
       itemByName: new Map(items.map((row) => [row.name, { id: row.id }])),
       itemTypeByName: new Map(itemTypes.map((row) => [row.name, { id: row.id }])),
+      subscriptionByName: new Map(subscriptions.map((row) => [row.name, { id: row.id }])),
+      subscriptionCategoryByName: new Map(
+        subscriptionCategories.map((row) => [row.name, { id: row.id }]),
+      ),
       existingIds: new Set([
         ...categories.map((row) => row.id),
         ...subcategories.map((row) => row.id),
@@ -374,6 +409,8 @@ export class ExcelImportService {
         ...insurances.map((row) => row.id),
         ...items.map((row) => row.id),
         ...itemTypes.map((row) => row.id),
+        ...subscriptions.map((row) => row.id),
+        ...subscriptionCategories.map((row) => row.id),
         ...transactions.map((row) => row.id),
       ]),
     };
@@ -848,6 +885,112 @@ export class ExcelImportService {
     }
   }
 
+  private parseSubscriptionCategories(
+    workbook: ExcelJS.Workbook,
+    registry: Registry,
+    plan: Plan,
+    counts: ImportResult["counts"],
+    errors: ImportRowIssue[],
+    warnings: ImportRowIssue[],
+  ): void {
+    const sheetName = SHEET_NAMES.subscriptionCategories;
+    const count = this.ensureCount(counts, "subscriptionCategories");
+    const seen = new Set<string>();
+    for (const { rowNumber, value } of this.sheetRows(
+      workbook,
+      sheetName,
+      SUBSCRIPTION_CATEGORY_COLUMNS,
+    )) {
+      try {
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
+        const name = cellToText(value("name"));
+        if (!name) throw new Error("名称不能为空");
+        if (registry.subscriptionCategoryByName.has(name)) {
+          count.matched += 1;
+          continue;
+        }
+        if (seen.has(name)) throw new Error(`订阅分类「${name}」在文件中重复`);
+        seen.add(name);
+        const ref: Ref = { id: null };
+        registry.subscriptionCategoryByName.set(name, ref);
+        plan.subscriptionCategories.push({
+          ref,
+          name,
+          icon: cellToText(value("icon")) || null,
+          sortOrder: cellToInt(value("sortOrder")) ?? 0,
+        });
+        count.new += 1;
+      } catch (error) {
+        errors.push({ sheet: sheetName, row: rowNumber, message: messageOf(error) });
+      }
+    }
+  }
+
+  private parseSubscriptions(
+    workbook: ExcelJS.Workbook,
+    registry: Registry,
+    plan: Plan,
+    counts: ImportResult["counts"],
+    errors: ImportRowIssue[],
+    warnings: ImportRowIssue[],
+  ): void {
+    const sheetName = SHEET_NAMES.subscriptions;
+    const count = this.ensureCount(counts, "subscriptions");
+    const seen = new Set<string>();
+    for (const { rowNumber, value } of this.sheetRows(workbook, sheetName, SUBSCRIPTION_COLUMNS)) {
+      try {
+        if (
+          this.classifyRow(sheetName, rowNumber, value("id"), registry, count, warnings) === "skip"
+        )
+          continue;
+        const name = cellToText(value("name"));
+        if (!name) throw new Error("名称不能为空");
+        if (registry.subscriptionByName.has(name)) {
+          count.matched += 1;
+          continue;
+        }
+        if (seen.has(name)) throw new Error(`订阅「${name}」在文件中重复`);
+        const categoryName = cellToText(value("category"));
+        let categoryRef: Ref | null = null;
+        if (categoryName) {
+          const category = registry.subscriptionCategoryByName.get(categoryName);
+          if (!category)
+            throw new Error(`订阅分类「${categoryName}」不存在（可先在订阅分类表新增）`);
+          categoryRef = category;
+        }
+        const billingText = cellToText(value("billingCycle"));
+        const billingCycle = billingText
+          ? (valueOfLabel(BILLING_CYCLE_LABELS, billingText) ?? billingText)
+          : null;
+        seen.add(name);
+        const ref: Ref = { id: null };
+        registry.subscriptionByName.set(name, ref);
+        plan.subscriptions.push({
+          ref,
+          name,
+          categoryRef,
+          provider: cellToText(value("provider")) || null,
+          planName: cellToText(value("planName")) || null,
+          priceMicros: hasCellValue(value("price")) ? cellToMicrosString(value("price")) : null,
+          billingCycle,
+          paymentMethod: cellToText(value("paymentMethod")) || null,
+          autoRenew: cellToText(value("autoRenew")) === "是",
+          startDate: hasCellValue(value("startDate")) ? cellToDateText(value("startDate")) : null,
+          nextRenewalDate: hasCellValue(value("nextRenewalDate"))
+            ? cellToDateText(value("nextRenewalDate"))
+            : null,
+          note: cellToText(value("note")) || null,
+        });
+        count.new += 1;
+      } catch (error) {
+        errors.push({ sheet: sheetName, row: rowNumber, message: messageOf(error) });
+      }
+    }
+  }
+
   private async parseTransactions(
     ledgerId: string,
     workbook: ExcelJS.Workbook,
@@ -890,6 +1033,7 @@ export class ExcelImportService {
           personRef: null,
           insuranceRefs: [],
           itemRefs: [],
+          subscriptionRefs: [],
           relations: [],
           note: cellToText(value("note")) || null,
         };
@@ -986,6 +1130,14 @@ export class ExcelImportService {
           if (!item) throw new Error(`物品「${itemName}」不存在（可先在物品表新增）`);
           return item;
         });
+        planned.subscriptionRefs = splitNames(cellToText(value("subscription"))).map(
+          (subscriptionName) => {
+            const subscription = registry.subscriptionByName.get(subscriptionName);
+            if (!subscription)
+              throw new Error(`订阅「${subscriptionName}」不存在（可先在订阅表新增）`);
+            return subscription;
+          },
+        );
 
         plan.transactions.push(planned);
         count.new += 1;
@@ -1172,6 +1324,11 @@ export class ExcelImportService {
             linkedType: "item",
             linkedId: ref.id!,
             linkKind: "consumable",
+          })),
+          ...planned.subscriptionRefs.map((ref) => ({
+            linkedType: "subscription",
+            linkedId: ref.id!,
+            linkKind: "related",
           })),
         ]) {
           await tx.transactionLink.upsert({
@@ -1377,6 +1534,38 @@ export class ExcelImportService {
             : null,
           purchaseDate: planned.purchaseDate ? parseDateOnly(planned.purchaseDate) : null,
           expectedYears: planned.expectedYears ?? null,
+          note: planned.note,
+          createdBy: userId,
+          updatedBy: userId,
+        },
+      });
+      planned.ref.id = created.id;
+    }
+    for (const planned of plan.subscriptionCategories) {
+      const created = await tx.subscriptionCategory.create({
+        data: {
+          ledgerId,
+          name: planned.name,
+          icon: planned.icon,
+          sortOrder: planned.sortOrder,
+        },
+      });
+      planned.ref.id = created.id;
+    }
+    for (const planned of plan.subscriptions) {
+      const created = await tx.subscription.create({
+        data: {
+          ledgerId,
+          name: planned.name,
+          categoryId: planned.categoryRef?.id ?? null,
+          provider: planned.provider,
+          planName: planned.planName,
+          priceMicros: planned.priceMicros ? BigInt(planned.priceMicros) : null,
+          billingCycle: planned.billingCycle,
+          paymentMethod: planned.paymentMethod,
+          autoRenew: planned.autoRenew,
+          startDate: planned.startDate ? parseDateOnly(planned.startDate) : null,
+          nextRenewalDate: planned.nextRenewalDate ? parseDateOnly(planned.nextRenewalDate) : null,
           note: planned.note,
           createdBy: userId,
           updatedBy: userId,

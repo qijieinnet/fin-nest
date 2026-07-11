@@ -19,7 +19,7 @@ apps/
   web/      # Next.js Web（纯前端交互层，经同源 /api 代理调 API）
 packages/
   backend/  # api/worker 共享平台：Prisma 注入、事务封装、幂等、审计日志、background_jobs、异常过滤器、BigInt 序列化
-  db/       # Prisma schema + 迁移 + client（35 个模型）
+  db/       # Prisma schema + 迁移 + client（37 个模型）
   shared/   # 前后端共享常量/类型（金额单位等）
   config/   # 环境变量读取与校验（zod，见 §9 环境变量）
   eslint-config/ tsconfig/
@@ -30,21 +30,21 @@ infra/
 docs/       # 本文件
 ```
 
-API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品）、`files`（附件）、`data-transfer`（导入导出/备份恢复）、`reminders`（红点聚合）。
+API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品/订阅）、`files`（附件）、`data-transfer`（导入导出/备份恢复）、`reminders`（红点聚合）。
 
-Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/more/*`（categories、people、settings、auto、quick、insurances、items、import-export、users、admin、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
+Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/more/*`（categories、people、settings、auto、quick、insurances、items、subscriptions、import-export、users、admin、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
 
 ## 3. 功能清单
 
 - **认证与管理**：邮箱/账号+密码注册登录；首个注册用户自动成为系统管理员并获得默认账本；管理员可开关注册、禁用/启用用户、授予/撤销管理员（保底最后一名管理员）、管理 service token。改密吊销其它会话；禁用用户即时吊销全部会话。
 - **账本协作**：账本 CRUD/软删（仅 owner 可删）；成员管理；邀请码（明文只返回一次，库存 hash，默认 1 天）→ 加入申请（pending/approved/rejected/cancelled）→ owner 审批入伙。账本级币种与金额小数位。
-- **记账**：支出/收入/转账；一级/二级分类（交易存快照，改名不影响历史）；人员（默认「我」）；账户/子账户绑定（是否必填由记账设置决定）；可收回/需归还四方向关联（原始金额 vs 有效金额）；附件；关联保险/物品；备注；多条件筛选 + 汇总卡片。
+- **记账**：支出/收入/转账；一级/二级分类（交易存快照，改名不影响历史）；人员（默认「我」）；账户/子账户绑定（是否必填由记账设置决定）；可收回/需归还四方向关联（原始金额 vs 有效金额）；附件；关联保险/物品/订阅；备注；多条件筛选 + 汇总卡片。
 - **账户**：储蓄/信用/投资（money 类，支持子账户）+ 可收回/需归还（往来类）；money 账户自动生成「默认子账户」，未指定子账户的记账落到默认子账户，恒有 `账户余额 = Σ子账户余额`；余额调整（生成调整记录 + 流水，不静默覆盖）；账户流水；归档要求先清零；账户/子账户拖拽排序。
 - **计划与预算**：计划（支出限额/收入目标、金额/次数、周/月/年/不重复、`match_rule`、命中明细、历史周期、预知能力、停止/恢复）；预算独立建模（月度总预算 + 分类预算，滚动自然月，不存历史周期）。
 - **自动化**：自动记账规则（支出/收入/转账）到期由 Worker 只生成待确认记录（`(auto_rule_id, period_key)` 唯一防重）；待确认可编辑/确认/批量确认/删除，确认才走交易服务；快捷模板（支出/收入/转账）预填或直接记账。
-- **保险/物品**：保险档案（险种/保司/投保方式/缴费方式/保额/保费/缴费频率/期数/续费方式/被保人/起止日期/终止与恢复/险种与同险种保单排序）；物品档案（类型/购买价/预期寿命/使用进度/报废与恢复/转卖价/排序）；均通过 `transaction_links` 关联交易做费用汇总，不是账户、不进净资产。
+- **保险/物品/订阅**：保险档案（险种/保司/投保方式/缴费方式/保额/保费/缴费频率/期数/续费方式/被保人/起止日期/终止与恢复/险种与同险种保单排序）；物品档案（类型/购买价/预期寿命/使用进度/报废与恢复/转卖价/排序）；订阅档案（套餐订阅如 iCloud/Claude/Apple Music：独立分类[物品类型式，含图标/归档/排序]/服务商/套餐/费用/计费周期/支付方式/自动续费/开通日/下次续费日/退订与恢复/同分类内排序）；均通过 `transaction_links` 关联交易做费用汇总，不是账户、不进净资产。
 - **统计**：月度收支、分类占比与下钻、人员排行、趋势、净资产序列、现金流序列；口径统一用有效金额。
-- **提醒红点**：`GET /ledgers/:ledgerId/reminder-summary` 聚合自动待确认、加入申请（owner）、保险 30 天内到期、计划超限、预算超限。
+- **提醒红点**：`GET /ledgers/:ledgerId/reminder-summary` 聚合自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 - **导入导出**（模块 `data-transfer`）：Excel 全量导出 / 记账模板下载 / 增量导入（`dryRun` 同步返回预览；正式导入入队后台 job，`import_jobs` 表跟踪状态）；JSON 全量备份与覆盖式恢复（仅 owner，需输入账本名确认；恢复时重新生成全部 UUID）。
 - **附件**：客户端 multipart 上传 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
 
@@ -60,7 +60,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 6. **幂等**：金额写操作（交易创建、账户创建/调整、子账户创建、快捷直接记账等）支持 `Idempotency-Key` 头；实现为「预留占位→执行→落响应」，keyHash 含 scope+userId，失败释放、5 分钟遗留占位可接管。
 7. **自动化不直接写账**：自动记账/快捷模板只能生成待确认或调用 `TransactionsService`；确认待确认用「带 status 条件的 updateMany」防并发双记。
 8. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
-9. **软删/归档优先**：交易/账本/保险/物品软删（`deletedAt`），分类/人员/账户/计划归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
+9. **软删/归档优先**：交易/账本/保险/物品/订阅软删（`deletedAt`），分类/人员/账户/计划/物品类型/订阅分类归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
 10. **审计**：注册/改密/管理操作/交易增删改/恢复等写 `audit_logs`。
 11. **Worker 边界**：Worker 只消费 `background_jobs`（`auto.schedule`、`file.delete`），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。
 
@@ -75,7 +75,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 - 附件 MIME 白名单（图片/PDF/Office/视频），无 SVG/HTML 等可执行类型；上限 20MB。
 - CORS 仅放行 `WEB_ORIGIN`（正常流量走同源 /api 代理，不跨域）。
 
-## 6. 数据模型速览（35 个模型）
+## 6. 数据模型速览（37 个模型）
 
 | 分组 | 模型 |
 |---|---|
@@ -86,7 +86,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 | 交易 | Transaction, TransactionAccountRelation, TransactionLink |
 | 自动化 | AutoRule, AutoPendingTransaction, QuickTemplate |
 | 计划预算 | Plan, BudgetSetting, CategoryBudget |
-| 档案 | Insurance, InsuranceInsuredPerson, ItemType, Item |
+| 档案 | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
 | 文件 | File, Attachment |
 | 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
 

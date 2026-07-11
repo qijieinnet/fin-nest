@@ -262,6 +262,13 @@ export class FilesService {
       if (!row) throw new AppError("OWNER_NOT_FOUND", "业务对象不存在", 404);
       return;
     }
+    if (ownerType === "subscription") {
+      const row = await this.prisma.client.subscription.findFirst({
+        where: { id: ownerId, ledgerId, deletedAt: null },
+      });
+      if (!row) throw new AppError("OWNER_NOT_FOUND", "业务对象不存在", 404);
+      return;
+    }
     throw new AppError("OWNER_TYPE_INVALID", "附件归属类型无效", 400);
   }
 }

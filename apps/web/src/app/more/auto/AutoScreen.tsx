@@ -21,6 +21,7 @@ import {
   useInsurances,
   useItems,
   usePeople,
+  useSubscriptions,
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -59,12 +60,14 @@ export function AutoScreen() {
   const peopleQuery = usePeople(ledgerId);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
+  const subscriptionsQuery = useSubscriptions(ledgerId);
 
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
   const people = peopleQuery.data ?? [];
   const insurances = insurancesQuery.data ?? [];
   const items = itemsQuery.data ?? [];
+  const subscriptions = subscriptionsQuery.data ?? [];
   const rules = rulesQuery.data ?? [];
   const pending = pendingQuery.data ?? [];
   const activeRuleCount = rules.filter((rule) => rule.enabled).length;
@@ -181,6 +184,7 @@ export function AutoScreen() {
           ledgerId={ledgerId}
           people={people}
           rule={rule}
+          subscriptions={subscriptions}
         />
       ),
     });
@@ -239,6 +243,7 @@ export function AutoScreen() {
           onToggle={() => toggleRule.mutate(rule)}
           pendingToggle={toggleRule.isPending}
           people={people}
+          subscriptions={subscriptions}
           rule={rule}
         />
       ),

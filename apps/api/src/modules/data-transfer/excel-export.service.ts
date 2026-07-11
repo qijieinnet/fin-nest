@@ -5,6 +5,7 @@ import { LedgersService } from "../ledgers/ledgers.service";
 import {
   ACCOUNT_COLUMNS,
   ACCOUNT_TYPE_LABELS,
+  BILLING_CYCLE_LABELS,
   BOOLEAN_LABELS,
   BUDGET_COLUMNS,
   CATEGORY_COLUMNS,
@@ -22,6 +23,8 @@ import {
   SHEET_NAMES,
   SUB_ACCOUNT_COLUMNS,
   SUBCATEGORY_COLUMNS,
+  SUBSCRIPTION_CATEGORY_COLUMNS,
+  SUBSCRIPTION_COLUMNS,
   TRANSACTION_COLUMNS,
   TRANSACTION_TYPE_LABELS,
 } from "./excel-schema";
@@ -59,6 +62,8 @@ export class ExcelExportService {
     this.addInsurancesSheet(workbook, data);
     this.addItemsSheet(workbook, data);
     this.addItemTypesSheet(workbook, data);
+    this.addSubscriptionsSheet(workbook, data);
+    this.addSubscriptionCategoriesSheet(workbook, data);
     if (!options.template) {
       this.addPlansSheet(workbook, data);
       this.addBudgetsSheet(workbook, data);
@@ -84,6 +89,8 @@ export class ExcelExportService {
       insurances,
       items,
       itemTypes,
+      subscriptions,
+      subscriptionCategories,
       transactions,
       relations,
       links,
@@ -103,6 +110,11 @@ export class ExcelExportService {
       client.insurance.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.item.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.itemType.findMany({ where, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+      client.subscription.findMany({ where, orderBy: { createdAt: "asc" } }),
+      client.subscriptionCategory.findMany({
+        where,
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      }),
       client.transaction.findMany({
         where: { ledgerId, deletedAt: null },
         orderBy: [{ occurredOn: "asc" }, { createdAt: "asc" }],
@@ -126,6 +138,8 @@ export class ExcelExportService {
     const insuranceById = new Map(insurances.map((row) => [row.id, row]));
     const itemById = new Map(items.map((row) => [row.id, row]));
     const itemTypeById = new Map(itemTypes.map((row) => [row.id, row]));
+    const subscriptionById = new Map(subscriptions.map((row) => [row.id, row]));
+    const subscriptionCategoryById = new Map(subscriptionCategories.map((row) => [row.id, row]));
 
     const relationsByTransaction = new Map<string, typeof relations>();
     for (const relation of relations) {
@@ -158,6 +172,8 @@ export class ExcelExportService {
       insurances,
       items,
       itemTypes,
+      subscriptions,
+      subscriptionCategories,
       transactions,
       plans,
       budgetSetting,
@@ -170,6 +186,8 @@ export class ExcelExportService {
       insuranceById,
       itemById,
       itemTypeById,
+      subscriptionById,
+      subscriptionCategoryById,
       relationsByTransaction,
       linksByTransaction,
       insuredPeopleByInsurance,
@@ -248,6 +266,11 @@ export class ExcelExportService {
         .map((link) => data.itemById.get(link.linkedId)?.name ?? "")
         .filter(Boolean)
         .join("、");
+      const subscriptionNames = linkRows
+        .filter((link) => link.linkedType === "subscription")
+        .map((link) => data.subscriptionById.get(link.linkedId)?.name ?? "")
+        .filter(Boolean)
+        .join("、");
       const row = sheet.addRow({
         id: transaction.id,
         occurredOn: dateToText(transaction.occurredOn),
@@ -276,6 +299,7 @@ export class ExcelExportService {
         person: transaction.personId ? (data.personById.get(transaction.personId)?.name ?? "") : "",
         insurance: insuranceNames,
         item: itemNames,
+        subscription: subscriptionNames,
         relations: relationText,
         note: transaction.note ?? "",
       });
@@ -410,6 +434,46 @@ export class ExcelExportService {
     const sheet = this.addSheet(workbook, SHEET_NAMES.itemTypes, ITEM_TYPE_COLUMNS);
     for (const itemType of data.itemTypes) {
       sheet.addRow({ id: itemType.id, name: itemType.name, sortOrder: itemType.sortOrder });
+    }
+  }
+
+  private addSubscriptionsSheet(workbook: ExcelJS.Workbook, data: LedgerData): void {
+    const sheet = this.addSheet(workbook, SHEET_NAMES.subscriptions, SUBSCRIPTION_COLUMNS);
+    for (const subscription of data.subscriptions) {
+      if (subscription.deletedAt) continue;
+      const row = sheet.addRow({
+        id: subscription.id,
+        name: subscription.name,
+        category: subscription.categoryId
+          ? (data.subscriptionCategoryById.get(subscription.categoryId)?.name ?? "")
+          : "",
+        provider: subscription.provider ?? "",
+        planName: subscription.planName ?? "",
+        price: microsToYuanNumber(subscription.priceMicros),
+        billingCycle: labelOf(BILLING_CYCLE_LABELS, subscription.billingCycle),
+        paymentMethod: subscription.paymentMethod ?? "",
+        autoRenew: labelOf(BOOLEAN_LABELS, String(subscription.autoRenew)),
+        startDate: dateToText(subscription.startDate),
+        nextRenewalDate: dateToText(subscription.nextRenewalDate),
+        note: subscription.note ?? "",
+      });
+      row.getCell("price").numFmt = MONEY_FORMAT;
+    }
+  }
+
+  private addSubscriptionCategoriesSheet(workbook: ExcelJS.Workbook, data: LedgerData): void {
+    const sheet = this.addSheet(
+      workbook,
+      SHEET_NAMES.subscriptionCategories,
+      SUBSCRIPTION_CATEGORY_COLUMNS,
+    );
+    for (const category of data.subscriptionCategories) {
+      sheet.addRow({
+        id: category.id,
+        name: category.name,
+        icon: category.icon ?? "",
+        sortOrder: category.sortOrder,
+      });
     }
   }
 

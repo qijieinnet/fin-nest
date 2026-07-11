@@ -25,6 +25,9 @@ import {
   type PlanProgressResult,
   type QuickTemplate,
   type RecordSetting,
+  type Subscription,
+  type SubscriptionCategory,
+  type SubscriptionDetail,
   type Transaction,
   type TransactionDetail,
   type TransactionListQuery,
@@ -186,9 +189,37 @@ export function useItemTypes(ledgerId: string | null) {
   });
 }
 
+export function useSubscriptions(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.subscriptions(ledgerId ?? "none"),
+    queryFn: () => apiRequest<Subscription[]>(ledgerApiPath(ledgerId!, "/subscriptions")),
+    enabled: Boolean(ledgerId),
+    staleTime: 30_000,
+  });
+}
+
+export function useSubscription(ledgerId: string | null, subscriptionId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.subscription(ledgerId ?? "none", subscriptionId ?? "none"),
+    queryFn: () =>
+      apiRequest<SubscriptionDetail>(ledgerApiPath(ledgerId!, `/subscriptions/${subscriptionId}`)),
+    enabled: Boolean(ledgerId) && Boolean(subscriptionId),
+  });
+}
+
+export function useSubscriptionCategories(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.subscriptionCategories(ledgerId ?? "none"),
+    queryFn: () =>
+      apiRequest<SubscriptionCategory[]>(ledgerApiPath(ledgerId!, "/subscription-categories")),
+    enabled: Boolean(ledgerId),
+    staleTime: 60_000,
+  });
+}
+
 export function useAttachments(
   ledgerId: string | null,
-  ownerType: "transaction" | "insurance" | "item",
+  ownerType: "transaction" | "insurance" | "item" | "subscription",
   ownerId: string | null,
 ) {
   return useQuery({

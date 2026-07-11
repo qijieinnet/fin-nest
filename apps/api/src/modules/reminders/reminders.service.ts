@@ -37,6 +37,7 @@ export class RemindersService {
       autoPending,
       joinRequests,
       insuranceDue,
+      subscriptionDue,
       plans,
       budgetSetting,
       categoryBudgets,
@@ -50,6 +51,14 @@ export class RemindersService {
           deletedAt: null,
           terminatedAt: null,
           endDate: { gte: today, lt: dueEnd },
+        },
+      }),
+      this.prisma.client.subscription.count({
+        where: {
+          ledgerId,
+          deletedAt: null,
+          terminatedAt: null,
+          nextRenewalDate: { gte: today, lt: dueEnd },
         },
       }),
       this.prisma.client.plan.findMany({ where: { ledgerId, archivedAt: null } }),
@@ -69,6 +78,7 @@ export class RemindersService {
       autoPending,
       joinRequests,
       insuranceDue,
+      subscriptionDue,
       planOverLimit,
       budgetOverLimit,
     });

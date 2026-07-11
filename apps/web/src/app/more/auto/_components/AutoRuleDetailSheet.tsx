@@ -2,7 +2,15 @@
 
 import { Edit3, Trash2 } from "lucide-react";
 import { Button, Switch } from "@/components/ui";
-import type { Account, AutoRule, Category, Insurance, ItemAsset, Person } from "@/lib/api";
+import type {
+  Account,
+  AutoRule,
+  Category,
+  Insurance,
+  ItemAsset,
+  Person,
+  Subscription,
+} from "@/lib/api";
 import {
   accountSummary,
   amountToneClass,
@@ -27,6 +35,7 @@ type AutoRuleDetailSheetProps = {
   onToggle: () => void;
   people: Person[];
   pendingToggle?: boolean;
+  subscriptions: Subscription[];
   rule: AutoRule;
 };
 
@@ -52,10 +61,13 @@ export function AutoRuleDetailSheet({
   people,
   pendingToggle = false,
   rule,
+  subscriptions,
 }: AutoRuleDetailSheetProps) {
   const insuranceName =
     insurances.find((insurance) => insurance.id === rule.insuranceId)?.name ?? null;
   const itemName = items.find((item) => item.id === rule.itemId)?.name ?? null;
+  const subscriptionName =
+    subscriptions.find((subscription) => subscription.id === rule.subscriptionId)?.name ?? null;
   const relationCount = rule.relationPayload?.length ?? 0;
   const summary =
     rule.type === "transfer"
@@ -124,6 +136,7 @@ export function AutoRuleDetailSheet({
               ) : null}
               {insuranceName ? <DetailRow label="保险" value={insuranceName} /> : null}
               {itemName ? <DetailRow label="关联物品" value={itemName} /> : null}
+              {subscriptionName ? <DetailRow label="关联订阅" value={subscriptionName} /> : null}
             </>
           )}
           <DetailRow label="重复周期" value={REPEAT_LABELS[rule.repeatRule]} />

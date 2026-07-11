@@ -16,6 +16,8 @@ export const SHEET_NAMES = {
   insurances: "保险",
   items: "物品",
   itemTypes: "物品类型",
+  subscriptions: "订阅",
+  subscriptionCategories: "订阅分类",
   plans: "计划",
   budgets: "预算",
   lookup: "基础数据",
@@ -39,6 +41,7 @@ export const TRANSACTION_COLUMNS: ColumnDef[] = [
   { key: "person", header: "成员", width: 10 },
   { key: "insurance", header: "关联保险", width: 16 },
   { key: "item", header: "关联物品", width: 16 },
+  { key: "subscription", header: "关联订阅", width: 16 },
   { key: "relations", header: "往来关联", width: 24 },
   { key: "note", header: "备注", width: 24 },
 ];
@@ -123,6 +126,37 @@ export const ITEM_TYPE_COLUMNS: ColumnDef[] = [
   { key: "name", header: "名称", width: 14 },
   { key: "sortOrder", header: "排序", width: 8 },
 ];
+
+export const SUBSCRIPTION_COLUMNS: ColumnDef[] = [
+  { key: "id", header: "ID", width: 38 },
+  { key: "name", header: "名称", width: 16 },
+  { key: "category", header: "订阅分类", width: 12 },
+  { key: "provider", header: "服务商", width: 14 },
+  { key: "planName", header: "套餐", width: 12 },
+  { key: "price", header: "费用(元)", width: 12 },
+  { key: "billingCycle", header: "计费周期", width: 10 },
+  { key: "paymentMethod", header: "支付方式", width: 12 },
+  { key: "autoRenew", header: "自动续费", width: 10 },
+  { key: "startDate", header: "开通日", width: 12 },
+  { key: "nextRenewalDate", header: "下次续费日", width: 12 },
+  { key: "note", header: "备注", width: 20 },
+];
+
+export const SUBSCRIPTION_CATEGORY_COLUMNS: ColumnDef[] = [
+  { key: "id", header: "ID", width: 38 },
+  { key: "name", header: "名称", width: 14 },
+  { key: "icon", header: "图标", width: 12 },
+  { key: "sortOrder", header: "排序", width: 8 },
+];
+
+/** 计费周期中英映射，与前端选项保持一致。 */
+export const BILLING_CYCLE_LABELS: Record<string, string> = {
+  weekly: "每周",
+  monthly: "每月",
+  quarterly: "每季",
+  yearly: "每年",
+  custom: "自定义",
+};
 
 export const PLAN_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },

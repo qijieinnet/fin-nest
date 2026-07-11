@@ -45,6 +45,7 @@ export function DesktopSidebar() {
     { label: "账本管理", route: routes.ledgers },
     { label: "保险管理", route: routes.insurances },
     { label: "物品管理", route: routes.items },
+    { label: "订阅管理", route: routes.subscriptions },
     ...(user?.isAdmin ? [{ label: "管理员功能", route: routes.admin }] : []),
     { label: "分类管理", route: routes.categories },
     { label: "人员管理", route: routes.people },

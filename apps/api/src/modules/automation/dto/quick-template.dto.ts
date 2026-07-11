@@ -101,6 +101,11 @@ export class CreateQuickTemplateDto {
   @IsString()
   itemId?: string | null;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string | null;
+
   @ApiPropertyOptional({ default: false })
   @IsOptional()
   @IsBoolean()

@@ -240,7 +240,7 @@ export type TransactionLink = {
   id: string;
   ledgerId: string;
   transactionId: string;
-  linkedType: "insurance" | "item";
+  linkedType: "insurance" | "item" | "subscription";
   linkedId: string;
   linkKind: "related" | "consumable" | "purchase";
   createdAt: string;
@@ -300,6 +300,7 @@ export type TransactionInput = {
   insuranceId?: string | null;
   itemId?: string | null;
   itemLinkKind?: "consumable" | "purchase";
+  subscriptionId?: string | null;
   relations?: TransactionRelationInput[];
 };
 
@@ -485,6 +486,7 @@ export type QuickTemplate = {
   relationPayload: AutoRelation[] | null;
   insuranceId: string | null;
   itemId: string | null;
+  subscriptionId: string | null;
   directEnabled: boolean;
   sortOrder: number;
   archivedAt: string | null;
@@ -517,6 +519,7 @@ export type AutoRule = {
   relationPayload: AutoRelation[] | null;
   insuranceId: string | null;
   itemId: string | null;
+  subscriptionId: string | null;
   repeatRule: AutoRepeatRule;
   startDate: string;
   nextRunOn: string | null;
@@ -628,11 +631,50 @@ export type ItemDetail = ItemAsset & {
   usagePercent: number | null;
 };
 
+export type SubscriptionCategory = {
+  id: string;
+  ledgerId: string;
+  name: string;
+  icon: string | null;
+  sortOrder: number;
+  createdAt: string;
+  archivedAt: string | null;
+};
+
+export type Subscription = {
+  id: string;
+  ledgerId: string;
+  categoryId: string | null;
+  name: string;
+  provider: string | null;
+  planName: string | null;
+  priceMicros: string | null;
+  billingCycle: string | null;
+  paymentMethod: string | null;
+  autoRenew: boolean;
+  startDate: string | null;
+  nextRenewalDate: string | null;
+  note: string | null;
+  sortOrder: number;
+  terminatedAt: string | null;
+  /** 关联记账的花费合计（支出为正、收入抵减），列表接口返回。 */
+  totalSpendMicros?: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+export type SubscriptionDetail = Subscription & {
+  transactionLinks: TransactionLink[];
+  linkedTransactions: Transaction[];
+  totalExpenseMicros: string;
+};
+
 export type AttachmentRecord = {
   id: string;
   ledgerId: string;
   fileId: string;
-  ownerType: "transaction" | "insurance" | "item";
+  ownerType: "transaction" | "insurance" | "item" | "subscription";
   ownerId: string;
   createdBy: string | null;
   createdAt: string;

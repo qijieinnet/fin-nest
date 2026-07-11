@@ -175,6 +175,8 @@ export type PayloadParams = {
   itemEnabled: boolean;
   selectedItemId: string | null;
   selectedItemLinkKind: "consumable" | "purchase";
+  subscriptionEnabled: boolean;
+  selectedSubscriptionId: string | null;
 };
 
 export function buildPayload(params: PayloadParams): BuildResult<TransactionInput> {
@@ -204,6 +206,8 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
     itemEnabled,
     selectedItemId,
     selectedItemLinkKind,
+    subscriptionEnabled,
+    selectedSubscriptionId,
   } = params;
 
   const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
@@ -236,6 +240,7 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
         personId: personEnabled ? (personId ?? undefined) : undefined,
         insuranceId: null,
         itemId: null,
+        subscriptionId: null,
         note: note.trim() || undefined,
       },
     };
@@ -289,6 +294,7 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
       insuranceId: insuranceEnabled ? selectedInsuranceId : null,
       itemId: itemEnabled ? selectedItemId : null,
       itemLinkKind: itemEnabled && selectedItemId ? selectedItemLinkKind : undefined,
+      subscriptionId: subscriptionEnabled ? selectedSubscriptionId : null,
       relations: relations.length > 0 ? relations : undefined,
     },
   };

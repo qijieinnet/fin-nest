@@ -28,6 +28,11 @@ export const queryKeys = {
   items: (ledgerId: string) => ["ledger", ledgerId, "items"] as const,
   item: (ledgerId: string, itemId: string) => ["ledger", ledgerId, "items", itemId] as const,
   itemTypes: (ledgerId: string) => ["ledger", ledgerId, "item-types"] as const,
+  subscriptions: (ledgerId: string) => ["ledger", ledgerId, "subscriptions"] as const,
+  subscription: (ledgerId: string, subscriptionId: string) =>
+    ["ledger", ledgerId, "subscriptions", subscriptionId] as const,
+  subscriptionCategories: (ledgerId: string) =>
+    ["ledger", ledgerId, "subscription-categories"] as const,
   attachments: (ledgerId: string, ownerType: string, ownerId: string) =>
     ["ledger", ledgerId, "attachments", ownerType, ownerId] as const,
   budgetProgress: (ledgerId: string, month: string) =>

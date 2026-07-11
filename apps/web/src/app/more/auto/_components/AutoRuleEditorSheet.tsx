@@ -29,6 +29,7 @@ import {
   type Insurance,
   type ItemAsset,
   type Person,
+  type Subscription,
   type TransactionType,
 } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
@@ -69,6 +70,7 @@ type AutoRuleEditorSheetProps = {
   ledgerId: string;
   people: Person[];
   rule?: AutoRule;
+  subscriptions: Subscription[];
 };
 
 type RelationBucket = "primary" | "linked";
@@ -127,6 +129,7 @@ export function AutoRuleEditorSheet({
   ledgerId,
   people,
   rule,
+  subscriptions,
 }: AutoRuleEditorSheetProps) {
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
@@ -174,6 +177,10 @@ export function AutoRuleEditorSheet({
   );
   const [itemEnabled, setItemEnabled] = useState(Boolean(rule?.itemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(rule?.itemId ?? null);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(Boolean(rule?.subscriptionId));
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(
+    rule?.subscriptionId ?? null,
+  );
   const [repeatRule, setRepeatRule] = useState<AutoRepeatRule>(rule?.repeatRule ?? "monthly");
   const [startDate, setStartDate] = useState(dateOnly(rule?.startDate) || todayKey());
   const [note, setNote] = useState(rule?.note ?? "");
@@ -214,6 +221,13 @@ export function AutoRuleEditorSheet({
   const itemOptions = useMemo(
     () => items.map((item) => ({ id: item.id, icon: "物", name: item.name })),
     [items],
+  );
+  const subscriptionOptions = useMemo(
+    () =>
+      subscriptions
+        .filter((subscription) => !subscription.terminatedAt)
+        .map((subscription) => ({ id: subscription.id, icon: "订", name: subscription.name })),
+    [subscriptions],
   );
   const nextPreview = upcomingDates(startDate, repeatRule, 1)[0] ?? startDate;
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
@@ -338,6 +352,8 @@ export function AutoRuleEditorSheet({
         relations,
         insuranceId: isTransfer || !insuranceEnabled ? null : (selectedInsuranceId ?? null),
         itemId: isTransfer || !itemEnabled ? null : (selectedItemId ?? null),
+        subscriptionId:
+          isTransfer || !subscriptionEnabled ? null : (selectedSubscriptionId ?? null),
         repeatRule,
         startDate,
         enabled,
@@ -596,6 +612,24 @@ export function AutoRuleEditorSheet({
                 }}
                 onSelect={setSelectedItemId}
                 selectedId={selectedItemId}
+              />
+
+              <AssetLinkCard
+                checked={subscriptionEnabled}
+                emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+                hint={
+                  type === "income"
+                    ? "把这笔收入（如退款）关联到一个订阅"
+                    : "把这笔支出（如订阅费）关联到一个订阅"
+                }
+                items={subscriptionOptions}
+                label="关联订阅"
+                onCheckedChange={(checked) => {
+                  setSubscriptionEnabled(checked);
+                  if (!checked) setSelectedSubscriptionId(null);
+                }}
+                onSelect={setSelectedSubscriptionId}
+                selectedId={selectedSubscriptionId}
               />
             </>
           ) : null}

@@ -31,7 +31,7 @@ export async function createAuthorizedObjectUrl(path: string): Promise<string> {
 
 export async function uploadAttachmentFile(
   ledgerId: string,
-  ownerType: "transaction" | "insurance" | "item",
+  ownerType: "transaction" | "insurance" | "item" | "subscription",
   ownerId: string,
   file: File,
 ): Promise<void> {

@@ -1,7 +1,15 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, LogOut, Package, Shield, ShieldCheck, WalletCards } from "lucide-react";
+import {
+  ChevronRight,
+  LogOut,
+  Package,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  WalletCards,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EdgeFade, MobileAppShell, MobileTabBar } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, clearSessionToken, getApiErrorMessage } from "@/lib/api";
@@ -13,6 +21,7 @@ import {
   useItems,
   usePeople,
   useQuickTemplates,
+  useSubscriptions,
 } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger } from "@/providers";
@@ -29,6 +38,7 @@ export function MoreScreen() {
   const quickTemplatesQuery = useQuickTemplates(currentLedger?.id ?? null);
   const insurancesQuery = useInsurances(currentLedger?.id ?? null);
   const itemsQuery = useItems(currentLedger?.id ?? null);
+  const subscriptionsQuery = useSubscriptions(currentLedger?.id ?? null);
 
   const logout = useMutation({
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
@@ -67,6 +77,12 @@ export function MoreScreen() {
   const insuranceCountText = insurancesQuery.isPending ? "加载中" : `${insuranceActiveCount} 份在保`;
   const itemActiveCount = (itemsQuery.data ?? []).filter((item) => !item.scrappedAt).length;
   const itemCountText = itemsQuery.isPending ? "加载中" : `${itemActiveCount} 件在用`;
+  const subscriptionActiveCount = (subscriptionsQuery.data ?? []).filter(
+    (subscription) => !subscription.terminatedAt,
+  ).length;
+  const subscriptionCountText = subscriptionsQuery.isPending
+    ? "加载中"
+    : `${subscriptionActiveCount} 个使用中`;
 
   return (
     <MobileAppShell>
@@ -164,6 +180,32 @@ export function MoreScreen() {
             </span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {itemCountText}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+        </section>
+
+        {/* 订阅管理入口 */}
+        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          <button
+            className="flex w-full items-center gap-3 p-4 text-left"
+            onClick={() => router.push(routes.subscriptions)}
+            type="button"
+          >
+            <span
+              aria-hidden
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+            >
+              <RefreshCw size={20} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-base text-[var(--color-text-primary)]">订阅管理</span>
+              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                套餐订阅与续费管理
+              </span>
+            </span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {subscriptionCountText}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>

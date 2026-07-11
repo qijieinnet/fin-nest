@@ -92,6 +92,11 @@ export class CreateAutoRuleDto {
   @IsString()
   itemId?: string | null;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string | null;
+
   @ApiProperty({ enum: ["daily", "weekly", "monthly", "yearly", "once"] })
   @IsIn(["daily", "weekly", "monthly", "yearly", "once"])
   repeatRule!: string;
@@ -192,6 +197,11 @@ export class UpdateAutoRuleDto {
   @IsOptional()
   @IsString()
   itemId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  subscriptionId?: string | null;
 
   @ApiPropertyOptional({ enum: ["daily", "weekly", "monthly", "yearly", "once"] })
   @IsOptional()

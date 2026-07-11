@@ -218,6 +218,24 @@ export function TransactionFormDesktop({
             }}
             selectedId={model.selectedItemId}
           />
+
+          <AssetLinkCard
+            checked={model.subscriptionEnabled}
+            emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+            hint={
+              type === "income"
+                ? "把这笔收入（如退款）关联到一个订阅"
+                : "把这笔支出（如订阅费）关联到一个订阅"
+            }
+            items={model.subscriptionOptions}
+            label="关联订阅"
+            onCheckedChange={(checked) => {
+              model.setSubscriptionEnabled(checked);
+              if (!checked) model.setSelectedSubscriptionId(null);
+            }}
+            onSelect={model.setSelectedSubscriptionId}
+            selectedId={model.selectedSubscriptionId}
+          />
         </div>
       ) : null}
     </form>

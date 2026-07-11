@@ -35,6 +35,7 @@ type AutoPayload = {
   relations?: StoredRelation[] | null;
   insuranceId?: string | null;
   itemId?: string | null;
+  subscriptionId?: string | null;
 };
 
 // 存入 relation_payload 的关联项结构（与交易关联一致，金额为字符串）。
@@ -95,6 +96,7 @@ export class AutomationService {
           relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
           insuranceId: isTransfer ? null : (input.insuranceId ?? null),
           itemId: isTransfer ? null : (input.itemId ?? null),
+          subscriptionId: isTransfer ? null : (input.subscriptionId ?? null),
           repeatRule: input.repeatRule,
           startDate,
           nextRunOn: input.enabled === false ? null : startDate,
@@ -149,6 +151,8 @@ export class AutomationService {
           : input.relations,
       insuranceId: input.insuranceId === undefined ? existing.insuranceId : input.insuranceId,
       itemId: input.itemId === undefined ? existing.itemId : input.itemId,
+      subscriptionId:
+        input.subscriptionId === undefined ? existing.subscriptionId : input.subscriptionId,
     });
     return this.txs.run(async (tx) => {
       const enabled = input.enabled ?? existing.enabled;
@@ -203,6 +207,7 @@ export class AutomationService {
                 : this.relationJson(input.relations),
           insuranceId: type === "transfer" ? null : input.insuranceId,
           itemId: type === "transfer" ? null : input.itemId,
+          subscriptionId: type === "transfer" ? null : input.subscriptionId,
           repeatRule: input.repeatRule,
           startDate: input.startDate ? startDate : undefined,
           nextRunOn,
@@ -359,6 +364,7 @@ export class AutomationService {
     await this.linkAssets(tx, ledgerId, transaction.id, {
       insuranceId: pending.insuranceId,
       itemId: pending.itemId,
+      subscriptionId: pending.subscriptionId,
     });
     // 带 status 条件的原子更新：并发确认同一条时，后提交的事务在这里更新到 0 行并回滚，
     // 避免同一条待确认生成两笔交易。
@@ -448,6 +454,8 @@ export class AutomationService {
           : input.relations,
       insuranceId: input.insuranceId === undefined ? existing.insuranceId : input.insuranceId,
       itemId: input.itemId === undefined ? existing.itemId : input.itemId,
+      subscriptionId:
+        input.subscriptionId === undefined ? existing.subscriptionId : input.subscriptionId,
     });
     return this.prisma.client.quickTemplate.update({
       where: { id: templateId },
@@ -493,6 +501,7 @@ export class AutomationService {
               : this.relationJson(input.relations),
         insuranceId: type === "transfer" ? null : input.insuranceId,
         itemId: type === "transfer" ? null : input.itemId,
+        subscriptionId: type === "transfer" ? null : input.subscriptionId,
         directEnabled: input.directEnabled,
         sortOrder: input.sortOrder,
         updatedBy: userId,
@@ -516,6 +525,7 @@ export class AutomationService {
       ...this.templateToTransaction(template, todayKey()),
       insuranceId: template.insuranceId,
       itemId: template.itemId,
+      subscriptionId: template.subscriptionId,
     };
   }
 
@@ -550,6 +560,7 @@ export class AutomationService {
         await this.linkAssets(tx, ledgerId, transaction.id, {
           insuranceId: template.insuranceId,
           itemId: template.itemId,
+          subscriptionId: template.subscriptionId,
         });
         return transaction;
       },
@@ -644,6 +655,7 @@ export class AutomationService {
       relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
       insuranceId: isTransfer ? null : (input.insuranceId ?? null),
       itemId: isTransfer ? null : (input.itemId ?? null),
+      subscriptionId: isTransfer ? null : (input.subscriptionId ?? null),
       directEnabled: input.directEnabled ?? false,
       sortOrder: input.sortOrder ?? 0,
       createdBy: userId,
@@ -726,6 +738,7 @@ export class AutomationService {
     this.assertRelationTotal(payload.amountMicros, payload.relations ?? []);
     if (payload.insuranceId) await this.assertInsurance(ledgerId, payload.insuranceId);
     if (payload.itemId) await this.assertItem(ledgerId, payload.itemId);
+    if (payload.subscriptionId) await this.assertSubscription(ledgerId, payload.subscriptionId);
   }
 
   private async assertRelations(ledgerId: string, type: string, relations: StoredRelation[]) {
@@ -793,6 +806,13 @@ export class AutomationService {
     if (!item) throw new AppError("ITEM_NOT_FOUND", "物品不存在", 404);
   }
 
+  private async assertSubscription(ledgerId: string, subscriptionId: string) {
+    const subscription = await this.prisma.client.subscription.findFirst({
+      where: { id: subscriptionId, ledgerId, deletedAt: null },
+    });
+    if (!subscription) throw new AppError("SUBSCRIPTION_NOT_FOUND", "订阅不存在", 404);
+  }
+
   /** 把关联数组转成可存入 JSONB 的值（空数组存 null，便于清空）。 */
   private relationJson(
     relations: TransactionAccountRelationDto[] | undefined,
@@ -827,15 +847,25 @@ export class AutomationService {
     tx: PrismaTransactionClient,
     ledgerId: string,
     transactionId: string,
-    links: { insuranceId: string | null; itemId: string | null },
+    links: { insuranceId: string | null; itemId: string | null; subscriptionId: string | null },
   ): Promise<void> {
-    const targets: Array<{ linkedType: "insurance" | "item"; linkedId: string; linkKind: string }> =
-      [];
+    const targets: Array<{
+      linkedType: "insurance" | "item" | "subscription";
+      linkedId: string;
+      linkKind: string;
+    }> = [];
     if (links.insuranceId) {
       targets.push({ linkedType: "insurance", linkedId: links.insuranceId, linkKind: "related" });
     }
     if (links.itemId) {
       targets.push({ linkedType: "item", linkedId: links.itemId, linkKind: "consumable" });
+    }
+    if (links.subscriptionId) {
+      targets.push({
+        linkedType: "subscription",
+        linkedId: links.subscriptionId,
+        linkKind: "related",
+      });
     }
     for (const target of targets) {
       await tx.transactionLink.upsert({

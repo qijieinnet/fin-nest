@@ -637,6 +637,12 @@ export class TransactionsService {
       });
       if (!item) throw new AppError("ITEM_NOT_FOUND", "物品不存在", 404);
     }
+    if (input.subscriptionId) {
+      const subscription = await tx.subscription.findFirst({
+        where: { id: input.subscriptionId, ledgerId, deletedAt: null },
+      });
+      if (!subscription) throw new AppError("SUBSCRIPTION_NOT_FOUND", "订阅不存在", 404);
+    }
   }
 
   private async createAssetLinks(
@@ -664,6 +670,17 @@ export class TransactionsService {
           linkedType: "item",
           linkedId: input.itemId,
           linkKind: input.itemLinkKind ?? "consumable",
+        },
+      });
+    }
+    if (input.subscriptionId) {
+      await tx.transactionLink.create({
+        data: {
+          ledgerId,
+          transactionId,
+          linkedType: "subscription",
+          linkedId: input.subscriptionId,
+          linkKind: "related",
         },
       });
     }
@@ -703,6 +720,22 @@ export class TransactionsService {
             linkedType: "item",
             linkedId: input.itemId,
             linkKind: input.itemLinkKind ?? "consumable",
+          },
+        });
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "subscriptionId")) {
+      await tx.transactionLink.deleteMany({
+        where: { ledgerId, transactionId, linkedType: "subscription" },
+      });
+      if (input.subscriptionId) {
+        await tx.transactionLink.create({
+          data: {
+            ledgerId,
+            transactionId,
+            linkedType: "subscription",
+            linkedId: input.subscriptionId,
+            linkKind: "related",
           },
         });
       }

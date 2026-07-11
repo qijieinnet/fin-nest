@@ -31,6 +31,7 @@ import {
   useItems,
   usePeople,
   useRecordSetting,
+  useSubscriptions,
   useTransaction,
 } from "@/lib/data/records";
 import {
@@ -248,6 +249,7 @@ export function BillDetailScreen({
   const attachmentsQuery = useAttachments(ledgerId, "transaction", transactionId ?? null);
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
+  const subscriptionsQuery = useSubscriptions(ledgerId);
   const pendingQuery = useAutoPending(isPendingMode ? ledgerId : null);
   const categoriesQuery = useCategories(ledgerId);
   const peopleQuery = usePeople(isPendingMode ? ledgerId : null);
@@ -426,6 +428,10 @@ export function BillDetailScreen({
       .filter((link) => link.linkedType === "item")
       .map((link) => itemsQuery.data?.find((item) => item.id === link.linkedId)?.name)
       .filter(Boolean);
+    const subscriptionNames = links
+      .filter((link) => link.linkedType === "subscription")
+      .map((link) => subscriptionsQuery.data?.find((sub) => sub.id === link.linkedId)?.name)
+      .filter(Boolean);
 
     const renderOrderedField = (field: string) => {
       switch (field) {
@@ -584,6 +590,12 @@ export function BillDetailScreen({
           {!isTransfer && itemNames.length > 0 ? (
             <ReadonlyCard>
               <ReadonlyRow label="关联物品" value={itemNames.join("、")} />
+            </ReadonlyCard>
+          ) : null}
+
+          {!isTransfer && subscriptionNames.length > 0 ? (
+            <ReadonlyCard>
+              <ReadonlyRow label="关联订阅" value={subscriptionNames.join("、")} />
             </ReadonlyCard>
           ) : null}
 

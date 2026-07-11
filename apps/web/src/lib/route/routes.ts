@@ -12,6 +12,7 @@ export const routes = {
   systemSettings: "/more/system",
   insurances: "/more/insurances",
   items: "/more/items",
+  subscriptions: "/more/subscriptions",
   importExport: "/more/import-export",
   admin: "/more/admin",
   users: "/more/users",

@@ -65,6 +65,8 @@ export class BackupService {
       itemTypes,
       items,
       insurances,
+      subscriptionCategories,
+      subscriptions,
       transactions,
       accountEntries,
       transactionAccountRelations,
@@ -86,6 +88,8 @@ export class BackupService {
       client.itemType.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.item.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.insurance.findMany({ where, orderBy: { createdAt: "asc" } }),
+      client.subscriptionCategory.findMany({ where, orderBy: { createdAt: "asc" } }),
+      client.subscription.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.transaction.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.accountEntry.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.transactionAccountRelation.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -132,6 +136,8 @@ export class BackupService {
         })),
         insurances,
         insuranceInsuredPeople,
+        subscriptionCategories,
+        subscriptions,
         transactions,
         accountEntries,
         transactionAccountRelations,
@@ -230,6 +236,8 @@ export class BackupService {
     await tx.insurance.deleteMany({ where });
     await tx.item.deleteMany({ where });
     await tx.itemType.deleteMany({ where });
+    await tx.subscription.deleteMany({ where });
+    await tx.subscriptionCategory.deleteMany({ where });
     await tx.categoryBudget.deleteMany({ where });
     await tx.plan.deleteMany({ where });
     await tx.subAccount.deleteMany({ where });
@@ -258,6 +266,8 @@ export class BackupService {
       itemType: newIdMap(rows("itemTypes")),
       item: newIdMap(rows("items")),
       insurance: newIdMap(rows("insurances")),
+      subscriptionCategory: newIdMap(rows("subscriptionCategories")),
+      subscription: newIdMap(rows("subscriptions")),
       transaction: newIdMap(rows("transactions")),
       autoRule: newIdMap(rows("autoRules")),
       quickTemplate: newIdMap(rows("quickTemplates")),
@@ -455,6 +465,46 @@ export class BackupService {
       }),
     );
 
+    counts.subscriptionCategories = await createManyChunked(
+      tx.subscriptionCategory,
+      rows("subscriptionCategories"),
+      (row) => ({
+        id: maps.subscriptionCategory.get(row.id)!,
+        ledgerId,
+        name: row.name,
+        icon: row.icon ?? null,
+        sortOrder: Number(row.sortOrder ?? 0),
+        archivedAt: dt(row.archivedAt),
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
+
+    counts.subscriptions = await createManyChunked(
+      tx.subscription,
+      rows("subscriptions"),
+      (row) => ({
+        id: maps.subscription.get(row.id)!,
+        ledgerId,
+        categoryId: ref(maps.subscriptionCategory, row.categoryId),
+        name: row.name,
+        provider: row.provider ?? null,
+        planName: row.planName ?? null,
+        priceMicros: bi(row.priceMicros),
+        billingCycle: row.billingCycle ?? null,
+        paymentMethod: row.paymentMethod ?? null,
+        autoRenew: Boolean(row.autoRenew),
+        startDate: dt(row.startDate),
+        nextRenewalDate: dt(row.nextRenewalDate),
+        note: row.note ?? null,
+        sortOrder: Number(row.sortOrder ?? 0),
+        terminatedAt: dt(row.terminatedAt),
+        createdBy: userId,
+        updatedBy: userId,
+        deletedAt: dt(row.deletedAt),
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
+
     counts.accountAdjustments = await createManyChunked(
       tx.accountAdjustment,
       rows("accountAdjustments"),
@@ -552,7 +602,9 @@ export class BackupService {
         linkedType: row.linkedType,
         linkedId: (row.linkedType === "insurance"
           ? ref(maps.insurance, row.linkedId)
-          : ref(maps.item, row.linkedId))!,
+          : row.linkedType === "subscription"
+            ? ref(maps.subscription, row.linkedId)
+            : ref(maps.item, row.linkedId))!,
         linkKind: row.linkKind ?? (row.linkedType === "item" ? "consumable" : "related"),
         createdAt: dt(row.createdAt) ?? undefined,
       }),
@@ -609,6 +661,7 @@ export class BackupService {
       relationPayload: remapRelationPayload(row.relationPayload, maps),
       insuranceId: ref(maps.insurance, row.insuranceId),
       itemId: ref(maps.item, row.itemId),
+      subscriptionId: ref(maps.subscription, row.subscriptionId),
       repeatRule: row.repeatRule,
       startDate: dt(row.startDate)!,
       nextRunOn: dt(row.nextRunOn),
@@ -643,6 +696,7 @@ export class BackupService {
         relationPayload: remapRelationPayload(row.relationPayload, maps),
         insuranceId: ref(maps.insurance, row.insuranceId),
         itemId: ref(maps.item, row.itemId),
+        subscriptionId: ref(maps.subscription, row.subscriptionId),
         confirmedTransactionId: ref(maps.transaction, row.confirmedTransactionId),
         confirmedBy: row.confirmedBy ? userId : null,
         confirmedAt: dt(row.confirmedAt),
@@ -675,6 +729,7 @@ export class BackupService {
         relationPayload: remapRelationPayload(row.relationPayload, maps),
         insuranceId: ref(maps.insurance, row.insuranceId),
         itemId: ref(maps.item, row.itemId),
+        subscriptionId: ref(maps.subscription, row.subscriptionId),
         directEnabled: Boolean(row.directEnabled),
         sortOrder: Number(row.sortOrder ?? 0),
         createdBy: userId,

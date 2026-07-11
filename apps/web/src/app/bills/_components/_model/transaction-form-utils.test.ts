@@ -73,6 +73,8 @@ const basePayload: PayloadParams = {
   itemEnabled: false,
   selectedItemId: null,
   selectedItemLinkKind: "consumable",
+  subscriptionEnabled: false,
+  selectedSubscriptionId: null,
 };
 
 describe("microsToInput", () => {

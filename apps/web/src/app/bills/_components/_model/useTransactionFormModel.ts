@@ -32,12 +32,15 @@ import {
   useItemTypes,
   usePeople,
   useRecordSetting,
+  useSubscriptionCategories,
+  useSubscriptions,
 } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../../more/insurances/_components/insurance-utils";
 import { typeGlyph } from "../../../more/items/_components/item-utils";
+import { categoryGlyph } from "../../../more/subscriptions/_components/subscription-utils";
 import {
   buildPayload,
   buildPendingPatch,
@@ -67,6 +70,7 @@ export type TransactionSeed = {
   relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }> | null;
   insuranceId?: string | null;
   itemId?: string | null;
+  subscriptionId?: string | null;
 };
 
 export type UseTransactionFormModelParams = {
@@ -108,6 +112,8 @@ export function useTransactionFormModel({
   const insurancesQuery = useInsurances(ledgerId);
   const itemsQuery = useItems(ledgerId);
   const itemTypesQuery = useItemTypes(ledgerId);
+  const subscriptionsQuery = useSubscriptions(ledgerId);
+  const subscriptionCategoriesQuery = useSubscriptionCategories(ledgerId);
 
   const setting = settingQuery.data;
   const categories = categoriesQuery.data ?? [];
@@ -192,12 +198,20 @@ export function useTransactionFormModel({
   // 编辑模式下，回显已有的保险/物品关联（后端关联为 upsert 幂等，重新保存不会重复）。
   const initialInsuranceLink = initial?.links?.find((link) => link.linkedType === "insurance");
   const initialItemLink = initial?.links?.find((link) => link.linkedType === "item");
+  const initialSubscriptionLink = initial?.links?.find(
+    (link) => link.linkedType === "subscription",
+  );
   const initialInsuranceId = initialInsuranceLink?.linkedId ?? seed?.insuranceId ?? null;
   const initialItemId = initialItemLink?.linkedId ?? seed?.itemId ?? null;
+  const initialSubscriptionId = initialSubscriptionLink?.linkedId ?? seed?.subscriptionId ?? null;
   const [insuranceEnabled, setInsuranceEnabled] = useState(Boolean(initialInsuranceId));
   const [selectedInsuranceId, setSelectedInsuranceId] = useState<string | null>(initialInsuranceId);
   const [itemEnabled, setItemEnabled] = useState(Boolean(initialItemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(initialItemId);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(Boolean(initialSubscriptionId));
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(
+    initialSubscriptionId,
+  );
   const [selectedItemLinkKind, setSelectedItemLinkKind] = useState<"consumable" | "purchase">(
     initialItemLink?.linkKind === "purchase" ? "purchase" : "consumable",
   );
@@ -245,6 +259,28 @@ export function useTransactionFormModel({
         name: item.name,
       })),
     [itemTypeById, itemsQuery.data],
+  );
+  const subscriptionCategoryById = useMemo(
+    () =>
+      new Map(
+        (subscriptionCategoriesQuery.data ?? []).map((category) => [category.id, category]),
+      ),
+    [subscriptionCategoriesQuery.data],
+  );
+  const subscriptionOptions = useMemo(
+    () =>
+      (subscriptionsQuery.data ?? [])
+        .filter((subscription) => !subscription.terminatedAt)
+        .map((subscription) => ({
+          id: subscription.id,
+          icon: categoryGlyph(
+            subscription.categoryId
+              ? subscriptionCategoryById.get(subscription.categoryId)
+              : null,
+          ),
+          name: subscription.name,
+        })),
+    [subscriptionCategoryById, subscriptionsQuery.data],
   );
 
   const visibleFields = setting?.visibleFields ?? {};
@@ -334,6 +370,7 @@ export function useTransactionFormModel({
       setAccountEnabled(false);
       setInsuranceEnabled(false);
       setItemEnabled(false);
+      setSubscriptionEnabled(false);
       setAttachmentsEnabled(false);
     }
   }
@@ -413,6 +450,7 @@ export function useTransactionFormModel({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "attachments"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.insurances(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions(ledgerId) }),
         isEdit
           ? queryClient.invalidateQueries({
               queryKey: queryKeys.transaction(ledgerId, initial!.id),
@@ -467,6 +505,8 @@ export function useTransactionFormModel({
     setSelectedInsuranceId(null);
     setItemEnabled(false);
     setSelectedItemId(null);
+    setSubscriptionEnabled(false);
+    setSelectedSubscriptionId(null);
     // 幂等键用于去重，下一笔必须换新键，否则会被服务端判定为重复提交。
     idempotencyKey.current = createClientId("transaction");
   }
@@ -522,6 +562,8 @@ export function useTransactionFormModel({
           itemEnabled,
           selectedItemId,
           selectedItemLinkKind,
+          subscriptionEnabled,
+          selectedSubscriptionId,
         });
     if (!result.ok) {
       showToast({ tone: "error", message: result.message });
@@ -644,6 +686,11 @@ export function useTransactionFormModel({
     setSelectedItemLinkKind,
     itemOptions,
     applyCreatedItem,
+    subscriptionEnabled,
+    setSubscriptionEnabled,
+    selectedSubscriptionId,
+    setSelectedSubscriptionId,
+    subscriptionOptions,
     // 提交
     decimalPlaces,
     validationMessage,

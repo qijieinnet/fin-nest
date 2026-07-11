@@ -11,6 +11,12 @@ import {
   UpdateItemDto,
   UpdateItemTypeDto,
 } from "./dto/item.dto";
+import {
+  CreateSubscriptionCategoryDto,
+  CreateSubscriptionDto,
+  UpdateSubscriptionCategoryDto,
+  UpdateSubscriptionDto,
+} from "./dto/subscription.dto";
 
 @Injectable()
 export class AssetsService {
@@ -393,9 +399,220 @@ export class AssetsService {
     await this.files.deleteAttachmentsForOwner(ledgerId, "item", itemId);
   }
 
+  async listSubscriptionCategories(ledgerId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    return this.prisma.client.subscriptionCategory.findMany({
+      where: { ledgerId },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+  }
+
+  async createSubscriptionCategory(
+    ledgerId: string,
+    userId: string,
+    input: CreateSubscriptionCategoryDto,
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const count = await this.prisma.client.subscriptionCategory.count({
+      where: { ledgerId, archivedAt: null },
+    });
+    return this.prisma.client.subscriptionCategory.create({
+      data: {
+        ledgerId,
+        name: input.name,
+        icon: input.icon ?? null,
+        sortOrder: input.sortOrder ?? count,
+      },
+    });
+  }
+
+  async updateSubscriptionCategory(
+    ledgerId: string,
+    categoryId: string,
+    userId: string,
+    input: UpdateSubscriptionCategoryDto,
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertSubscriptionCategory(ledgerId, categoryId);
+    return this.prisma.client.subscriptionCategory.update({
+      where: { id: categoryId },
+      data: { name: input.name, icon: input.icon, sortOrder: input.sortOrder },
+    });
+  }
+
+  // 归档而非删除：已记录的订阅仍通过 categoryId 显示分类名，仅从选择/管理列表隐藏。
+  async archiveSubscriptionCategory(ledgerId: string, categoryId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertSubscriptionCategory(ledgerId, categoryId);
+    await this.prisma.client.subscriptionCategory.update({
+      where: { id: categoryId },
+      data: { archivedAt: new Date() },
+    });
+  }
+
+  async reorderSubscriptionCategories(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.prisma.client.subscriptionCategory.findMany({
+      where: { ledgerId, archivedAt: null },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((category) => category.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("SUBSCRIPTION_CATEGORY_ORDER_MISMATCH", "订阅分类顺序与当前分类不一致", 400);
+    }
+    await this.prisma.client.$transaction(
+      ids.map((id, index) =>
+        this.prisma.client.subscriptionCategory.update({
+          where: { id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+  }
+
+  async listSubscriptions(ledgerId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const subscriptions = await this.prisma.client.subscription.findMany({
+      where: { ledgerId, deletedAt: null },
+      orderBy: [{ categoryId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+    if (!subscriptions.length) return subscriptions;
+    const links = await this.prisma.client.transactionLink.findMany({
+      where: { ledgerId, linkedType: "subscription" },
+    });
+    const transactions = links.length
+      ? await this.prisma.client.transaction.findMany({
+          where: { id: { in: links.map((link) => link.transactionId) }, deletedAt: null },
+        })
+      : [];
+    const transactionById = new Map(transactions.map((tx) => [tx.id, tx]));
+    // 花费合计：关联支出累加、关联收入（如退款）抵减。
+    const spendBySubscription = new Map<string, bigint>();
+    for (const link of links) {
+      const tx = transactionById.get(link.transactionId);
+      if (!tx) continue;
+      const delta =
+        tx.type === "expense"
+          ? tx.effectiveAmountMicros
+          : tx.type === "income"
+            ? -tx.effectiveAmountMicros
+            : 0n;
+      spendBySubscription.set(
+        link.linkedId,
+        (spendBySubscription.get(link.linkedId) ?? 0n) + delta,
+      );
+    }
+    return subscriptions.map((subscription) => ({
+      ...subscription,
+      totalSpendMicros: (spendBySubscription.get(subscription.id) ?? 0n).toString(),
+    }));
+  }
+
+  async getSubscription(ledgerId: string, subscriptionId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const subscription = await this.assertSubscription(ledgerId, subscriptionId);
+    const links = await this.linkedTransactions(ledgerId, "subscription", subscriptionId);
+    return { ...subscription, ...links };
+  }
+
+  async createSubscription(ledgerId: string, userId: string, input: CreateSubscriptionDto) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    if (input.categoryId) await this.assertSubscriptionCategory(ledgerId, input.categoryId);
+    const sortOrder = await this.prisma.client.subscription.count({
+      where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
+    });
+    return this.prisma.client.subscription.create({
+      data: this.subscriptionData(ledgerId, userId, input, sortOrder),
+    });
+  }
+
+  async updateSubscription(
+    ledgerId: string,
+    subscriptionId: string,
+    userId: string,
+    input: UpdateSubscriptionDto,
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.assertSubscription(ledgerId, subscriptionId);
+    if (input.categoryId) await this.assertSubscriptionCategory(ledgerId, input.categoryId);
+    const changingCategory =
+      input.categoryId !== undefined && input.categoryId !== existing.categoryId;
+    const updateData = this.subscriptionUpdateData(userId, input);
+    if (changingCategory) {
+      updateData.sortOrder = await this.prisma.client.subscription.count({
+        where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
+      });
+    }
+    return this.prisma.client.subscription.update({
+      where: { id: subscriptionId },
+      data: updateData,
+    });
+  }
+
+  async terminateSubscription(ledgerId: string, subscriptionId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertSubscription(ledgerId, subscriptionId);
+    return this.prisma.client.subscription.update({
+      where: { id: subscriptionId },
+      data: { terminatedAt: new Date(), updatedBy: userId },
+    });
+  }
+
+  async resumeSubscription(ledgerId: string, subscriptionId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertSubscription(ledgerId, subscriptionId);
+    return this.prisma.client.subscription.update({
+      where: { id: subscriptionId },
+      data: { terminatedAt: null, updatedBy: userId },
+    });
+  }
+
+  async reorderSubscriptions(ledgerId: string, userId: string, ids: string[]) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const subscriptions = await this.prisma.client.subscription.findMany({
+      where: { ledgerId, id: { in: ids }, deletedAt: null, terminatedAt: null },
+      select: { id: true, categoryId: true },
+    });
+    const existingIds = new Set(subscriptions.map((subscription) => subscription.id));
+    if (ids.length !== existingIds.size || ids.some((id) => !existingIds.has(id))) {
+      throw new AppError("SUBSCRIPTION_ORDER_MISMATCH", "订阅顺序与当前订阅不一致", 400);
+    }
+    const [first] = subscriptions;
+    const categoryId = first?.categoryId ?? null;
+    if (subscriptions.some((subscription) => subscription.categoryId !== categoryId)) {
+      throw new AppError("SUBSCRIPTION_ORDER_CROSS_CATEGORY", "只能在同一订阅分类内排序", 400);
+    }
+    const groupSubscriptions = await this.prisma.client.subscription.findMany({
+      where: { ledgerId, deletedAt: null, terminatedAt: null, categoryId },
+      select: { id: true },
+    });
+    const groupIds = new Set(groupSubscriptions.map((subscription) => subscription.id));
+    if (ids.length !== groupIds.size || ids.some((id) => !groupIds.has(id))) {
+      throw new AppError("SUBSCRIPTION_ORDER_MISMATCH", "订阅顺序与当前订阅不一致", 400);
+    }
+    await this.prisma.client.$transaction(
+      ids.map((id, index) =>
+        this.prisma.client.subscription.update({
+          where: { id },
+          data: { sortOrder: index, updatedBy: userId },
+        }),
+      ),
+    );
+  }
+
+  async deleteSubscription(ledgerId: string, subscriptionId: string, userId: string): Promise<void> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertSubscription(ledgerId, subscriptionId);
+    await this.prisma.client.subscription.update({
+      where: { id: subscriptionId },
+      data: { deletedAt: new Date(), updatedBy: userId },
+    });
+    await this.files.deleteAttachmentsForOwner(ledgerId, "subscription", subscriptionId);
+  }
+
   async linkTransaction(
     ledgerId: string,
-    linkedType: "insurance" | "item",
+    linkedType: "insurance" | "item" | "subscription",
     linkedId: string,
     transactionId: string,
     userId: string,
@@ -404,6 +621,7 @@ export class AssetsService {
     await this.ledgers.assertMember(ledgerId, userId);
     if (linkedType === "insurance") await this.assertInsurance(ledgerId, linkedId);
     if (linkedType === "item") await this.assertItem(ledgerId, linkedId);
+    if (linkedType === "subscription") await this.assertSubscription(ledgerId, linkedId);
     const transaction = await this.prisma.client.transaction.findFirst({
       where: { id: transactionId, ledgerId, deletedAt: null },
     });
@@ -596,5 +814,66 @@ export class AssetsService {
   private async assertItemType(ledgerId: string, typeId: string) {
     const type = await this.prisma.client.itemType.findFirst({ where: { id: typeId, ledgerId } });
     if (!type) throw new AppError("ITEM_TYPE_NOT_FOUND", "物品类型不存在", 404);
+  }
+
+  private subscriptionData(
+    ledgerId: string,
+    userId: string,
+    input: CreateSubscriptionDto,
+    sortOrder: number,
+  ): Prisma.SubscriptionUncheckedCreateInput {
+    return {
+      ledgerId,
+      categoryId: input.categoryId ?? null,
+      name: input.name,
+      provider: input.provider,
+      planName: input.planName,
+      priceMicros: input.priceMicros ? BigInt(input.priceMicros) : null,
+      billingCycle: input.billingCycle,
+      paymentMethod: input.paymentMethod,
+      autoRenew: input.autoRenew ?? false,
+      startDate: input.startDate ? parseDateOnly(input.startDate) : null,
+      nextRenewalDate: input.nextRenewalDate ? parseDateOnly(input.nextRenewalDate) : null,
+      note: input.note,
+      sortOrder,
+      createdBy: userId,
+      updatedBy: userId,
+    };
+  }
+
+  private subscriptionUpdateData(
+    userId: string,
+    input: UpdateSubscriptionDto,
+  ): Prisma.SubscriptionUncheckedUpdateInput {
+    return {
+      categoryId: input.categoryId,
+      name: input.name,
+      provider: input.provider,
+      planName: input.planName,
+      priceMicros: input.priceMicros === undefined ? undefined : BigInt(input.priceMicros),
+      billingCycle: input.billingCycle,
+      paymentMethod: input.paymentMethod,
+      autoRenew: input.autoRenew,
+      startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
+      nextRenewalDate:
+        input.nextRenewalDate === undefined ? undefined : parseDateOnly(input.nextRenewalDate),
+      note: input.note,
+      updatedBy: userId,
+    };
+  }
+
+  private async assertSubscription(ledgerId: string, subscriptionId: string) {
+    const subscription = await this.prisma.client.subscription.findFirst({
+      where: { id: subscriptionId, ledgerId, deletedAt: null },
+    });
+    if (!subscription) throw new AppError("SUBSCRIPTION_NOT_FOUND", "订阅不存在", 404);
+    return subscription;
+  }
+
+  private async assertSubscriptionCategory(ledgerId: string, categoryId: string) {
+    const category = await this.prisma.client.subscriptionCategory.findFirst({
+      where: { id: categoryId, ledgerId },
+    });
+    if (!category) throw new AppError("SUBSCRIPTION_CATEGORY_NOT_FOUND", "订阅分类不存在", 404);
   }
 }

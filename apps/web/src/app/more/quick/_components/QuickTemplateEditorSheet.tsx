@@ -26,6 +26,7 @@ import {
   type ItemAsset,
   type Person,
   type QuickTemplate,
+  type Subscription,
   type TransactionType,
 } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
@@ -54,6 +55,7 @@ type QuickTemplateEditorSheetProps = {
   items: ItemAsset[];
   ledgerId: string;
   people: Person[];
+  subscriptions: Subscription[];
   template?: QuickTemplate;
 };
 
@@ -130,6 +132,7 @@ export function QuickTemplateEditorSheet({
   items,
   ledgerId,
   people,
+  subscriptions,
   template,
 }: QuickTemplateEditorSheetProps) {
   const queryClient = useQueryClient();
@@ -182,6 +185,10 @@ export function QuickTemplateEditorSheet({
   );
   const [itemEnabled, setItemEnabled] = useState(Boolean(template?.itemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(template?.itemId ?? null);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(Boolean(template?.subscriptionId));
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(
+    template?.subscriptionId ?? null,
+  );
   const [directEnabled, setDirectEnabled] = useState(template?.directEnabled ?? false);
 
   const catOptions = useMemo(
@@ -219,6 +226,13 @@ export function QuickTemplateEditorSheet({
     () => items.map((item) => ({ id: item.id, icon: "物", name: item.name })),
     [items],
   );
+  const subscriptionOptions = useMemo(
+    () =>
+      subscriptions
+        .filter((subscription) => !subscription.terminatedAt)
+        .map((subscription) => ({ id: subscription.id, icon: "订", name: subscription.name })),
+    [subscriptions],
+  );
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
 
@@ -255,6 +269,8 @@ export function QuickTemplateEditorSheet({
       setSelectedInsuranceId(null);
       setItemEnabled(false);
       setSelectedItemId(null);
+      setSubscriptionEnabled(false);
+      setSelectedSubscriptionId(null);
       return;
     }
     setCategoryId(firstCategoryId(categories, nextType === "income" ? "income" : "expense"));
@@ -353,6 +369,8 @@ export function QuickTemplateEditorSheet({
         relations,
         insuranceId: isTransfer || !insuranceEnabled ? null : (selectedInsuranceId ?? null),
         itemId: isTransfer || !itemEnabled ? null : (selectedItemId ?? null),
+        subscriptionId:
+          isTransfer || !subscriptionEnabled ? null : (selectedSubscriptionId ?? null),
         directEnabled,
       };
       if (template) {
@@ -601,6 +619,24 @@ export function QuickTemplateEditorSheet({
                 }}
                 onSelect={setSelectedItemId}
                 selectedId={selectedItemId}
+              />
+
+              <AssetLinkCard
+                checked={subscriptionEnabled}
+                emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+                hint={
+                  type === "income"
+                    ? "把这笔收入（如退款）关联到一个订阅"
+                    : "把这笔支出（如订阅费）关联到一个订阅"
+                }
+                items={subscriptionOptions}
+                label="关联订阅"
+                onCheckedChange={(checked) => {
+                  setSubscriptionEnabled(checked);
+                  if (!checked) setSelectedSubscriptionId(null);
+                }}
+                onSelect={setSelectedSubscriptionId}
+                selectedId={selectedSubscriptionId}
               />
             </>
           ) : null}
