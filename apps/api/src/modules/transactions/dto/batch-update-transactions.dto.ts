@@ -14,6 +14,7 @@ const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 可批量修改的字段（一次只能改一项）。金额不在内。 */
 export const BATCH_UPDATE_FIELDS = [
+  "type",
   "category",
   "account",
   "person",
@@ -39,7 +40,14 @@ export class BatchUpdateTransactionsDto {
   @IsIn(BATCH_UPDATE_FIELDS)
   field!: BatchUpdateField;
 
-  // ---- field=category 时使用 ----
+  // ---- field=type 时使用：目标类型。改为转账需 fromAccountId/toAccountId，
+  // 改为收/支需对应类型的 categoryId（旧分类类型不匹配）----
+  @ApiPropertyOptional({ enum: ["expense", "income", "transfer"] })
+  @IsOptional()
+  @IsIn(["expense", "income", "transfer"])
+  type?: "expense" | "income" | "transfer";
+
+  // ---- field=category（或 field=type 且目标为收/支）时使用 ----
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -61,7 +69,8 @@ export class BatchUpdateTransactionsDto {
   @IsString()
   subAccountId?: string;
 
-  // ---- field=account 且为转账时使用（转出/转入账户，可只改一侧）----
+  // ---- field=account 且为转账时使用（转出/转入账户，可只改一侧）；
+  // field=type 改为转账时两侧必填 ----
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

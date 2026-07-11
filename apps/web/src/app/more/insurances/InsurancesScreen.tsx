@@ -382,16 +382,16 @@ export function InsurancesScreen() {
   };
 
   const terminate = useMutation({
-    mutationFn: (insuranceId: string) =>
-      apiRequest(ledgerApiPath(ledgerId!, `/insurances/${insuranceId}/terminate`), {
+    mutationFn: ({ id }: { id: string; expired: boolean }) =>
+      apiRequest(ledgerApiPath(ledgerId!, `/insurances/${id}/terminate`), {
         method: "POST",
       }),
-    onSuccess: async (_data, insuranceId) => {
+    onSuccess: async (_data, { id, expired }) => {
       await Promise.all([
         invalidate(),
-        queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId!, insuranceId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId!, id) }),
       ]);
-      showToast({ tone: "success", message: "已终止续保" });
+      showToast({ tone: "success", message: expired ? "保单已归档" : "已终止续保" });
     },
     onError: (error) =>
       showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
@@ -558,7 +558,12 @@ export function InsurancesScreen() {
           onDelete={() => confirmDelete(insurance)}
           onEdit={() => openEditor(insurance)}
           onResume={() => resume.mutate(insurance.id)}
-          onTerminate={() => terminate.mutate(insurance.id)}
+          onTerminate={() =>
+            terminate.mutate({
+              id: insurance.id,
+              expired: insuranceStatus(insurance).key === "expired",
+            })
+          }
           people={people}
           resuming={resume.isPending}
           terminating={terminate.isPending}
@@ -595,7 +600,7 @@ export function InsurancesScreen() {
     ];
 
     return (
-      <SwipeActionRow actions={actions} key={insurance.id}>
+      <SwipeActionRow actions={actions} desktopClickable key={insurance.id}>
         <button
           className="flex w-full items-center gap-3 px-4 py-3 text-left"
           onClick={() => openDetail(insurance)}

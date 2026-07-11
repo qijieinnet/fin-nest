@@ -126,10 +126,18 @@ export function formatFixed1(value: number): string {
   return value.toFixed(1);
 }
 
-/** 平均年价/月价：不足 1 个统计周期时，按 1 个周期摊销，避免短期年化/月化失真。 */
+/** 平均年价/月价（微单位）：不足 1 个统计周期时按 1 个周期摊销，避免短期年化/月化失真。可跨物品累加。 */
+export function itemAverageMicros(totalMicros: bigint, spans: number): number {
+  if (!Number.isFinite(spans) || spans < 0) return 0;
+  const divisor = Math.max(1, spans);
+  return Number(totalMicros) / divisor;
+}
+
+/** 平均年价/月价：不足 1 个统计周期时，按 1 个周期摊销，避免短期年化/月化失真。金额跟随账本小数位。 */
 export function formatAverage(totalMicros: bigint, spans: number): string {
   if (!Number.isFinite(spans) || spans < 0) return "—";
-  const divisor = Math.max(1, spans);
-  const yuan = Number(totalMicros) / 1_000_000;
-  return `¥${(yuan / divisor).toFixed(1)}`;
+  return formatMicros(BigInt(Math.round(itemAverageMicros(totalMicros, spans))), {
+    currencySymbol: "¥",
+    trimTrailingZeros: true,
+  });
 }

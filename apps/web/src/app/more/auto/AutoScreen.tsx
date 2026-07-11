@@ -280,7 +280,7 @@ export function AutoScreen() {
     const nextLabel = rule.enabled ? formatDateLabel(rule.nextRunOn) : "已暂停";
 
     return (
-      <SwipeActionRow actions={actions} key={rule.id}>
+      <SwipeActionRow actions={actions} desktopClickable key={rule.id}>
         <div className="flex items-center gap-3 px-4 py-3">
           <button
             className="flex min-w-0 flex-1 items-center gap-3 text-left"

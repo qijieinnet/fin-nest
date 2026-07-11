@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { usePreferences } from "@/providers";
+import { NavMenuSettings } from "./_components/NavMenuSettings";
 
 export function SystemSettingsScreen() {
   const router = useRouter();
@@ -46,6 +47,14 @@ export function SystemSettingsScreen() {
               />
             </div>
           </section>
+
+          <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+            导航菜单
+          </span>
+          <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+            开关控制该菜单是否在左侧导航栏显示，按住右侧图标拖动可调整顺序。关闭的菜单仍可从「更多」进入。
+          </p>
+          <NavMenuSettings />
         </div>
       </MobilePage>
     </MobileAppShell>

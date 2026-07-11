@@ -5260,6 +5260,17 @@ select:focus-visible {
     pointer-events: auto;
     z-index: 3;
   }
+
+  /* 管理类列表：桌面 hover 不露出编辑/删除，整行点击进入详情。 */
+  .biz-swipe-row--desktop-clickable:hover .biz-swipe-row__actions--trailing {
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .biz-swipe-row--desktop-clickable .biz-swipe-row__content {
+    cursor: pointer;
+  }
 }
 
 /* --- C2：DesktopDatePicker 带标签触发器（复用到编辑弹层的日期字段） --- */

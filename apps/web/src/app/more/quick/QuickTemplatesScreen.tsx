@@ -133,6 +133,7 @@ export function QuickTemplatesScreen() {
           insurances={insurances}
           items={items}
           ledgerId={ledgerId}
+          onDelete={template ? () => void confirmDelete(template) : undefined}
           people={people}
           subscriptions={subscriptions}
           template={template}
@@ -201,7 +202,7 @@ export function QuickTemplatesScreen() {
     ];
 
     return (
-      <SwipeActionRow actions={actions} key={template.id}>
+      <SwipeActionRow actions={actions} desktopClickable key={template.id}>
         <button
           className="flex w-full items-center gap-3 px-4 py-3 text-left"
           onClick={() => openEditor(template)}

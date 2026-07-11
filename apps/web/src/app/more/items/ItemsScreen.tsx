@@ -57,8 +57,10 @@ import {
   formatDateLabel,
   formatFixed1,
   formatMoney,
+  itemAverageMicros,
   itemStatus,
   itemTotalMicros,
+  itemUsedMonths,
   itemUsedYears,
   typeGlyph,
 } from "./_components/item-utils";
@@ -352,6 +354,25 @@ export function ItemsScreen() {
   const consumablesTotal = filteredItems
     .reduce((sum, item) => sum + BigInt(item.consumablesMicros ?? "0"), 0n)
     .toString();
+  // 在用物品的平均年价/月价汇总：仅统计有购买日期的物品，按各自使用时长摊销后累加（微单位）。
+  const avgYearMicros = BigInt(
+    Math.round(
+      filteredItems.reduce((sum, item) => {
+        if (!item.purchaseDate) return sum;
+        const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
+        return sum + itemAverageMicros(total, itemUsedYears(item));
+      }, 0),
+    ),
+  ).toString();
+  const avgMonthMicros = BigInt(
+    Math.round(
+      filteredItems.reduce((sum, item) => {
+        if (!item.purchaseDate) return sum;
+        const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
+        return sum + itemAverageMicros(total, itemUsedMonths(item));
+      }, 0),
+    ),
+  ).toString();
   const itemGroups = buildItemGroups(filteredItems, itemTypes, itemTypeById, {
     includeArchivedTypes: true,
   });
@@ -574,7 +595,7 @@ export function ItemsScreen() {
     ];
 
     return (
-      <SwipeActionRow actions={actions} key={item.id}>
+      <SwipeActionRow actions={actions} desktopClickable key={item.id}>
         <button
           className="flex w-full items-center gap-3 px-4 py-3 text-left"
           onClick={() => openDetail(item)}
@@ -739,17 +760,33 @@ export function ItemsScreen() {
             <>
               <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
                 <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                  在用物品总价
+                  平均月价
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
                     ¥
                   </span>
                   <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-                    {formatMoney(totalValue)}
+                    {formatMoney(avgMonthMicros)}
                   </span>
                 </p>
-                <div className="mt-3.5 flex gap-7">
+                <div className="mt-3.5 flex flex-wrap gap-x-7 gap-y-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                      平均年价
+                    </div>
+                    <div className="mt-0.5 block text-[15px] font-semibold">
+                      {formatMoney(avgYearMicros)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                      在用总价
+                    </div>
+                    <div className="mt-0.5 block text-[15px] font-semibold">
+                      {formatMoney(totalValue)}
+                    </div>
+                  </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
                       在用件数

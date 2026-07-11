@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
@@ -230,15 +230,15 @@ export function InsuranceDetailSheet({
         >
           编辑保单
         </Button>
-        {status.key === "active" ? (
+        {!insurance.terminatedAt ? (
           <Button
             className="!bg-[var(--color-bg-surface)]"
             disabled={terminating}
-            icon={<Ban size={17} />}
+            icon={status.key === "expired" ? <Archive size={17} /> : <Ban size={17} />}
             onClick={onTerminate}
             variant="secondary"
           >
-            {terminating ? "处理中…" : "终止续保"}
+            {terminating ? "处理中…" : status.key === "expired" ? "归档保单" : "终止续保"}
           </Button>
         ) : null}
         {insurance.terminatedAt ? (

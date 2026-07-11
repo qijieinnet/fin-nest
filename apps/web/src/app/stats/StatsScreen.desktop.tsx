@@ -154,16 +154,23 @@ export function StatsScreenDesktop() {
                 const height =
                   maxTrendMicros > 0n ? Number((point.valueMicros * 72n) / maxTrendMicros) : 0;
                 const isCurrent = index === trendPoints.length - 1;
+                // 柱数不超过 12（近1年/近6个月/近1周）时在柱顶显示金额；近1个月的日柱过密则省略。
+                const showTrendValue = trendPoints.length <= 12;
                 return (
                   <div
                     className="flex h-full flex-1 flex-col items-center justify-end gap-2"
                     key={`${point.label}-${index}`}
                   >
-                    {denseTrend ? null : (
-                      <span className="text-[10px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
+                    {showTrendValue ? (
+                      <span
+                        className={cn(
+                          "text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]",
+                          denseTrend ? "text-[9px]" : "text-[10px]",
+                        )}
+                      >
                         {compactYuan(point.valueMicros)}
                       </span>
-                    )}
+                    ) : null}
                     <span
                       className={cn(
                         "block w-full rounded-t-[6px] rounded-b-[3px] transition-[height] duration-300",

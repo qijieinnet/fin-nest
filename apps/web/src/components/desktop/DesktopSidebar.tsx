@@ -1,19 +1,13 @@
 "use client";
 
-import {
-  CalendarDays,
-  ChartPie,
-  Home,
-  type LucideIcon,
-  MoreHorizontal,
-  WalletCards,
-} from "lucide-react";
+import { ChartPie, type LucideIcon, MoreHorizontal } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAutoPending } from "@/lib/data/records";
+import { navMenuByKey } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
-import { useAuth, useLedger } from "@/providers";
+import { useAuth, useLedger, usePreferences } from "@/providers";
 
 type NavItem = {
   dot?: boolean;
@@ -32,16 +26,24 @@ export function DesktopSidebar() {
   const pathname = usePathname();
   const { currentLedger } = useLedger();
   const { user } = useAuth();
+  const { preferences } = usePreferences();
   const autoPendingQuery = useAutoPending(currentLedger?.id ?? null);
   const pendingCount = autoPendingQuery.data?.length ?? 0;
 
+  // 一级导航：按用户在「系统设置 → 导航菜单」配置的顺序/可见性渲染，统计固定常驻。
+  const hidden = new Set(preferences.navMenuHidden);
+  const configured: NavItem[] = preferences.navMenuOrder.flatMap((key) => {
+    if (hidden.has(key)) return [];
+    const menu = navMenuByKey(key);
+    return menu ? [{ icon: menu.icon, label: menu.label, route: menu.route }] : [];
+  });
   const primary: NavItem[] = [
-    { icon: Home, label: "账单", route: routes.bills },
-    { icon: WalletCards, label: "账户", route: routes.accounts },
+    ...configured,
     { icon: ChartPie, label: "统计", route: routes.stats },
-    { icon: CalendarDays, label: "计划", route: routes.budget },
   ];
 
+  // 「更多」里去掉已提升到一级导航的菜单，避免重复入口。
+  const visibleRoutes = new Set(configured.map((item) => item.route));
   const moreItems: NavItem[] = [
     { label: "账本管理", route: routes.ledgers },
     { label: "保险管理", route: routes.insurances },
@@ -55,7 +57,7 @@ export function DesktopSidebar() {
     { label: "记账设置", route: routes.recordSettings },
     { label: "系统设置", route: routes.systemSettings },
     { label: "导入导出", route: routes.importExport },
-  ];
+  ].filter((item) => !visibleRoutes.has(item.route));
 
   const moreActive = isActive(pathname, routes.more);
 

@@ -2,7 +2,7 @@
 
 import { ChevronRight, Plus } from "lucide-react";
 import { EmptyState } from "@/components/business";
-import { Button, MobileAppShell, Switch, Tabs } from "@/components/ui";
+import { IconButton, MobileAppShell, Switch, Tabs } from "@/components/ui";
 import { type Plan, type PlanKind } from "@/lib/api";
 import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
@@ -55,37 +55,40 @@ export function PlansScreenDesktop() {
 
   return (
     <MobileAppShell>
-      <div className="desktop-budget desktop-page--wide">
-        <header className="desktop-budget__head">
+      <div className="desktop-accounts-single">
+        <div className="desktop-accounts__list-head">
           <h1 className="desktop-page-title">计划</h1>
-          <div className="flex items-center gap-3">
-            <Tabs
-              items={[
-                { value: "expense", label: "支出限额" },
-                { value: "income", label: "收入目标" },
-              ]}
-              onValueChange={(value) => model.setTab(value as PlanKind)}
-              value={tab}
-            />
-            <Button icon={<Plus size={16} />} onClick={() => openEditor()} variant="secondary">
-              新建计划
-            </Button>
-          </div>
-        </header>
+          <IconButton
+            icon={<Plus size={22} strokeWidth={2.3} />}
+            label="新建计划"
+            onClick={() => openEditor()}
+          />
+        </div>
+
+        <Tabs
+          items={[
+            { value: "expense", label: "支出限额" },
+            { value: "income", label: "收入目标" },
+          ]}
+          onValueChange={(value) => model.setTab(value as PlanKind)}
+          value={tab}
+        />
 
         {model.plansQuery.isPending ? (
-          <div className="desktop-budget__grid">
+          <div className="mt-3.5 flex flex-col gap-3.5">
             {Array.from({ length: 3 }, (_, index) => (
               <PlanPeriodCardSkeleton key={index} />
             ))}
           </div>
         ) : tabPlans.length === 0 ? (
-          <EmptyState
-            message={`还没有${tab === "income" ? "收入目标" : "支出限额"}计划，点击右上角新建一个。`}
-            title={tab === "income" ? "还没有收入目标" : "还没有支出限额"}
-          />
+          <div className="mt-6">
+            <EmptyState
+              message={`还没有${tab === "income" ? "收入目标" : "支出限额"}计划，点击右上角 + 新建一个。`}
+              title={tab === "income" ? "还没有收入目标" : "还没有支出限额"}
+            />
+          </div>
         ) : (
-          <div className="desktop-budget__grid">
+          <div className="mt-3.5 flex flex-col gap-3.5">
             {tabPlans.map((plan) => (
               <PlanCardWithProgress
                 key={plan.id}
@@ -97,7 +100,7 @@ export function PlansScreenDesktop() {
           </div>
         )}
 
-        <section className="mt-8 max-w-[560px] overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+        <section className="mt-8 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
           <button
             className="flex w-full items-center px-[18px] py-[15px] text-left"
             onClick={openStoppedPlans}
@@ -116,7 +119,7 @@ export function PlansScreenDesktop() {
         <h2 className="mt-8 px-1 pb-2.5 text-[20px] font-bold tracking-tight text-[var(--color-text-primary)]">
           预测
         </h2>
-        <div className="flex max-w-[560px] items-center gap-2 rounded-[18px] bg-[var(--color-bg-surface)] px-4 py-3.5 shadow-[var(--shadow-soft)]">
+        <div className="flex items-center gap-2 rounded-[18px] bg-[var(--color-bg-surface)] px-4 py-3.5 shadow-[var(--shadow-soft)]">
           <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
           <Switch
             checked={foresightOn}

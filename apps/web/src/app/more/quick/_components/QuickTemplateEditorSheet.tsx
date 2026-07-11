@@ -14,7 +14,7 @@ import {
   ToggleCard,
   type RecoverablePayableItem,
 } from "@/components/business";
-import { IconButton, Input, Switch, Tabs } from "@/components/ui";
+import { Button, IconButton, Input, Switch, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -54,6 +54,7 @@ type QuickTemplateEditorSheetProps = {
   insurances: Insurance[];
   items: ItemAsset[];
   ledgerId: string;
+  onDelete?: () => void;
   people: Person[];
   subscriptions: Subscription[];
   template?: QuickTemplate;
@@ -131,6 +132,7 @@ export function QuickTemplateEditorSheet({
   insurances,
   items,
   ledgerId,
+  onDelete,
   people,
   subscriptions,
   template,
@@ -657,6 +659,12 @@ export function QuickTemplateEditorSheet({
               </div>
             </section>
           </div> */}
+
+          {isEditing && onDelete ? (
+            <Button block onClick={onDelete} variant="danger">
+              删除快速记账
+            </Button>
+          ) : null}
         </div>
       </div>
     </form>

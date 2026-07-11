@@ -2,6 +2,13 @@
 
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  DEFAULT_NAV_MENU_HIDDEN,
+  DEFAULT_NAV_MENU_ORDER,
+  type NavMenuKey,
+  normalizeNavMenuHidden,
+  normalizeNavMenuOrder,
+} from "@/lib/nav/navMenus";
 
 const PREFERENCES_STORAGE_KEY = "fin-nest:preferences";
 
@@ -9,10 +16,16 @@ const PREFERENCES_STORAGE_KEY = "fin-nest:preferences";
 export type Preferences = {
   /** 账单页是否显示账本切换入口，默认关闭。 */
   showLedgerSwitcherOnBills: boolean;
+  /** 一级导航菜单的完整排序（含隐藏项，保证隐藏也能记住位置）。 */
+  navMenuOrder: NavMenuKey[];
+  /** 从一级导航隐藏的菜单键（仍可从「更多」进入）。 */
+  navMenuHidden: NavMenuKey[];
 };
 
 const DEFAULT_PREFERENCES: Preferences = {
   showLedgerSwitcherOnBills: false,
+  navMenuOrder: [...DEFAULT_NAV_MENU_ORDER],
+  navMenuHidden: [...DEFAULT_NAV_MENU_HIDDEN],
 };
 
 type PreferencesContextValue = {
@@ -28,7 +41,12 @@ function readStoredPreferences(): Preferences {
     const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY);
     if (!raw) return DEFAULT_PREFERENCES;
     const parsed = JSON.parse(raw) as Partial<Preferences>;
-    return { ...DEFAULT_PREFERENCES, ...parsed };
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...parsed,
+      navMenuOrder: normalizeNavMenuOrder(parsed.navMenuOrder),
+      navMenuHidden: normalizeNavMenuHidden(parsed.navMenuHidden),
+    };
   } catch {
     return DEFAULT_PREFERENCES;
   }
@@ -51,7 +69,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   if (!hydratedRef.current && typeof window !== "undefined") {
     hydratedRef.current = true;
     const stored = readStoredPreferences();
-    if (stored.showLedgerSwitcherOnBills !== DEFAULT_PREFERENCES.showLedgerSwitcherOnBills) {
+    if (JSON.stringify(stored) !== JSON.stringify(DEFAULT_PREFERENCES)) {
       setPreferences(stored);
     }
   }

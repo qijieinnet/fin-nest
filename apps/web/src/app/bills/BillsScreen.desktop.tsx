@@ -26,6 +26,7 @@ import { NewBillFormScreen } from "./_components/NewBillFormScreen";
 import { useBillsModel } from "./_model/useBillsModel";
 
 const BATCH_FIELD_ITEMS: Array<{ field: BatchUpdateField; label: string }> = [
+  { field: "type", label: "类型" },
   { field: "category", label: "分类" },
   { field: "account", label: "账户" },
   { field: "person", label: "人员" },

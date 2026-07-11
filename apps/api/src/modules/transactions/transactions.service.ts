@@ -327,9 +327,23 @@ export class TransactionsService {
    * 批量修改多笔交易的单个字段（一次只能改一项）。逐笔以现有数据（含关联/资产链接）重建
    * 完整 DTO，仅覆盖目标字段后复用 update()，保持冲正流水/快照等不变式。
    * 转账无分类、账户分转出/转入两侧，故 category/account 对转账不适用会被跳过。
+   * type 变更：改为转账需转出/转入账户，改为收/支需目标类型的分类；类型相同、
+   * 带可收回/需归还关联、或改为转账但带资产链接的记录跳过。
    */
   async batchUpdate(ledgerId: string, userId: string, dto: BatchUpdateTransactionsDto) {
     await this.ledgers.assertMember(ledgerId, userId);
+    if (dto.field === "type") {
+      if (!dto.type) {
+        throw new AppError("BATCH_FIELD_REQUIRED", "缺少类型", 400);
+      }
+      if (dto.type === "transfer" && (!dto.fromAccountId || !dto.toAccountId)) {
+        throw new AppError("BATCH_FIELD_REQUIRED", "改为转账需指定转出和转入账户", 400);
+      }
+      // 分类快照按交易类型校验，旧分类类型必然不匹配，改为收/支必须同时给目标类型的分类。
+      if (dto.type !== "transfer" && !dto.categoryId) {
+        throw new AppError("BATCH_FIELD_REQUIRED", "改为收支需指定分类", 400);
+      }
+    }
     if (dto.field === "category" && !dto.categoryId) {
       throw new AppError("BATCH_FIELD_REQUIRED", "缺少分类", 400);
     }
@@ -357,6 +371,10 @@ export class TransactionsService {
       }
       // 转账无分类；转账改账户需指定转出/转入，非转账改账户需指定 accountId，否则跳过。
       const isTransfer = existing.type === "transfer";
+      if (dto.field === "type" && existing.type === dto.type) {
+        skipped += 1;
+        continue;
+      }
       if (dto.field === "category" && isTransfer) {
         skipped += 1;
         continue;
@@ -380,6 +398,15 @@ export class TransactionsService {
           orderBy: { createdAt: "asc" },
         }),
       ]);
+      // 类型变更：可收回/需归还关联的种类与交易类型强绑定，改类型必失配 → 跳过；
+      // 转账不支持保险/物品/订阅等资产链接，带链接的记录改为转账也跳过。
+      if (
+        dto.field === "type" &&
+        (relations.length > 0 || (dto.type === "transfer" && links.length > 0))
+      ) {
+        skipped += 1;
+        continue;
+      }
       const input = this.reconstructUpdateInput(existing, relations, links);
       this.applyBatchField(input, dto);
       await this.update(ledgerId, transactionId, userId, input);
@@ -428,6 +455,35 @@ export class TransactionsService {
   /** 仅覆盖批量目标字段；person/note 留空表示清除。 */
   private applyBatchField(input: CreateTransactionDto, dto: BatchUpdateTransactionsDto) {
     switch (dto.field) {
+      case "type": {
+        if (!dto.type) break;
+        const wasTransfer = input.type === "transfer";
+        input.type = dto.type;
+        if (dto.type === "transfer") {
+          input.categoryId = undefined;
+          input.subcategoryId = undefined;
+          input.accountId = undefined;
+          input.subAccountId = undefined;
+          input.fromAccountId = dto.fromAccountId;
+          input.fromSubAccountId = dto.fromSubAccountId;
+          input.toAccountId = dto.toAccountId;
+          input.toSubAccountId = dto.toSubAccountId;
+        } else {
+          input.categoryId = dto.categoryId ?? undefined;
+          input.subcategoryId = dto.subcategoryId ?? undefined;
+          if (wasTransfer) {
+            // 转账转收支：账户取资金流动的一侧（支出=转出账户，收入=转入账户）。
+            input.accountId = dto.type === "expense" ? input.fromAccountId : input.toAccountId;
+            input.subAccountId =
+              dto.type === "expense" ? input.fromSubAccountId : input.toSubAccountId;
+          }
+          input.fromAccountId = undefined;
+          input.fromSubAccountId = undefined;
+          input.toAccountId = undefined;
+          input.toSubAccountId = undefined;
+        }
+        break;
+      }
       case "category":
         input.categoryId = dto.categoryId ?? undefined;
         input.subcategoryId = dto.subcategoryId ?? undefined;

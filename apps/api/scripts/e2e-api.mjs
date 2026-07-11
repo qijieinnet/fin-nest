@@ -198,7 +198,7 @@ async function main() {
   );
 }
 
-/** 批量修改单字段：备注/分类/人员/账户/日期，并验证转账对分类/账户被跳过、余额冲正正确。 */
+/** 批量修改单字段：备注/分类/人员/账户/日期/类型，并验证转账对分类/账户被跳过、类型互转的余额冲正正确。 */
 async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, category, person }) {
   const token = owner.token;
   const category2 = await api("POST", `/ledgers/${ledgerId}/categories`, {
@@ -335,6 +335,73 @@ async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, ca
   const tfAAfter = await get(tfA.id);
   assert.equal(tfAAfter.fromAccountId, third.id);
   assert.equal(tfAAfter.toAccountId, transferAccount.id);
+
+  // 类型批量修改：支出→转账（相同类型跳过 + 余额冲正）
+  const te = await makeExpense("batch type");
+  const accBefore3 = BigInt(await accountBalance(ledgerId, account.id, token));
+  const thirdBefore3 = BigInt(await accountBalance(ledgerId, third.id, token));
+  const typeRes = await batch({
+    transactionIds: [te.id, tfA.id],
+    field: "type",
+    type: "transfer",
+    fromAccountId: account.id,
+    toAccountId: third.id,
+  });
+  assert.equal(typeRes.updated, 1); // tfA 已是转账 → 跳过
+  assert.equal(typeRes.skipped, 1);
+  const teTransfer = await get(te.id);
+  assert.equal(teTransfer.type, "transfer");
+  assert.equal(teTransfer.fromAccountId, account.id);
+  assert.equal(teTransfer.toAccountId, third.id);
+  assert.equal(teTransfer.categoryId, null);
+  assert.equal(teTransfer.accountId, null);
+  // 支出(account) → 转账(account→third)：account 净额不变，third +3M
+  assert.equal(await accountBalance(ledgerId, account.id, token), accBefore3.toString());
+  assert.equal(
+    await accountBalance(ledgerId, third.id, token),
+    (thirdBefore3 + 3_000_000n).toString(),
+  );
+
+  // 转账→收入：账户取转入侧，分类必须是目标类型
+  const incomeCat = await api("POST", `/ledgers/${ledgerId}/categories`, {
+    token,
+    expected: 201,
+    body: { type: "income", name: `E2E Batch Income ${stamp}` },
+  });
+  const backRes = await batch({
+    transactionIds: [te.id],
+    field: "type",
+    type: "income",
+    categoryId: incomeCat.id,
+  });
+  assert.equal(backRes.updated, 1);
+  const teIncome = await get(te.id);
+  assert.equal(teIncome.type, "income");
+  assert.equal(teIncome.accountId, third.id);
+  assert.equal(teIncome.categoryId, incomeCat.id);
+  assert.equal(teIncome.fromAccountId, null);
+  assert.equal(teIncome.toAccountId, null);
+  // 冲正转账(account+3M, third-3M)后 third 记收入 +3M
+  assert.equal(
+    await accountBalance(ledgerId, account.id, token),
+    (accBefore3 + 3_000_000n).toString(),
+  );
+  assert.equal(
+    await accountBalance(ledgerId, third.id, token),
+    (thirdBefore3 + 3_000_000n).toString(),
+  );
+
+  // 参数校验：改为转账缺任一侧账户、改为收/支缺分类 → 400
+  await api("POST", `/ledgers/${ledgerId}/transactions/batch`, {
+    token,
+    expected: 400,
+    body: { transactionIds: [te.id], field: "type", type: "transfer", fromAccountId: account.id },
+  });
+  await api("POST", `/ledgers/${ledgerId}/transactions/batch`, {
+    token,
+    expected: 400,
+    body: { transactionIds: [te.id], field: "type", type: "expense" },
+  });
 }
 
 async function ensureApi() {

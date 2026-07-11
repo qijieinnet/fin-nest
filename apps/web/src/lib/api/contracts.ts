@@ -329,17 +329,19 @@ export type TransactionSummary = {
 };
 
 /** 可批量修改的单个字段（一次只能改一项）。金额不在内。 */
-export type BatchUpdateField = "category" | "account" | "person" | "occurredOn" | "note";
+export type BatchUpdateField = "type" | "category" | "account" | "person" | "occurredOn" | "note";
 
 /** 批量修改多笔交易的单个字段；转账对 category/account 不适用会被跳过。 */
 export type BatchUpdateTransactionsInput = {
   transactionIds: string[];
   field: BatchUpdateField;
+  /** field=type 时的目标类型：转账需 fromAccountId/toAccountId，收/支需对应类型的 categoryId。 */
+  type?: TransactionType;
   categoryId?: string;
   subcategoryId?: string;
   accountId?: string;
   subAccountId?: string;
-  /** 转账改账户时使用（可只改一侧）。 */
+  /** 转账改账户时使用（可只改一侧）；改类型为转账时两侧必填。 */
   fromAccountId?: string;
   fromSubAccountId?: string;
   toAccountId?: string;

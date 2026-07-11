@@ -18,6 +18,11 @@ type SwipeActionRowProps = {
   actions?: SwipeAction[];
   children: ReactNode;
   className?: string;
+  /**
+   * 桌面端把整行当作可点击项：鼠标 hover 不再露出编辑/删除，点击直接打开详情。
+   * 触屏（pointerType==="touch"）仍保留左滑露出动作。
+   */
+  desktopClickable?: boolean;
   /** 右滑（向右拖）在左侧露出的动作，如确认。 */
   leadingActions?: SwipeAction[];
 };
@@ -33,6 +38,7 @@ export function SwipeActionRow({
   actions = [],
   children,
   className,
+  desktopClickable = false,
   leadingActions = [],
 }: SwipeActionRowProps) {
   const rowId = useId();
@@ -137,12 +143,21 @@ export function SwipeActionRow({
   }
 
   return (
-    <div className={cn("biz-swipe-row", open && "biz-swipe-row--open", className)}>
+    <div
+      className={cn(
+        "biz-swipe-row",
+        open && "biz-swipe-row--open",
+        desktopClickable && "biz-swipe-row--desktop-clickable",
+        className,
+      )}
+    >
       {leadingActions.length > 0 ? renderActions(leadingActions, "leading", leadingWidth) : null}
       {actions.length > 0 ? renderActions(actions, "trailing", trailingWidth) : null}
       <div
         className="biz-swipe-row__content"
         onPointerDown={(event) => {
+          // 桌面端（鼠标/触控笔）不进入滑动手势：不劫持指针，click 直接作用于内部按钮打开详情。
+          if (desktopClickable && event.pointerType !== "touch") return;
           startDrag(event.clientX);
           // Capture so move/up keep firing even if the finger leaves the row.
           if (event.currentTarget.hasPointerCapture?.(event.pointerId) === false) {
