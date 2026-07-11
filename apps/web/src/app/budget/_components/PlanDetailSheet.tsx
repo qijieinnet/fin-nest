@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Edit3, Ellipsis, RotateCcw, Trash2, X } from "lucide-react";
+import { Ban, Edit3, Ellipsis, RotateCcw, Share2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, IconButtonGroup, PopoverMenu } from "@/components/ui";
@@ -11,6 +11,7 @@ import { useSheetStack } from "@/providers";
 import { PlanEditorSheet } from "./PlanEditorSheet";
 import { PlanMatchedListSheet } from "./PlanMatchedListSheet";
 import { PlanPeriodCard } from "./PlanPeriodCard";
+import { PlanShareSheet } from "./PlanShareSheet";
 import { periodShortLabel } from "./plan-utils";
 
 type PlanDetailSheetProps = {
@@ -58,6 +59,14 @@ export function PlanDetailSheet({
     });
   };
 
+  const openShare = (plan: Plan) => {
+    push({
+      className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
+      hideDefaultHeader: true,
+      content: <PlanShareSheet ledgerId={ledgerId} planId={plan.id} />,
+    });
+  };
+
   const menuGroups: MenuItem[][] = result
     ? [
         [
@@ -84,6 +93,15 @@ export function PlanDetailSheet({
             label: "编辑计划",
             onSelect: () => openEditor(result.plan),
           },
+          ...(!result.plan.stoppedAt
+            ? [
+                {
+                  icon: <Share2 size={18} />,
+                  label: "分享本期数据",
+                  onSelect: () => openShare(result.plan),
+                },
+              ]
+            : []),
         ],
         [
           {

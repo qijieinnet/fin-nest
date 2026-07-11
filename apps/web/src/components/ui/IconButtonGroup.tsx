@@ -35,10 +35,8 @@ export function IconButtonGroup({
         <button
           aria-label={item.label}
           className={cn(
-            "relative flex h-10 items-center justify-center text-[var(--color-text-primary)] active:bg-[var(--color-control-pressed)]",
-            item.text
-              ? "px-3.5 text-sm font-semibold"
-              : "w-12",
+            "relative flex h-11 items-center justify-center text-[var(--color-text-primary)] active:bg-[var(--color-control-pressed)]",
+            item.text ? "px-3 text-sm font-semibold" : "px-[11px]",
             index > 0 && "border-l border-[var(--color-border-subtle)]",
           )}
           key={item.label}

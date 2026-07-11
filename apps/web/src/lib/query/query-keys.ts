@@ -17,6 +17,8 @@ export const queryKeys = {
   stoppedPlans: (ledgerId: string) => ["ledger", ledgerId, "plans", "stopped"] as const,
   planProgress: (ledgerId: string, planId: string) =>
     ["ledger", ledgerId, "plans", planId, "progress"] as const,
+  planShareToken: (ledgerId: string, planId: string) =>
+    ["ledger", ledgerId, "plans", planId, "share-token"] as const,
   autoRules: (ledgerId: string) => ["ledger", ledgerId, "auto-rules"] as const,
   autoPending: (ledgerId: string, status = "pending") =>
     ["ledger", ledgerId, "auto-pending-transactions", status] as const,

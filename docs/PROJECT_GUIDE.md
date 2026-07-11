@@ -90,7 +90,9 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 | 文件 | File, Attachment |
 | 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
 
-表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。
+表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。迁移目录用**两位补零**前缀（`00_`..），保证 Prisma 字典序应用顺序 == 依赖顺序；新增迁移沿用递增两位前缀。
+
+> 历史迁移曾用未补零/复用的前缀（导致全新库 `migrate deploy` 顺序错乱），已一次性补零重排。**改名前已存在的库**在下次迁移前需执行一次 `packages/db/prisma/reconcile-migration-rename.sql`（同步 `_prisma_migrations.migration_name`，幂等）；全新库无需。
 
 ## 7. 开发工作流
 

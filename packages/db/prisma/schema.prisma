@@ -483,6 +483,20 @@ model Plan {
   @@map("plans")
 }
 
+model PlanShareToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  planId     String    @map("plan_id") @db.Uuid
+  ledgerId   String    @map("ledger_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdBy  String    @map("created_by") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([planId])
+  @@map("plan_share_tokens")
+}
+
 model BudgetSetting {
   ledgerId          String   @id @map("ledger_id") @db.Uuid
   enabled           Boolean  @default(false)

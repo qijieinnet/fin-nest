@@ -23,6 +23,7 @@ import {
   type Person,
   type Plan,
   type PlanProgressResult,
+  type PlanShareToken,
   type QuickTemplate,
   type RecordSetting,
   type Subscription,
@@ -102,6 +103,18 @@ export function usePlanProgress(ledgerId: string | null, planId: string | null) 
     queryKey: queryKeys.planProgress(ledgerId ?? "none", planId ?? "none"),
     queryFn: () =>
       apiRequest<PlanProgressResult>(ledgerApiPath(ledgerId!, `/plans/${planId}/progress`)),
+    enabled: Boolean(ledgerId) && Boolean(planId),
+    staleTime: 15_000,
+  });
+}
+
+export function usePlanShareToken(ledgerId: string | null, planId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.planShareToken(ledgerId ?? "none", planId ?? "none"),
+    queryFn: () =>
+      apiRequest<PlanShareToken | null>(
+        ledgerApiPath(ledgerId!, `/plans/${planId}/share-token`),
+      ),
     enabled: Boolean(ledgerId) && Boolean(planId),
     staleTime: 15_000,
   });

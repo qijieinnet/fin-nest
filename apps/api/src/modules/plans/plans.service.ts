@@ -163,6 +163,43 @@ export class PlansService {
     };
   }
 
+  /** 免登录场景（分享 token）用：按 plan 直接算「本期」卡片，返回体已裁剪，不含 ledgerId/matchRule/历史。 */
+  async computeCurrentPeriodCard(plan: PlanRow, date: Date) {
+    const period = planPeriod(plan, date);
+    const transactions = await this.prisma.client.transaction.findMany({
+      where: {
+        ledgerId: plan.ledgerId,
+        deletedAt: null,
+        type: plan.kind,
+        occurredOn: { gte: period.start, lt: period.end },
+      },
+    });
+    const [pending, autoRules] = plan.foresightEnabled
+      ? await Promise.all([
+          this.prisma.client.autoPendingTransaction.findMany({
+            where: {
+              ledgerId: plan.ledgerId,
+              status: "pending",
+              type: plan.kind,
+              scheduledFor: { gte: period.start, lt: period.end },
+            },
+          }),
+          this.prisma.client.autoRule.findMany({
+            where: { ledgerId: plan.ledgerId, enabled: true, archivedAt: null, type: plan.kind },
+          }),
+        ])
+      : [[] as PendingRow[], [] as AutoRuleRow[]];
+    return {
+      plan: {
+        name: plan.name,
+        kind: plan.kind,
+        metric: plan.metric,
+        foresightEnabled: plan.foresightEnabled,
+      },
+      period: this.periodProgress(plan, period, transactions, pending, autoRules, date),
+    };
+  }
+
   async getBudgetSetting(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.budgetSetting.findUniqueOrThrow({ where: { ledgerId } });

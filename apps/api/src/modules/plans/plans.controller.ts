@@ -5,6 +5,7 @@ import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import { CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
 import { PlanProgressQueryDto } from "./dto/progress-query.dto";
+import { PlanShareTokenService } from "./plan-share-token.service";
 import { PlansService } from "./plans.service";
 
 @ApiTags("plans")
@@ -12,7 +13,10 @@ import { PlansService } from "./plans.service";
 @UseGuards(SessionAuthGuard)
 @Controller("ledgers/:ledgerId/plans")
 export class PlansController {
-  constructor(private readonly plans: PlansService) {}
+  constructor(
+    private readonly plans: PlansService,
+    private readonly shareTokens: PlanShareTokenService,
+  ) {}
 
   @Get()
   @ApiOkResponse()
@@ -82,5 +86,35 @@ export class PlansController {
     @Query() query: PlanProgressQueryDto,
   ) {
     return this.plans.getPlanProgress(ledgerId, planId, (auth as SessionAuthContext).userId, query);
+  }
+
+  @Get(":planId/share-token")
+  @ApiOkResponse({ description: "该计划当前有效的分享 token 元数据（不含明文），无则为 null" })
+  getShareToken(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+  ) {
+    return this.shareTokens.getActive(ledgerId, planId, (auth as SessionAuthContext).userId);
+  }
+
+  @Post(":planId/share-token")
+  @ApiCreatedResponse({ description: "生成分享 token，明文仅返回一次；旧 token 自动吊销" })
+  createShareToken(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+  ) {
+    return this.shareTokens.create(ledgerId, planId, (auth as SessionAuthContext).userId);
+  }
+
+  @Delete(":planId/share-token")
+  @ApiNoContentResponse()
+  async revokeShareToken(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+  ): Promise<void> {
+    await this.shareTokens.revoke(ledgerId, planId, (auth as SessionAuthContext).userId);
   }
 }

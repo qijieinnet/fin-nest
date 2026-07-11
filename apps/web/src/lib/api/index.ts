@@ -1,4 +1,4 @@
-export { apiRequest } from "./client";
+export { apiRequest, buildApiUrl } from "./client";
 export type { ApiRequestOptions } from "./client";
 export { createAuthorizedObjectUrl, uploadAttachmentFile } from "./files";
 export {
@@ -64,6 +64,9 @@ export type {
   PlanPeriodProgress,
   PlanProgressResult,
   PlanRepeatRule,
+  PlanShareToken,
+  CreatedPlanShareToken,
+  PublicPlanCard,
   PublicUser,
   QuickTemplate,
   RecordSetting,

@@ -417,6 +417,28 @@ export type PlanProgressResult = {
   history: PlanPeriodProgress[];
 };
 
+export type PlanShareToken = {
+  id: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+// 生成时返回，明文 token 仅此一次可见。
+export type CreatedPlanShareToken = PlanShareToken & {
+  token: string;
+};
+
+// 免登录公开卡片：GET /public/plans/:token/progress 的响应（供外部消费，app 内不直接请求）。
+export type PublicPlanCard = {
+  plan: {
+    name: string;
+    kind: PlanKind;
+    metric: PlanMetric;
+    foresightEnabled: boolean;
+  };
+  period: PlanPeriodProgress;
+};
+
 export type BudgetProgress = {
   month: string;
   enabled: boolean;

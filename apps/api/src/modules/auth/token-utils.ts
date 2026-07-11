@@ -15,7 +15,7 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const KEY_LENGTH = 64;
 
-export function createOpaqueToken(prefix: "fn_sess" | "fn_svc"): string {
+export function createOpaqueToken(prefix: "fn_sess" | "fn_svc" | "fn_plan"): string {
   return `${prefix}_${randomBytes(32).toString("base64url")}`;
 }
 
