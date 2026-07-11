@@ -1,14 +1,16 @@
 "use client";
 
-import { ArrowUpDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, ChevronRight, Ellipsis, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
-import { Button, IconButton, MobileAppShell, Switch } from "@/components/ui";
+import { Button, IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
+import type { MenuItem } from "@/components/ui";
 import type { Account, SubAccount } from "@/lib/api";
 import { useSheetStack } from "@/providers";
 import { AccountBalanceCard } from "./_components/AccountBalanceCard";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
 import { AccountsSortList } from "./_components/AccountsSortList";
+import { SubAccountsSortList } from "./_components/SubAccountsSortList";
 import { AccountEntryListSheet } from "./_components/AccountEntryListSheet";
 import { BalanceAdjustmentListSheet } from "./_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "./_components/BalanceEditSheet";
@@ -28,28 +30,18 @@ import {
   orderedSubAccountRows,
 } from "./_components/account-utils";
 import { useAccountDetailModel } from "./[accountId]/_model/useAccountDetailModel";
+import { useSubAccountDetailModel } from "./[accountId]/[subAccountId]/_model/useSubAccountDetailModel";
 import { useAccountsModel } from "./_model/useAccountsModel";
 import { useDecimalPlaces } from "@/providers";
 
-/** 桌面账户页：左列账户列表（含净资产卡）+ 右侧选中账户详情。 */
+/** 桌面账户页：单列账户列表（含净资产卡）；点击账户以弹层打开详情（内容同移动端）。 */
 export function AccountsScreenDesktop() {
-  const { push } = useSheetStack();
+  const { push, pop } = useSheetStack();
   const decimalPlaces = useDecimalPlaces();
   const model = useAccountsModel();
   const { accounts, accountsQuery, groups, netWorth, canSort } = model;
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState(false);
-
-  // 默认选中第一个账户；选中项被删除后回退到第一个。
-  useEffect(() => {
-    if (accounts.length === 0) {
-      if (selectedId !== null) setSelectedId(null);
-      return;
-    }
-    if (!selectedId || !accounts.some((a) => a.id === selectedId)) {
-      setSelectedId(accounts[0]!.id);
-    }
-  }, [accounts, selectedId]);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const openEditor = () => {
     if (!model.ledgerId) return;
@@ -60,10 +52,17 @@ export function AccountsScreenDesktop() {
     });
   };
 
+  // 点击账户：弹层打开账户详情（与移动端详情页同一套内容）。
+  const openDetail = (accountId: string) => {
+    push({
+      hideDefaultHeader: true,
+      content: <AccountDetailPanel accountId={accountId} onClose={pop} />,
+    });
+  };
+
   return (
     <MobileAppShell>
-      <div className="desktop-accounts desktop-page--wide">
-      <aside className="desktop-accounts__list">
+      <div className="desktop-accounts-single">
         <div className="desktop-accounts__list-head">
           <h1 className="desktop-page-title">账户</h1>
           {sortMode ? (
@@ -71,19 +70,34 @@ export function AccountsScreenDesktop() {
               完成
             </Button>
           ) : (
-            <div className="flex items-center gap-2">
-              {canSort ? (
-                <Button
-                  icon={<ArrowUpDown size={16} />}
-                  onClick={() => setSortMode(true)}
-                  variant="secondary"
-                >
-                  排序
-                </Button>
-              ) : null}
-              <Button icon={<Plus size={16} />} onClick={openEditor} variant="secondary">
-                添加账户
-              </Button>
+            <div className="relative flex justify-end">
+              <IconButtonGroup
+                items={[
+                  {
+                    icon: <Ellipsis size={22} />,
+                    label: "更多",
+                    onClick: () => setMoreMenuOpen((open) => !open),
+                  },
+                ]}
+              />
+              <PopoverMenu
+                groups={[
+                  [
+                    { icon: <Plus size={18} />, label: "添加账户", onSelect: openEditor },
+                    ...(canSort
+                      ? [
+                          {
+                            icon: <ArrowUpDown size={18} />,
+                            label: "账户排序",
+                            onSelect: () => setSortMode(true),
+                          },
+                        ]
+                      : []),
+                  ],
+                ]}
+                onOpenChange={setMoreMenuOpen}
+                open={moreMenuOpen}
+              />
             </div>
           )}
         </div>
@@ -130,8 +144,7 @@ export function AccountsScreenDesktop() {
                         <AccountRow
                           account={account}
                           key={account.id}
-                          onSelect={() => setSelectedId(account.id)}
-                          selected={account.id === selectedId}
+                          onSelect={() => openDetail(account.id)}
                         />
                       ))}
                     </div>
@@ -141,17 +154,6 @@ export function AccountsScreenDesktop() {
             )}
           </>
         )}
-      </aside>
-
-      <main className="desktop-accounts__detail">
-        {selectedId ? (
-          <AccountDetailPanel accountId={selectedId} key={selectedId} />
-        ) : (
-          <div className="desktop-empty-pane">
-            <EmptyState title="选择左侧账户查看详情" />
-          </div>
-        )}
-      </main>
       </div>
     </MobileAppShell>
   );
@@ -160,11 +162,9 @@ export function AccountsScreenDesktop() {
 function AccountRow({
   account,
   onSelect,
-  selected,
 }: {
   account: Account;
   onSelect: () => void;
-  selected: boolean;
 }) {
   const liability = isLiability(account.type);
   const total = accountTotalMicros(account);
@@ -172,7 +172,7 @@ function AccountRow({
   const settled = Boolean(account.settledAt) && total === 0n;
   return (
     <button
-      className={`desktop-account-row${selected ? " desktop-account-row--selected" : ""} flex w-full items-center gap-3 px-4 py-3 text-left`}
+      className="desktop-account-row flex w-full items-center gap-3 px-4 py-3 text-left"
       onClick={onSelect}
       type="button"
     >
@@ -213,9 +213,11 @@ function AccountRow({
   );
 }
 
-/** 右侧详情面板：复用 useAccountDetailModel；余额调整/关联记录等走 Modal（桌面 SheetShell 分支）。 */
-function AccountDetailPanel({ accountId }: { accountId: string }) {
-  const { push } = useSheetStack();
+/** 账户详情弹层：复用 useAccountDetailModel；余额调整/关联记录等再叠一层 Modal（桌面 SheetShell 分支）。 */
+function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose: () => void }) {
+  const { push, pop } = useSheetStack();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [sortMode, setSortMode] = useState(false);
   const model = useAccountDetailModel(accountId);
   const { account, isLend, entries, adjustmentEntries, transactions } = model;
 
@@ -235,6 +237,7 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
   const hasMultipleSubAccounts = namedSubAccounts.length > 1;
   const showRelatedRecordsLink = !hasSplitSubAccounts;
   const showAdjustmentRecordsLink = !hasMultipleSubAccounts;
+  const canSortSubAccounts = hasSplitSubAccounts;
   const subAccountRows = orderedSubAccountRows(account);
 
   const openEditor = () =>
@@ -284,13 +287,15 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
       title: "资金变动记录",
       content: <AccountEntryListSheet accountType={account.type} entries={entries} />,
     });
-  const openSubList = () =>
+  const openSubDetail = (subAccount: SubAccount) =>
     push({
-      title: "子账户",
+      hideDefaultHeader: true,
       content: (
-        <div className="desktop-subaccount-list">
-          {subAccountRows.map((row) => renderSubRow(row.sub))}
-        </div>
+        <SubAccountDetailPanel
+          accountId={account.id}
+          onClose={pop}
+          subAccountId={subAccount.id}
+        />
       ),
     });
 
@@ -334,9 +339,14 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
     });
   }
 
-  // 桌面用可见的编辑/删除按钮替代移动端滑动操作。
+  // 与移动端一致：行本身可点击进入子账户详情，编辑/删除收进详情页的「更多」菜单。
   const renderSubRow = (subAccount: SubAccount) => (
-    <div className="desktop-subaccount-row flex w-full items-center gap-3 px-4 py-3" key={subAccount.id}>
+    <button
+      className="desktop-subaccount-row flex w-full items-center gap-3 px-4 py-3 text-left"
+      key={subAccount.id}
+      onClick={() => openSubDetail(subAccount)}
+      type="button"
+    >
       <span className="flex-1 truncate text-[15px] text-[var(--color-text-primary)]">
         <span className="mr-2">{subAccount.icon ?? "💵"}</span>
         {subAccount.name}
@@ -344,46 +354,75 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
       <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
         {formatMoney(subAccount.balanceMicros)}
       </span>
-      <div className="desktop-subaccount-row__actions flex shrink-0 items-center gap-1">
-        <IconButton
-          icon={<Pencil size={16} />}
-          label={`修改${subAccount.name}余额`}
-          onClick={() => openBalanceEdit(subAccount)}
-        />
-        {subAccount.isDefault ? null : (
-          <IconButton
-            icon={<Trash2 size={16} />}
-            label={`删除${subAccount.name}`}
-            onClick={() => void model.requestDeleteSub(subAccount)}
-          />
-        )}
-      </div>
-    </div>
+      <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
+    </button>
   );
 
+  // 头部操作收进「更多」菜单（与移动端一致）。
+  const accountMenuGroups: MenuItem[][] = [
+    [
+      ...(moneyAccount
+        ? [{ icon: <Plus size={18} />, label: "添加子账户", onSelect: openSubAdd }]
+        : []),
+      ...(canSortSubAccounts
+        ? [
+            {
+              icon: <ArrowUpDown size={18} />,
+              label: "子账户排序",
+              onSelect: () => setSortMode(true),
+            },
+          ]
+        : []),
+      { icon: <Pencil size={18} />, label: "编辑账户", onSelect: openEditor },
+    ],
+    [
+      {
+        danger: true,
+        icon: <Trash2 size={18} />,
+        label: "删除账户",
+        onSelect: () => void model.requestDeleteAccount(),
+      },
+    ],
+  ];
+
   return (
-    <div className="desktop-detail-scroll">
+    <div className="desktop-account-detail-dialog">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-[var(--color-text-primary)]">{account.name}</h2>
-        <div className="flex items-center gap-2">
-          <Button icon={<Pencil size={15} />} onClick={openEditor} variant="secondary">
-            编辑
-          </Button>
-          {moneyAccount ? (
-            <Button icon={<Plus size={15} />} onClick={openSubAdd} variant="secondary">
-              子账户
+        <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--color-text-primary)]">
+          {account.name}
+        </h2>
+        <div className="flex shrink-0 items-center gap-2">
+          {sortMode ? (
+            <Button onClick={() => setSortMode(false)} variant="primary">
+              完成
             </Button>
-          ) : null}
-          <Button
-            icon={<Trash2 size={15} />}
-            onClick={() => void model.requestDeleteAccount()}
-            variant="danger"
-          >
-            删除
-          </Button>
+          ) : (
+            <div className="relative flex">
+              <IconButtonGroup
+                items={[
+                  {
+                    icon: <Ellipsis size={22} />,
+                    label: "更多",
+                    onClick: () => setMenuOpen((open) => !open),
+                  },
+                ]}
+              />
+              <PopoverMenu groups={accountMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+            </div>
+          )}
+          <IconButton icon={<X size={18} />} label="关闭" onClick={onClose} />
         </div>
       </div>
 
+      {sortMode ? (
+        <section className="mt-2">
+          <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
+            按住右侧图标拖动排序，默认子账户也可调整位置。
+          </p>
+          <SubAccountsSortList onReorder={model.handleReorderSub} rows={subAccountRows} />
+        </section>
+      ) : (
+        <>
       <AccountBalanceCard
         accountType={account.type}
         balanceColor={
@@ -423,8 +462,15 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
       ) : null}
 
       {moneyAccount && hasSplitSubAccounts ? (
-        <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-          <DetailLinkRow count={subAccountRows.length} label="子账户" onClick={openSubList} />
+        <section className="mt-6">
+          <div className="flex items-center justify-between px-1 pb-2">
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h3>
+          </div>
+          <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            <div className="divide-y divide-black/[0.06]">
+              {subAccountRows.map((row) => renderSubRow(row.sub))}
+            </div>
+          </div>
         </section>
       ) : null}
 
@@ -467,6 +513,162 @@ function AccountDetailPanel({ accountId }: { accountId: string }) {
           </Button>
         </div>
       ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 子账户详情弹层：内容对齐移动端子账户详情页；删除走父账户模型（避免桌面下 router 跳转）。 */
+function SubAccountDetailPanel({
+  accountId,
+  onClose,
+  subAccountId,
+}: {
+  accountId: string;
+  onClose: () => void;
+  subAccountId: string;
+}) {
+  const { push } = useSheetStack();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const model = useSubAccountDetailModel(accountId, subAccountId);
+  const accountModel = useAccountDetailModel(accountId);
+  const { account, subAccount, isDefaultSubAccount, transactions, entries, adjustmentEntries } =
+    model;
+
+  // 子账户被删除后（父账户模型删除成功并刷新列表）自动关闭本弹层。
+  useEffect(() => {
+    if (!model.isLoading && model.ledgerId && !subAccount) onClose();
+  }, [model.isLoading, model.ledgerId, subAccount, onClose]);
+
+  if (model.isLoading || !model.ledgerId) return <LoadingState rows={5} title="加载子账户" />;
+  if (!account || !subAccount) return <EmptyState title="子账户不存在或已删除" />;
+
+  const ledgerId = model.ledgerId;
+  const meta = accountGroupMeta(account.type);
+  const subAccountName = subAccount.name;
+  const subAccountIcon = subAccount.icon ?? "💵";
+  const subAccountBalance = BigInt(subAccount.balanceMicros);
+
+  const openBalanceEdit = () =>
+    push({
+      hideDefaultHeader: true,
+      content: (
+        <BalanceEditSheet
+          accountId={account.id}
+          allowNegative={account.type !== "credit"}
+          initialBalance={microsToInput(subAccountBalance.toString())}
+          ledgerId={ledgerId}
+          offsetMicros="0"
+          subAccountId={subAccount.id}
+          title={`修改余额 · ${subAccountName}`}
+        />
+      ),
+    });
+  const openRename = () =>
+    push({
+      className: "ui-bottom-sheet--account-form",
+      hideDefaultHeader: true,
+      content: (
+        <AccountEditorSheet ledgerId={ledgerId} parentAccount={account} subAccount={subAccount} />
+      ),
+    });
+  const openRelatedRecords = () =>
+    push({
+      title: "关联记录",
+      content: (
+        <RelatedTransactionList
+          accountId={account.id}
+          emptyText="还没有使用该子账户的记账"
+          ledgerId={ledgerId}
+          subAccountId={subAccount.id}
+        />
+      ),
+    });
+  const openAdjustmentRecords = () =>
+    push({
+      title: "余额修改记录",
+      content: <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />,
+    });
+
+  const subMenuGroups: MenuItem[][] = [
+    [{ icon: <Pencil size={18} />, label: "编辑子账户", onSelect: openRename }],
+    ...(!isDefaultSubAccount
+      ? [
+          [
+            {
+              danger: true,
+              icon: <Trash2 size={18} />,
+              label: "删除子账户",
+              onSelect: () => void accountModel.requestDeleteSub(subAccount),
+            },
+          ],
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="desktop-account-detail-dialog">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-[var(--color-text-primary)]">
+          {account.name} · {subAccountName}
+        </h2>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="relative flex">
+            <IconButtonGroup
+              items={[
+                {
+                  icon: <Ellipsis size={22} />,
+                  label: "更多",
+                  onClick: () => setMenuOpen((open) => !open),
+                },
+              ]}
+            />
+            <PopoverMenu groups={subMenuGroups} onOpenChange={setMenuOpen} open={menuOpen} />
+          </div>
+          <IconButton icon={<X size={18} />} label="关闭" onClick={onClose} />
+        </div>
+      </div>
+
+      <AccountBalanceCard
+        accountType={account.type}
+        balanceLabel="子账户余额"
+        balanceMicros={subAccountBalance.toString()}
+        entries={entries}
+        icon={subAccountIcon}
+        name={`${account.name} · ${subAccountName}`}
+        subtitle={`子账户 · ${meta.name}`}
+      />
+
+      <div className="mt-4 flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
+          <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+            开启后该子账户余额不计入净资产统计
+          </p>
+        </div>
+        <Switch
+          checked={subAccount.includeInNetWorth === false}
+          disabled={model.updateSubNetWorth.isPending}
+          label="不计入总资产"
+          onCheckedChange={(checked) => model.updateSubNetWorth.mutate(!checked)}
+        />
+      </div>
+
+      <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+        <DetailLinkRow count={transactions.length} label="关联记录" onClick={openRelatedRecords} />
+        <DetailLinkRow
+          count={adjustmentEntries.length}
+          label="余额修改记录"
+          onClick={openAdjustmentRecords}
+        />
+      </section>
+
+      <div className="mt-6">
+        <Button block onClick={openBalanceEdit} variant="secondary">
+          修改余额
+        </Button>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAutoPending } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
@@ -65,9 +66,7 @@ export function DesktopSidebar() {
   return (
     <aside className="desktop-sidebar">
       <div className="desktop-sidebar__brand">
-        <span className="desktop-sidebar__brand-mark" aria-hidden>
-          🐣
-        </span>
+        <AppLogo className="desktop-sidebar__brand-mark" size={30} />
         <div className="min-w-0">
           <p className="desktop-sidebar__brand-name">Fin Nest</p>
           <p className="desktop-sidebar__brand-sub">{currentLedger?.name ?? "未选择账本"}</p>

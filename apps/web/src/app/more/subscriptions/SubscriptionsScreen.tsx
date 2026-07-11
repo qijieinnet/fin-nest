@@ -36,6 +36,7 @@ import {
   type SubscriptionCategory,
 } from "@/lib/api";
 import { useSubscriptionCategories, useSubscriptions } from "@/lib/data/records";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { cn } from "@/lib/format/class-names";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -342,6 +343,7 @@ export function SubscriptionsScreen() {
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
+  const isDesktop = useIsDesktop();
   const subscriptionsQuery = useSubscriptions(ledgerId);
   const categoriesQuery = useSubscriptionCategories(ledgerId);
   const [pendingDelete, setPendingDelete] = useState<Subscription | null>(null);
@@ -689,6 +691,21 @@ export function SubscriptionsScreen() {
               />
               <PopoverMenu
                 groups={[
+                  // 桌面端把「添加订阅」收进更多菜单；移动端保留右下角悬浮按钮。
+                  ...(isDesktop
+                    ? [
+                        [
+                          {
+                            icon: <Plus size={18} />,
+                            label: "添加订阅",
+                            onSelect: () => {
+                              setMoreMenuOpen(false);
+                              openEditor();
+                            },
+                          },
+                        ],
+                      ]
+                    : []),
                   [
                     {
                       icon: allGroupsCollapsed ? (
@@ -833,7 +850,7 @@ export function SubscriptionsScreen() {
       </MobilePage>
       <EdgeFade />
 
-      {!sortMode ? (
+      {!isDesktop && !sortMode ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
           <div className="relative w-[min(100vw,430px)]">
             <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">

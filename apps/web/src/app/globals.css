@@ -4439,8 +4439,9 @@ select:focus-visible {
 }
 
 .desktop-sidebar__brand-mark {
-  font-size: 26px;
-  line-height: 1;
+  flex-shrink: 0;
+  display: block;
+  border-radius: 8px;
 }
 
 .desktop-sidebar__brand-name {
@@ -4901,12 +4902,13 @@ select:focus-visible {
   color: var(--color-text-primary);
 }
 
-.desktop-accounts {
-  display: grid;
-  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
-  gap: 28px;
+.desktop-accounts-single {
   padding: 24px 0 48px;
-  align-items: start;
+}
+
+/* 账户详情弹层内容较宽（头部含编辑/子账户/删除按钮），放宽默认 Modal 宽度。 */
+.desktop-dialog-panel--modal:has(.desktop-account-detail-dialog) {
+  width: min(92vw, 560px);
 }
 
 .desktop-accounts__list-head {
@@ -4916,53 +4918,10 @@ select:focus-visible {
   margin-bottom: 16px;
 }
 
-.desktop-accounts__detail {
-  position: sticky;
-  top: 24px;
-}
-
-.desktop-empty-pane {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-  border-radius: 18px;
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-soft);
-}
-
-.desktop-detail-scroll {
-  max-height: calc(100dvh - 48px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
-}
-
-.desktop-account-row--selected {
-  background: var(--color-tint-soft);
-}
-
-.desktop-subaccount-row__actions {
-  opacity: 0.55;
-  transition: opacity 0.15s ease;
-}
-
-/* 子账户弹窗：直接列出行、行间分隔线，卡片不带阴影。 */
-.desktop-subaccount-list > .desktop-subaccount-row {
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-}
-
-.desktop-subaccount-list > .desktop-subaccount-row:last-child {
-  box-shadow: none;
-}
-
 @media (hover: hover) {
-  .desktop-account-row:hover:not(.desktop-account-row--selected) {
+  .desktop-account-row:hover,
+  .desktop-subaccount-row:hover {
     background: var(--color-control-fill-muted);
-  }
-
-  .desktop-subaccount-row:hover .desktop-subaccount-row__actions {
-    opacity: 1;
   }
 }
 

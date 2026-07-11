@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   defaultFilterValue,
@@ -10,7 +10,7 @@ import {
   LoadingState,
   MoneyText,
 } from "@/components/business";
-import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu } from "@/components/ui";
+import { IconButtonGroup, MobileAppShell, PopoverMenu } from "@/components/ui";
 import type { Account, BatchUpdateField, Transaction } from "@/lib/api";
 import {
   accountName,
@@ -20,8 +20,7 @@ import {
 } from "@/lib/data/options";
 import { formatMicros } from "@/lib/money";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
-import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
-import { EditBillScreen } from "./[transactionId]/edit/EditBillScreen";
+import { BillDetailScreen } from "./[transactionId]/BillDetailScreen";
 import { BatchEditDialog, type BatchFieldPatch } from "./_components/BatchEditDialog";
 import { NewBillFormScreen } from "./_components/NewBillFormScreen";
 import { useBillsModel } from "./_model/useBillsModel";
@@ -83,20 +82,15 @@ function toRow(
   };
 }
 
-/** 桌面账单页：左侧交易表格（无限滚动）+ 右侧详情面板；顶部汇总条 + 记一笔（N 快捷键）。 */
+/** 桌面账单页：交易表格（无限滚动）+ 顶部汇总条 + 记一笔（N 快捷键）；点击行以弹层打开详情。 */
 export function BillsScreenDesktop() {
-  const { push, clear } = useSheetStack();
+  const { push, pop, clear } = useSheetStack();
   const decimalPlaces = useDecimalPlaces();
   const [filterOpen, setFilterOpen] = useState(false);
 
   const model = useBillsModel();
   const { totals, transactions, accounts, categoryLookup } = model;
   const balanceMicros = model.balanceMicros;
-
-  // 桌面屏仅在客户端断点检测后挂载，window 一定可用；初始选中读 ?tx。
-  const [selectedId, setSelectedId] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get("tx"),
-  );
 
   // 批量修改：多选行 + 当前打开的字段编辑弹窗。
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
@@ -115,16 +109,6 @@ export function BillsScreenDesktop() {
     });
   }, []);
 
-  // 选中项写回 URL（?tx=<id>），不做整页跳转。
-  const selectTx = useCallback((id: string | null) => {
-    setSelectedId(id);
-    const params = new URLSearchParams(window.location.search);
-    if (id) params.set("tx", id);
-    else params.delete("tx");
-    const qs = params.toString();
-    window.history.replaceState(window.history.state, "", qs ? `?${qs}` : window.location.pathname);
-  }, []);
-
   const openRecord = useCallback(() => {
     push({
       className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
@@ -133,15 +117,16 @@ export function BillsScreenDesktop() {
     });
   }, [push, clear]);
 
-  const openEdit = useCallback(
+  // 点击某行：打开账单详情弹层（与统计页下钻进入的记录详情同一套 sheet 样式）。
+  const openDetail = useCallback(
     (id: string) => {
       push({
-        className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
+        className: "ui-bottom-sheet--sheet-form",
         hideDefaultHeader: true,
-        content: <EditBillScreen embedded onClose={() => clear()} transactionId={id} />,
+        content: <BillDetailScreen embedded onClose={pop} transactionId={id} />,
       });
     },
-    [push, clear],
+    [push, pop],
   );
 
   // 全局快捷键：N 记一笔、/ 打开筛选（输入态与已有弹层时忽略）。
@@ -164,8 +149,6 @@ export function BillsScreenDesktop() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [openRecord]);
-
-  const selected = transactions.find((t) => t.id === selectedId) ?? null;
 
   const allLoadedSelected =
     transactions.length > 0 && transactions.every((t) => selectedIds.has(t.id));
@@ -279,7 +262,7 @@ export function BillsScreenDesktop() {
           </div>
         </header>
 
-        <div className={`desktop-bills__body${selected ? "" : " desktop-bills__body--full"}`}>
+        <div className="desktop-bills__body desktop-bills__body--full">
           <section className="desktop-bills__table-wrap">
             {model.transactionsQuery.isPending ? (
               <LoadingState rows={6} title="加载账单" />
@@ -316,9 +299,9 @@ export function BillsScreenDesktop() {
                       const checked = selectedIds.has(transaction.id);
                       return (
                         <tr
-                          className={`desktop-table__row${transaction.id === selectedId ? " desktop-table__row--selected" : ""}${checked ? " desktop-table__row--checked" : ""}`}
+                          className={`desktop-table__row${checked ? " desktop-table__row--checked" : ""}`}
                           key={transaction.id}
-                          onClick={() => selectTx(transaction.id)}
+                          onClick={() => openDetail(transaction.id)}
                         >
                           <td
                             className="desktop-table__check"
@@ -362,19 +345,6 @@ export function BillsScreenDesktop() {
             )}
           </section>
 
-          {selected ? (
-            <aside className="desktop-bills__detail">
-              <TxDetailPanel
-                accounts={accounts}
-                categoryLookup={categoryLookup}
-                decimalPlaces={decimalPlaces}
-                onClose={() => selectTx(null)}
-                onDelete={() => model.setTransactionPendingDelete(selected)}
-                onEdit={() => openEdit(selected.id)}
-                transaction={selected}
-              />
-            </aside>
-          ) : null}
         </div>
       </div>
 
@@ -389,21 +359,6 @@ export function BillsScreenDesktop() {
         open={filterOpen}
         personOptions={model.filterPersonOptions}
         value={model.filterValue}
-      />
-
-      <DeleteBillConfirmDialog
-        deleting={model.deleteMutation.isPending}
-        onCancel={() => {
-          if (!model.deleteMutation.isPending) model.setTransactionPendingDelete(null);
-        }}
-        onConfirm={() => {
-          if (model.transactionPendingDelete && !model.deleteMutation.isPending) {
-            const removedId = model.transactionPendingDelete.id;
-            model.deleteMutation.mutate(removedId);
-            if (removedId === selectedId) selectTx(null);
-          }
-        }}
-        transaction={model.transactionPendingDelete}
       />
 
       <BatchEditDialog
@@ -442,60 +397,6 @@ function Figure({
         tone={tone}
       />
       <span className="sr-only">{formatMicros(micros, { decimalPlaces })}</span>
-    </div>
-  );
-}
-
-function TxDetailPanel({
-  accounts,
-  categoryLookup,
-  onClose,
-  onDelete,
-  onEdit,
-  transaction,
-}: {
-  accounts: Account[];
-  categoryLookup: CategoryLookup;
-  decimalPlaces: number;
-  onClose: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-  transaction: Transaction;
-}) {
-  const row = toRow(transaction, accounts, categoryLookup);
-  const rows: Array<{ label: string; value: string }> = [
-    { label: "日期", value: (transaction.occurredOn ?? "").slice(0, 10) },
-    { label: "小类", value: `${row.categoryIcon} ${row.subcategoryName}` },
-    { label: "大类", value: row.parentCategoryName || "—" },
-    { label: "账户", value: row.accountLabel || "—" },
-    ...(row.isTransfer ? [] : [{ label: "人员", value: row.personName || "—" }]),
-    { label: "备注", value: row.note || "—" },
-  ];
-  return (
-    <div className="desktop-detail-scroll">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <MoneyText
-          amountMicros={transaction.grossAmountMicros}
-          className="desktop-amount text-[28px] font-bold [font-variant-numeric:tabular-nums]"
-          tone={transaction.type}
-        />
-        <div className="flex items-center gap-1">
-          <IconButton icon={<Pencil size={18} />} label="编辑" onClick={onEdit} />
-          <IconButton icon={<Trash2 size={18} />} label="删除" onClick={onDelete} />
-          <IconButton icon={<X size={18} />} label="关闭" onClick={onClose} />
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-        {rows.map((r) => (
-          <div
-            className="flex items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
-            key={r.label}
-          >
-            <span className="w-16 shrink-0 text-sm text-[var(--color-text-muted)]">{r.label}</span>
-            <span className="min-w-0 flex-1 text-sm text-[var(--color-text-primary)]">{r.value}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
