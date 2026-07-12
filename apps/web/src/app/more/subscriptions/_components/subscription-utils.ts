@@ -70,12 +70,28 @@ export type SubscriptionStatus = {
   tone: "active" | "dueSoon" | "terminated";
 };
 
+/** 「即将续费」提前提醒天数，按计费周期区分；自定义/未知周期用 2 天。 */
+export function dueSoonWindowDays(cycle: string | null): number {
+  switch (cycle) {
+    case "weekly":
+      return 2;
+    case "monthly":
+      return 7;
+    case "quarterly":
+      return 14;
+    case "yearly":
+      return 14;
+    default:
+      return 2;
+  }
+}
+
 export function subscriptionStatus(
-  subscription: Pick<Subscription, "terminatedAt" | "nextRenewalDate">,
+  subscription: Pick<Subscription, "terminatedAt" | "nextRenewalDate" | "billingCycle">,
 ): SubscriptionStatus {
   if (subscription.terminatedAt) return { key: "terminated", label: "已退订", tone: "terminated" };
   const days = daysUntilRenewal(subscription);
-  if (days !== null && days >= 0 && days <= 31) {
+  if (days !== null && days >= 0 && days <= dueSoonWindowDays(subscription.billingCycle)) {
     return { key: "dueSoon", label: "即将续费", tone: "dueSoon" };
   }
   return { key: "active", label: "使用中", tone: "active" };
