@@ -592,7 +592,9 @@ export function useTransactionFormModel({
         name: file.name,
         contentType: file.type,
         sizeBytes: file.size,
-        url: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+        // 新选附件用本地 blob URL 预览/下载（含 PDF/视频等）；其 id 是客户端临时 id，
+        // 尚未落库，绝不能拿它去请求服务器 /attachments/:id/content。
+        url: URL.createObjectURL(file),
         file,
       })),
     ]);

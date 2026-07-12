@@ -6,6 +6,8 @@ export const queryKeys = {
   ledgers: ["ledgers"] as const,
   ledger: (ledgerId: string) => ["ledger", ledgerId] as const,
   ledgerMembers: (ledgerId: string) => ["ledger", ledgerId, "members"] as const,
+  transactionCreators: (ledgerId: string) =>
+    ["ledger", ledgerId, "transaction-creators"] as const,
   ledgerJoinRequests: (ledgerId: string) => ["ledger", ledgerId, "join-requests"] as const,
   reminderSummary: (ledgerId: string) => ["ledger", ledgerId, "reminder-summary"] as const,
   categories: (ledgerId: string) => ["ledger", ledgerId, "categories"] as const,

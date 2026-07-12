@@ -50,6 +50,14 @@ export type LedgerMember = {
   account: string;
 };
 
+/** 记账人候选：当前成员 + 有记账记录的已移除成员（removed=true）。 */
+export type TransactionCreator = {
+  userId: string;
+  alias: string;
+  account: string;
+  removed: boolean;
+};
+
 export type LedgerInvite = {
   id: string;
   ledgerId: string;
@@ -314,6 +322,8 @@ export type TransactionListQuery = {
   createdBy?: string;
   dateFrom?: string;
   dateTo?: string;
+  createdFrom?: string;
+  createdTo?: string;
   amountMinMicros?: string;
   amountMaxMicros?: string;
   note?: string;

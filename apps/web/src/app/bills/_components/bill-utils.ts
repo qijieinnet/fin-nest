@@ -95,6 +95,10 @@ export function filterToQuery(
   if (account.subAccountId) query.subAccountId = account.subAccountId;
   const personId = value.personIds?.[0] ?? value.personId ?? undefined;
   if (personId) query.personId = personId;
+  const createdBy = value.creatorIds?.[0] ?? value.creatorId ?? undefined;
+  if (createdBy) query.createdBy = createdBy;
+  if (value.createdFrom) query.createdFrom = value.createdFrom;
+  if (value.createdTo) query.createdTo = value.createdTo;
   if (value.keyword) query.note = value.keyword;
 
   if (value.amountMin) {

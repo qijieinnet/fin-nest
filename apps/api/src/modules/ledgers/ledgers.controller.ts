@@ -66,6 +66,12 @@ export class LedgersController {
     return this.ledgers.listMembers(ledgerId, (auth as SessionAuthContext).userId);
   }
 
+  @Get("ledgers/:ledgerId/transaction-creators")
+  @ApiOkResponse({ description: "记账人候选：当前成员 + 有记账记录的已移除成员" })
+  transactionCreators(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
+    return this.ledgers.listTransactionCreators(ledgerId, (auth as SessionAuthContext).userId);
+  }
+
   @Delete("ledgers/:ledgerId/members/:userId")
   @ApiNoContentResponse()
   async removeMember(

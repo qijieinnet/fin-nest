@@ -604,6 +604,7 @@ select:focus-visible {
 
 .ui-surface--menu {
   border-radius: 22px;
+  border: 2px solid #ffffff;
 }
 
 .ui-surface--interactive {
@@ -3226,11 +3227,12 @@ select:focus-visible {
   align-items: flex-start;
   color: var(--color-text-primary);
   /* display: grid; */
-  gap: 6px;
+  gap: 12px;
   justify-items: start;
   margin-top: 12px;
   display: flex;
-  justify-content: space-between;
+  /* justify-content: space-between; */
+  justify-content: start;
 }
 
 .biz-transaction-group__header > strong {
@@ -3244,7 +3246,7 @@ select:focus-visible {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 22px;
+  gap: 12px;
   justify-content: flex-start;
 }
 
@@ -3755,6 +3757,67 @@ select:focus-visible {
 
 .biz-attachment-preview__nav--next {
   right: 4px;
+}
+
+.biz-attachment-preview__status {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.82);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 10px;
+  justify-content: center;
+}
+
+.biz-attachment-preview__spinner {
+  animation: ui-button-spin 0.85s linear infinite;
+}
+
+/* PDF：按容器宽度自渲染每页并纵向堆叠，移动端/桌面端一致可滚全部页面。 */
+.biz-pdf-viewer {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
+.biz-pdf-viewer__pages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  margin: 0 auto;
+  max-width: 900px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.biz-pdf-viewer__page {
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.biz-pdf-viewer__status {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.82);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 10px;
+  inset: 0;
+  justify-content: center;
+  pointer-events: none;
+  position: absolute;
+}
+
+.biz-pdf-viewer__spinner {
+  animation: ui-button-spin 0.85s linear infinite;
 }
 
 .biz-attachment__copy {
@@ -4475,7 +4538,9 @@ select:focus-visible {
   font-size: 15px;
   text-align: left;
   color: var(--color-text-secondary);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .desktop-nav-item--sub {

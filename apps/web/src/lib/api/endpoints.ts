@@ -41,6 +41,10 @@ export function ledgerMemberPath(ledgerId: string, userId: string): string {
   return ledgerApiPath(ledgerId, `/members/${encodeURIComponent(userId)}`);
 }
 
+export function ledgerTransactionCreatorsPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/transaction-creators");
+}
+
 export function ledgerInvitesPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/invites");
 }

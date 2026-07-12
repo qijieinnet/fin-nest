@@ -50,6 +50,18 @@ export class ListTransactionsQueryDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   dateTo?: string;
 
+  @ApiPropertyOptional({ example: "2026-06-01", description: "记录时间（createdAt）起始日，含当日" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  createdFrom?: string;
+
+  @ApiPropertyOptional({ example: "2026-06-30", description: "记录时间（createdAt）截止日，含当日" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  createdTo?: string;
+
   @ApiPropertyOptional({ example: "1000000" })
   @IsOptional()
   @IsString()

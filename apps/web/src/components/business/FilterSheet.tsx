@@ -134,7 +134,7 @@ export function FilterSheet({
 
   const tabs = useMemo(() => {
     const next: FilterTab[] = [];
-    if (hasField(fields, "dateRange")) next.push("时间");
+    if (hasField(fields, "dateRange") || hasField(fields, "createdRange")) next.push("时间");
     if (hasField(fields, "type") || hasField(fields, "category")) next.push("分类");
     if (hasField(fields, "account")) next.push("账户");
     if (
@@ -256,39 +256,70 @@ export function FilterSheet({
 
           {activeTab === "时间" ? (
             <>
-              <p className="biz-filter-label">时间范围</p>
-              <div className="biz-filter-chip-row">
-                {timePills.map((pill) => (
-                  <FilterChip
-                    key={pill.value}
-                    label={pill.label}
-                    onClick={() => patch({ timePreset: pill.value })}
-                    selected={(draft.timePreset ?? "month") === pill.value}
-                  />
-                ))}
-              </div>
-              {(draft.timePreset ?? "month") === "custom" ? (
-                <div className="biz-filter-date-range biz-filter-date-range--custom">
-                  <label className="biz-filter-date-cell">
-                    <span className="biz-filter-date-caption">开始日期</span>
-                    <input
-                      onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
-                      placeholder="选择日期"
-                      type="date"
-                      value={draft.dateFrom ?? ""}
-                    />
-                  </label>
-                  <span>—</span>
-                  <label className="biz-filter-date-cell">
-                    <span className="biz-filter-date-caption">结束日期</span>
-                    <input
-                      onChange={(event) => patch({ dateTo: event.currentTarget.value })}
-                      placeholder="选择日期"
-                      type="date"
-                      value={draft.dateTo ?? ""}
-                    />
-                  </label>
-                </div>
+              {hasField(fields, "dateRange") ? (
+                <>
+                  <p className="biz-filter-label">记账日期</p>
+                  <div className="biz-filter-chip-row">
+                    {timePills.map((pill) => (
+                      <FilterChip
+                        key={pill.value}
+                        label={pill.label}
+                        onClick={() => patch({ timePreset: pill.value })}
+                        selected={(draft.timePreset ?? "month") === pill.value}
+                      />
+                    ))}
+                  </div>
+                  {(draft.timePreset ?? "month") === "custom" ? (
+                    <div className="biz-filter-date-range biz-filter-date-range--custom">
+                      <label className="biz-filter-date-cell">
+                        <span className="biz-filter-date-caption">开始日期</span>
+                        <input
+                          onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
+                          placeholder="选择日期"
+                          type="date"
+                          value={draft.dateFrom ?? ""}
+                        />
+                      </label>
+                      <span>—</span>
+                      <label className="biz-filter-date-cell">
+                        <span className="biz-filter-date-caption">结束日期</span>
+                        <input
+                          onChange={(event) => patch({ dateTo: event.currentTarget.value })}
+                          placeholder="选择日期"
+                          type="date"
+                          value={draft.dateTo ?? ""}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {hasField(fields, "createdRange") ? (
+                <>
+                  <p className="biz-filter-label">记录时间（按入账当天筛选）</p>
+                  <div className="biz-filter-date-range biz-filter-date-range--custom">
+                    <label className="biz-filter-date-cell">
+                      <span className="biz-filter-date-caption">开始日期</span>
+                      <input
+                        onChange={(event) => patch({ createdFrom: event.currentTarget.value })}
+                        placeholder="选择日期"
+                        type="date"
+                        value={draft.createdFrom ?? ""}
+                      />
+                    </label>
+                    <span>—</span>
+                    <label className="biz-filter-date-cell">
+                      <span className="biz-filter-date-caption">结束日期</span>
+                      <input
+                        onChange={(event) => patch({ createdTo: event.currentTarget.value })}
+                        placeholder="选择日期"
+                        type="date"
+                        value={draft.createdTo ?? ""}
+                      />
+                    </label>
+                  </div>
+                </>
               ) : null}
             </>
           ) : null}

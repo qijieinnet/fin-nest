@@ -7,6 +7,7 @@ import {
   ChevronRight,
   FileText,
   Image as ImageIcon,
+  Loader2,
   Paperclip,
   RotateCcw,
   Trash2,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { IconButton } from "@/components/ui";
 import type { AttachmentItem } from "./business-types";
+import { PdfPreview } from "./PdfPreview";
 
 function formatFileSize(sizeBytes?: number): string {
   if (!sizeBytes) return "";
@@ -34,7 +36,9 @@ type AttachmentPreviewProps = {
 type ActivePreview = {
   index: number;
   item: AttachmentItem;
-  url: string;
+  // url 在解析完成前为 null（此时展示加载态），解析失败为 status "error"。
+  url: string | null;
+  status: "loading" | "ready" | "error";
 };
 
 function isImage(item: AttachmentItem): boolean {
@@ -147,27 +151,39 @@ export function AttachmentPreview({
     return result;
   }
 
+  // 立即弹出遮罩并进入加载态，再异步解析 URL——避免大附件下载期间点击后「无反馈」。
   async function openPreviewAt(index: number) {
     const nextItem = previewItems[index];
     if (!nextItem) return;
-    const url = await resolveUrl(nextItem);
-    if (!url) return;
-    setActivePreview({ index, item: nextItem, url });
+    setActivePreview({ index, item: nextItem, url: null, status: "loading" });
     setZoom(1);
+    const url = await resolveUrl(nextItem);
+    setActivePreview((current) => {
+      // 期间用户可能已关闭或切到其他附件，仅更新仍指向本 item 的加载态。
+      if (!current || current.item.id !== nextItem.id) return current;
+      if (!url) return { ...current, status: "error" };
+      return { ...current, url, status: "ready" };
+    });
   }
 
   async function handleOpen(item: AttachmentItem) {
-    const url = await resolveUrl(item);
-    if (!url) return;
     if (canPreviewInPage(item)) {
       const index = Math.max(
         0,
         previewItems.findIndex((candidate) => candidate.id === item.id),
       );
-      setActivePreview({ index, item, url });
+      setActivePreview({ index, item, url: null, status: "loading" });
       setZoom(1);
+      const url = await resolveUrl(item);
+      setActivePreview((current) => {
+        if (!current || current.item.id !== item.id) return current;
+        if (!url) return { ...current, status: "error" };
+        return { ...current, url, status: "ready" };
+      });
       return;
     }
+    const url = await resolveUrl(item);
+    if (!url) return;
     await downloadUrl(url, item.name);
   }
 
@@ -219,6 +235,7 @@ export function AttachmentPreview({
             onZoomIn={() => setZoom((current) => Math.min(4, current + 0.25))}
             onZoomOut={() => setZoom((current) => Math.max(0.5, current - 0.25))}
             position={`${activePreview.index + 1} / ${previewItems.length}`}
+            status={activePreview.status}
             url={activePreview.url}
             zoom={zoom}
           />,
@@ -338,6 +355,7 @@ function AttachmentFullscreenPreview({
   onZoomIn,
   onZoomOut,
   position,
+  status,
   url,
   zoom,
 }: {
@@ -350,10 +368,12 @@ function AttachmentFullscreenPreview({
   onZoomIn: () => void;
   onZoomOut: () => void;
   position: string;
-  url: string;
+  status: "loading" | "ready" | "error";
+  url: string | null;
   zoom: number;
 }) {
   const image = isImage(item);
+  const showZoomControls = image && status === "ready";
   return (
     <div className="biz-attachment-preview">
       <button
@@ -368,7 +388,7 @@ function AttachmentFullscreenPreview({
           {hasMultiple ? <small>{position}</small> : null}
         </div>
         <div className="biz-attachment-preview__actions">
-          {image ? (
+          {showZoomControls ? (
             <>
               <IconButton
                 icon={<ZoomOut size={17} />}
@@ -405,10 +425,21 @@ function AttachmentFullscreenPreview({
             <ChevronLeft size={24} />
           </button>
         ) : null}
-        {image ? (
+        {status === "loading" ? (
+          <div className="biz-attachment-preview__status" role="status">
+            <Loader2 className="biz-attachment-preview__spinner" size={26} />
+            <span>正在加载附件…</span>
+          </div>
+        ) : status === "error" || !url ? (
+          <div className="biz-attachment-preview__status" role="alert">
+            <span>附件暂时无法预览</span>
+          </div>
+        ) : image ? (
           <img alt={item.name} src={url} style={{ transform: `scale(${zoom})` }} />
         ) : isVideo(item) ? (
           <video controls playsInline src={url} />
+        ) : isPdf(item) ? (
+          <PdfPreview url={url} />
         ) : (
           <iframe src={url} title={item.name} />
         )}

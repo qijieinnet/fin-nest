@@ -1,9 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { apiRequest, getApiErrorMessage, type LedgerMember, ledgerMembersPath, ledgerMemberPath } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useToast } from "@/providers";
+import { RemoveMemberConfirmDialog } from "./RemoveMemberConfirmDialog";
 
 function memberName(member: LedgerMember): string {
   return member.alias || member.account || `用户 ${member.userId.slice(0, 8)}`;
@@ -20,6 +22,7 @@ export function MembersSection({
 }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const [memberPendingRemove, setMemberPendingRemove] = useState<LedgerMember | null>(null);
 
   const membersQuery = useQuery({
     queryKey: queryKeys.ledgerMembers(ledgerId),
@@ -35,6 +38,7 @@ export function MembersSection({
         queryClient.invalidateQueries({ queryKey: queryKeys.ledgers }),
       ]);
       showToast({ tone: "success", message: "已移除成员" });
+      setMemberPendingRemove(null);
     },
     onError: (error) => {
       showToast({ tone: "error", message: getApiErrorMessage(error, "移除失败") });
@@ -74,7 +78,7 @@ export function MembersSection({
                   <button
                     className="shrink-0 text-sm font-medium text-[var(--color-accent-expense)] disabled:opacity-50"
                     disabled={removeMember.isPending}
-                    onClick={() => removeMember.mutate(member.userId)}
+                    onClick={() => setMemberPendingRemove(member)}
                     type="button"
                   >
                     移除
@@ -85,6 +89,19 @@ export function MembersSection({
           })}
         </ul>
       )}
+
+      <RemoveMemberConfirmDialog
+        memberName={memberPendingRemove ? memberName(memberPendingRemove) : null}
+        onCancel={() => {
+          if (!removeMember.isPending) setMemberPendingRemove(null);
+        }}
+        onConfirm={() => {
+          if (memberPendingRemove && !removeMember.isPending) {
+            removeMember.mutate(memberPendingRemove.userId);
+          }
+        }}
+        removing={removeMember.isPending}
+      />
     </section>
   );
 }

@@ -4,6 +4,7 @@ export type FilterField =
   | "account"
   | "amountRange"
   | "category"
+  | "createdRange"
   | "creator"
   | "dateRange"
   | "keyword"
@@ -21,6 +22,8 @@ export type BusinessFilterValue = {
   creatorIds?: string[];
   dateFrom?: string;
   dateTo?: string;
+  createdFrom?: string;
+  createdTo?: string;
   keyword?: string;
   personId?: string | null;
   personIds?: string[];

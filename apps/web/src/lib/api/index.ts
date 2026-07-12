@@ -18,6 +18,7 @@ export {
   ledgerMemberPath,
   ledgerMembersPath,
   ledgerPath,
+  ledgerTransactionCreatorsPath,
   rejectJoinRequestPath,
 } from "./endpoints";
 export { ApiClientError, getApiErrorMessage, isApiClientError } from "./errors";
@@ -86,6 +87,7 @@ export type {
   SubscriptionDetail,
   Transaction,
   TransactionAccountRelation,
+  TransactionCreator,
   TransactionDetail,
   TransactionInput,
   TransactionLink,

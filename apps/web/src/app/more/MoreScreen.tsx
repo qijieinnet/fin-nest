@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
+  KeyRound,
   LogOut,
   Package,
   RefreshCw,
@@ -11,8 +12,10 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { EdgeFade, MobileAppShell, MobileTabBar } from "@/components/ui";
-import { API_ENDPOINTS, apiRequest, clearSessionToken, getApiErrorMessage } from "@/lib/api";
+import { useState } from "react";
+import { EdgeFade, MobileAppShell, MobileTabBar, PopoverMenu } from "@/components/ui";
+import { API_ENDPOINTS, apiRequest, clearSessionToken } from "@/lib/api";
+import { ChangePasswordDialog } from "./_components/ChangePasswordDialog";
 import {
   useAutoPending,
   useAutoRules,
@@ -39,6 +42,8 @@ export function MoreScreen() {
   const insurancesQuery = useInsurances(currentLedger?.id ?? null);
   const itemsQuery = useItems(currentLedger?.id ?? null);
   const subscriptionsQuery = useSubscriptions(currentLedger?.id ?? null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   const logout = useMutation({
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
@@ -87,24 +92,52 @@ export function MoreScreen() {
   return (
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
-        {/* 用户信息卡片 */}
-        <section className="flex items-center gap-3.5 rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-          <span
-            aria-hidden
-            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-[var(--color-tint)] text-[23px] font-semibold text-[var(--color-tint-contrast)]"
+        {/* 用户信息卡片：点击弹出「修改密码 / 退出登录」选项 */}
+        <section className="relative">
+          <button
+            className="flex w-full items-center gap-3.5 rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] p-4 text-left shadow-[var(--shadow-soft)]"
+            onClick={() => setAccountMenuOpen((current) => !current)}
+            type="button"
           >
-            {avatarChar}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-lg font-bold text-[var(--color-text-primary)]">
-              {user?.alias ?? "未登录"}
-            </p>
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">
-                {subtitle}
-              </p>
-            ) : null}
-          </div>
+            <span
+              aria-hidden
+              className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-[var(--color-tint)] text-[23px] font-semibold text-[var(--color-tint-contrast)]"
+            >
+              {avatarChar}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[var(--color-text-primary)]">
+                {user?.alias ?? "未登录"}
+              </span>
+              {subtitle ? (
+                <span className="mt-0.5 block truncate text-xs text-[var(--color-text-secondary)]">
+                  {subtitle}
+                </span>
+              ) : null}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <PopoverMenu
+            align="end"
+            groups={[
+              [
+                {
+                  icon: <KeyRound size={18} />,
+                  label: "修改密码",
+                  onSelect: () => setPasswordDialogOpen(true),
+                },
+                {
+                  danger: true,
+                  disabled: logout.isPending,
+                  icon: <LogOut size={18} />,
+                  label: logout.isPending ? "退出中…" : "退出登录",
+                  onSelect: () => logout.mutate(),
+                },
+              ],
+            ]}
+            onOpenChange={setAccountMenuOpen}
+            open={accountMenuOpen}
+          />
         </section>
 
         {/* 账本管理入口 */}
@@ -310,23 +343,12 @@ export function MoreScreen() {
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>
-
-        {/* 退出登录 */}
-        <button
-          className="mt-6 flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--color-bg-surface)] text-base font-semibold text-[var(--color-accent-expense)] shadow-[var(--shadow-soft)] disabled:opacity-60"
-          disabled={logout.isPending}
-          onClick={() => logout.mutate()}
-          type="button"
-        >
-          <LogOut size={18} />
-          {logout.isPending ? "退出中…" : "退出登录"}
-        </button>
-        {logout.isError ? (
-          <p className="mt-3 text-center text-xs text-[var(--color-accent-expense)]">
-            {getApiErrorMessage(logout.error)}
-          </p>
-        ) : null}
       </main>
+
+      <ChangePasswordDialog
+        onClose={() => setPasswordDialogOpen(false)}
+        open={passwordDialogOpen}
+      />
 
       <EdgeFade />
       <MobileTabBar />

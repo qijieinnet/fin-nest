@@ -116,6 +116,46 @@ export class LedgersService {
     });
   }
 
+  /**
+   * 记账人候选：当前成员 ∪ 有记账记录的历史创建人（含已移除成员）。
+   * 供账单筛选「记账人」下拉使用；已移除成员标记 removed=true。
+   */
+  async listTransactionCreators(ledgerId: string, userId: string) {
+    await this.assertMember(ledgerId, userId);
+    const [members, creatorRows] = await Promise.all([
+      this.prisma.client.ledgerMember.findMany({
+        where: { ledgerId, removedAt: null },
+        orderBy: { joinedAt: "asc" },
+        select: { userId: true },
+      }),
+      this.prisma.client.transaction.findMany({
+        where: { ledgerId, deletedAt: null },
+        distinct: ["createdBy"],
+        select: { createdBy: true },
+      }),
+    ]);
+
+    const currentMemberIds = new Set(members.map((member) => member.userId));
+    // 当前成员在前（按加入顺序），其后追加仅在历史记录中出现的创建人。
+    const orderedIds = [
+      ...members.map((member) => member.userId),
+      ...creatorRows
+        .map((row) => row.createdBy)
+        .filter((id): id is string => Boolean(id) && !currentMemberIds.has(id)),
+    ];
+
+    const identities = await this.loadUserIdentities(orderedIds);
+    return orderedIds.map((id) => {
+      const identity = identities.get(id);
+      return {
+        userId: id,
+        alias: identity?.alias ?? "",
+        account: identity?.account ?? "",
+        removed: !currentMemberIds.has(id),
+      };
+    });
+  }
+
   async removeMember(ledgerId: string, targetUserId: string, actorUserId: string): Promise<void> {
     await this.assertOwner(ledgerId, actorUserId);
     const membership = await this.prisma.client.ledgerMember.findUnique({

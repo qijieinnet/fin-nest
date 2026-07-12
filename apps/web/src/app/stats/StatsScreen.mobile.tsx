@@ -227,11 +227,14 @@ export function StatsScreenMobile() {
                       className="flex h-full flex-1 flex-col items-center justify-end gap-2"
                       key={`${point.label}-${index}`}
                     >
-                      {denseTrend ? null : (
-                        <span className="text-[10px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
-                          {compactYuan(point.valueMicros)}
-                        </span>
-                      )}
+                      <span
+                        className={cn(
+                          "text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]",
+                          denseTrend ? "text-[8px]" : "text-[10px]",
+                        )}
+                      >
+                        {compactYuan(point.valueMicros)}
+                      </span>
                       <span
                         className={cn(
                           "block w-full rounded-t-[6px] rounded-b-[3px] transition-[height] duration-300",

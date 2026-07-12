@@ -6,6 +6,7 @@ import type {
   CategorySnapshot,
   Person,
   Transaction,
+  TransactionCreator,
   TransactionType,
 } from "@/lib/api";
 
@@ -228,6 +229,17 @@ export function relationAccountOptions(
 
 export function personOptions(people: Person[]): BusinessOption[] {
   return people.map((person) => ({ id: person.id, label: person.name }));
+}
+
+/** 记账人筛选项：以用户 id 为值，已移除成员标注「已移除」。 */
+export function creatorOptions(creators: TransactionCreator[]): BusinessOption[] {
+  return creators.map((creator) => {
+    const name = creator.alias || creator.account || `用户 ${creator.userId.slice(0, 8)}`;
+    return {
+      id: creator.userId,
+      label: creator.removed ? `${name}（已移除）` : name,
+    };
+  });
 }
 
 /** 把账户选择（可能是子账户 id）解析为 accountId + subAccountId。 */

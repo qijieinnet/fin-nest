@@ -30,6 +30,7 @@ import {
   type SubscriptionCategory,
   type SubscriptionDetail,
   type Transaction,
+  type TransactionCreator,
   type TransactionDetail,
   type TransactionListQuery,
   type TransactionSummary,
@@ -57,6 +58,16 @@ export function usePeople(ledgerId: string | null) {
   return useQuery({
     queryKey: queryKeys.people(ledgerId ?? "none"),
     queryFn: () => apiRequest<Person[]>(ledgerApiPath(ledgerId!, "/people")),
+    enabled: Boolean(ledgerId),
+    staleTime: 60_000,
+  });
+}
+
+export function useTransactionCreators(ledgerId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.transactionCreators(ledgerId ?? "none"),
+    queryFn: () =>
+      apiRequest<TransactionCreator[]>(ledgerApiPath(ledgerId!, "/transaction-creators")),
     enabled: Boolean(ledgerId),
     staleTime: 60_000,
   });

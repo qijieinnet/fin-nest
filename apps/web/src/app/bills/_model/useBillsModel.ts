@@ -15,6 +15,7 @@ import {
 import {
   buildCategoryLookup,
   categoryOptions,
+  creatorOptions,
   moneyAccountOptions,
   personOptions,
 } from "@/lib/data/options";
@@ -25,6 +26,7 @@ import {
   useCategories,
   useInfiniteTransactions,
   usePeople,
+  useTransactionCreators,
   useTransactionSummary,
 } from "@/lib/data/records";
 import { useDecimalPlaces, useLedger, useToast } from "@/providers";
@@ -69,6 +71,7 @@ export function useBillsModel() {
   const categoriesQuery = useCategories(ledgerId);
   const accountsQuery = useAccounts(ledgerId);
   const peopleQuery = usePeople(ledgerId);
+  const creatorsQuery = useTransactionCreators(ledgerId);
   const autoPendingQuery = useAutoPending(ledgerId);
   const pendingCount = autoPendingQuery.data?.length ?? 0;
 
@@ -130,6 +133,10 @@ export function useBillsModel() {
   const filterPersonOptions = useMemo(
     () => personOptions(peopleQuery.data ?? []),
     [peopleQuery.data],
+  );
+  const filterCreatorOptions = useMemo(
+    () => creatorOptions(creatorsQuery.data ?? []),
+    [creatorsQuery.data],
   );
 
   const budget = budgetQuery.data;
@@ -194,6 +201,7 @@ export function useBillsModel() {
     filterCategoryOptions,
     filterAccountOptions,
     filterPersonOptions,
+    filterCreatorOptions,
     sentinelRef,
     hasNextPage,
     isFetchingNextPage,

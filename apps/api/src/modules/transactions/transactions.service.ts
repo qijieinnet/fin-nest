@@ -76,6 +76,15 @@ export class TransactionsService {
         lte: query.dateTo ? parseDateOnly(query.dateTo) : undefined,
       };
     }
+    if (query.createdFrom || query.createdTo) {
+      // createdAt 是时间戳；截止日用「次日零点」的半开区间，覆盖当日全天。
+      where.createdAt = {
+        gte: query.createdFrom ? parseDateOnly(query.createdFrom) : undefined,
+        lt: query.createdTo
+          ? new Date(parseDateOnly(query.createdTo).getTime() + 24 * 60 * 60 * 1000)
+          : undefined,
+      };
+    }
     if (query.amountMinMicros || query.amountMaxMicros) {
       where.grossAmountMicros = {
         gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,

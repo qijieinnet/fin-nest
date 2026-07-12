@@ -352,7 +352,18 @@ export function BillsScreenDesktop() {
       <FilterSheet
         accountOptions={model.filterAccountOptions}
         categoryOptions={model.filterCategoryOptions}
-        fields={["type", "dateRange", "category", "account", "person", "amountRange", "keyword"]}
+        creatorOptions={model.filterCreatorOptions}
+        fields={[
+          "type",
+          "dateRange",
+          "createdRange",
+          "category",
+          "account",
+          "person",
+          "creator",
+          "amountRange",
+          "keyword",
+        ]}
         onApply={() => undefined}
         onChange={model.setFilterValue}
         onOpenChange={setFilterOpen}
