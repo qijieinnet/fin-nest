@@ -287,14 +287,15 @@ export function AutoScreen() {
             onClick={() => openDetail(rule)}
             type="button"
           >
-            <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)] text-[21px] opacity-[var(--auto-rule-dim,1)]">
+            {/* <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-control-fill-muted)] text-[21px] opacity-[var(--auto-rule-dim,1)]">
               {summary.icon}
-            </span>
+            </span> */}
             <span className="min-w-0 flex-1 opacity-[var(--auto-rule-dim,1)]">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-[15.5px] font-semibold text-[var(--color-text-primary)]">
-                  {summary.name}
+                  {rule.note ? <span className="truncate">{rule.note}</span> : summary.name}
                 </span>
+
                 <span
                   className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
                     rule.enabled
@@ -306,8 +307,7 @@ export function AutoScreen() {
                 </span>
               </span>
               <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                {transactionTypeLabel(rule.type)} · {nextLabel} · {meta}
-                {rule.note ? ` · ${rule.note}` : ""}
+                {transactionTypeLabel(rule.type)} · {summary.name} · {nextLabel} · {meta}
               </span>
             </span>
           </button>

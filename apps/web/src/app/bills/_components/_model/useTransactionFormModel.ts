@@ -39,7 +39,7 @@ import { createClientId } from "@/lib/id/client-id";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../../more/insurances/_components/insurance-utils";
-import { typeGlyph } from "../../../more/items/_components/item-utils";
+import { formatDateLabel, typeGlyph } from "../../../more/items/_components/item-utils";
 import { categoryGlyph } from "../../../more/subscriptions/_components/subscription-utils";
 import {
   buildPayload,
@@ -261,18 +261,24 @@ export function useTransactionFormModel({
   );
   const itemOptions = useMemo(
     () =>
-      (itemsQuery.data ?? []).map((item) => ({
-        id: item.id,
-        icon: typeGlyph(item.typeId ? itemTypeById.get(item.typeId) : null),
-        name: item.name,
-      })),
+      (itemsQuery.data ?? []).map((item) => {
+        const itemType = item.typeId ? itemTypeById.get(item.typeId) : null;
+        const descriptionParts = [
+          itemType?.name,
+          item.purchaseDate ? `${formatDateLabel(item.purchaseDate)}` : null,
+        ].filter(Boolean);
+        return {
+          id: item.id,
+          icon: typeGlyph(itemType),
+          name: item.name,
+          description: descriptionParts.length > 0 ? descriptionParts.join(" · ") : undefined,
+        };
+      }),
     [itemTypeById, itemsQuery.data],
   );
   const subscriptionCategoryById = useMemo(
     () =>
-      new Map(
-        (subscriptionCategoriesQuery.data ?? []).map((category) => [category.id, category]),
-      ),
+      new Map((subscriptionCategoriesQuery.data ?? []).map((category) => [category.id, category])),
     [subscriptionCategoriesQuery.data],
   );
   const subscriptionOptions = useMemo(
@@ -282,9 +288,7 @@ export function useTransactionFormModel({
         .map((subscription) => ({
           id: subscription.id,
           icon: categoryGlyph(
-            subscription.categoryId
-              ? subscriptionCategoryById.get(subscription.categoryId)
-              : null,
+            subscription.categoryId ? subscriptionCategoryById.get(subscription.categoryId) : null,
           ),
           name: subscription.name,
         })),

@@ -143,9 +143,7 @@ export function AutoRuleEditorSheet({
   );
   const initialAccountOptions = useMemo(() => moneyAccountOptions(accounts), [accounts]);
   const [accountId, setAccountId] = useState<string | null>(
-    rule
-      ? accountSelectionId(rule.accountId, rule.subAccountId)
-      : firstSelectableAccountOptionId(initialAccountOptions),
+    rule ? accountSelectionId(rule.accountId, rule.subAccountId) : null,
   );
   const [fromAccountId, setFromAccountId] = useState<string | null>(
     rule ? accountSelectionId(rule.fromAccountId, rule.fromSubAccountId) : null,
