@@ -175,6 +175,20 @@ export class SubscriptionsController {
     );
   }
 
+  @Post("subscriptions/:subscriptionId/confirm-renewal")
+  @ApiOkResponse()
+  confirmRenewal(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("subscriptionId") subscriptionId: string,
+  ) {
+    return this.assets.confirmSubscriptionRenewal(
+      ledgerId,
+      subscriptionId,
+      (auth as SessionAuthContext).userId,
+    );
+  }
+
   @Post("subscriptions/:subscriptionId/transactions")
   @ApiCreatedResponse()
   linkTransaction(

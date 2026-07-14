@@ -629,6 +629,9 @@ model Subscription {
   autoRenew       Boolean   @default(false) @map("auto_renew")
   startDate       DateTime? @map("start_date") @db.Date
   nextRenewalDate DateTime? @map("next_renewal_date") @db.Date
+  // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
+  remindLeadValue Int?      @map("remind_lead_value")
+  remindLeadUnit  String?   @map("remind_lead_unit")
   note            String?
   sortOrder       Int       @default(0) @map("sort_order")
   terminatedAt    DateTime? @map("terminated_at") @db.Timestamptz(6)

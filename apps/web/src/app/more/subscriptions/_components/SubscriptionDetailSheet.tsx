@@ -1,17 +1,24 @@
 "use client";
 
-import { ChevronRight, Edit3, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarCheck, ChevronRight, Edit3, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { useState } from "react";
 import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
+  apiRequest,
   type AttachmentRecord,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
+  type Subscription,
   type SubscriptionCategory,
 } from "@/lib/api";
 import { useAttachments, useSubscription } from "@/lib/data/records";
+import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
+import { DeleteSubscriptionConfirmDialog } from "./DeleteSubscriptionConfirmDialog";
+import { SubscriptionEditorSheet } from "./SubscriptionEditorSheet";
 import { SubscriptionTransactionList } from "./SubscriptionTransactionList";
 import {
   billingCycleLabel,
@@ -20,16 +27,18 @@ import {
   formatDateLabel,
   formatMoney,
   monthlyCostMicros,
+  remindLeadLabel,
+  renewalReminderDue,
   subscriptionStatus,
 } from "./subscription-utils";
 
 type SubscriptionDetailSheetProps = {
   categories: SubscriptionCategory[];
   ledgerId: string;
-  onDelete: () => void;
-  onEdit: () => void;
-  onResume: () => void;
-  onTerminate: () => void;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onResume?: () => void;
+  onTerminate?: () => void;
   resuming?: boolean;
   subscriptionId: string;
   terminating?: boolean;
@@ -82,14 +91,94 @@ export function SubscriptionDetailSheet({
   terminating = false,
 }: SubscriptionDetailSheetProps) {
   const { showToast } = useToast();
-  const { push } = useSheetStack();
+  const { push, pop } = useSheetStack();
+  const queryClient = useQueryClient();
   const detailQuery = useSubscription(ledgerId, subscriptionId);
   const attachmentsQuery = useAttachments(ledgerId, "subscription", subscriptionId);
   const subscription = detailQuery.data;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const invalidateSubscription = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscriptions(ledgerId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.subscription(ledgerId, subscriptionId) }),
+    ]);
+
+  const onMutationError = (error: unknown) =>
+    showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
+
+  const confirmRenewal = useMutation({
+    mutationFn: () =>
+      apiRequest<Subscription>(
+        ledgerApiPath(ledgerId, `/subscriptions/${subscriptionId}/confirm-renewal`),
+        { method: "POST" },
+      ),
+    onSuccess: async () => {
+      await invalidateSubscription();
+      showToast({ tone: "success", message: "已确认续费，续费日已顺延" });
+      pop();
+    },
+    onError: onMutationError,
+  });
+
+  // 未传入外部回调时（如从续费确认列表打开），详情自行处理退订/恢复/删除。
+  const terminateInternal = useMutation({
+    mutationFn: () =>
+      apiRequest(ledgerApiPath(ledgerId, `/subscriptions/${subscriptionId}/terminate`), {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await invalidateSubscription();
+      showToast({ tone: "success", message: "已退订" });
+    },
+    onError: onMutationError,
+  });
+
+  const resumeInternal = useMutation({
+    mutationFn: () =>
+      apiRequest(ledgerApiPath(ledgerId, `/subscriptions/${subscriptionId}/resume`), {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await invalidateSubscription();
+      showToast({ tone: "success", message: "已恢复订阅" });
+    },
+    onError: onMutationError,
+  });
+
+  const removeInternal = useMutation({
+    mutationFn: () =>
+      apiRequest<void>(ledgerApiPath(ledgerId, `/subscriptions/${subscriptionId}`), {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await invalidateSubscription();
+      setConfirmingDelete(false);
+      showToast({ tone: "success", message: "订阅已删除" });
+      pop();
+    },
+    onError: onMutationError,
+  });
 
   if (!subscription) {
     return <LoadingState rows={5} title="加载订阅" />;
   }
+
+  const openEditorInternal = () => {
+    push({
+      className: "ui-bottom-sheet--sheet-form",
+      hideDefaultHeader: true,
+      content: <SubscriptionEditorSheet ledgerId={ledgerId} subscription={subscription} />,
+    });
+  };
+
+  // 外部回调优先；否则用详情内置处理，使详情组件可脱离父级独立工作。
+  const handleEdit = onEdit ?? openEditorInternal;
+  const handleTerminate = onTerminate ?? (() => terminateInternal.mutate());
+  const handleResume = onResume ?? (() => resumeInternal.mutate());
+  const handleDelete = onDelete ?? (() => setConfirmingDelete(true));
+  const terminatingState = terminating || terminateInternal.isPending;
+  const resumingState = resuming || resumeInternal.isPending;
 
   const category = categories.find((entry) => entry.id === subscription.categoryId);
   const categoryName = category?.name ?? "未分类";
@@ -197,6 +286,7 @@ export function SubscriptionDetailSheet({
                 : "未设置"
             }
           />
+          <DetailRow label="到期提醒" value={remindLeadLabel(subscription) || "未设置"} />
           {subscription.terminatedAt ? (
             <DetailRow label="退订时间" value={formatDateLabel(subscription.terminatedAt)} />
           ) : null}
@@ -248,10 +338,21 @@ export function SubscriptionDetailSheet({
       </section>
 
       <div className="mt-2 flex flex-col gap-2">
+        {!subscription.terminatedAt && renewalReminderDue(subscription) ? (
+          <Button
+            disabled={confirmRenewal.isPending}
+            icon={<CalendarCheck size={17} />}
+            loading={confirmRenewal.isPending}
+            onClick={() => confirmRenewal.mutate()}
+            variant="primary"
+          >
+            确认续订
+          </Button>
+        ) : null}
         <Button
           className="!bg-[var(--color-bg-surface)]"
           icon={<Edit3 size={17} />}
-          onClick={onEdit}
+          onClick={handleEdit}
           variant="secondary"
         >
           编辑订阅
@@ -259,33 +360,46 @@ export function SubscriptionDetailSheet({
         {subscription.terminatedAt ? (
           <Button
             className="!bg-[var(--color-bg-surface)]"
-            disabled={resuming}
+            disabled={resumingState}
             icon={<RotateCcw size={17} />}
-            onClick={onResume}
+            onClick={handleResume}
             variant="secondary"
           >
-            {resuming ? "处理中…" : "恢复订阅"}
+            {resumingState ? "处理中…" : "恢复订阅"}
           </Button>
         ) : (
           <Button
             className="!bg-[var(--color-bg-surface)]"
-            disabled={terminating}
+            disabled={terminatingState}
             icon={<XCircle size={17} />}
-            onClick={onTerminate}
+            onClick={handleTerminate}
             variant="secondary"
           >
-            {terminating ? "处理中…" : "退订"}
+            {terminatingState ? "处理中…" : "退订"}
           </Button>
         )}
         <Button
           className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           icon={<Trash2 size={17} />}
-          onClick={onDelete}
+          onClick={handleDelete}
           variant="danger"
         >
           删除订阅
         </Button>
       </div>
+
+      {onDelete ? null : (
+        <DeleteSubscriptionConfirmDialog
+          deleting={removeInternal.isPending}
+          onCancel={() => {
+            if (!removeInternal.isPending) setConfirmingDelete(false);
+          }}
+          onConfirm={() => {
+            if (!removeInternal.isPending) removeInternal.mutate();
+          }}
+          subscription={confirmingDelete ? subscription : null}
+        />
+      )}
     </div>
   );
 }

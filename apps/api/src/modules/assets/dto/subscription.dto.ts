@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import {
   ArrayNotEmpty,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -85,6 +86,17 @@ export class CreateSubscriptionDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   nextRenewalDate?: string;
+
+  @ApiPropertyOptional({ description: "到期提醒：提前的数量，配合 remindLeadUnit。传 null 清除。" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  remindLeadValue?: number | null;
+
+  @ApiPropertyOptional({ description: "到期提醒单位：day/week/month/year。传 null 清除。" })
+  @IsOptional()
+  @IsIn(["day", "week", "month", "year"])
+  remindLeadUnit?: "day" | "week" | "month" | "year" | null;
 
   @ApiPropertyOptional()
   @IsOptional()

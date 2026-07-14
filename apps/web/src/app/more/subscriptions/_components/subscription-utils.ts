@@ -15,6 +15,55 @@ export function billingCycleLabel(cycle: string | null): string {
   return BILLING_CYCLE_OPTIONS.find((item) => item.value === cycle)?.label ?? cycle;
 }
 
+/** 能自动推算下一续费日的计费周期（确认续费按此推进）。 */
+const ADVANCEABLE_CYCLES = new Set(["weekly", "monthly", "quarterly", "yearly"]);
+
+/** 到期提醒的提前单位，value 与后端一致。 */
+export const REMIND_UNIT_OPTIONS = [
+  { value: "day", label: "天" },
+  { value: "week", label: "周" },
+  { value: "month", label: "月" },
+  { value: "year", label: "年" },
+] as const;
+
+export type RemindUnit = (typeof REMIND_UNIT_OPTIONS)[number]["value"];
+
+export function remindUnitLabel(unit: string | null | undefined): string {
+  return REMIND_UNIT_OPTIONS.find((item) => item.value === unit)?.label ?? "";
+}
+
+/** 提前提醒文案，如「提前 3 天」；未配置返回空串。 */
+export function remindLeadLabel(
+  subscription: Pick<Subscription, "remindLeadValue" | "remindLeadUnit">,
+): string {
+  if (!subscription.remindLeadValue || !subscription.remindLeadUnit) return "";
+  return `提前 ${subscription.remindLeadValue} ${remindUnitLabel(subscription.remindLeadUnit)}`;
+}
+
+/** 以 UTC 计算，把 `YYYY-MM-DD` 按单位平移 amount（可为负），返回 `YYYY-MM-DD`。 */
+function shiftDateKey(dateKey: string, amount: number, unit: RemindUnit): string {
+  const parts = dateKey.slice(0, 10).split("-");
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  switch (unit) {
+    case "day":
+      dt.setUTCDate(dt.getUTCDate() + amount);
+      break;
+    case "week":
+      dt.setUTCDate(dt.getUTCDate() + amount * 7);
+      break;
+    case "month":
+      dt.setUTCMonth(dt.getUTCMonth() + amount);
+      break;
+    case "year":
+      dt.setUTCFullYear(dt.getUTCFullYear() + amount);
+      break;
+  }
+  return dt.toISOString().slice(0, 10);
+}
+
 /** 常用订阅分类的推荐图标，未匹配的自定义分类用兜底图标。 */
 export const SUBSCRIPTION_CATEGORY_ICONS: Record<string, string> = {
   影音: "🎬",
@@ -70,7 +119,7 @@ export type SubscriptionStatus = {
   tone: "active" | "dueSoon" | "terminated";
 };
 
-/** 「即将续费」提前提醒天数，按计费周期区分；自定义/未知周期用 2 天。 */
+/** 未显式配置提醒时的默认提前天数，按计费周期区分；自定义/未知周期用 2 天。 */
 export function dueSoonWindowDays(cycle: string | null): number {
   switch (cycle) {
     case "weekly":
@@ -86,13 +135,47 @@ export function dueSoonWindowDays(cycle: string | null): number {
   }
 }
 
+type ReminderFields = Pick<
+  Subscription,
+  "nextRenewalDate" | "billingCycle" | "remindLeadValue" | "remindLeadUnit"
+>;
+
+/**
+ * 提醒日期（`YYYY-MM-DD`）：续费日往前推「提前量」。
+ * 显式配置了 remindLeadValue/Unit 则用之，否则按计费周期回退到默认窗口。无续费日返回 null。
+ */
+export function reminderDateKey(subscription: ReminderFields): string | null {
+  if (!subscription.nextRenewalDate) return null;
+  const base = subscription.nextRenewalDate.slice(0, 10);
+  if (subscription.remindLeadValue && subscription.remindLeadUnit) {
+    return shiftDateKey(base, -subscription.remindLeadValue, subscription.remindLeadUnit);
+  }
+  return shiftDateKey(base, -dueSoonWindowDays(subscription.billingCycle), "day");
+}
+
+/** 是否已到（或过）提醒日期：未退订、有续费日、今天 ≥ 提醒日。 */
+export function isReminderDue(
+  subscription: Pick<Subscription, "terminatedAt"> & ReminderFields,
+): boolean {
+  if (subscription.terminatedAt) return false;
+  const reminderKey = reminderDateKey(subscription);
+  if (!reminderKey) return false;
+  return todayKey() >= reminderKey;
+}
+
+/** 是否可进入「确认续费」列表：已到提醒日 + 计费周期可自动推算。 */
+export function renewalReminderDue(
+  subscription: Pick<Subscription, "terminatedAt"> & ReminderFields,
+): boolean {
+  return isReminderDue(subscription) && ADVANCEABLE_CYCLES.has(subscription.billingCycle ?? "");
+}
+
 export function subscriptionStatus(
-  subscription: Pick<Subscription, "terminatedAt" | "nextRenewalDate" | "billingCycle">,
+  subscription: Pick<Subscription, "terminatedAt"> & ReminderFields,
 ): SubscriptionStatus {
   if (subscription.terminatedAt) return { key: "terminated", label: "已退订", tone: "terminated" };
-  const days = daysUntilRenewal(subscription);
-  if (days !== null && days >= 0 && days <= dueSoonWindowDays(subscription.billingCycle)) {
-    return { key: "dueSoon", label: "即将续费", tone: "dueSoon" };
+  if (isReminderDue(subscription)) {
+    return { key: "dueSoon", label: "即将到期", tone: "dueSoon" };
   }
   return { key: "active", label: "使用中", tone: "active" };
 }

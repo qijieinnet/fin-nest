@@ -18,6 +18,30 @@ import {
   UpdateSubscriptionDto,
 } from "./dto/subscription.dto";
 
+/**
+ * 按计费周期把续费日往后推一个周期（UTC-midnight 存储）。
+ * 自定义/未知周期返回 null，交由调用方决定如何处理。
+ */
+function advanceRenewalDate(date: Date, billingCycle: string | null): Date | null {
+  const next = new Date(date);
+  switch (billingCycle) {
+    case "weekly":
+      next.setUTCDate(next.getUTCDate() + 7);
+      return next;
+    case "monthly":
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      return next;
+    case "quarterly":
+      next.setUTCMonth(next.getUTCMonth() + 3);
+      return next;
+    case "yearly":
+      next.setUTCFullYear(next.getUTCFullYear() + 1);
+      return next;
+    default:
+      return null;
+  }
+}
+
 @Injectable()
 export class AssetsService {
   constructor(
@@ -567,6 +591,27 @@ export class AssetsService {
     });
   }
 
+  /** 确认续费：把下次续费日按计费周期往后推一个周期。自定义/未知周期无法推算。 */
+  async confirmSubscriptionRenewal(ledgerId: string, subscriptionId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const subscription = await this.assertSubscription(ledgerId, subscriptionId);
+    if (!subscription.nextRenewalDate) {
+      throw new AppError("SUBSCRIPTION_NO_RENEWAL_DATE", "该订阅未设置下次续费日", 400);
+    }
+    const next = advanceRenewalDate(subscription.nextRenewalDate, subscription.billingCycle);
+    if (!next) {
+      throw new AppError(
+        "SUBSCRIPTION_CYCLE_UNSUPPORTED",
+        "自定义或未知计费周期无法自动推算，请手动修改续费日",
+        400,
+      );
+    }
+    return this.prisma.client.subscription.update({
+      where: { id: subscriptionId },
+      data: { nextRenewalDate: next, updatedBy: userId },
+    });
+  }
+
   async reorderSubscriptions(ledgerId: string, userId: string, ids: string[]) {
     await this.ledgers.assertMember(ledgerId, userId);
     const subscriptions = await this.prisma.client.subscription.findMany({
@@ -834,6 +879,8 @@ export class AssetsService {
       autoRenew: input.autoRenew ?? false,
       startDate: input.startDate ? parseDateOnly(input.startDate) : null,
       nextRenewalDate: input.nextRenewalDate ? parseDateOnly(input.nextRenewalDate) : null,
+      remindLeadValue: input.remindLeadValue ?? null,
+      remindLeadUnit: input.remindLeadUnit ?? null,
       note: input.note,
       sortOrder,
       createdBy: userId,
@@ -857,6 +904,8 @@ export class AssetsService {
       startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
       nextRenewalDate:
         input.nextRenewalDate === undefined ? undefined : parseDateOnly(input.nextRenewalDate),
+      remindLeadValue: input.remindLeadValue === undefined ? undefined : input.remindLeadValue,
+      remindLeadUnit: input.remindLeadUnit === undefined ? undefined : input.remindLeadUnit,
       note: input.note,
       updatedBy: userId,
     };

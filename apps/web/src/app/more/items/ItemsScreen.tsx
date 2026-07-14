@@ -736,7 +736,7 @@ export function ItemsScreen() {
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "物品管理"}
       >
-        <div className="flex flex-col gap-3 pb-6">
+        <div className="flex flex-col gap-3 pb-22">
           {itemsQuery.isPending || itemTypesQuery.isPending ? (
             <LoadingState rows={4} title="加载物品" />
           ) : items.length === 0 ? (

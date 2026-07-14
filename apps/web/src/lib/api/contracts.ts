@@ -688,6 +688,9 @@ export type Subscription = {
   autoRenew: boolean;
   startDate: string | null;
   nextRenewalDate: string | null;
+  /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
+  remindLeadValue: number | null;
+  remindLeadUnit: "day" | "week" | "month" | "year" | null;
   note: string | null;
   sortOrder: number;
   terminatedAt: string | null;

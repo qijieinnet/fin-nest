@@ -25,6 +25,8 @@ import {
   BILLING_CYCLE_OPTIONS,
   categoryGlyph,
   microsToInput,
+  REMIND_UNIT_OPTIONS,
+  type RemindUnit,
   todayKey,
 } from "./subscription-utils";
 
@@ -39,6 +41,11 @@ type PendingAttachment = AttachmentItem & { file: File };
 const AUTO_RENEW_OPTIONS = [
   { value: "true", label: "自动续费" },
   { value: "false", label: "手动续费" },
+] as const;
+
+const REMIND_TOGGLE_OPTIONS = [
+  { value: "true", label: "开启" },
+  { value: "false", label: "关闭" },
 ] as const;
 
 function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
@@ -245,6 +252,15 @@ export function SubscriptionEditorSheet({
   const [nextRenewalDate, setNextRenewalDate] = useState(
     subscription?.nextRenewalDate?.slice(0, 10) ?? "",
   );
+  const [remindEnabled, setRemindEnabled] = useState(
+    Boolean(subscription?.remindLeadValue && subscription?.remindLeadUnit),
+  );
+  const [remindValue, setRemindValue] = useState(
+    subscription?.remindLeadValue ? String(subscription.remindLeadValue) : "3",
+  );
+  const [remindUnit, setRemindUnit] = useState<RemindUnit>(
+    (subscription?.remindLeadUnit as RemindUnit | null) ?? "day",
+  );
   const [note, setNote] = useState(subscription?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<AttachmentItem[]>([]);
@@ -306,6 +322,11 @@ export function SubscriptionEditorSheet({
       const priceParsed = price.trim() ? parseMoneyToMicros(price) : null;
       if (priceParsed && !priceParsed.ok) throw new Error("费用格式不正确");
 
+      // 开启提醒需正整数提前量；关闭或无效时统一清空（传 null 让后端置空）。
+      const parsedRemindValue = Number.parseInt(remindValue, 10);
+      const remindActive =
+        remindEnabled && Number.isFinite(parsedRemindValue) && parsedRemindValue > 0;
+
       const body = {
         name: trimmedName,
         categoryId: categoryId || undefined,
@@ -317,6 +338,8 @@ export function SubscriptionEditorSheet({
         autoRenew,
         startDate: startDate || undefined,
         nextRenewalDate: nextRenewalDate || undefined,
+        remindLeadValue: remindActive ? parsedRemindValue : null,
+        remindLeadUnit: remindActive ? remindUnit : null,
         note: note.trim() || undefined,
       };
       const saved = subscription
@@ -507,6 +530,42 @@ export function SubscriptionEditorSheet({
               onChange={setNextRenewalDate}
               value={nextRenewalDate}
             />
+          </div>
+
+          <div className="transaction-form__card">
+            <SelectRow
+              label="到期提醒"
+              onChange={(value) => setRemindEnabled(value === "true")}
+              options={REMIND_TOGGLE_OPTIONS}
+              value={String(remindEnabled)}
+            />
+            {remindEnabled ? (
+              <>
+                <span className="transaction-form__divider" />
+                <FieldRow
+                  inputMode="numeric"
+                  label="提前"
+                  maxLength={3}
+                  onChange={(event) =>
+                    setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
+                  }
+                  placeholder="3"
+                  value={remindValue}
+                />
+                <span className="transaction-form__divider" />
+                <SelectRow
+                  label="提醒单位"
+                  onChange={(value) => setRemindUnit(value as RemindUnit)}
+                  options={REMIND_UNIT_OPTIONS}
+                  value={remindUnit}
+                />
+                {nextRenewalDate ? null : (
+                  <p className="px-1 pt-2 text-xs text-[var(--color-text-muted)]">
+                    需设置「下次续费日」后提醒才会生效。
+                  </p>
+                )}
+              </>
+            ) : null}
           </div>
 
           <AttachmentPicker

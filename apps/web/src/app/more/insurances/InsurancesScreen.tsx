@@ -730,7 +730,7 @@ export function InsurancesScreen() {
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "保险管理"}
       >
-        <div className="flex flex-col gap-3 pb-6">
+        <div className="flex flex-col gap-3 pb-22">
           {insurancesQuery.isPending || peopleQuery.isPending ? (
             <LoadingState rows={4} title="加载保单" />
           ) : insurances.length === 0 ? (

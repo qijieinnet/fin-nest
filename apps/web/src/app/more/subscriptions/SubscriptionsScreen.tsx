@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveX,
   ArrowUpDown,
+  BellRing,
   ChevronDown,
   ChevronLeft,
   ChevronsDownUp,
@@ -52,14 +53,20 @@ import { DeleteSubscriptionConfirmDialog } from "./_components/DeleteSubscriptio
 import { SubscriptionDetailSheet } from "./_components/SubscriptionDetailSheet";
 import { SubscriptionEditorSheet } from "./_components/SubscriptionEditorSheet";
 import {
+  dueRenewalSubscriptions,
+  SubscriptionRenewalConfirmSheet,
+} from "./_components/SubscriptionRenewalConfirmSheet";
+import {
   SubscriptionSortList,
   type SubscriptionSortGroup,
 } from "./_components/SubscriptionSortList";
 import {
   billingCycleLabel,
   categoryGlyph,
+  formatDateLabel,
   formatMoney,
   monthlyCostMicros,
+  renewalReminderDue,
   subscriptionStatus,
 } from "./_components/subscription-utils";
 
@@ -71,7 +78,7 @@ const STATUS_CLASS: Record<string, string> = {
 
 const SUBSCRIPTION_STATUS_OPTIONS: AssetFilterOption[] = [
   { id: "active", label: "使用中" },
-  { id: "dueSoon", label: "即将续费" },
+  { id: "dueSoon", label: "即将到期" },
 ];
 
 const TERMINATED_STATUS_OPTIONS: AssetFilterOption[] = [{ id: "terminated", label: "已退订" }];
@@ -125,7 +132,11 @@ function buildFilterOptions(
   return [
     ...categories
       .filter((category) => subscriptions.some((sub) => sub.categoryId === category.id))
-      .map((category) => ({ icon: categoryGlyph(category), id: category.id, label: category.name })),
+      .map((category) => ({
+        icon: categoryGlyph(category),
+        id: category.id,
+        label: category.name,
+      })),
     ...(hasUncategorized
       ? [{ icon: categoryGlyph(null), id: "uncategorized", label: "未分类" }]
       : []),
@@ -201,7 +212,9 @@ function buildGroups(
         (options.includeEmptyCategories && !group.category.archivedAt) || group.items.length > 0,
     );
   const missing = subscriptions
-    .filter((subscription) => !subscription.categoryId || !categoryById.has(subscription.categoryId))
+    .filter(
+      (subscription) => !subscription.categoryId || !categoryById.has(subscription.categoryId),
+    )
     .sort(compareSubscriptions);
   return [
     ...categoryGroups,
@@ -357,10 +370,16 @@ export function SubscriptionsScreen() {
   const categories = categoriesQuery.data ?? [];
   const activeSubscriptions = subscriptions.filter((subscription) => !subscription.terminatedAt);
   const terminatedSubscriptions = subscriptions.filter((subscription) => subscription.terminatedAt);
+  const dueRenewalCount = dueRenewalSubscriptions(subscriptions).length;
   const activeFilterCount = countActiveAssetFilters(filterValue);
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const filterOptions = buildFilterOptions(activeSubscriptions, categories, categoryById);
-  const filtered = filterSubscriptions(activeSubscriptions, categoryById, filterValue, decimalPlaces);
+  const filtered = filterSubscriptions(
+    activeSubscriptions,
+    categoryById,
+    filterValue,
+    decimalPlaces,
+  );
   const monthlyTotal = filtered
     .reduce((sum, subscription) => sum + monthlyCostMicros(subscription), 0n)
     .toString();
@@ -540,6 +559,16 @@ export function SubscriptionsScreen() {
     });
   };
 
+  const openRenewals = () => {
+    if (!ledgerId) return;
+    setMoreMenuOpen(false);
+    push({
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
+      hideDefaultHeader: true,
+      content: <SubscriptionRenewalConfirmSheet ledgerId={ledgerId} />,
+    });
+  };
+
   const openTerminated = () => {
     if (!ledgerId) return;
     setMoreMenuOpen(false);
@@ -582,7 +611,15 @@ export function SubscriptionsScreen() {
     const category = categories.find((entry) => entry.id === subscription.categoryId);
     const categoryName = category?.name ?? "未分类";
     const status = subscriptionStatus(subscription);
-    const metaText = [categoryName, billingCycleLabel(subscription.billingCycle), subscription.provider]
+    const nextRenewalText = subscription.nextRenewalDate
+      ? `${formatDateLabel(subscription.nextRenewalDate)}`
+      : null;
+    const metaText = [
+      categoryName,
+      billingCycleLabel(subscription.billingCycle),
+      nextRenewalText,
+      subscription.provider,
+    ]
       .filter(Boolean)
       .join(" · ");
     const monthly = monthlyCostMicros(subscription);
@@ -683,6 +720,7 @@ export function SubscriptionsScreen() {
                     onClick: () => setFilterOpen(true),
                   },
                   {
+                    dot: dueRenewalCount > 0,
                     icon: <MoreHorizontal size={22} strokeWidth={2.3} />,
                     label: "更多选项",
                     onClick: () => setMoreMenuOpen((open) => !open),
@@ -702,6 +740,18 @@ export function SubscriptionsScreen() {
                               setMoreMenuOpen(false);
                               openEditor();
                             },
+                          },
+                        ],
+                      ]
+                    : []),
+                  ...(dueRenewalCount > 0
+                    ? [
+                        [
+                          {
+                            description: `${dueRenewalCount} 个待确认`,
+                            icon: <BellRing size={18} />,
+                            label: "续费确认",
+                            onSelect: openRenewals,
                           },
                         ],
                       ]
@@ -746,7 +796,7 @@ export function SubscriptionsScreen() {
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "订阅管理"}
       >
-        <div className="flex flex-col gap-3 pb-6">
+        <div className="flex flex-col gap-3 pb-22">
           {subscriptionsQuery.isPending || categoriesQuery.isPending ? (
             <LoadingState rows={4} title="加载订阅" />
           ) : subscriptions.length === 0 ? (
