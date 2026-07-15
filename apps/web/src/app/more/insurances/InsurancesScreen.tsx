@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveX,
   ArrowUpDown,
+  BellRing,
   ChevronDown,
   ChevronLeft,
   ChevronsDownUp,
@@ -50,10 +51,12 @@ import {
 } from "../_components/AssetFilterSheet";
 import { InsuranceDetailSheet } from "./_components/InsuranceDetailSheet";
 import { InsuranceEditorSheet } from "./_components/InsuranceEditorSheet";
+import { InsuranceReminderSheet } from "./_components/InsuranceReminderSheet";
 import { InsuranceSortList, type InsuranceSortGroup } from "./_components/InsuranceSortList";
 import {
   INSURANCE_TYPES,
   annualPremiumMicros,
+  dueReminderInsurances,
   formatMoney,
   insuranceStatus,
   insuranceTypeMeta,
@@ -62,6 +65,7 @@ import {
 
 const STATUS_CLASS: Record<string, string> = {
   active: "bg-[var(--color-tint-soft)] text-[var(--color-tint)]",
+  dueSoon: "bg-[rgba(255,149,0,0.14)] text-[var(--color-accent-warning,#c77700)]",
   expired: "bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]",
   terminated: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
@@ -72,6 +76,7 @@ const KNOWN_INSURANCE_TYPE_VALUES: ReadonlySet<string> = new Set(
 
 const INSURANCE_STATUS_OPTIONS: AssetFilterOption[] = [
   { id: "active", label: "在保" },
+  { id: "dueSoon", label: "即将到期" },
   { id: "expired", label: "已过期" },
 ];
 
@@ -349,6 +354,7 @@ export function InsurancesScreen() {
   const people = peopleQuery.data ?? [];
   const currentInsurances = insurances.filter((insurance) => !insurance.terminatedAt);
   const terminatedInsurances = insurances.filter((insurance) => insurance.terminatedAt);
+  const dueReminderCount = dueReminderInsurances(insurances).length;
   const activeFilterCount = countActiveAssetFilters(filterValue);
   const insuranceFilterOptions = buildInsuranceFilterOptions(currentInsurances);
   const filteredInsurances = filterInsurances(
@@ -357,9 +363,11 @@ export function InsurancesScreen() {
     filterValue,
     decimalPlaces,
   );
-  const active = filteredInsurances.filter(
-    (insurance) => insuranceStatus(insurance).key === "active",
-  );
+  // 「在保」汇总含在保与即将到期（均未过期、未终止，仍在保障期内）。
+  const active = filteredInsurances.filter((insurance) => {
+    const key = insuranceStatus(insurance).key;
+    return key === "active" || key === "dueSoon";
+  });
   const annualPremium = active
     .reduce((sum, insurance) => sum + annualPremiumMicros(insurance), 0n)
     .toString();
@@ -529,6 +537,16 @@ export function InsurancesScreen() {
     });
   };
 
+  const openReminders = () => {
+    if (!ledgerId) return;
+    setMoreMenuOpen(false);
+    push({
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
+      hideDefaultHeader: true,
+      content: <InsuranceReminderSheet ledgerId={ledgerId} />,
+    });
+  };
+
   const openTerminatedInsurances = () => {
     if (!ledgerId) return;
     setMoreMenuOpen(false);
@@ -664,6 +682,7 @@ export function InsurancesScreen() {
                     onClick: () => setFilterOpen(true),
                   },
                   {
+                    dot: dueReminderCount > 0,
                     icon: <MoreHorizontal size={22} strokeWidth={2.3} />,
                     label: "更多选项",
                     onClick: () => setMoreMenuOpen((open) => !open),
@@ -683,6 +702,18 @@ export function InsurancesScreen() {
                               setMoreMenuOpen(false);
                               openEditor();
                             },
+                          },
+                        ],
+                      ]
+                    : []),
+                  ...(dueReminderCount > 0
+                    ? [
+                        [
+                          {
+                            description: `${dueReminderCount} 份待处理`,
+                            icon: <BellRing size={18} />,
+                            label: "到期提醒",
+                            onSelect: openReminders,
                           },
                         ],
                       ]

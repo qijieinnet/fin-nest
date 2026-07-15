@@ -3,6 +3,7 @@ import {
   ArrayNotEmpty,
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -86,6 +87,25 @@ export class CreateInsuranceDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   endDate?: string;
+
+  @ApiPropertyOptional({ description: "到期提醒：提前的数量，配合 remindLeadUnit。传 null 清除。" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  remindLeadValue?: number | null;
+
+  @ApiPropertyOptional({ description: "到期提醒单位：day/week/month/year。传 null 清除。" })
+  @IsOptional()
+  @IsIn(["day", "week", "month", "year"])
+  remindLeadUnit?: "day" | "week" | "month" | "year" | null;
+
+  @ApiPropertyOptional({
+    example: "09:00",
+    description: "到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送。传 null 清除。",
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  remindTime?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

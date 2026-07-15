@@ -98,6 +98,14 @@ export class CreateSubscriptionDto {
   @IsIn(["day", "week", "month", "year"])
   remindLeadUnit?: "day" | "week" | "month" | "year" | null;
 
+  @ApiPropertyOptional({
+    example: "09:00",
+    description: "到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送。传 null 清除。",
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  remindTime?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

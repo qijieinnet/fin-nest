@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AppError, parseDateOnly, PrismaService } from "@fin-nest/backend";
+import { AppError, parseDateOnly, PrismaService, todayKey } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
@@ -40,6 +40,104 @@ function advanceRenewalDate(date: Date, billingCycle: string | null): Date | nul
     default:
       return null;
   }
+}
+
+/** 到期提醒默认提前窗口（天），按计费周期区分；与前端 dueSoonWindowDays 保持一致。 */
+function dueSoonWindowDays(billingCycle: string | null): number {
+  switch (billingCycle) {
+    case "weekly":
+      return 2;
+    case "monthly":
+      return 7;
+    case "quarterly":
+      return 14;
+    case "yearly":
+      return 14;
+    default:
+      return 2;
+  }
+}
+
+/** 把 UTC-midnight 日期按单位平移 amount（可为负）。 */
+function shiftDateByUnit(
+  date: Date,
+  amount: number,
+  unit: "day" | "week" | "month" | "year",
+): Date {
+  const next = new Date(date);
+  switch (unit) {
+    case "day":
+      next.setUTCDate(next.getUTCDate() + amount);
+      break;
+    case "week":
+      next.setUTCDate(next.getUTCDate() + amount * 7);
+      break;
+    case "month":
+      next.setUTCMonth(next.getUTCMonth() + amount);
+      break;
+    case "year":
+      next.setUTCFullYear(next.getUTCFullYear() + amount);
+      break;
+  }
+  return next;
+}
+
+/**
+ * 到期提醒日期（UTC-midnight）：续费日往前推提前量；显式配置了 remindLeadValue/Unit 则用之，
+ * 否则按计费周期回退默认窗口。无续费日返回 null。与前端 reminderDateKey 口径一致。
+ */
+function subscriptionReminderDate(sub: {
+  nextRenewalDate: Date | null;
+  billingCycle: string | null;
+  remindLeadValue: number | null;
+  remindLeadUnit: string | null;
+}): Date | null {
+  if (!sub.nextRenewalDate) return null;
+  if (sub.remindLeadValue && sub.remindLeadUnit) {
+    return shiftDateByUnit(
+      sub.nextRenewalDate,
+      -sub.remindLeadValue,
+      sub.remindLeadUnit as "day" | "week" | "month" | "year",
+    );
+  }
+  return shiftDateByUnit(sub.nextRenewalDate, -dueSoonWindowDays(sub.billingCycle), "day");
+}
+
+/**
+ * 自动确认续费：订阅已到提醒日、计费周期可推算、且当前续费周期内存在「有效金额 ≥ 单期费用」
+ * 的关联支出时，返回顺延一个周期后的续费日；否则 null。
+ * 关联支出限定在单周期窗口 [提醒日, 下次续费日+一个周期)，保证同一笔支出只推进一次、不越期累推。
+ */
+function autoConfirmedRenewalDate(
+  subscription: {
+    terminatedAt: Date | null;
+    nextRenewalDate: Date | null;
+    billingCycle: string | null;
+    priceMicros: bigint | null;
+    remindLeadValue: number | null;
+    remindLeadUnit: string | null;
+  },
+  linkedTransactions: Array<{ type: string; effectiveAmountMicros: bigint; occurredOn: Date }>,
+  today: Date,
+): Date | null {
+  if (subscription.terminatedAt) return null;
+  if (!subscription.nextRenewalDate) return null;
+  if (!subscription.priceMicros || subscription.priceMicros <= 0n) return null;
+  const next = advanceRenewalDate(subscription.nextRenewalDate, subscription.billingCycle);
+  if (!next) return null; // 自定义/未知周期无法自动推算
+  const remindOn = subscriptionReminderDate(subscription);
+  if (!remindOn || today.getTime() < remindOn.getTime()) return null; // 尚未到提醒日
+  const windowStart = remindOn.getTime();
+  const windowEnd = next.getTime();
+  const price = subscription.priceMicros;
+  const paid = linkedTransactions.some(
+    (tx) =>
+      tx.type === "expense" &&
+      tx.effectiveAmountMicros >= price &&
+      tx.occurredOn.getTime() >= windowStart &&
+      tx.occurredOn.getTime() < windowEnd,
+  );
+  return paid ? next : null;
 }
 
 @Injectable()
@@ -510,8 +608,9 @@ export class AssetsService {
         })
       : [];
     const transactionById = new Map(transactions.map((tx) => [tx.id, tx]));
-    // 花费合计：关联支出累加、关联收入（如退款）抵减。
+    // 花费合计：关联支出累加、关联收入（如退款）抵减；同时按订阅归集关联交易用于自动续费判定。
     const spendBySubscription = new Map<string, bigint>();
+    const txsBySubscription = new Map<string, typeof transactions>();
     for (const link of links) {
       const tx = transactionById.get(link.transactionId);
       if (!tx) continue;
@@ -525,9 +624,34 @@ export class AssetsService {
         link.linkedId,
         (spendBySubscription.get(link.linkedId) ?? 0n) + delta,
       );
+      const bucket = txsBySubscription.get(link.linkedId);
+      if (bucket) bucket.push(tx);
+      else txsBySubscription.set(link.linkedId, [tx]);
+    }
+    // 自动确认续费：命中的订阅顺延续费日并持久化，返回值同步反映最新续费日。
+    const today = parseDateOnly(todayKey());
+    const advanced = new Map<string, Date>();
+    for (const subscription of subscriptions) {
+      const target = autoConfirmedRenewalDate(
+        subscription,
+        txsBySubscription.get(subscription.id) ?? [],
+        today,
+      );
+      if (target) advanced.set(subscription.id, target);
+    }
+    if (advanced.size) {
+      await Promise.all(
+        Array.from(advanced.entries()).map(([id, nextRenewalDate]) =>
+          this.prisma.client.subscription.update({
+            where: { id },
+            data: { nextRenewalDate, updatedBy: userId },
+          }),
+        ),
+      );
     }
     return subscriptions.map((subscription) => ({
       ...subscription,
+      nextRenewalDate: advanced.get(subscription.id) ?? subscription.nextRenewalDate,
       totalSpendMicros: (spendBySubscription.get(subscription.id) ?? 0n).toString(),
     }));
   }
@@ -536,6 +660,19 @@ export class AssetsService {
     await this.ledgers.assertMember(ledgerId, userId);
     const subscription = await this.assertSubscription(ledgerId, subscriptionId);
     const links = await this.linkedTransactions(ledgerId, "subscription", subscriptionId);
+    // 与列表口径一致：满足条件时自动确认续费并持久化。
+    const target = autoConfirmedRenewalDate(
+      subscription,
+      links.linkedTransactions,
+      parseDateOnly(todayKey()),
+    );
+    if (target) {
+      await this.prisma.client.subscription.update({
+        where: { id: subscriptionId },
+        data: { nextRenewalDate: target, updatedBy: userId },
+      });
+      subscription.nextRenewalDate = target;
+    }
     return { ...subscription, ...links };
   }
 
@@ -701,6 +838,9 @@ export class AssetsService {
       coverageDesc: input.coverageDesc,
       startDate: input.startDate ? parseDateOnly(input.startDate) : null,
       endDate: input.endDate ? parseDateOnly(input.endDate) : null,
+      remindLeadValue: input.remindLeadValue ?? null,
+      remindLeadUnit: input.remindLeadUnit ?? null,
+      remindTime: input.remindTime ?? null,
       note: input.note,
       sortOrder,
       createdBy: userId,
@@ -727,6 +867,9 @@ export class AssetsService {
       coverageDesc: input.coverageDesc,
       startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
       endDate: input.endDate === undefined ? undefined : parseDateOnly(input.endDate),
+      remindLeadValue: input.remindLeadValue === undefined ? undefined : input.remindLeadValue,
+      remindLeadUnit: input.remindLeadUnit === undefined ? undefined : input.remindLeadUnit,
+      remindTime: input.remindTime === undefined ? undefined : input.remindTime,
       note: input.note,
       updatedBy: userId,
     };
@@ -881,6 +1024,7 @@ export class AssetsService {
       nextRenewalDate: input.nextRenewalDate ? parseDateOnly(input.nextRenewalDate) : null,
       remindLeadValue: input.remindLeadValue ?? null,
       remindLeadUnit: input.remindLeadUnit ?? null,
+      remindTime: input.remindTime ?? null,
       note: input.note,
       sortOrder,
       createdBy: userId,
@@ -906,6 +1050,7 @@ export class AssetsService {
         input.nextRenewalDate === undefined ? undefined : parseDateOnly(input.nextRenewalDate),
       remindLeadValue: input.remindLeadValue === undefined ? undefined : input.remindLeadValue,
       remindLeadUnit: input.remindLeadUnit === undefined ? undefined : input.remindLeadUnit,
+      remindTime: input.remindTime === undefined ? undefined : input.remindTime,
       note: input.note,
       updatedBy: userId,
     };

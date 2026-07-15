@@ -286,7 +286,16 @@ export function SubscriptionDetailSheet({
                 : "未设置"
             }
           />
-          <DetailRow label="到期提醒" value={remindLeadLabel(subscription) || "未设置"} />
+          <DetailRow
+            label="到期提醒"
+            value={
+              remindLeadLabel(subscription)
+                ? [remindLeadLabel(subscription), subscription.remindTime]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "未设置"
+            }
+          />
           {subscription.terminatedAt ? (
             <DetailRow label="退订时间" value={formatDateLabel(subscription.terminatedAt)} />
           ) : null}

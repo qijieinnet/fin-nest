@@ -607,6 +607,11 @@ export type Insurance = {
   coverageDesc: string | null;
   startDate: string | null;
   endDate: string | null;
+  /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
+  remindLeadValue: number | null;
+  remindLeadUnit: "day" | "week" | "month" | "year" | null;
+  /** 到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送；为空表示未设置。 */
+  remindTime: string | null;
   note: string | null;
   sortOrder: number;
   typeSortOrder?: number;
@@ -691,6 +696,8 @@ export type Subscription = {
   /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
   remindLeadValue: number | null;
   remindLeadUnit: "day" | "week" | "month" | "year" | null;
+  /** 到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送；为空表示未设置。 */
+  remindTime: string | null;
   note: string | null;
   sortOrder: number;
   terminatedAt: string | null;

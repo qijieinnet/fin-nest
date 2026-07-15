@@ -4,7 +4,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Settings2, X } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPicker,
+  DateWheelPicker,
+  TimeWheelPicker,
+  ToggleCard,
+  type AttachmentItem,
+} from "@/components/business";
 import { IconButton, PopoverMenu } from "@/components/ui";
 import {
   apiRequest,
@@ -43,10 +49,8 @@ const AUTO_RENEW_OPTIONS = [
   { value: "false", label: "手动续费" },
 ] as const;
 
-const REMIND_TOGGLE_OPTIONS = [
-  { value: "true", label: "开启" },
-  { value: "false", label: "关闭" },
-] as const;
+/** 未设置提醒时间时的默认时刻。 */
+const DEFAULT_REMIND_TIME = "09:00";
 
 function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
   return {
@@ -261,6 +265,7 @@ export function SubscriptionEditorSheet({
   const [remindUnit, setRemindUnit] = useState<RemindUnit>(
     (subscription?.remindLeadUnit as RemindUnit | null) ?? "day",
   );
+  const [remindTime, setRemindTime] = useState(subscription?.remindTime ?? DEFAULT_REMIND_TIME);
   const [note, setNote] = useState(subscription?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<AttachmentItem[]>([]);
@@ -340,6 +345,7 @@ export function SubscriptionEditorSheet({
         nextRenewalDate: nextRenewalDate || undefined,
         remindLeadValue: remindActive ? parsedRemindValue : null,
         remindLeadUnit: remindActive ? remindUnit : null,
+        remindTime: remindActive ? remindTime || DEFAULT_REMIND_TIME : null,
         note: note.trim() || undefined,
       };
       const saved = subscription
@@ -532,41 +538,37 @@ export function SubscriptionEditorSheet({
             />
           </div>
 
-          <div className="transaction-form__card">
-            <SelectRow
-              label="到期提醒"
-              onChange={(value) => setRemindEnabled(value === "true")}
-              options={REMIND_TOGGLE_OPTIONS}
-              value={String(remindEnabled)}
+          <ToggleCard
+            checked={remindEnabled}
+            hint="到续费日前提醒确认续订"
+            label="到期提醒"
+            onCheckedChange={setRemindEnabled}
+          >
+            <FieldRow
+              inputMode="numeric"
+              label="提前"
+              maxLength={3}
+              onChange={(event) =>
+                setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
+              }
+              placeholder="3"
+              value={remindValue}
             />
-            {remindEnabled ? (
-              <>
-                <span className="transaction-form__divider" />
-                <FieldRow
-                  inputMode="numeric"
-                  label="提前"
-                  maxLength={3}
-                  onChange={(event) =>
-                    setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
-                  }
-                  placeholder="3"
-                  value={remindValue}
-                />
-                <span className="transaction-form__divider" />
-                <SelectRow
-                  label="提醒单位"
-                  onChange={(value) => setRemindUnit(value as RemindUnit)}
-                  options={REMIND_UNIT_OPTIONS}
-                  value={remindUnit}
-                />
-                {nextRenewalDate ? null : (
-                  <p className="px-1 pt-2 text-xs text-[var(--color-text-muted)]">
-                    需设置「下次续费日」后提醒才会生效。
-                  </p>
-                )}
-              </>
-            ) : null}
-          </div>
+            <SelectRow
+              label="提醒单位"
+              onChange={(value) => setRemindUnit(value as RemindUnit)}
+              options={REMIND_UNIT_OPTIONS}
+              value={remindUnit}
+            />
+            <div className="transaction-form__date-card">
+              <TimeWheelPicker label="提醒时间" onValueChange={setRemindTime} value={remindTime} />
+            </div>
+            {nextRenewalDate ? null : (
+              <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                需设置「下次续费日」后提醒才会生效。
+              </p>
+            )}
+          </ToggleCard>
 
           <AttachmentPicker
             accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"

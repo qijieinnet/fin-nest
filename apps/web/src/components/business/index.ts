@@ -19,6 +19,7 @@ export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
 export { OptionPicker } from "./OptionPicker";
 export { PersonSelectField } from "./PersonSelectField";
+export { TimeWheelPicker } from "./TimeWheelPicker";
 export { PlanLimitCard } from "./PlanLimitCard";
 export { PlanProgress } from "./PlanProgress";
 export { CategorySelectionList } from "./CategorySelectionList";

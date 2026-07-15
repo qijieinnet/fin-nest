@@ -539,6 +539,11 @@ model Insurance {
   coverageDesc   String?   @map("coverage_desc")
   startDate      DateTime? @map("start_date") @db.Date
   endDate        DateTime? @map("end_date") @db.Date
+  // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
+  remindLeadValue Int?     @map("remind_lead_value")
+  remindLeadUnit  String?  @map("remind_lead_unit")
+  // 提醒时间（本地 HH:mm，24 小时制），供后续邮件/推送在当天该时刻发送；为空表示未设置。
+  remindTime      String?  @map("remind_time")
   note           String?
   sortOrder      Int       @default(0) @map("sort_order")
   terminatedAt   DateTime? @map("terminated_at") @db.Timestamptz(6)
@@ -632,6 +637,8 @@ model Subscription {
   // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
   remindLeadValue Int?      @map("remind_lead_value")
   remindLeadUnit  String?   @map("remind_lead_unit")
+  // 提醒时间（本地 HH:mm，24 小时制），供后续邮件/推送在当天该时刻发送；为空表示未设置。
+  remindTime      String?   @map("remind_time")
   note            String?
   sortOrder       Int       @default(0) @map("sort_order")
   terminatedAt    DateTime? @map("terminated_at") @db.Timestamptz(6)

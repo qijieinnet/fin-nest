@@ -4,7 +4,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, X } from "lucide-react";
 import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AttachmentPicker, DateWheelPicker, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPicker,
+  DateWheelPicker,
+  TimeWheelPicker,
+  ToggleCard,
+  type AttachmentItem,
+} from "@/components/business";
 import { IconButton, PopoverMenu } from "@/components/ui";
 import {
   apiRequest,
@@ -24,10 +30,15 @@ import {
   INSURANCE_TYPES,
   microsToInput,
   PREMIUM_FREQ_OPTIONS,
+  REMIND_UNIT_OPTIONS,
+  type RemindUnit,
   RENEWAL_OPTIONS,
   todayKey,
   todayPlusYearsKey,
 } from "./insurance-utils";
+
+/** 未设置提醒时间时的默认时刻。 */
+const DEFAULT_REMIND_TIME = "09:00";
 
 type InsuranceEditorSheetProps = {
   insurance?: Insurance;
@@ -173,6 +184,46 @@ function SelectRow({
   );
 }
 
+/** 无整卡包裹的选值行：用于 ToggleCard 内嵌的提醒单位等。 */
+function PlainSelectRow({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: ReadonlyArray<{ label: string; value: string }>;
+  value: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+  return (
+    <div className="relative">
+      <button
+        className="transaction-form__select-row"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <span>{label}</span>
+        <strong>{selected ? selected.label : "请选择"}</strong>
+        <ChevronRight size={18} />
+      </button>
+      <PopoverMenu
+        groups={[
+          options.map((option) => ({
+            label: option.label,
+            onSelect: () => onChange(option.value),
+            selected: option.value === value,
+          })),
+        ]}
+        onOpenChange={setOpen}
+        open={open}
+      />
+    </div>
+  );
+}
+
 /** 带标题的整卡容器，用于承载 chip 组、多行文本等非行内内容。 */
 function LabeledCard({
   children,
@@ -264,6 +315,16 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
     insurance ? (insurance.endDate?.slice(0, 10) ?? "") : todayPlusYearsKey(1),
   );
   const [coverageDesc, setCoverageDesc] = useState(insurance?.coverageDesc ?? "");
+  const [remindEnabled, setRemindEnabled] = useState(
+    Boolean(insurance?.remindLeadValue && insurance?.remindLeadUnit),
+  );
+  const [remindValue, setRemindValue] = useState(
+    insurance?.remindLeadValue ? String(insurance.remindLeadValue) : "30",
+  );
+  const [remindUnit, setRemindUnit] = useState<RemindUnit>(
+    (insurance?.remindLeadUnit as RemindUnit | null) ?? "day",
+  );
+  const [remindTime, setRemindTime] = useState(insurance?.remindTime ?? DEFAULT_REMIND_TIME);
   const [note, setNote] = useState(insurance?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
@@ -329,6 +390,10 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       if (periodsValue !== undefined && (!Number.isFinite(periodsValue) || periodsValue < 1)) {
         throw new Error("缴费期数需为正整数");
       }
+      // 开启提醒需正整数提前量；关闭或无效时统一清空（传 null 让后端置空）。
+      const parsedRemindValue = Number.parseInt(remindValue, 10);
+      const remindActive =
+        remindEnabled && Number.isFinite(parsedRemindValue) && parsedRemindValue > 0;
       const body = {
         type,
         name: trimmedName,
@@ -344,6 +409,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         renewal: freqIsSingle ? undefined : renewal,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        remindLeadValue: remindActive ? parsedRemindValue : null,
+        remindLeadUnit: remindActive ? remindUnit : null,
+        remindTime: remindActive ? remindTime || DEFAULT_REMIND_TIME : null,
         coverageDesc: coverageDesc.trim() || undefined,
         note: note.trim() || undefined,
       };
@@ -564,6 +632,38 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             <span className="transaction-form__divider" />
             <DateFieldRow label="到期日" onChange={setEndDate} value={endDate} />
           </div>
+
+          <ToggleCard
+            checked={remindEnabled}
+            hint="到期日前提醒续保或缴费"
+            label="到期提醒"
+            onCheckedChange={setRemindEnabled}
+          >
+            <FieldRow
+              inputMode="numeric"
+              label="提前"
+              maxLength={3}
+              onChange={(event) =>
+                setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
+              }
+              placeholder="30"
+              value={remindValue}
+            />
+            <PlainSelectRow
+              label="提醒单位"
+              onChange={(value) => setRemindUnit(value as RemindUnit)}
+              options={REMIND_UNIT_OPTIONS}
+              value={remindUnit}
+            />
+            <div className="transaction-form__date-card">
+              <TimeWheelPicker label="提醒时间" onValueChange={setRemindTime} value={remindTime} />
+            </div>
+            {endDate ? null : (
+              <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                需设置「到期日」后提醒才会生效。
+              </p>
+            )}
+          </ToggleCard>
 
           <AttachmentPicker
             accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"

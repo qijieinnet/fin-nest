@@ -39,7 +39,7 @@ import {
   categoryRowProps,
   TRANSFER_ICON,
 } from "@/lib/data/options";
-import { useSubscriptions } from "@/lib/data/records";
+import { useInsurances, useSubscriptions } from "@/lib/data/records";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useDecimalPlaces, useLedger, usePreferences, useSheetStack } from "@/providers";
@@ -47,6 +47,8 @@ import {
   dueRenewalSubscriptions,
   SubscriptionRenewalConfirmSheet,
 } from "@/app/more/subscriptions/_components/SubscriptionRenewalConfirmSheet";
+import { InsuranceReminderSheet } from "@/app/more/insurances/_components/InsuranceReminderSheet";
+import { dueReminderInsurances } from "@/app/more/insurances/_components/insurance-utils";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
 import { dayLabel, periodLabel } from "./_components/bill-utils";
 import { useBillsModel } from "./_model/useBillsModel";
@@ -88,6 +90,8 @@ export function BillsScreenMobile() {
   const ledgerId = currentLedger?.id ?? null;
   const subscriptionsQuery = useSubscriptions(ledgerId);
   const dueRenewalCount = dueRenewalSubscriptions(subscriptionsQuery.data ?? []).length;
+  const insurancesQuery = useInsurances(ledgerId);
+  const dueInsuranceCount = dueReminderInsurances(insurancesQuery.data ?? []).length;
 
   const openRenewals = () => {
     if (!ledgerId) return;
@@ -96,6 +100,16 @@ export function BillsScreenMobile() {
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
       hideDefaultHeader: true,
       content: <SubscriptionRenewalConfirmSheet ledgerId={ledgerId} />,
+    });
+  };
+
+  const openInsuranceReminders = () => {
+    if (!ledgerId) return;
+    setMoreMenuOpen(false);
+    push({
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
+      hideDefaultHeader: true,
+      content: <InsuranceReminderSheet ledgerId={ledgerId} />,
     });
   };
 
@@ -118,11 +132,15 @@ export function BillsScreenMobile() {
                   label: "统计",
                   onClick: () => router.push(routes.stats),
                 },
-                // 有待确认记录、待确认续费或启用账本切换时显示「更多」入口。
-                ...(model.pendingCount > 0 || dueRenewalCount > 0 || showLedgerSwitcher
+                // 有待确认记录、待确认续费、保险到期提醒或启用账本切换时显示「更多」入口。
+                ...(model.pendingCount > 0 ||
+                dueRenewalCount > 0 ||
+                dueInsuranceCount > 0 ||
+                showLedgerSwitcher
                   ? [
                       {
-                        dot: model.pendingCount > 0 || dueRenewalCount > 0,
+                        dot:
+                          model.pendingCount > 0 || dueRenewalCount > 0 || dueInsuranceCount > 0,
                         icon: <Ellipsis size={22} />,
                         label: "更多",
                         onClick: () => setMoreMenuOpen((open) => !open),
@@ -171,6 +189,20 @@ export function BillsScreenMobile() {
                         ),
                         label: "续费确认",
                         onSelect: openRenewals,
+                      },
+                    ]
+                  : [],
+                dueInsuranceCount > 0
+                  ? [
+                      {
+                        description: `${dueInsuranceCount} 份待处理`,
+                        icon: (
+                          <DotBadge show={dueInsuranceCount > 0}>
+                            <BellRing size={18} />
+                          </DotBadge>
+                        ),
+                        label: "保险到期",
+                        onSelect: openInsuranceReminders,
                       },
                     ]
                   : [],

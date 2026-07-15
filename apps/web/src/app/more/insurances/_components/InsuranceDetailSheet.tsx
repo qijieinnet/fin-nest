@@ -1,9 +1,11 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
 import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import { Button } from "@/components/ui";
 import {
+  apiRequest,
   type AttachmentRecord,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
@@ -11,7 +13,9 @@ import {
   type Person,
 } from "@/lib/api";
 import { useAttachments, useInsurance } from "@/lib/data/records";
-import { useSheetStack, useToast } from "@/providers";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useConfirm, useSheetStack, useToast } from "@/providers";
+import { InsuranceEditorSheet } from "./InsuranceEditorSheet";
 import { InsuranceTransactionList } from "./InsuranceTransactionList";
 import {
   formatDateLabel,
@@ -19,16 +23,18 @@ import {
   insuranceStatus,
   insuranceTypeMeta,
   premiumFreqLabel,
+  remindLeadLabel,
   renewalLabel,
 } from "./insurance-utils";
 
 type InsuranceDetailSheetProps = {
   insuranceId: string;
   ledgerId: string;
-  onDelete: () => void;
-  onEdit: () => void;
-  onResume: () => void;
-  onTerminate: () => void;
+  // 外部回调可选；未传时详情内置处理（编辑/终止/恢复/删除），使详情可脱离父级独立复用。
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onResume?: () => void;
+  onTerminate?: () => void;
   people: Person[];
   resuming?: boolean;
   terminating?: boolean;
@@ -36,6 +42,7 @@ type InsuranceDetailSheetProps = {
 
 const STATUS_CLASS: Record<string, string> = {
   active: "bg-[var(--color-tint-soft)] text-[var(--color-tint)]",
+  dueSoon: "bg-[rgba(255,149,0,0.14)] text-[var(--color-accent-warning,#c77700)]",
   expired: "bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]",
   terminated: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
@@ -72,15 +79,79 @@ export function InsuranceDetailSheet({
   terminating = false,
 }: InsuranceDetailSheetProps) {
   const { showToast } = useToast();
-  const { push } = useSheetStack();
+  const { push, pop } = useSheetStack();
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const detailQuery = useInsurance(ledgerId, insuranceId);
   const attachmentsQuery = useAttachments(ledgerId, "insurance", insuranceId);
   const attachmentRecords = attachmentsQuery.data ?? [];
   const insurance = detailQuery.data;
 
+  const invalidateInsurance = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.insurances(ledgerId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId, insuranceId) }),
+    ]);
+
+  const onMutationError = (error: unknown) =>
+    showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
+
+  const terminateInternal = useMutation({
+    mutationFn: () =>
+      apiRequest(ledgerApiPath(ledgerId, `/insurances/${insuranceId}/terminate`), {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await invalidateInsurance();
+      const expired = insuranceStatus(detailQuery.data ?? { terminatedAt: null, endDate: null, remindLeadValue: null, remindLeadUnit: null }).key === "expired";
+      showToast({ tone: "success", message: expired ? "保单已归档" : "已终止续保" });
+    },
+    onError: onMutationError,
+  });
+
+  const resumeInternal = useMutation({
+    mutationFn: () =>
+      apiRequest(ledgerApiPath(ledgerId, `/insurances/${insuranceId}/resume`), { method: "POST" }),
+    onSuccess: async () => {
+      await invalidateInsurance();
+      showToast({ tone: "success", message: "已恢复保单" });
+    },
+    onError: onMutationError,
+  });
+
+  const removeInternal = useMutation({
+    mutationFn: () =>
+      apiRequest<void>(ledgerApiPath(ledgerId, `/insurances/${insuranceId}`), { method: "DELETE" }),
+    onSuccess: async () => {
+      await invalidateInsurance();
+      showToast({ tone: "success", message: "保单已删除" });
+      pop();
+    },
+    onError: onMutationError,
+  });
+
   if (!insurance) {
     return <LoadingState rows={5} title="加载保单" />;
   }
+
+  const openEditorInternal = () => {
+    push({
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--sheet-form",
+      hideDefaultHeader: true,
+      content: <InsuranceEditorSheet insurance={insurance} ledgerId={ledgerId} people={people} />,
+    });
+  };
+
+  const confirmDeleteInternal = async () => {
+    if (removeInternal.isPending) return;
+    const confirmed = await confirm({
+      title: `删除「${insurance.name}」？`,
+      message: "关联的记账记录会保留，仅移除该保单。",
+      confirmText: "删除",
+      tone: "danger",
+    });
+    if (confirmed) removeInternal.mutate();
+  };
 
   async function openAttachment(item: AttachmentItem): Promise<string | void> {
     if (item.url) {
@@ -107,6 +178,14 @@ export function InsuranceDetailSheet({
       ),
     });
   };
+
+  // 外部回调优先；否则用详情内置处理，使详情可脱离父级独立复用（如从到期提醒列表打开）。
+  const handleEdit = onEdit ?? openEditorInternal;
+  const handleTerminate = onTerminate ?? (() => terminateInternal.mutate());
+  const handleResume = onResume ?? (() => resumeInternal.mutate());
+  const handleDelete = onDelete ?? confirmDeleteInternal;
+  const terminatingState = terminating || terminateInternal.isPending;
+  const resumingState = resuming || resumeInternal.isPending;
 
   const meta = insuranceTypeMeta(insurance.type);
   const status = insuranceStatus(insurance);
@@ -169,6 +248,14 @@ export function InsuranceDetailSheet({
           ) : null}
           <DetailRow label="生效日" value={formatDateLabel(insurance.startDate)} />
           <DetailRow label="到期日" value={formatDateLabel(insurance.endDate)} />
+          <DetailRow
+            label="到期提醒"
+            value={
+              remindLeadLabel(insurance)
+                ? [remindLeadLabel(insurance), insurance.remindTime].filter(Boolean).join(" · ")
+                : "未设置"
+            }
+          />
         </div>
       </section>
 
@@ -225,7 +312,7 @@ export function InsuranceDetailSheet({
         <Button
           className="!bg-[var(--color-bg-surface)]"
           icon={<Edit3 size={17} />}
-          onClick={onEdit}
+          onClick={handleEdit}
           variant="secondary"
         >
           编辑保单
@@ -233,29 +320,29 @@ export function InsuranceDetailSheet({
         {!insurance.terminatedAt ? (
           <Button
             className="!bg-[var(--color-bg-surface)]"
-            disabled={terminating}
+            disabled={terminatingState}
             icon={status.key === "expired" ? <Archive size={17} /> : <Ban size={17} />}
-            onClick={onTerminate}
+            onClick={handleTerminate}
             variant="secondary"
           >
-            {terminating ? "处理中…" : status.key === "expired" ? "归档保单" : "终止续保"}
+            {terminatingState ? "处理中…" : status.key === "expired" ? "归档保单" : "终止续保"}
           </Button>
         ) : null}
         {insurance.terminatedAt ? (
           <Button
             className="!bg-[var(--color-bg-surface)]"
-            disabled={resuming}
+            disabled={resumingState}
             icon={<RotateCcw size={17} />}
-            onClick={onResume}
+            onClick={handleResume}
             variant="secondary"
           >
-            {resuming ? "处理中…" : "恢复保单"}
+            {resumingState ? "处理中…" : "恢复保单"}
           </Button>
         ) : null}
         <Button
           className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
           icon={<Trash2 size={17} />}
-          onClick={onDelete}
+          onClick={handleDelete}
           variant="danger"
         >
           删除保单
