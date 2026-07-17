@@ -29,4 +29,5 @@ export const routes = {
   stats: "/stats",
   budget: "/budget",
   more: "/more",
+  ai: "/ai",
 } as const;

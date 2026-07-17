@@ -54,6 +54,8 @@ function templateToSeed(template: QuickTemplate): TransactionSeed {
 
 type NewBillFormScreenProps = {
   embedded?: boolean;
+  /** 外部注入的初始 seed（AI 草稿「去编辑」），优先级低于交互选择的快捷模板。 */
+  initialSeed?: TransactionSeed | null;
   onClose?: () => void;
   onSaved?: () => void;
   templateId?: string | null;
@@ -61,6 +63,7 @@ type NewBillFormScreenProps = {
 
 export function NewBillFormScreen({
   embedded = false,
+  initialSeed = null,
   onClose,
   onSaved,
   templateId,
@@ -114,12 +117,14 @@ export function NewBillFormScreen({
       }
     : undefined;
 
-  const seed = selectedSeed ?? prefillSeed;
+  const seed = selectedSeed ?? initialSeed ?? prefillSeed;
   const seedKey = selectedSeed
     ? `seed:${seedRevision}`
-    : templateId
-      ? `template:${templateId}`
-      : "blank";
+    : initialSeed
+      ? "ai-draft"
+      : templateId
+        ? `template:${templateId}`
+        : "blank";
 
   const waitingForPrefill = Boolean(templateId) && !selectedSeed && prefillQuery.isPending;
   const applyTemplate = useCallback((selected: QuickTemplate) => {

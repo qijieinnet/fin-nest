@@ -1208,6 +1208,15 @@ select:focus-visible {
   top: -5px;
 }
 
+/* 收窄版底部导航：不撑满容器、按内容自适应（AI 按钮与主导航左右分置时使用）。 */
+.tab-bar--fit {
+  grid-template-columns: repeat(var(--tab-count, 4), minmax(48px, auto));
+}
+
+.tab-bar--fit .tab-bar__item {
+  padding: 0 4px;
+}
+
 .ui-icon-button {
   justify-self: center;
 }
@@ -4526,6 +4535,13 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* 侧边栏底部固定区（AI 助手入口）：靠 margin-top:auto 沉底。 */
+.desktop-sidebar__footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .desktop-nav-item {

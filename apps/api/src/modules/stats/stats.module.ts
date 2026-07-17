@@ -8,5 +8,6 @@ import { StatsService } from "./stats.service";
   imports: [AuthModule, LedgersModule],
   controllers: [StatsController],
   providers: [StatsService],
+  exports: [StatsService],
 })
 export class StatsModule {}

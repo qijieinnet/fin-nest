@@ -735,3 +735,101 @@ export type AttachmentRecord = {
     deletedAt: string | null;
   };
 };
+
+// ---------- AI 助手 ----------
+
+export type AiStatus = {
+  enabled: boolean;
+  model: string | null;
+};
+
+export type AiConversationSummary = {
+  id: string;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 记账草稿卡字段：金额为 micros 字符串，名称冗余存储供历史回放展示。 */
+export type AiDraftFields = {
+  type: "expense" | "income" | "transfer";
+  grossAmountMicros: string;
+  occurredOn: string;
+  categoryId?: string;
+  categoryName?: string;
+  subcategoryId?: string;
+  subcategoryName?: string;
+  personId?: string;
+  personName?: string;
+  accountId?: string;
+  accountName?: string;
+  subAccountId?: string;
+  subAccountName?: string;
+  fromAccountId?: string;
+  fromAccountName?: string;
+  fromSubAccountId?: string;
+  fromSubAccountName?: string;
+  toAccountId?: string;
+  toAccountName?: string;
+  toSubAccountId?: string;
+  toSubAccountName?: string;
+  note?: string;
+};
+
+export type AiTransactionRow = {
+  occurredOn: string;
+  type: string;
+  grossAmountMicros: string;
+  categoryName?: string;
+  note?: string;
+};
+
+export type AiCard =
+  | {
+      kind: "transaction_draft";
+      status: "proposed" | "confirmed";
+      transactionId?: string;
+      draft: AiDraftFields;
+    }
+  | {
+      kind: "transactions";
+      title: string;
+      count: number;
+      expenseMicros: string;
+      incomeMicros: string;
+      rows: AiTransactionRow[];
+    }
+  | {
+      kind: "stats_month";
+      month: string;
+      expenseMicros: string;
+      incomeMicros: string;
+      topExpenseCategories: Array<{ name: string; amountMicros: string }>;
+    };
+
+export type AiMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  cards: AiCard[] | null;
+  createdAt: string;
+};
+
+export type AiConversationDetail = {
+  conversation: AiConversationSummary;
+  messages: AiMessage[];
+};
+
+export type AiChatResult = {
+  conversationId: string;
+  title: string | null;
+  message: AiMessage;
+};
+
+/** POST /ai/chat/stream 的 SSE 事件（event 名 → data 结构）。 */
+export type AiChatStreamEvents = {
+  delta: { text: string };
+  card: { card: AiCard };
+  done: AiChatResult;
+  error: { message: string };
+};

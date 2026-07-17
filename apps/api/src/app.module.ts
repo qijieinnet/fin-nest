@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { BackendPlatformModule } from "@fin-nest/backend";
 import { HealthController } from "./health/health.controller";
 import { AccountsModule } from "./modules/accounts/accounts.module";
+import { AiModule } from "./modules/ai/ai.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { AutomationModule } from "./modules/automation/automation.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -24,6 +25,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     AuthModule,
     LedgersModule,
     AccountsModule,
+    AiModule,
     AssetsModule,
     AutomationModule,
     DataTransferModule,

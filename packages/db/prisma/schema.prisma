@@ -747,3 +747,35 @@ model ImportJob {
   @@index([ledgerId])
   @@map("import_jobs")
 }
+
+model AiConversation {
+  id        String    @id @default(uuid()) @db.Uuid
+  ledgerId  String    @map("ledger_id") @db.Uuid
+  // 会话按创建者私有：仅本人可见/可续聊，不做账本内共享。
+  userId    String    @map("user_id") @db.Uuid
+  // 取首条用户消息截断生成，可为空（极端情况下创建即失败重试）。
+  title     String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  ledgerId       String   @map("ledger_id") @db.Uuid
+  // user | assistant（工具调用中间态不落库，只存对话的可见内容）。
+  role           String
+  content        String
+  // assistant 消息携带的结构化卡片数组（记账草稿/查询结果等），前端按 kind 渲染；
+  // 草稿卡确认后回写 status/transactionId，历史回放时显示「已记账」。
+  cards          Json?    @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}

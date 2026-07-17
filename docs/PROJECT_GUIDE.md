@@ -30,9 +30,9 @@ infra/
 docs/       # 本文件
 ```
 
-API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品/订阅）、`files`（附件）、`data-transfer`（导入导出/备份恢复）、`reminders`（红点聚合）。
+API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品/订阅）、`files`（附件）、`data-transfer`（导入导出/备份恢复）、`reminders`（红点聚合）、`ai`（AI 助手：LLM 工具调用、会话/消息、记账草稿）。
 
-Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/more/*`（categories、people、settings、auto、quick、insurances、items、subscriptions、import-export、users、admin、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
+Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/ai`（AI 助手聊天，全屏、移动端底部导航左侧独立入口 / 桌面侧边栏底部入口）、`/more/*`（categories、people、settings、auto、quick、insurances、items、subscriptions、import-export、users、admin、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
 
 ## 3. 功能清单
 
@@ -47,9 +47,9 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 - **统计**：月度收支、分类占比与下钻、人员排行、趋势、净资产序列、现金流序列；口径统一用有效金额。
 - **提醒红点**：`GET /ledgers/:ledgerId/reminder-summary` 聚合自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 - **导入导出**（模块 `data-transfer`）：Excel 全量导出 / 记账模板下载 / 增量导入（`dryRun` 同步返回预览；正式导入入队后台 job，`import_jobs` 表跟踪状态）；JSON 全量备份与覆盖式恢复（仅 owner，需输入账本名确认；恢复时重新生成全部 UUID）。
-- **附件**：客户端 multipart 上传 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
+- **AI 助手**（模块 `ai`，可选启用）：配置 `AI_BASE_URL/AI_API_KEY/AI_MODEL`（OpenAI-compatible，可指 DeepSeek/通义/本地 Ollama）后启用，未配置时接口返回未启用、前端隐藏入口。聊天页 `/ai`：自然语言记账与查询；LLM 通过工具调用工作——`draft_transaction` 只产出**记账草稿卡片**（不写库），用户在卡片上确认后由前端调既有 `POST /transactions`（幂等键 `ai-card-{messageId}-{cardIndex}`）入账并回写卡片状态；`query_transactions`/`get_monthly_stats` 复用 TransactionsService/StatsService 出查询/统计卡片。金额换算（元→micros）在确定性代码中完成，LLM 只产出十进制「元」字符串；分类/账户/人员的真实 id 注入系统提示，后端二次校验归属。会话按创建者私有并持久化（`ai_conversations`/`ai_messages`，软删）。工具循环上限 6 轮；聊天走 SSE 流式（`POST /ai/chat/stream`，事件 delta/card/done/error，思维链不透出），非流式 `POST /ai/chat` 保留同构结果。 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
 
-预留但未接线：`ServiceTokenService.authenticate`（scope / CIDR IP 白名单 / actorUserId+ledgerId 代表用户校验）尚无业务端点调用，为将来 AI/外部系统集成预留；当前创建的 service token 只能被管理、不能访问业务数据。AI 能力未实现。
+预留但未接线：`ServiceTokenService.authenticate`（scope / CIDR IP 白名单 / actorUserId+ledgerId 代表用户校验）尚无业务端点调用，为将来外部系统集成（iOS 捷径等）预留；当前创建的 service token 只能被管理、不能访问业务数据。应用内 AI 助手走用户自己的 session 鉴权，不经 service token。
 
 ## 4. 核心不变式（改代码必须遵守）
 
@@ -76,7 +76,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 - 附件 MIME 白名单（图片/PDF/Office/视频），无 SVG/HTML 等可执行类型；上限 20MB。
 - CORS 仅放行 `WEB_ORIGIN`（正常流量走同源 /api 代理，不跨域）。
 
-## 6. 数据模型速览（37 个模型）
+## 6. 数据模型速览（39 个模型）
 
 | 分组 | 模型 |
 |---|---|
@@ -90,6 +90,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 | 档案 | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
 | 文件 | File, Attachment |
 | 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
+| AI 助手 | AiConversation, AiMessage |
 
 表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。迁移目录用**两位补零**前缀（`00_`..），保证 Prisma 字典序应用顺序 == 依赖顺序；新增迁移沿用递增两位前缀。
 
@@ -125,6 +126,7 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 | `TRUST_PROXY` | 有可信反代设 `true`，直连保持 `false`（见 §5） |
 | `APP_TIMEZONE` | 「今天/本月」的时区（默认 Asia/Shanghai），影响统计月份与自动记账触发 |
 | `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用；OpenAI-compatible `/chat/completions` 协议 |
 | `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |
 | `API_INTERNAL_URL` | web 容器内转发 /api 的目标 |
 

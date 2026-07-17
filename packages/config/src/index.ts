@@ -71,6 +71,12 @@ const EnvSchema = z.object({
 
   // worker 常驻轮询间隔；后台任务（自动记账生成、文件删除重试）依赖 worker 持续运行。
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
+
+  // AI 助手（可选）：三者都配置时启用；OpenAI-compatible /chat/completions 协议，
+  // 可指向 DeepSeek / 通义 / 本地 Ollama 等。未配置时 AI 相关端点返回未启用、前端隐藏入口。
+  AI_BASE_URL: z.string().url().optional(),
+  AI_API_KEY: z.string().min(1).optional(),
+  AI_MODEL: z.string().min(1).optional(),
 }).superRefine((config, ctx) => {
   // 生产环境禁止 MinIO 弱凭证：secret 是附件存储的唯一门禁，默认值等于对外裸奔。
   const weakSecrets = new Set(["minioadmin", "change-me-please"]);

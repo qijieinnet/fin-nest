@@ -86,3 +86,27 @@ export function approveJoinRequestPath(ledgerId: string, requestId: string): str
 export function rejectJoinRequestPath(ledgerId: string, requestId: string): string {
   return ledgerApiPath(ledgerId, `/join-requests/${encodeURIComponent(requestId)}/reject`);
 }
+
+export function aiStatusPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/ai/status");
+}
+
+export function aiConversationsPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/ai/conversations");
+}
+
+export function aiConversationPath(ledgerId: string, conversationId: string): string {
+  return ledgerApiPath(ledgerId, `/ai/conversations/${encodeURIComponent(conversationId)}`);
+}
+
+export function aiChatPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/ai/chat");
+}
+
+export function aiChatStreamPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/ai/chat/stream");
+}
+
+export function aiMessageCardStatePath(ledgerId: string, messageId: string): string {
+  return ledgerApiPath(ledgerId, `/ai/messages/${encodeURIComponent(messageId)}/card-state`);
+}

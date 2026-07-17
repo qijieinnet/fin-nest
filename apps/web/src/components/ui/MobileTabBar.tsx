@@ -1,11 +1,12 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useAiStatus } from "@/lib/data/ai";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { navMenuByKey } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
-import { usePreferences } from "@/providers";
+import { useLedger, usePreferences } from "@/providers";
 import { TabBar } from "./TabBar";
 
 // 底部导航最多容纳的一级菜单数（再加固定的「更多」共 5 个，符合移动端 tab 密度）。
@@ -17,12 +18,24 @@ const MORE_TAB = {
   icon: <MoreHorizontal size={20} />,
 };
 
-/** 全局底部导航：按「系统设置 → 导航菜单」的顺序/可见性渲染一级菜单 + 固定的「更多」，居中于容器底部。 */
+const AI_TAB = {
+  value: routes.ai,
+  label: "AI",
+  icon: <Sparkles size={20} />,
+};
+
+/**
+ * 全局底部导航：按「系统设置 → 导航菜单」的顺序/可见性渲染一级菜单 + 固定的「更多」。
+ * AI 启用时布局为「左贴边 AI 按钮 + 右贴边主导航、中间留空」；未启用时主导航居中撑满（原样式）。
+ */
 export function MobileTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const isDesktop = useIsDesktop();
   const { preferences } = usePreferences();
+  const { currentLedger } = useLedger();
+  const aiStatusQuery = useAiStatus(currentLedger?.id ?? null);
+  const aiEnabled = aiStatusQuery.data?.enabled === true;
 
   // 与桌面侧边栏一致：按用户配置的顺序取未隐藏的一级菜单，超出容量的收进「更多」。
   const hidden = new Set(preferences.navMenuHidden);
@@ -47,18 +60,37 @@ export function MobileTabBar() {
   // 桌面断点由 DesktopSidebar 承担导航，底部 TabBar 不渲染。
   if (isDesktop) return null;
 
+  const mainTabBar = (
+    <TabBar
+      className={aiEnabled ? "tab-bar--fit" : undefined}
+      items={tabs}
+      onValueChange={(next) => {
+        if (next !== value) router.push(next);
+      }}
+      value={value}
+    />
+  );
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">
       <div className="relative w-[min(100vw,var(--space-app-width))]">
-        <div className="pointer-events-auto absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))]">
-          <TabBar
-            items={tabs}
-            onValueChange={(next) => {
-              if (next !== value) router.push(next);
-            }}
-            value={value}
-          />
-        </div>
+        {aiEnabled ? (
+          <div className="absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))] flex items-stretch justify-between gap-2">
+            <div className="pointer-events-auto">
+              <TabBar
+                className="tab-bar--fit"
+                items={[AI_TAB]}
+                onValueChange={() => router.push(routes.ai)}
+                value=""
+              />
+            </div>
+            <div className="pointer-events-auto">{mainTabBar}</div>
+          </div>
+        ) : (
+          <div className="pointer-events-auto absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))]">
+            {mainTabBar}
+          </div>
+        )}
       </div>
     </div>
   );

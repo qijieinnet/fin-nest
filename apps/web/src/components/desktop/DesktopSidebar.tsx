@@ -1,9 +1,10 @@
 "use client";
 
-import { ChartPie, type LucideIcon, MoreHorizontal } from "lucide-react";
+import { ChartPie, type LucideIcon, MoreHorizontal, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
+import { useAiStatus } from "@/lib/data/ai";
 import { useAutoPending } from "@/lib/data/records";
 import { navMenuByKey } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
@@ -29,6 +30,8 @@ export function DesktopSidebar() {
   const { preferences } = usePreferences();
   const autoPendingQuery = useAutoPending(currentLedger?.id ?? null);
   const pendingCount = autoPendingQuery.data?.length ?? 0;
+  const aiStatusQuery = useAiStatus(currentLedger?.id ?? null);
+  const aiEnabled = aiStatusQuery.data?.enabled === true;
 
   // 一级导航：按用户在「系统设置 → 导航菜单」配置的顺序/可见性渲染，统计固定常驻。
   const hidden = new Set(preferences.navMenuHidden);
@@ -124,6 +127,20 @@ export function DesktopSidebar() {
           </div>
         </div>
       </nav>
+
+      {aiEnabled ? (
+        <div className="desktop-sidebar__footer">
+          <button
+            aria-current={isActive(pathname, routes.ai) ? "page" : undefined}
+            className={`desktop-nav-item${isActive(pathname, routes.ai) ? " desktop-nav-item--active" : ""}`}
+            onClick={() => go(routes.ai)}
+            type="button"
+          >
+            <Sparkles size={20} />
+            <span>AI 助手</span>
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

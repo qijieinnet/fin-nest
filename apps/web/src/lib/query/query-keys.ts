@@ -50,6 +50,10 @@ export const queryKeys = {
     ["ledger", ledgerId, "transactions", filters ?? null] as const,
   transaction: (ledgerId: string, transactionId: string) =>
     ["ledger", ledgerId, "transaction", transactionId] as const,
+  aiStatus: (ledgerId: string) => ["ledger", ledgerId, "ai", "status"] as const,
+  aiConversations: (ledgerId: string) => ["ledger", ledgerId, "ai", "conversations"] as const,
+  aiConversation: (ledgerId: string, conversationId: string) =>
+    ["ledger", ledgerId, "ai", "conversations", conversationId] as const,
 };
 
 /**
