@@ -11,6 +11,7 @@ import { AiCard, AiDraftFields, AiStatsCategory, AiTransactionRow } from "./ai-c
 import { microsToYuan, yuanToMicros } from "./ai-money";
 import { isValidDateKey } from "./ai-validation";
 import { ChatRequestDto } from "./dto/chat-request.dto";
+import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
 import { LlmClient, LlmMessage, LlmTool, LlmToolCall } from "./llm-client";
 
@@ -186,12 +187,13 @@ export class AiService {
     return { enabled: this.llm !== null, model: this.llm ? (this.config.AI_MODEL ?? null) : null };
   }
 
-  async listConversations(ledgerId: string, userId: string) {
+  async listConversations(ledgerId: string, userId: string, query: ListConversationsQueryDto = {}) {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.aiConversation.findMany({
       where: { ledgerId, userId, deletedAt: null },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: Math.min(query.limit ?? 20, 50),
+      skip: query.offset ?? 0,
       select: { id: true, title: true, createdAt: true, updatedAt: true },
     });
   }
@@ -807,6 +809,7 @@ export class AiService {
       "## 规则",
       `- 金额使用账本币种 ${context.currency} 的主单位十进制字符串（如 "88.5"），最多 ${context.amountDecimalPlaces} 位小数，不做单位换算。`,
       "- 分类/账户/人员 id 必须来自下方列表，绝不编造；没有合适的分类就不传 categoryId。",
+      "- 用户输入常来自语音转写，人名、分类名、账户名可能被写成同音/近音的别字（如列表中人员是「张伟」，转写成「章委」「张委」）。提取参数时先与下方列表做模糊匹配：读音相同或相近、或明显是指同一人/同一项的，就取列表中对应的 id，并在正文或备注中使用列表里的正确写法；实在对不上再按「未提及」处理。",
       "- 用户没说日期就用今天；「昨天/上周三」等相对日期按今天推算。",
       "- 用户没提的字段（账户/人员/备注）不要传。",
       "- draft_transaction 的收付款账户只能选择储蓄、信用或投资账户；可收回/需归还账户只用于查询。",

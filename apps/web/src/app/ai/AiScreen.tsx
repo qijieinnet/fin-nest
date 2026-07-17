@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, History, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { ChevronLeft, History, Mic, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { LoadingState } from "@/components/business";
 import { BottomSheet, IconButton, MobileAppShell, NavigationBar } from "@/components/ui";
@@ -21,8 +21,8 @@ import {
 import {
   streamAiChat,
   useAiConversation,
-  useAiConversations,
   useAiStatus,
+  useInfiniteAiConversations,
   useDeleteAiConversation,
   useUpdateAiCardState,
 } from "@/lib/data/ai";
@@ -31,6 +31,8 @@ import {
   aiCardIdempotencyKey,
   type AiDraftHandoff,
 } from "@/lib/data/ai-draft-handoff";
+import { usePeople } from "@/lib/data/records";
+import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useToast } from "@/providers";
@@ -80,7 +82,25 @@ export function AiScreen() {
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
 
   const conversationQuery = useAiConversation(ledgerId, conversationId);
-  const conversationsQuery = useAiConversations(historyOpen ? ledgerId : null);
+  const conversationsQuery = useInfiniteAiConversations(historyOpen ? ledgerId : null);
+  const conversations = conversationsQuery.data?.pages.flat() ?? [];
+  const { fetchNextPage, hasNextPage, isFetchingNextPage } = conversationsQuery;
+  // 历史会话滚动到底部前自动拉下一页；sentinel 进入视口即触发（sheet-body 内滚动也能感知）。
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el || !historyOpen) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "160px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [historyOpen, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const deleteConversation = useDeleteAiConversation(ledgerId);
   const updateCardState = useUpdateAiCardState(ledgerId);
   // 流式进行中的助手消息（未持久化）：delta 增量拼正文、card 事件实时追加；done 后替换为持久化消息。
@@ -143,9 +163,33 @@ export function AiScreen() {
   const abortRef = useRef<AbortController | null>(null);
   const handleStop = () => abortRef.current?.abort();
 
+  // 语音输入：录音开始时记住已有文本，转写结果实时拼在其后（中文无需分隔符）。
+  const speechBaseRef = useRef("");
+  const peopleQuery = usePeople(ledgerId);
+  // 人员名是通用识别模型最弱的短专有名词，作为热词传给识别引擎
+  //（仅支持 contextual biasing 的浏览器生效，其余静默忽略）。
+  const speechPhrases = useMemo(
+    () => (peopleQuery.data ?? []).map((person) => person.name),
+    [peopleQuery.data],
+  );
+  const speech = useSpeechInput({
+    phrases: speechPhrases,
+    onTranscript: (transcript) => setInput(speechBaseRef.current + transcript),
+    onError: (message) => showToast({ tone: "error", message }),
+  });
+  const handleVoiceToggle = () => {
+    if (speech.listening) {
+      speech.stop();
+      return;
+    }
+    speechBaseRef.current = input;
+    speech.start();
+  };
+
   const handleSend = (raw?: string) => {
     const content = (raw ?? input).trim();
     if (!content || sending || !ledgerId) return;
+    if (speech.listening) speech.stop();
     setInput("");
     setMessages((prev) => [
       ...prev,
@@ -257,6 +301,12 @@ export function AiScreen() {
   const aiEnabled = aiStatusQuery.data?.enabled === true;
   const loadingConversation = Boolean(conversationId) && conversationQuery.isPending;
 
+  // 输入栏按钮三选一：生成中只显示停止；录音中或输入为空显示语音；有内容且非录音显示发送。
+  const hasInput = input.trim().length > 0;
+  const showStop = sending;
+  const showMic = !sending && speech.supported && (speech.listening || !hasInput);
+  const showSend = !sending && !speech.listening && (hasInput || !speech.supported);
+
   return (
     <MobileAppShell>
       <main className="flex h-dvh flex-col px-[var(--space-page-x)]">
@@ -282,7 +332,7 @@ export function AiScreen() {
           variant="inline"
         />
 
-        <div className="flex-1 overflow-y-auto pb-4">
+        <div className="-mr-[var(--space-page-x)] flex-1 overflow-y-auto pb-4 pr-[var(--space-page-x)]">
           {aiStatusQuery.isPending ? (
             <LoadingState rows={2} title="加载中" />
           ) : !aiEnabled ? (
@@ -405,87 +455,120 @@ export function AiScreen() {
         {aiEnabled ? (
           <div className="sticky bottom-0 flex items-end gap-2 border-black/[0.05] bg-[var(--color-bg-app)] pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5">
             <textarea
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
-              onChange={(event) => setInput(event.target.value)}
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:shadow-none focus-visible:shadow-none"
+              onChange={(event) => {
+                // 录音中手动改字则停止识别，避免后续转写覆盖手动编辑。
+                if (speech.listening) speech.stop();
+                setInput(event.target.value);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   handleSend();
                 }
               }}
-              placeholder="例如：昨天打车 32 块"
+              placeholder={speech.listening ? "正在聆听…" : "例如：昨天打车 32 块"}
               rows={1}
               value={input}
             />
-            {sending ? (
+            {showMic ? (
+              <IconButton
+                icon={
+                  <Mic
+                    className={
+                      speech.listening ? "animate-pulse text-[var(--color-accent-expense)]" : ""
+                    }
+                    size={20}
+                  />
+                }
+                label={speech.listening ? "停止语音输入" : "语音输入"}
+                onClick={handleVoiceToggle}
+              />
+            ) : null}
+            {showStop ? (
               <IconButton
                 icon={<Square fill="currentColor" size={16} />}
                 label="停止生成"
                 onClick={handleStop}
                 variant="primary"
               />
-            ) : (
+            ) : showSend ? (
               <IconButton
-                disabled={!input.trim()}
+                disabled={!hasInput}
                 icon={<Send size={20} />}
                 label="发送"
                 onClick={() => handleSend()}
                 variant="primary"
               />
-            )}
+            ) : null}
           </div>
         ) : null}
       </main>
 
-      <BottomSheet onClose={() => setHistoryOpen(false)} open={historyOpen} title="历史会话">
+      <BottomSheet
+        className="ui-bottom-sheet--edge-scroll"
+        onClose={() => setHistoryOpen(false)}
+        open={historyOpen}
+        title="历史会话"
+      >
         <div className="flex flex-col gap-1 pb-4">
           {conversationsQuery.isPending ? (
             <LoadingState rows={3} title="加载会话" />
-          ) : (conversationsQuery.data?.length ?? 0) === 0 ? (
+          ) : conversations.length === 0 ? (
             <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
               还没有历史会话
             </p>
           ) : (
-            conversationsQuery.data!.map((conversation) => (
-              <div className="flex items-center gap-1" key={conversation.id}>
-                <button
-                  className={`min-w-0 flex-1 rounded-[14px] px-3 py-3 text-left ${
-                    conversation.id === conversationId
-                      ? "bg-[var(--color-control-fill-muted,rgba(0,0,0,0.05))]"
-                      : ""
-                  }`}
-                  onClick={() => {
-                    setConversationId(conversation.id);
-                    setHistoryOpen(false);
-                  }}
-                  type="button"
+            <>
+              {conversations.map((conversation) => (
+                <div className="flex items-center gap-1" key={conversation.id}>
+                  <button
+                    className={`min-w-0 flex-1 rounded-[14px] px-3 py-3 text-left ${
+                      conversation.id === conversationId
+                        ? "bg-[var(--color-control-fill-muted,rgba(0,0,0,0.05))]"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setConversationId(conversation.id);
+                      setHistoryOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <p className="truncate text-[15px] text-[var(--color-text-primary)]">
+                      {conversation.title ?? "未命名会话"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                      {new Date(conversation.updatedAt).toLocaleString("zh-CN")}
+                    </p>
+                  </button>
+                  <IconButton
+                    icon={<Trash2 size={18} />}
+                    label="删除会话"
+                    onClick={() => {
+                      deleteConversation.mutate(conversation.id, {
+                        onSuccess: () => {
+                          if (conversation.id === conversationId) startNewConversation();
+                        },
+                        onError: (error) => {
+                          showToast({
+                            tone: "error",
+                            message: getApiErrorMessage(error, "删除失败"),
+                          });
+                        },
+                      });
+                    }}
+                  />
+                </div>
+              ))}
+              {hasNextPage ? (
+                <div
+                  className="py-3 text-center text-xs text-[var(--color-text-muted)]"
+                  ref={loadMoreRef}
                 >
-                  <p className="truncate text-[15px] text-[var(--color-text-primary)]">
-                    {conversation.title ?? "未命名会话"}
-                  </p>
-                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                    {new Date(conversation.updatedAt).toLocaleString("zh-CN")}
-                  </p>
-                </button>
-                <IconButton
-                  icon={<Trash2 size={18} />}
-                  label="删除会话"
-                  onClick={() => {
-                    deleteConversation.mutate(conversation.id, {
-                      onSuccess: () => {
-                        if (conversation.id === conversationId) startNewConversation();
-                      },
-                      onError: (error) => {
-                        showToast({
-                          tone: "error",
-                          message: getApiErrorMessage(error, "删除失败"),
-                        });
-                      },
-                    });
-                  }}
-                />
-              </div>
-            ))
+                  加载中…
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </BottomSheet>

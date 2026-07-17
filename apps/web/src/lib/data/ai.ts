@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   aiChatPath,
   aiChatStreamPath,
@@ -30,10 +30,18 @@ export function useAiStatus(ledgerId: string | null) {
   });
 }
 
-export function useAiConversations(ledgerId: string | null) {
-  return useQuery({
-    queryKey: queryKeys.aiConversations(ledgerId ?? "none"),
-    queryFn: () => apiRequest<AiConversationSummary[]>(aiConversationsPath(ledgerId!)),
+/** 历史会话滚动加载：每页 pageSize 条，返回不足一页即无更多。 */
+export function useInfiniteAiConversations(ledgerId: string | null, pageSize = 20) {
+  return useInfiniteQuery({
+    // 前缀为 aiConversations(ledgerId)，聊天结束的 invalidate 会一并命中本分页查询。
+    queryKey: [...queryKeys.aiConversations(ledgerId ?? "none"), "paged"],
+    queryFn: ({ pageParam }) =>
+      apiRequest<AiConversationSummary[]>(aiConversationsPath(ledgerId!), {
+        query: { limit: pageSize, offset: pageParam },
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.length === pageSize ? allPages.length * pageSize : undefined,
     enabled: Boolean(ledgerId),
   });
 }
@@ -41,8 +49,7 @@ export function useAiConversations(ledgerId: string | null) {
 export function useAiConversation(ledgerId: string | null, conversationId: string | null) {
   return useQuery({
     queryKey: queryKeys.aiConversation(ledgerId ?? "none", conversationId ?? "none"),
-    queryFn: () =>
-      apiRequest<AiConversationDetail>(aiConversationPath(ledgerId!, conversationId!)),
+    queryFn: () => apiRequest<AiConversationDetail>(aiConversationPath(ledgerId!, conversationId!)),
     enabled: Boolean(ledgerId && conversationId),
   });
 }
@@ -112,7 +119,8 @@ export async function streamAiChat(
     if (event === "delta") handlers.onDelta((data as { text: string }).text);
     else if (event === "card") handlers.onCard((data as { card: AiCard }).card);
     else if (event === "done") result = data as AiChatResult;
-    else if (event === "error") upstreamError = (data as { message?: string }).message ?? "AI 服务出错";
+    else if (event === "error")
+      upstreamError = (data as { message?: string }).message ?? "AI 服务出错";
   };
 
   const reader = response.body.getReader();
@@ -158,14 +166,14 @@ export function useDeleteAiConversation(ledgerId: string | null) {
 /** 草稿卡确认入账后回写卡片状态（消息级更新，聊天页本地同步即可，不强制刷新会话）。 */
 export function useUpdateAiCardState(ledgerId: string | null) {
   return useMutation({
-    mutationFn: (input: {
-      messageId: string;
-      cardIndex: number;
-      transactionId: string;
-    }) =>
+    mutationFn: (input: { messageId: string; cardIndex: number; transactionId: string }) =>
       apiRequest<AiMessage>(aiMessageCardStatePath(ledgerId!, input.messageId), {
         method: "POST",
-        body: { cardIndex: input.cardIndex, status: "confirmed", transactionId: input.transactionId },
+        body: {
+          cardIndex: input.cardIndex,
+          status: "confirmed",
+          transactionId: input.transactionId,
+        },
       }),
   });
 }

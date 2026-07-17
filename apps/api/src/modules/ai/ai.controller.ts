@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOkResponse, ApiProduces, ApiTags } from "@nestjs/swagger";
 import { AppError } from "@fin-nest/backend";
 import type { Response } from "express";
@@ -7,6 +7,7 @@ import { CurrentAuth } from "../auth/current-auth.decorator";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import { AiService } from "./ai.service";
 import { ChatRequestDto } from "./dto/chat-request.dto";
+import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
 
 @ApiTags("ai")
@@ -24,8 +25,12 @@ export class AiController {
 
   @Get("conversations")
   @ApiOkResponse()
-  listConversations(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
-    return this.ai.listConversations(ledgerId, (auth as SessionAuthContext).userId);
+  listConversations(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Query() query: ListConversationsQueryDto,
+  ) {
+    return this.ai.listConversations(ledgerId, (auth as SessionAuthContext).userId, query);
   }
 
   @Get("conversations/:conversationId")
