@@ -2,13 +2,30 @@ import { AppError } from "../errors/app-error";
 
 /** Parse a `YYYY-MM-DD` date string into a UTC-midnight Date. */
 export function parseDateOnly(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new AppError("INVALID_DATE", "日期格式无效", 400);
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year!, month! - 1, day!));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month! - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    throw new AppError("INVALID_DATE", "日期格式无效", 400);
+  }
+  return parsed;
 }
 
 /** Half-open `[start, end)` range covering the given `YYYY-MM` month in UTC. */
 export function monthRange(month: string): { start: Date; end: Date } {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new AppError("INVALID_MONTH", "月份格式无效", 400);
+  }
   const [year, rawMonth] = month.split("-").map(Number);
-  if (!year || !rawMonth) throw new AppError("INVALID_MONTH", "月份格式无效", 400);
+  if (!year || !rawMonth || rawMonth < 1 || rawMonth > 12) {
+    throw new AppError("INVALID_MONTH", "月份格式无效", 400);
+  }
   return {
     start: new Date(Date.UTC(year, rawMonth - 1, 1)),
     end: new Date(Date.UTC(year, rawMonth, 1)),

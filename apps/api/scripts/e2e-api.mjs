@@ -1,9 +1,11 @@
-/* global console, fetch, process, setTimeout */
+/* global Blob, console, fetch, FormData, process, setTimeout */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "../../../packages/db/node_modules/@prisma/client/index.js";
+import prismaPackage from "../../../packages/db/generated/client/index.js";
+
+const { PrismaClient } = prismaPackage;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const apiDir = path.resolve(scriptDir, "..");
@@ -174,6 +176,7 @@ async function main() {
     category,
     person,
   });
+  await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
 
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
@@ -190,6 +193,7 @@ async function main() {
           "attachment_auth",
           "reminder_summary",
           "batch_update",
+          "effective_amount_queries",
           "idempotency",
         ],
       },
@@ -197,6 +201,81 @@ async function main() {
       2,
     ),
   );
+}
+
+/** 列表筛选、汇总与统计统一使用有效金额，并严格拒绝不存在的日历日期。 */
+async function assertEffectiveAmountQueries({ ledgerId, owner, account, category, person }) {
+  const token = owner.token;
+  const relationAccount = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "receivable", name: `E2E Receivable ${stamp}`, balanceMicros: "0" },
+  });
+  const note = `effective-${stamp}`;
+  const transaction = await api("POST", `/ledgers/${ledgerId}/transactions`, {
+    token,
+    expected: 201,
+    body: {
+      type: "expense",
+      grossAmountMicros: "10000000",
+      occurredOn: todayIso(),
+      categoryId: category.id,
+      personId: person.id,
+      accountId: account.id,
+      note,
+      relations: [
+        {
+          accountId: relationAccount.id,
+          relationKind: "receivable_from_expense",
+          amountMicros: "4000000",
+        },
+      ],
+    },
+  });
+  assert.equal(transaction.effectiveAmountMicros, "6000000");
+
+  const summary = await api(
+    "GET",
+    `/ledgers/${ledgerId}/transactions/summary?note=${encodeURIComponent(note)}`,
+    { token },
+  );
+  assert.equal(summary.count, 1);
+  assert.equal(summary.expenseMicros, "6000000");
+
+  const filtered = await api(
+    "GET",
+    `/ledgers/${ledgerId}/transactions?note=${encodeURIComponent(note)}&amountMinMicros=7000000`,
+    { token },
+  );
+  assert.equal(filtered.length, 0);
+
+  const stats = await api(
+    "GET",
+    `/ledgers/${ledgerId}/stats?month=${todayIso().slice(0, 7)}&note=${encodeURIComponent(note)}`,
+    { token },
+  );
+  assert.equal(stats.expense.totalMicros, "6000000");
+
+  const periodStats = await api(
+    "GET",
+    `/ledgers/${ledgerId}/stats?dateFrom=${todayIso()}&dateTo=${todayIso()}&note=${encodeURIComponent(note)}`,
+    { token },
+  );
+  assert.equal(periodStats.expense.totalMicros, "6000000");
+  assert.equal(periodStats.expense.categories[0]?.amountMicros, "6000000");
+
+  await api("POST", `/ledgers/${ledgerId}/transactions`, {
+    token,
+    expected: 400,
+    body: {
+      type: "expense",
+      grossAmountMicros: "1000000",
+      occurredOn: "2026-02-30",
+      categoryId: category.id,
+      personId: person.id,
+      note: `invalid-date-${stamp}`,
+    },
+  });
 }
 
 /** 批量修改单字段：备注/分类/人员/账户/日期/类型，并验证转账对分类/账户被跳过、类型互转的余额冲正正确。 */
@@ -466,37 +545,26 @@ async function assertPasswordVerify(token) {
 }
 
 async function assertAttachmentAuthorization(ledgerId, transactionId, ownerToken, requesterToken) {
-  const upload = await api("POST", `/ledgers/${ledgerId}/files/upload-url`, {
-    token: ownerToken,
-    expected: 201,
-    body: {
-      ownerType: "transaction",
-      ownerId: transactionId,
-      originalName: "private-contract.pdf",
-      mime: "application/pdf",
-    },
-  });
-  assert.equal(upload.objectKey.includes("private-contract"), false);
-  const bound = await api("POST", `/ledgers/${ledgerId}/attachments`, {
-    token: ownerToken,
-    expected: 201,
-    body: {
-      ownerType: "transaction",
-      ownerId: transactionId,
-      originalName: "private-contract.pdf",
-      mime: "application/pdf",
-      objectKey: upload.objectKey,
-      sizeBytes: "1024",
-    },
-  });
-  touched.fileIds.add(bound.file.id);
-  const download = await api(
-    "GET",
-    `/ledgers/${ledgerId}/attachments/${bound.attachment.id}/download-url`,
-    { token: ownerToken },
+  const form = new FormData();
+  form.set("ownerType", "transaction");
+  form.set("ownerId", transactionId);
+  form.set(
+    "file",
+    new Blob(["private e2e attachment"], { type: "application/pdf" }),
+    "private-contract.pdf",
   );
-  assert.ok(download.downloadUrl.startsWith("http"));
-  await api("GET", `/ledgers/${ledgerId}/attachments/${bound.attachment.id}/download-url`, {
+  const response = await fetch(`${baseUrl}/ledgers/${ledgerId}/files/upload`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${ownerToken}` },
+    body: form,
+  });
+  assert.equal(response.status, 201);
+  const uploaded = await response.json();
+  touched.fileIds.add(uploaded.file.id);
+  await api("GET", `/ledgers/${ledgerId}/attachments/${uploaded.attachment.id}/content`, {
+    token: ownerToken,
+  });
+  await api("GET", `/ledgers/${ledgerId}/attachments/${uploaded.attachment.id}/content`, {
     token: requesterToken,
     expected: 403,
   });

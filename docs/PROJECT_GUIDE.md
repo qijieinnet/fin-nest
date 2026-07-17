@@ -47,7 +47,7 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 - **统计**：月度收支、分类占比与下钻、人员排行、趋势、净资产序列、现金流序列；口径统一用有效金额。
 - **提醒红点**：`GET /ledgers/:ledgerId/reminder-summary` 聚合自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 - **导入导出**（模块 `data-transfer`）：Excel 全量导出 / 记账模板下载 / 增量导入（`dryRun` 同步返回预览；正式导入入队后台 job，`import_jobs` 表跟踪状态）；JSON 全量备份与覆盖式恢复（仅 owner，需输入账本名确认；恢复时重新生成全部 UUID）。
-- **AI 助手**（模块 `ai`，可选启用）：配置 `AI_BASE_URL/AI_API_KEY/AI_MODEL`（OpenAI-compatible，可指 DeepSeek/通义/本地 Ollama）后启用，未配置时接口返回未启用、前端隐藏入口。聊天页 `/ai`：自然语言记账与查询；LLM 通过工具调用工作——`draft_transaction` 只产出**记账草稿卡片**（不写库），用户在卡片上确认后由前端调既有 `POST /transactions`（幂等键 `ai-card-{messageId}-{cardIndex}`）入账并回写卡片状态；`query_transactions`/`get_monthly_stats` 复用 TransactionsService/StatsService 出查询/统计卡片。金额换算（元→micros）在确定性代码中完成，LLM 只产出十进制「元」字符串；分类/账户/人员的真实 id 注入系统提示，后端二次校验归属。会话按创建者私有并持久化（`ai_conversations`/`ai_messages`，软删）。工具循环上限 6 轮；聊天走 SSE 流式（`POST /ai/chat/stream`，事件 delta/card/done/error，思维链不透出），非流式 `POST /ai/chat` 保留同构结果。 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
+- **AI 助手**（模块 `ai`，可选启用）：配置 `AI_BASE_URL/AI_API_KEY/AI_MODEL`（OpenAI-compatible，可指 DeepSeek/通义/本地 Ollama）后启用，未配置时接口返回未启用、前端隐藏入口。聊天页 `/ai`：自然语言记账与查询；LLM 通过工具调用工作——`draft_transaction` 只产出**记账草稿卡片**（不写库），用户直接确认或进入表单编辑后保存都复用幂等键 `ai-card-{messageId}-{cardIndex}` 入账并回写卡片状态；`query_transactions` 仅处理用户明确要求的逐笔明细，`get_period_stats` 统一处理日/周/月/季度/年/自定义区间统计，以有效金额返回收支总额、分类饼图和一级分类汇总卡片。金额换算（账本币种主单位→micros）在确定性代码中完成，严格遵守账本币种和小数位；分类/资金账户/人员的真实 id 注入系统提示，后端二次校验归属和类型。会话按创建者私有并持久化（`ai_conversations`/`ai_messages`，软删）。工具循环上限 6 轮；聊天走 SSE 流式（`POST /ai/chat/stream`，事件 delta/card/done/error，思维链不透出），非流式 `POST /ai/chat` 保留同构结果。 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
 
 预留但未接线：`ServiceTokenService.authenticate`（scope / CIDR IP 白名单 / actorUserId+ledgerId 代表用户校验）尚无业务端点调用，为将来外部系统集成（iOS 捷径等）预留；当前创建的 service token 只能被管理、不能访问业务数据。应用内 AI 助手走用户自己的 session 鉴权，不经 service token。
 
@@ -78,19 +78,19 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 
 ## 6. 数据模型速览（39 个模型）
 
-| 分组 | 模型 |
-|---|---|
-| 身份与系统 | User, AppSetting, Session, ServiceToken |
-| 账本协作 | Ledger, LedgerMember, LedgerInvite, LedgerJoinRequest |
-| 记账配置 | RecordSetting, Category, Subcategory, Person |
-| 账户 | Account, SubAccount, AccountAdjustment, AccountEntry |
-| 交易 | Transaction, TransactionAccountRelation, TransactionLink |
-| 自动化 | AutoRule, AutoPendingTransaction, QuickTemplate |
-| 计划预算 | Plan, BudgetSetting, CategoryBudget |
-| 档案 | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
-| 文件 | File, Attachment |
-| 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
-| AI 助手 | AiConversation, AiMessage |
+| 分组       | 模型                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------- |
+| 身份与系统 | User, AppSetting, Session, ServiceToken                                               |
+| 账本协作   | Ledger, LedgerMember, LedgerInvite, LedgerJoinRequest                                 |
+| 记账配置   | RecordSetting, Category, Subcategory, Person                                          |
+| 账户       | Account, SubAccount, AccountAdjustment, AccountEntry                                  |
+| 交易       | Transaction, TransactionAccountRelation, TransactionLink                              |
+| 自动化     | AutoRule, AutoPendingTransaction, QuickTemplate                                       |
+| 计划预算   | Plan, BudgetSetting, CategoryBudget                                                   |
+| 档案       | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
+| 文件       | File, Attachment                                                                      |
+| 平台       | AuditLog, BackgroundJob, IdempotencyKey, ImportJob                                    |
+| AI 助手    | AiConversation, AiMessage                                                             |
 
 表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。迁移目录用**两位补零**前缀（`00_`..），保证 Prisma 字典序应用顺序 == 依赖顺序；新增迁移沿用递增两位前缀。
 
@@ -118,25 +118,25 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 
 关键环境变量（`packages/config/src/index.ts` 是唯一权威定义）：
 
-| 变量 | 说明 |
-|---|---|
-| `DATABASE_URL` | 必填 |
-| `MINIO_*` | 对象存储；**生产必须改强 `MINIO_SECRET_KEY`**，弱默认值拒绝启动 |
-| `WEB_ORIGIN` | CORS 放行来源（逗号分隔） |
-| `TRUST_PROXY` | 有可信反代设 `true`，直连保持 `false`（见 §5） |
-| `APP_TIMEZONE` | 「今天/本月」的时区（默认 Asia/Shanghai），影响统计月份与自动记账触发 |
-| `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
+| 变量                                      | 说明                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------- |
+| `DATABASE_URL`                            | 必填                                                                          |
+| `MINIO_*`                                 | 对象存储；**生产必须改强 `MINIO_SECRET_KEY`**，弱默认值拒绝启动               |
+| `WEB_ORIGIN`                              | CORS 放行来源（逗号分隔）                                                     |
+| `TRUST_PROXY`                             | 有可信反代设 `true`，直连保持 `false`（见 §5）                                |
+| `APP_TIMEZONE`                            | 「今天/本月」的时区（默认 Asia/Shanghai），影响统计月份与自动记账触发         |
+| `WORKER_POLL_INTERVAL_MS`                 | Worker 轮询间隔（默认 30s）                                                   |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用；OpenAI-compatible `/chat/completions` 协议 |
-| `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |
-| `API_INTERNAL_URL` | web 容器内转发 /api 的目标 |
+| `NEXT_PUBLIC_API_BASE_URL`                | 浏览器 API 前缀（默认 `/api`，同源代理）                                      |
+| `API_INTERNAL_URL`                        | web 容器内转发 /api 的目标                                                    |
 
 ## 9. 文档地图
 
-| 文档 | 用途 |
-|---|---|
-| `docs/PROJECT_GUIDE.md`（本文件） | 项目权威入口 |
-| `docs/DESKTOP_UI_PLAN.md` | 桌面端 UI 改造方案与多智能体执行任务书 |
-| `docs/DESKTOP_UI_CHECKLIST.md` | 桌面端双端走查清单（WP-C3） |
-| `AGENTS.md` / `CLAUDE.md` | AI 协作须知（精简硬规则 + 指向本文件） |
-| `README.md` | 快速上手（安装/脚本） |
-| `infra/docker/README.md` | 部署细节 |
+| 文档                              | 用途                                   |
+| --------------------------------- | -------------------------------------- |
+| `docs/PROJECT_GUIDE.md`（本文件） | 项目权威入口                           |
+| `docs/DESKTOP_UI_PLAN.md`         | 桌面端 UI 改造方案与多智能体执行任务书 |
+| `docs/DESKTOP_UI_CHECKLIST.md`    | 桌面端双端走查清单（WP-C3）            |
+| `AGENTS.md` / `CLAUDE.md`         | AI 协作须知（精简硬规则 + 指向本文件） |
+| `README.md`                       | 快速上手（安装/脚本）                  |
+| `infra/docker/README.md`          | 部署细节                               |

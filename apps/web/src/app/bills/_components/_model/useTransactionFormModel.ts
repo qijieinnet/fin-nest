@@ -78,8 +78,12 @@ export type TransactionSeed = {
 export type UseTransactionFormModelParams = {
   ledgerId: string;
   initial?: TransactionDetail;
+  /** AI 草稿编辑等跨页面流程可复用外部幂等键。 */
+  idempotencyKeyOverride?: string;
+  /** 保存后必须完成外部回写，不受连续记账设置影响。 */
+  completeAfterSave?: boolean;
   onCanSubmitChange?: (canSubmit: boolean) => void;
-  onSaved?: () => void;
+  onSaved?: (transaction: TransactionDetail) => void | Promise<void>;
   onSubmitBlocked?: (submitBlocked: () => void) => void;
   onPendingChange?: (pending: boolean) => void;
   /** 记账日期变化时回调，父层据此在选择快捷模板（表单重挂载）时保留用户已选日期。 */
@@ -93,6 +97,8 @@ async function uploadAttachment(ledgerId: string, transactionId: string, item: P
 }
 
 export function useTransactionFormModel({
+  completeAfterSave = false,
+  idempotencyKeyOverride,
   initial,
   ledgerId,
   onCanSubmitChange,
@@ -124,7 +130,7 @@ export function useTransactionFormModel({
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
   const decimalPlaces = useDecimalPlaces();
-  const idempotencyKey = useRef(createClientId("transaction"));
+  const idempotencyKey = useRef(idempotencyKeyOverride ?? createClientId("transaction"));
 
   const seedAmountMicros =
     initial?.grossAmountMicros ?? pending?.amountMicros ?? seed?.grossAmountMicros ?? null;
@@ -440,7 +446,7 @@ export function useTransactionFormModel({
         showToast({ tone: "success", message: "已确认入账" });
         // 编辑页在历史里紧邻待确认列表（详情进编辑用 replace 取代了详情），
         // 用 back 直接回到列表，避免残留失效的详情页。
-        if (onSaved) onSaved();
+        if (onSaved) await onSaved(transaction);
         else router.back();
         return;
       }
@@ -473,11 +479,11 @@ export function useTransactionFormModel({
         showToast({ tone: "success", message: isEdit ? "已保存修改" : "已记一笔" });
       }
       // 新建且开启连续记账：保留页面继续记下一笔，不触发关闭/返回。
-      if (!isEdit && continuousEntry) {
+      if (!isEdit && continuousEntry && !completeAfterSave) {
         resetForContinuousEntry();
         return;
       }
-      if (onSaved) onSaved();
+      if (onSaved) await onSaved(transaction);
       else router.back();
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),

@@ -86,7 +86,7 @@ export class TransactionsService {
       };
     }
     if (query.amountMinMicros || query.amountMaxMicros) {
-      where.grossAmountMicros = {
+      where.effectiveAmountMicros = {
         gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
@@ -158,14 +158,14 @@ export class TransactionsService {
     const grouped = await this.prisma.client.transaction.groupBy({
       by: ["type"],
       where: await this.buildListWhere(ledgerId, query),
-      _sum: { grossAmountMicros: true },
+      _sum: { effectiveAmountMicros: true },
       _count: { _all: true },
     });
     let expenseMicros = 0n;
     let incomeMicros = 0n;
     let count = 0;
     for (const row of grouped) {
-      const sum = row._sum.grossAmountMicros ?? 0n;
+      const sum = row._sum.effectiveAmountMicros ?? 0n;
       if (row.type === "expense") expenseMicros = sum;
       else if (row.type === "income") incomeMicros = sum;
       count += row._count._all;
@@ -294,7 +294,7 @@ export class TransactionsService {
             type: input.type,
             grossAmountMicros: normalized.grossAmountMicros,
             effectiveAmountMicros: normalized.effectiveAmountMicros,
-            currency: input.currency ?? "CNY",
+            currency: input.currency ?? existing.currency,
             occurredOn: parseDateOnly(input.occurredOn),
             occurredAt: parseDateOnly(input.occurredOn),
             categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
@@ -313,7 +313,14 @@ export class TransactionsService {
           },
         });
 
-        await this.writeRelationsAndEntries(tx, ledgerId, updated.id, userId, resolved.input, normalized);
+        await this.writeRelationsAndEntries(
+          tx,
+          ledgerId,
+          updated.id,
+          userId,
+          resolved.input,
+          normalized,
+        );
         await this.replaceAssetLinks(tx, ledgerId, updated.id, input);
         await this.audit.write(
           {
@@ -356,12 +363,7 @@ export class TransactionsService {
     if (dto.field === "category" && !dto.categoryId) {
       throw new AppError("BATCH_FIELD_REQUIRED", "缺少分类", 400);
     }
-    if (
-      dto.field === "account" &&
-      !dto.accountId &&
-      !dto.fromAccountId &&
-      !dto.toAccountId
-    ) {
+    if (dto.field === "account" && !dto.accountId && !dto.fromAccountId && !dto.toAccountId) {
       throw new AppError("BATCH_FIELD_REQUIRED", "缺少账户", 400);
     }
     if (dto.field === "occurredOn" && !dto.occurredOn) {
@@ -572,13 +574,17 @@ export class TransactionsService {
   ) {
     const normalized = await this.normalize(tx, ledgerId, input);
     const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
+    const ledger = await tx.ledger.findFirst({
+      where: { id: ledgerId, deletedAt: null },
+      select: { currency: true },
+    });
     const transaction = await tx.transaction.create({
       data: {
         ledgerId,
         type: input.type,
         grossAmountMicros: normalized.grossAmountMicros,
         effectiveAmountMicros: normalized.effectiveAmountMicros,
-        currency: input.currency ?? "CNY",
+        currency: input.currency ?? ledger?.currency ?? "CNY",
         occurredOn: parseDateOnly(input.occurredOn),
         occurredAt: parseDateOnly(input.occurredOn),
         categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
@@ -599,7 +605,14 @@ export class TransactionsService {
         updatedBy: userId,
       },
     });
-    await this.writeRelationsAndEntries(tx, ledgerId, transaction.id, userId, resolved.input, normalized);
+    await this.writeRelationsAndEntries(
+      tx,
+      ledgerId,
+      transaction.id,
+      userId,
+      resolved.input,
+      normalized,
+    );
     await this.createAssetLinks(tx, ledgerId, transaction.id, input);
     return transaction;
   }
@@ -632,18 +645,8 @@ export class TransactionsService {
       await this.assertMoneyAccount(tx, ledgerId, input.accountId, input.subAccountId);
     }
     if (input.type === "transfer") {
-      await this.assertMoneyAccount(
-        tx,
-        ledgerId,
-        input.fromAccountId!,
-        input.fromSubAccountId,
-      );
-      await this.assertMoneyAccount(
-        tx,
-        ledgerId,
-        input.toAccountId!,
-        input.toSubAccountId,
-      );
+      await this.assertMoneyAccount(tx, ledgerId, input.fromAccountId!, input.fromSubAccountId);
+      await this.assertMoneyAccount(tx, ledgerId, input.toAccountId!, input.toSubAccountId);
       if (
         input.fromAccountId === input.toAccountId &&
         input.fromSubAccountId === input.toSubAccountId

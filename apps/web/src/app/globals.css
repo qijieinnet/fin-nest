@@ -1213,8 +1213,16 @@ select:focus-visible {
   grid-template-columns: repeat(var(--tab-count, 4), minmax(48px, auto));
 }
 
+.tab-bar--fit.ai {
+  padding: 4px;
+}
+
 .tab-bar--fit .tab-bar__item {
-  padding: 0 4px;
+  padding: 0 20px;
+}
+
+.tab-bar--fit.ai .tab-bar__item {
+  padding: 0 0px;
 }
 
 .ui-icon-button {

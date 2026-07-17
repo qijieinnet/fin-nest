@@ -295,6 +295,8 @@ export type TransactionInput = {
   type: TransactionType;
   grossAmountMicros: string;
   occurredOn: string;
+  /** 缺省时后端使用账本币种。 */
+  currency?: string;
   categoryId?: string;
   subcategoryId?: string;
   personId?: string;
@@ -755,6 +757,8 @@ export type AiDraftFields = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;
   occurredOn: string;
+  /** 新卡片会写入；旧历史卡片缺省时按 CNY 展示。 */
+  currency?: string;
   categoryId?: string;
   categoryName?: string;
   subcategoryId?: string;
@@ -779,9 +783,17 @@ export type AiDraftFields = {
 export type AiTransactionRow = {
   occurredOn: string;
   type: string;
-  grossAmountMicros: string;
+  /** 有效金额；旧历史卡片可能只有 grossAmountMicros。 */
+  effectiveAmountMicros?: string;
+  grossAmountMicros?: string;
   categoryName?: string;
   note?: string;
+};
+
+export type AiStatsCategory = {
+  name: string;
+  icon?: string | null;
+  amountMicros: string;
 };
 
 export type AiCard =
@@ -789,11 +801,13 @@ export type AiCard =
       kind: "transaction_draft";
       status: "proposed" | "confirmed";
       transactionId?: string;
+      confirmationBlockedReason?: string;
       draft: AiDraftFields;
     }
   | {
       kind: "transactions";
       title: string;
+      currency?: string;
       count: number;
       expenseMicros: string;
       incomeMicros: string;
@@ -802,9 +816,21 @@ export type AiCard =
   | {
       kind: "stats_month";
       month: string;
+      currency?: string;
       expenseMicros: string;
       incomeMicros: string;
       topExpenseCategories: Array<{ name: string; amountMicros: string }>;
+    }
+  | {
+      kind: "stats_period";
+      title: string;
+      dateFrom: string;
+      dateTo: string;
+      currency?: string;
+      expenseMicros: string;
+      incomeMicros: string;
+      expenseCategories: AiStatsCategory[];
+      incomeCategories: AiStatsCategory[];
     };
 
 export type AiMessage = {

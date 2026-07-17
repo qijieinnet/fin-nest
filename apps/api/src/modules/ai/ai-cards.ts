@@ -5,6 +5,7 @@ export type AiDraftFields = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;
   occurredOn: string;
+  currency?: string;
   categoryId?: string;
   categoryName?: string;
   subcategoryId?: string;
@@ -29,9 +30,15 @@ export type AiDraftFields = {
 export type AiTransactionRow = {
   occurredOn: string;
   type: string;
-  grossAmountMicros: string;
+  effectiveAmountMicros: string;
   categoryName?: string;
   note?: string;
+};
+
+export type AiStatsCategory = {
+  name: string;
+  icon?: string | null;
+  amountMicros: string;
 };
 
 export type AiCard =
@@ -39,11 +46,13 @@ export type AiCard =
       kind: "transaction_draft";
       status: "proposed" | "confirmed";
       transactionId?: string;
+      confirmationBlockedReason?: string;
       draft: AiDraftFields;
     }
   | {
       kind: "transactions";
       title: string;
+      currency?: string;
       count: number;
       expenseMicros: string;
       incomeMicros: string;
@@ -52,7 +61,19 @@ export type AiCard =
   | {
       kind: "stats_month";
       month: string;
+      currency?: string;
       expenseMicros: string;
       incomeMicros: string;
       topExpenseCategories: Array<{ name: string; amountMicros: string }>;
+    }
+  | {
+      kind: "stats_period";
+      title: string;
+      dateFrom: string;
+      dateTo: string;
+      currency?: string;
+      expenseMicros: string;
+      incomeMicros: string;
+      expenseCategories: AiStatsCategory[];
+      incomeCategories: AiStatsCategory[];
     };

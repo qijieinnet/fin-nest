@@ -20,7 +20,7 @@ const MORE_TAB = {
 
 const AI_TAB = {
   value: routes.ai,
-  label: "AI",
+  label: "",
   icon: <Sparkles size={20} />,
 };
 
@@ -78,7 +78,7 @@ export function MobileTabBar() {
           <div className="absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))] flex items-stretch justify-between gap-2">
             <div className="pointer-events-auto">
               <TabBar
-                className="tab-bar--fit"
+                className="tab-bar--fit ai"
                 items={[AI_TAB]}
                 onValueChange={() => router.push(routes.ai)}
                 value=""

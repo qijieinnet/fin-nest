@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useId, useRef, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { BottomSheet, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
-import { apiRequest, ledgerApiPath, type QuickTemplate } from "@/lib/api";
+import { apiRequest, ledgerApiPath, type QuickTemplate, type TransactionDetail } from "@/lib/api";
 import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
@@ -56,13 +56,17 @@ type NewBillFormScreenProps = {
   embedded?: boolean;
   /** 外部注入的初始 seed（AI 草稿「去编辑」），优先级低于交互选择的快捷模板。 */
   initialSeed?: TransactionSeed | null;
+  idempotencyKeyOverride?: string;
+  completeAfterSave?: boolean;
   onClose?: () => void;
-  onSaved?: () => void;
+  onSaved?: (transaction: TransactionDetail) => void | Promise<void>;
   templateId?: string | null;
 };
 
 export function NewBillFormScreen({
+  completeAfterSave = false,
   embedded = false,
+  idempotencyKeyOverride,
   initialSeed = null,
   onClose,
   onSaved,
@@ -93,7 +97,9 @@ export function NewBillFormScreen({
   const prefillQuery = useQuery({
     queryKey: ["ledger", ledgerId, "quick-template-prefill", templateId],
     queryFn: () =>
-      apiRequest<PrefillResponse>(ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/prefill`)),
+      apiRequest<PrefillResponse>(
+        ledgerApiPath(ledgerId!, `/quick-templates/${templateId}/prefill`),
+      ),
     enabled: Boolean(ledgerId) && Boolean(templateId) && !selectedSeed,
   });
 
@@ -189,7 +195,9 @@ export function NewBillFormScreen({
       <LoadingState rows={5} title="加载中" />
     ) : (
       <TransactionForm
+        completeAfterSave={completeAfterSave}
         formId={formId}
+        idempotencyKeyOverride={idempotencyKeyOverride}
         key={seedKey}
         ledgerId={ledgerId}
         onCanSubmitChange={setCanSubmit}

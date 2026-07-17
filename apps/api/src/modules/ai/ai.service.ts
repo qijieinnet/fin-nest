@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AppError, dateKey, PrismaService, todayKey } from "@fin-nest/backend";
+import { AppError, currentMonthKey, dateKey, PrismaService, todayKey } from "@fin-nest/backend";
 import { loadConfig } from "@fin-nest/config";
 import { Prisma } from "@fin-nest/db";
 import { AccountsService } from "../accounts/accounts.service";
@@ -7,8 +7,9 @@ import { LedgersService } from "../ledgers/ledgers.service";
 import { RecordsService } from "../records/records.service";
 import { StatsService } from "../stats/stats.service";
 import { TransactionsService } from "../transactions/transactions.service";
-import { AiCard, AiDraftFields, AiTransactionRow } from "./ai-cards";
+import { AiCard, AiDraftFields, AiStatsCategory, AiTransactionRow } from "./ai-cards";
 import { microsToYuan, yuanToMicros } from "./ai-money";
+import { isValidDateKey } from "./ai-validation";
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
 import { LlmClient, LlmMessage, LlmTool, LlmToolCall } from "./llm-client";
@@ -17,8 +18,7 @@ import { LlmClient, LlmMessage, LlmTool, LlmToolCall } from "./llm-client";
 const MAX_TOOL_ROUNDS = 6;
 // 送入 LLM 的历史消息条数上限（按最近截取）。
 const HISTORY_LIMIT = 30;
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH_PATTERN = /^\d{4}-\d{2}$/;
+const MONEY_ACCOUNT_TYPES = new Set(["savings", "credit", "invest"]);
 
 type CategoryWithSubs = {
   id: string;
@@ -38,6 +38,7 @@ type LedgerContext = {
   ledgerId: string;
   userId: string;
   currency: string;
+  amountDecimalPlaces: number;
   categories: CategoryWithSubs[];
   accounts: AccountWithSubs[];
   people: Array<{ id: string; name: string }>;
@@ -77,6 +78,11 @@ type QueryToolArgs = {
   limit?: number;
 };
 
+type PeriodStatsToolArgs = {
+  dateFrom?: string;
+  dateTo?: string;
+};
+
 const TOOLS: LlmTool[] = [
   {
     type: "function",
@@ -88,7 +94,7 @@ const TOOLS: LlmTool[] = [
         type: "object",
         properties: {
           type: { type: "string", enum: ["expense", "income", "transfer"] },
-          amountYuan: { type: "string", description: '金额（元），十进制字符串，如 "88.5"' },
+          amountYuan: { type: "string", description: '账本币种的金额，十进制字符串，如 "88.5"' },
           occurredOn: { type: "string", description: "交易日期 YYYY-MM-DD" },
           categoryId: { type: "string", description: "分类 id（支出/收入用，须来自账本数据列表）" },
           subcategoryId: { type: "string", description: "二级分类 id，须属于 categoryId" },
@@ -109,7 +115,8 @@ const TOOLS: LlmTool[] = [
     type: "function",
     function: {
       name: "query_transactions",
-      description: "按条件查询交易明细与合计，结果同时以卡片展示给用户。",
+      description:
+        "仅在用户明确要求查看每笔记录、明细、有哪些交易时调用；按条件查询交易明细与合计。统计、汇总、趋势类问题不要调用本工具。",
       parameters: {
         type: "object",
         properties: {
@@ -122,8 +129,8 @@ const TOOLS: LlmTool[] = [
           dateFrom: { type: "string", description: "起始日期 YYYY-MM-DD（含）" },
           dateTo: { type: "string", description: "截止日期 YYYY-MM-DD（含）" },
           noteKeyword: { type: "string", description: "备注关键词" },
-          minAmountYuan: { type: "string", description: "金额下限（元）" },
-          maxAmountYuan: { type: "string", description: "金额上限（元）" },
+          minAmountYuan: { type: "string", description: "账本币种主单位的金额下限" },
+          maxAmountYuan: { type: "string", description: "账本币种主单位的金额上限" },
           limit: { type: "number", description: "返回条数，默认 20，最大 50" },
         },
         required: [],
@@ -133,12 +140,20 @@ const TOOLS: LlmTool[] = [
   {
     type: "function",
     function: {
-      name: "get_monthly_stats",
-      description: "查询某月的收支统计（总额与分类拆分），结果同时以卡片展示给用户。",
+      name: "get_period_stats",
+      description:
+        "查询任意时间范围的收支统计，返回支出总额、收入总额、分类饼图及一级分类汇总。适用于日、周、月、季度、年度、自定义区间等所有统计或汇总请求。",
       parameters: {
         type: "object",
         properties: {
-          month: { type: "string", description: "月份 YYYY-MM，缺省为当月" },
+          dateFrom: {
+            type: "string",
+            description: "统计开始日期 YYYY-MM-DD（含）；与 dateTo 同时传，缺省时统计本月至今",
+          },
+          dateTo: {
+            type: "string",
+            description: "统计结束日期 YYYY-MM-DD（含）；与 dateFrom 同时传，缺省时统计本月至今",
+          },
         },
         required: [],
       },
@@ -161,7 +176,9 @@ export class AiService {
   ) {
     const { AI_BASE_URL, AI_API_KEY, AI_MODEL } = this.config;
     this.llm =
-      AI_BASE_URL && AI_API_KEY && AI_MODEL ? new LlmClient(AI_BASE_URL, AI_API_KEY, AI_MODEL) : null;
+      AI_BASE_URL && AI_API_KEY && AI_MODEL
+        ? new LlmClient(AI_BASE_URL, AI_API_KEY, AI_MODEL)
+        : null;
   }
 
   async status(ledgerId: string, userId: string) {
@@ -197,7 +214,11 @@ export class AiService {
     };
   }
 
-  async deleteConversation(ledgerId: string, conversationId: string, userId: string): Promise<void> {
+  async deleteConversation(
+    ledgerId: string,
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     const result = await this.prisma.client.aiConversation.updateMany({
       where: { id: conversationId, ledgerId, userId, deletedAt: null },
@@ -209,7 +230,12 @@ export class AiService {
   }
 
   /** 草稿卡确认后回写状态（幂等入口在前端的 Idempotency-Key；这里防重复确认与串卡）。 */
-  async updateCardState(ledgerId: string, messageId: string, userId: string, input: UpdateCardStateDto) {
+  async updateCardState(
+    ledgerId: string,
+    messageId: string,
+    userId: string,
+    input: UpdateCardStateDto,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
     const message = await this.prisma.client.aiMessage.findFirst({
       where: { id: messageId, ledgerId, role: "assistant" },
@@ -360,7 +386,11 @@ export class AiService {
 
   // ---------- 工具执行 ----------
 
-  private async executeTool(call: LlmToolCall, context: LedgerContext, cards: AiCard[]): Promise<string> {
+  private async executeTool(
+    call: LlmToolCall,
+    context: LedgerContext,
+    cards: AiCard[],
+  ): Promise<string> {
     let args: Record<string, unknown>;
     try {
       args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
@@ -373,8 +403,10 @@ export class AiService {
           return JSON.stringify(this.runDraftTool(args as DraftToolArgs, context, cards));
         case "query_transactions":
           return JSON.stringify(await this.runQueryTool(args as QueryToolArgs, context, cards));
-        case "get_monthly_stats":
-          return JSON.stringify(await this.runStatsTool(args as { month?: string }, context, cards));
+        case "get_period_stats":
+          return JSON.stringify(
+            await this.runPeriodStatsTool(args as PeriodStatsToolArgs, context, cards),
+          );
         default:
           return JSON.stringify({ ok: false, error: `未知工具 ${call.function.name}` });
       }
@@ -390,27 +422,51 @@ export class AiService {
     if (args.type !== "expense" && args.type !== "income" && args.type !== "transfer") {
       return fail("type 必须是 expense/income/transfer");
     }
-    const micros = args.amountYuan ? yuanToMicros(args.amountYuan) : null;
-    if (micros === null || micros <= 0n) return fail('amountYuan 必须是正的十进制金额字符串，如 "88.5"');
-    if (!args.occurredOn || !DATE_PATTERN.test(args.occurredOn) || Number.isNaN(Date.parse(args.occurredOn))) {
+    const micros = args.amountYuan
+      ? yuanToMicros(args.amountYuan, context.amountDecimalPlaces)
+      : null;
+    if (micros === null || micros <= 0n) {
+      return fail(
+        `amountYuan 必须是正的十进制金额字符串，且最多 ${context.amountDecimalPlaces} 位小数`,
+      );
+    }
+    if (!args.occurredOn || !isValidDateKey(args.occurredOn)) {
       return fail("occurredOn 必须是合法的 YYYY-MM-DD 日期");
     }
-    if (args.note && args.note.length > 500) return fail("note 过长（≤500 字）");
+    if (args.note && args.note.length > 240) return fail("note 过长（≤240 字）");
 
     const draft: AiDraftFields = {
       type: args.type,
       grossAmountMicros: micros.toString(),
       occurredOn: args.occurredOn,
+      currency: context.currency,
       ...(args.note ? { note: args.note } : {}),
     };
+
+    if (args.personId) {
+      const person = context.people.find((item) => item.id === args.personId);
+      if (!person) return fail("personId 不在账本人员列表中");
+      draft.personId = person.id;
+      draft.personName = person.name;
+    }
+    if (!draft.personId && context.personRequired) {
+      const person = context.people[0];
+      if (!person) return fail("当前账本要求选择人员，但账本中没有可用人员");
+      draft.personId = person.id;
+      draft.personName = person.name;
+    }
 
     if (args.type === "transfer") {
       const from = this.resolveAccount(context, args.fromAccountId, args.fromSubAccountId);
       const to = this.resolveAccount(context, args.toAccountId, args.toSubAccountId);
-      if (!args.fromAccountId || !args.toAccountId) return fail("转账必须提供 fromAccountId 和 toAccountId");
+      if (!args.fromAccountId || !args.toAccountId)
+        return fail("转账必须提供 fromAccountId 和 toAccountId");
       if (typeof from === "string") return fail(from);
       if (typeof to === "string") return fail(to);
-      if (args.fromAccountId === args.toAccountId && args.fromSubAccountId === args.toSubAccountId) {
+      if (
+        from.account?.id === to.account?.id &&
+        (from.subAccount?.id ?? null) === (to.subAccount?.id ?? null)
+      ) {
         return fail("转出与转入不能是同一账户/子账户");
       }
       draft.fromAccountId = args.fromAccountId;
@@ -425,7 +481,10 @@ export class AiService {
       if (args.categoryId) {
         const category = context.categories.find((item) => item.id === args.categoryId);
         if (!category) return fail("categoryId 不在账本分类列表中");
-        if (category.type !== args.type) return fail(`分类「${category.name}」不是${args.type === "expense" ? "支出" : "收入"}分类`);
+        if (category.type !== args.type)
+          return fail(
+            `分类「${category.name}」不是${args.type === "expense" ? "支出" : "收入"}分类`,
+          );
         draft.categoryId = category.id;
         draft.categoryName = category.name;
         if (args.subcategoryId) {
@@ -436,12 +495,6 @@ export class AiService {
         }
       } else if (args.subcategoryId) {
         return fail("传 subcategoryId 时必须同时传 categoryId");
-      }
-      if (args.personId) {
-        const person = context.people.find((item) => item.id === args.personId);
-        if (!person) return fail("personId 不在账本人员列表中");
-        draft.personId = person.id;
-        draft.personName = person.name;
       }
       if (args.accountId) {
         const resolved = this.resolveAccount(context, args.accountId, args.subAccountId);
@@ -456,12 +509,9 @@ export class AiService {
         return fail("传 subAccountId 时必须同时传 accountId");
       }
       // 记账设置必填而用户未提及时，默认取列表第一个（与记账表单展示顺序一致），确认前可编辑。
-      if (!draft.personId && context.personRequired && context.people.length > 0) {
-        draft.personId = context.people[0]!.id;
-        draft.personName = context.people[0]!.name;
-      }
-      if (!draft.accountId && context.acctRequired && context.accounts.length > 0) {
-        const account = context.accounts[0]!;
+      if (!draft.accountId && context.acctRequired) {
+        const account = context.accounts.find((item) => MONEY_ACCOUNT_TYPES.has(item.type));
+        if (!account) return fail("当前账本要求绑定账户，但没有可用的资金账户");
         draft.accountId = account.id;
         draft.accountName = account.name;
         const defaultSub = account.subAccounts.find((sub) => sub.isDefault);
@@ -469,7 +519,14 @@ export class AiService {
       }
     }
 
-    cards.push({ kind: "transaction_draft", status: "proposed", draft });
+    cards.push({
+      kind: "transaction_draft",
+      status: "proposed",
+      ...(!draft.categoryId && draft.type !== "transfer"
+        ? { confirmationBlockedReason: "未匹配到分类，请先编辑补充" }
+        : {}),
+      draft,
+    });
     return {
       ok: true as const,
       message: "草稿卡片已生成并展示给用户，等待用户确认后才会入账。",
@@ -487,9 +544,51 @@ export class AiService {
   }
 
   private async runQueryTool(args: QueryToolArgs, context: LedgerContext, cards: AiCard[]) {
-    const limit = Math.min(Math.max(Math.trunc(args.limit ?? 20), 1), 50);
-    const minMicros = args.minAmountYuan ? yuanToMicros(args.minAmountYuan) : null;
-    const maxMicros = args.maxAmountYuan ? yuanToMicros(args.maxAmountYuan) : null;
+    const fail = (error: string) => ({ ok: false as const, error });
+    if (args.type && !["expense", "income", "transfer"].includes(args.type)) {
+      return fail("type 必须是 expense/income/transfer");
+    }
+    if (args.dateFrom && !isValidDateKey(args.dateFrom)) return fail("dateFrom 日期无效");
+    if (args.dateTo && !isValidDateKey(args.dateTo)) return fail("dateTo 日期无效");
+    if (args.dateFrom && args.dateTo && args.dateFrom > args.dateTo) {
+      return fail("dateFrom 不能晚于 dateTo");
+    }
+    if (
+      args.limit !== undefined &&
+      (!Number.isFinite(args.limit) || !Number.isInteger(args.limit))
+    ) {
+      return fail("limit 必须是整数");
+    }
+    const category = args.categoryId
+      ? context.categories.find((item) => item.id === args.categoryId)
+      : undefined;
+    if (args.categoryId && !category) return fail("categoryId 不在账本分类列表中");
+    if (category && args.type && category.type !== args.type)
+      return fail("categoryId 与 type 不匹配");
+    if (args.subcategoryId) {
+      if (!category) return fail("传 subcategoryId 时必须同时传 categoryId");
+      if (!category.subcategories.some((item) => item.id === args.subcategoryId)) {
+        return fail("subcategoryId 不属于该分类");
+      }
+    }
+    if (args.personId && !context.people.some((item) => item.id === args.personId)) {
+      return fail("personId 不在账本人员列表中");
+    }
+    if (args.accountId && !context.accounts.some((item) => item.id === args.accountId)) {
+      return fail("accountId 不在账本账户列表中");
+    }
+    const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
+    const minMicros = args.minAmountYuan
+      ? yuanToMicros(args.minAmountYuan, context.amountDecimalPlaces)
+      : null;
+    const maxMicros = args.maxAmountYuan
+      ? yuanToMicros(args.maxAmountYuan, context.amountDecimalPlaces)
+      : null;
+    if (args.minAmountYuan && minMicros === null) return fail("minAmountYuan 金额格式无效");
+    if (args.maxAmountYuan && maxMicros === null) return fail("maxAmountYuan 金额格式无效");
+    if (minMicros !== null && maxMicros !== null && minMicros > maxMicros) {
+      return fail("金额下限不能大于上限");
+    }
     const query = {
       type: args.type,
       categoryId: args.categoryId,
@@ -516,7 +615,7 @@ export class AiService {
       return {
         occurredOn: dateKey(row.occurredOn),
         type: row.type,
-        grossAmountMicros: row.grossAmountMicros.toString(),
+        effectiveAmountMicros: row.effectiveAmountMicros.toString(),
         ...(categoryName ? { categoryName } : {}),
         ...(row.note ? { note: row.note } : {}),
       };
@@ -524,6 +623,7 @@ export class AiService {
     cards.push({
       kind: "transactions",
       title: args.title?.trim() || "查询结果",
+      currency: context.currency,
       count: summary.count,
       expenseMicros: summary.expenseMicros.toString(),
       incomeMicros: summary.incomeMicros.toString(),
@@ -537,45 +637,89 @@ export class AiService {
       transactions: packed.map((row) => ({
         date: row.occurredOn,
         type: row.type,
-        amountYuan: microsToYuan(BigInt(row.grossAmountMicros)),
+        amountYuan: microsToYuan(BigInt(row.effectiveAmountMicros)),
         category: row.categoryName,
         note: row.note,
       })),
     };
   }
 
-  private async runStatsTool(args: { month?: string }, context: LedgerContext, cards: AiCard[]) {
-    if (args.month && !MONTH_PATTERN.test(args.month)) {
-      return { ok: false as const, error: "month 必须是 YYYY-MM 格式" };
+  private async runPeriodStatsTool(
+    args: PeriodStatsToolArgs,
+    context: LedgerContext,
+    cards: AiCard[],
+  ) {
+    const fail = (error: string) => ({ ok: false as const, error });
+    if (Boolean(args.dateFrom) !== Boolean(args.dateTo)) {
+      return fail("dateFrom 和 dateTo 必须同时提供");
     }
+    const dateFrom = args.dateFrom ?? `${currentMonthKey()}-01`;
+    const dateTo = args.dateTo ?? todayKey();
+    if (!isValidDateKey(dateFrom)) return fail("dateFrom 日期无效");
+    if (!isValidDateKey(dateTo)) return fail("dateTo 日期无效");
+    if (dateFrom > dateTo) return fail("dateFrom 不能晚于 dateTo");
+
     const result = await this.stats.monthly(context.ledgerId, context.userId, {
-      month: args.month,
+      dateFrom,
+      dateTo,
     } as Parameters<StatsService["monthly"]>[2]);
-    const topExpense = result.expense.categories.slice(0, 5).map((item) => ({
-      name: item.name,
-      amountMicros: item.amountMicros,
-    }));
+    const packCategories = (categories: typeof result.expense.categories): AiStatsCategory[] =>
+      categories.map((item) => ({
+        name: item.name,
+        icon: item.icon,
+        amountMicros: item.amountMicros,
+      }));
+    const expenseCategories = packCategories(result.expense.categories);
+    const incomeCategories = packCategories(result.income.categories);
+
     cards.push({
-      kind: "stats_month",
-      month: result.month,
+      kind: "stats_period",
+      title: this.periodStatsTitle(dateFrom, dateTo),
+      dateFrom,
+      dateTo,
+      currency: context.currency,
       expenseMicros: result.expense.totalMicros,
       incomeMicros: result.income.totalMicros,
-      topExpenseCategories: topExpense,
+      expenseCategories,
+      incomeCategories,
     });
     return {
       ok: true as const,
-      month: result.month,
+      dateFrom,
+      dateTo,
       expenseYuan: microsToYuan(BigInt(result.expense.totalMicros)),
       incomeYuan: microsToYuan(BigInt(result.income.totalMicros)),
-      topExpenseCategories: result.expense.categories.slice(0, 8).map((item) => ({
+      expenseCategories: result.expense.categories.slice(0, 10).map((item) => ({
         name: item.name,
         amountYuan: microsToYuan(BigInt(item.amountMicros)),
       })),
-      topIncomeCategories: result.income.categories.slice(0, 8).map((item) => ({
+      incomeCategories: result.income.categories.slice(0, 10).map((item) => ({
         name: item.name,
         amountYuan: microsToYuan(BigInt(item.amountMicros)),
       })),
     };
+  }
+
+  private periodStatsTitle(dateFrom: string, dateTo: string): string {
+    if (dateFrom === dateTo) return `${dateFrom} 收支统计`;
+    const year = dateFrom.slice(0, 4);
+    if (dateFrom === `${year}-01-01` && dateTo === `${year}-12-31`) {
+      return `${year} 年收支统计`;
+    }
+    if (dateFrom === `${year}-01-01` && dateTo === todayKey()) {
+      return `${year} 年至今收支统计`;
+    }
+    const month = dateFrom.slice(0, 7);
+    const nextMonth = new Date(`${month}-01T00:00:00.000Z`);
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+    const monthEnd = new Date(nextMonth.getTime() - 86_400_000).toISOString().slice(0, 10);
+    if (dateFrom === `${month}-01` && dateTo === monthEnd) {
+      return `${Number(month.slice(5, 7))} 月收支统计`;
+    }
+    if (dateFrom === `${month}-01` && dateTo === todayKey()) {
+      return `${Number(month.slice(5, 7))} 月至今收支统计`;
+    }
+    return `${dateFrom} 至 ${dateTo} 收支统计`;
   }
 
   // ---------- 上下文与辅助 ----------
@@ -584,12 +728,11 @@ export class AiService {
     context: LedgerContext,
     accountId?: string,
     subAccountId?: string,
-  ):
-    | string
-    | { account?: AccountWithSubs; subAccount?: AccountWithSubs["subAccounts"][number] } {
+  ): string | { account?: AccountWithSubs; subAccount?: AccountWithSubs["subAccounts"][number] } {
     if (!accountId) return {};
     const account = context.accounts.find((item) => item.id === accountId);
     if (!account) return "账户 id 不在账本账户列表中";
+    if (!MONEY_ACCOUNT_TYPES.has(account.type)) return "记账只能选择储蓄、信用或投资账户";
     if (!subAccountId) {
       // 未指定子账户时落到默认子账户：交易本就会落默认子账户，且表单预填按子账户 id 匹配。
       return { account, subAccount: account.subAccounts.find((sub) => sub.isDefault) };
@@ -611,6 +754,7 @@ export class AiService {
       ledgerId,
       userId,
       currency: ledger?.currency ?? "CNY",
+      amountDecimalPlaces: ledger?.amountDecimalPlaces ?? 2,
       categories: categories.map((category) => ({
         id: category.id,
         name: category.name,
@@ -645,7 +789,7 @@ export class AiService {
     const accountTypeLabel: Record<string, string> = {
       savings: "储蓄",
       credit: "信用",
-      investment: "投资",
+      invest: "投资",
       receivable: "可收回",
       payable: "需归还",
     };
@@ -656,14 +800,16 @@ export class AiService {
       "",
       "## 能力",
       "1. 记账：用户描述支出/收入/转账时**必须**调用 draft_transaction 生成草稿（一句话多笔就多次调用），绝不能只在正文声称已生成；没有合适的分类就不传 categoryId、照常调用。草稿以卡片展示、需用户手动确认才入账，所以不要说「已记账」。",
-      "2. 查询：query_transactions 查明细，get_monthly_stats 查某月收支统计。",
-      "3. 其他记账相关问题直接回答；与记账无关的请求礼貌拒绝。",
+      "2. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats；它会统一展示支出总额、收入总额、分类饼图和一级分类汇总。",
+      "3. 明细：只有用户明确说「明细」「每笔」「有哪些交易」「列出来」时才调用 query_transactions。不能用交易明细卡代替统计卡。",
+      "4. 其他记账相关问题直接回答；与记账无关的请求礼貌拒绝。",
       "",
       "## 规则",
-      '- 金额一律用「元」的十进制字符串（如 "88.5"），不做任何单位换算。',
+      `- 金额使用账本币种 ${context.currency} 的主单位十进制字符串（如 "88.5"），最多 ${context.amountDecimalPlaces} 位小数，不做单位换算。`,
       "- 分类/账户/人员 id 必须来自下方列表，绝不编造；没有合适的分类就不传 categoryId。",
       "- 用户没说日期就用今天；「昨天/上周三」等相对日期按今天推算。",
       "- 用户没提的字段（账户/人员/备注）不要传。",
+      "- draft_transaction 的收付款账户只能选择储蓄、信用或投资账户；可收回/需归还账户只用于查询。",
       "- 用简体中文回复，简洁友好；已有卡片展示数据时文字只做一句总结。",
       "- 用纯文本回复，不要使用 Markdown 语法（**加粗**、列表符号等不会被渲染）。",
       "- 工具生成的卡片会直接展示给用户，正文绝不复述卡片里的金额/分类/日期等细节，一句话收尾即可。",

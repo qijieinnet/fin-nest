@@ -26,21 +26,31 @@ import {
   useDeleteAiConversation,
   useUpdateAiCardState,
 } from "@/lib/data/ai";
+import {
+  AI_DRAFT_SEED_KEY,
+  aiCardIdempotencyKey,
+  type AiDraftHandoff,
+} from "@/lib/data/ai-draft-handoff";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useToast } from "@/providers";
-import { StatsMonthCard, TransactionDraftCard, TransactionsCard } from "./_components/AiCards";
+import {
+  StatsMonthCard,
+  StatsPeriodCard,
+  TransactionDraftCard,
+  TransactionsCard,
+} from "./_components/AiCards";
 
 const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
 
-/** 「去编辑」经 sessionStorage 把草稿交给记一笔表单（见 NewBillScreen）。 */
-export const AI_DRAFT_SEED_KEY = "fin-nest.ai-draft-seed";
-
-function draftToTransactionInput(draft: Extract<AiCard, { kind: "transaction_draft" }>["draft"]): TransactionInput {
+function draftToTransactionInput(
+  draft: Extract<AiCard, { kind: "transaction_draft" }>["draft"],
+): TransactionInput {
   return {
     type: draft.type,
     grossAmountMicros: draft.grossAmountMicros,
     occurredOn: draft.occurredOn,
+    ...(draft.currency ? { currency: draft.currency } : {}),
     ...(draft.categoryId ? { categoryId: draft.categoryId } : {}),
     ...(draft.subcategoryId ? { subcategoryId: draft.subcategoryId } : {}),
     ...(draft.personId ? { personId: draft.personId } : {}),
@@ -103,7 +113,7 @@ export function AiScreen() {
           method: "POST",
           body: draftToTransactionInput(card.draft),
           // 幂等键与卡片一一对应：重复点击/失败重试不会重复入账。
-          headers: { "idempotency-key": `ai-card-${message.id}-${cardIndex}` },
+          headers: { "idempotency-key": aiCardIdempotencyKey(message.id, cardIndex) },
         },
       );
       return updateCardState.mutateAsync({
@@ -217,25 +227,20 @@ export function AiScreen() {
     })();
   };
 
-  const handleEdit = (draft: AiDraftFields) => {
-    // 只带 id/金额/日期/备注等表单字段，冗余的 *Name 字段不进 seed。
-    const seed = {
-      type: draft.type,
-      occurredOn: draft.occurredOn,
-      grossAmountMicros: draft.grossAmountMicros,
-      categoryId: draft.categoryId ?? null,
-      subcategoryId: draft.subcategoryId ?? null,
-      personId: draft.personId ?? null,
-      accountId: draft.accountId ?? null,
-      subAccountId: draft.subAccountId ?? null,
-      fromAccountId: draft.fromAccountId ?? null,
-      fromSubAccountId: draft.fromSubAccountId ?? null,
-      toAccountId: draft.toAccountId ?? null,
-      toSubAccountId: draft.toSubAccountId ?? null,
-      note: draft.note ?? null,
+  const handleEdit = (messageId: string, cardIndex: number, draft: AiDraftFields) => {
+    if (!conversationId) {
+      showToast({ tone: "error", message: "会话尚未保存，请稍后重试" });
+      return;
+    }
+    const handoff: AiDraftHandoff = {
+      version: 1,
+      conversationId,
+      messageId,
+      cardIndex,
+      draft,
     };
     try {
-      sessionStorage.setItem(AI_DRAFT_SEED_KEY, JSON.stringify(seed));
+      sessionStorage.setItem(AI_DRAFT_SEED_KEY, JSON.stringify(handoff));
     } catch {
       showToast({ tone: "error", message: "打开编辑失败，请重试" });
       return;
@@ -294,9 +299,7 @@ export function AiScreen() {
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
               <Sparkles className="text-[var(--color-tint-strong)]" size={30} />
               <div>
-                <p className="font-semibold text-[var(--color-text-primary)]">
-                  用一句话记账或查账
-                </p>
+                <p className="font-semibold text-[var(--color-text-primary)]">用一句话记账或查账</p>
                 <p className="mt-1 text-sm text-[var(--color-text-muted)]">
                   记账草稿需要你确认后才会入账
                 </p>
@@ -344,12 +347,15 @@ export function AiScreen() {
                                 setConfirmingKey(key);
                                 confirmDraft.mutate({ message, cardIndex });
                               }}
-                              onEdit={() => handleEdit(card.draft)}
+                              onEdit={() => handleEdit(message.id, cardIndex, card.draft)}
                             />
                           );
                         }
                         if (card.kind === "transactions") {
                           return <TransactionsCard card={card} key={key} />;
+                        }
+                        if (card.kind === "stats_period") {
+                          return <StatsPeriodCard card={card} key={key} />;
                         }
                         return <StatsMonthCard card={card} key={key} />;
                       })
@@ -384,6 +390,9 @@ export function AiScreen() {
                     if (card.kind === "transactions") {
                       return <TransactionsCard card={card} key={key} />;
                     }
+                    if (card.kind === "stats_period") {
+                      return <StatsPeriodCard card={card} key={key} />;
+                    }
                     return <StatsMonthCard card={card} key={key} />;
                   })}
                 </div>
@@ -394,7 +403,7 @@ export function AiScreen() {
         </div>
 
         {aiEnabled ? (
-          <div className="sticky bottom-0 flex items-end gap-2 border-t border-black/[0.05] bg-[var(--color-bg-app)] pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5">
+          <div className="sticky bottom-0 flex items-end gap-2 border-black/[0.05] bg-[var(--color-bg-app)] pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5">
             <textarea
               className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
               onChange={(event) => setInput(event.target.value)}
@@ -433,7 +442,9 @@ export function AiScreen() {
           {conversationsQuery.isPending ? (
             <LoadingState rows={3} title="加载会话" />
           ) : (conversationsQuery.data?.length ?? 0) === 0 ? (
-            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">还没有历史会话</p>
+            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
+              还没有历史会话
+            </p>
           ) : (
             conversationsQuery.data!.map((conversation) => (
               <div className="flex items-center gap-1" key={conversation.id}>

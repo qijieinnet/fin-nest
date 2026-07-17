@@ -1,9 +1,12 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { Button } from "@/components/ui";
+import { useState } from "react";
+import { CategoryIcon } from "@/components/business";
+import { Button, Tabs } from "@/components/ui";
 import type { AiCard, AiDraftFields } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { useLedger } from "@/providers";
 
 const TYPE_LABEL: Record<string, string> = {
   expense: "支出",
@@ -18,8 +21,30 @@ const TYPE_COLOR: Record<string, string> = {
   transfer: "var(--color-accent-transfer)",
 };
 
-function amount(micros: string): string {
-  return formatMicros(micros, { currencySymbol: "¥" });
+// 与统计页的分类色带保持一致。
+const STATS_PALETTE = [
+  "oklch(0.70 0.16 25)",
+  "oklch(0.74 0.15 55)",
+  "oklch(0.80 0.14 90)",
+  "oklch(0.75 0.15 140)",
+  "oklch(0.72 0.13 185)",
+  "oklch(0.66 0.15 245)",
+  "oklch(0.62 0.17 290)",
+  "oklch(0.68 0.17 330)",
+];
+
+function currencySymbol(currency = "CNY"): string {
+  const known: Record<string, string> = { CNY: "¥", USD: "$", EUR: "€", GBP: "£", JPY: "¥" };
+  return known[currency] ?? `${currency} `;
+}
+
+function amount(micros: string, currency?: string): string {
+  return formatMicros(micros, { currencySymbol: currencySymbol(currency) });
+}
+
+function useCardCurrency(currency?: string): string {
+  const { currentLedger } = useLedger();
+  return currency ?? currentLedger?.currency ?? "CNY";
 }
 
 function DraftRow({ label, value }: { label: string; value?: string }) {
@@ -49,6 +74,7 @@ export function TransactionDraftCard({
   onEdit?: () => void;
 }) {
   const draft: AiDraftFields = card.draft;
+  const currency = useCardCurrency(draft.currency);
   const confirmed = card.status === "confirmed";
   const accountText =
     draft.type === "transfer"
@@ -77,7 +103,7 @@ export function TransactionDraftCard({
           {TYPE_LABEL[draft.type] ?? draft.type}
         </span>
         <span className="text-[20px] font-bold" style={{ color: TYPE_COLOR[draft.type] }}>
-          {amount(draft.grossAmountMicros)}
+          {amount(draft.grossAmountMicros, currency)}
         </span>
       </div>
       <div className="mt-3 flex flex-col gap-1.5">
@@ -92,6 +118,17 @@ export function TransactionDraftCard({
           <Button block disabled icon={<Check size={16} />} variant="secondary">
             已记账
           </Button>
+        ) : card.confirmationBlockedReason ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-[var(--color-text-muted)]">
+              {card.confirmationBlockedReason}
+            </p>
+            {onEdit ? (
+              <Button block disabled={disabled || confirming} onClick={onEdit} variant="secondary">
+                去编辑
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <div className="flex gap-2">
             {onEdit ? (
@@ -120,11 +157,8 @@ export function TransactionDraftCard({
 }
 
 /** 查询结果卡：明细列表 + 合计。 */
-export function TransactionsCard({
-  card,
-}: {
-  card: Extract<AiCard, { kind: "transactions" }>;
-}) {
+export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "transactions" }> }) {
+  const currency = useCardCurrency(card.currency);
   return (
     <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
       <div className="flex items-baseline justify-between gap-3">
@@ -132,8 +166,10 @@ export function TransactionsCard({
         <p className="shrink-0 text-xs text-[var(--color-text-muted)]">共 {card.count} 笔</p>
       </div>
       <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-muted)]">
-        {card.expenseMicros !== "0" ? <span>支出 {amount(card.expenseMicros)}</span> : null}
-        {card.incomeMicros !== "0" ? <span>收入 {amount(card.incomeMicros)}</span> : null}
+        {card.expenseMicros !== "0" ? (
+          <span>支出 {amount(card.expenseMicros, currency)}</span>
+        ) : null}
+        {card.incomeMicros !== "0" ? <span>收入 {amount(card.incomeMicros, currency)}</span> : null}
       </div>
       {card.rows.length > 0 ? (
         <div className="mt-3 flex flex-col divide-y divide-black/[0.04]">
@@ -149,7 +185,7 @@ export function TransactionsCard({
                 </p>
               </div>
               <span className="shrink-0 font-semibold" style={{ color: TYPE_COLOR[row.type] }}>
-                {amount(row.grossAmountMicros)}
+                {amount(row.effectiveAmountMicros ?? row.grossAmountMicros ?? "0", currency)}
               </span>
             </div>
           ))}
@@ -168,6 +204,7 @@ export function TransactionsCard({
 
 /** 月度统计卡：收支总额 + 支出分类 Top。 */
 export function StatsMonthCard({ card }: { card: Extract<AiCard, { kind: "stats_month" }> }) {
+  const currency = useCardCurrency(card.currency);
   return (
     <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
       <p className="font-bold text-[var(--color-text-primary)]">{card.month} 月度统计</p>
@@ -175,13 +212,13 @@ export function StatsMonthCard({ card }: { card: Extract<AiCard, { kind: "stats_
         <div>
           <p className="text-xs text-[var(--color-text-muted)]">支出</p>
           <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.expense }}>
-            {amount(card.expenseMicros)}
+            {amount(card.expenseMicros, currency)}
           </p>
         </div>
         <div>
           <p className="text-xs text-[var(--color-text-muted)]">收入</p>
           <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.income }}>
-            {amount(card.incomeMicros)}
+            {amount(card.incomeMicros, currency)}
           </p>
         </div>
       </div>
@@ -191,12 +228,183 @@ export function StatsMonthCard({ card }: { card: Extract<AiCard, { kind: "stats_
             <div className="flex items-baseline justify-between gap-3 text-sm" key={index}>
               <span className="truncate text-[var(--color-text-primary)]">{item.name}</span>
               <span className="shrink-0 text-[var(--color-text-secondary)]">
-                {amount(item.amountMicros)}
+                {amount(item.amountMicros, currency)}
               </span>
             </div>
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+type PeriodCategory = Extract<AiCard, { kind: "stats_period" }>["expenseCategories"][number];
+
+function categoryPercent(amountMicros: string, totalMicros: bigint): number {
+  if (totalMicros <= 0n) return 0;
+  return Number((BigInt(amountMicros) * 1000n) / totalMicros) / 10;
+}
+
+function StatsCategoryDonut({
+  categories,
+  currency,
+  totalMicros,
+  type,
+}: {
+  categories: Extract<AiCard, { kind: "stats_period" }>["expenseCategories"];
+  currency: string;
+  totalMicros: string;
+  type: "expense" | "income";
+}) {
+  const total = BigInt(totalMicros);
+  let cursor = 0;
+  const gradient =
+    total > 0n
+      ? categories
+          .map((category, index) => {
+            const start = cursor;
+            const size = categoryPercent(category.amountMicros, total);
+            cursor = index === categories.length - 1 ? 100 : Math.min(cursor + size, 100);
+            return `${STATS_PALETTE[index % STATS_PALETTE.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+          })
+          .join(", ")
+      : "var(--color-control-fill-muted) 0% 100%";
+
+  return (
+    <div className="mt-3 flex items-center gap-4 rounded-[16px] bg-[var(--color-control-fill-muted)] p-3">
+      <div className="relative h-28 w-28 shrink-0">
+        <div
+          aria-label={`${TYPE_LABEL[type]}分类饼图`}
+          className="absolute inset-0 rounded-full"
+          role="img"
+          style={{ background: `conic-gradient(${gradient})` }}
+        />
+        <div className="absolute inset-[17px] flex flex-col items-center justify-center rounded-full bg-[var(--color-bg-surface)]">
+          <span className="text-[10px] text-[var(--color-text-muted)]">总{TYPE_LABEL[type]}</span>
+          <span className="mt-0.5 max-w-[76px] truncate text-[15px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+            {amount(totalMicros, currency)}
+          </span>
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {categories.length > 0 ? (
+          categories.slice(0, 5).map((category, index) => (
+            <div className="flex items-center gap-2" key={`${category.name}:${index}`}>
+              <span
+                className="h-[9px] w-[9px] shrink-0 rounded-[3px]"
+                style={{ background: STATS_PALETTE[index % STATS_PALETTE.length] }}
+              />
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text-primary)]">
+                {category.name}
+              </span>
+              <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">
+                {Math.round(categoryPercent(category.amountMicros, total))}%
+              </span>
+            </div>
+          ))
+        ) : (
+          <span className="text-xs text-[var(--color-text-muted)]">暂无分类数据</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CategorySummary({
+  categories,
+  currency,
+  totalMicros,
+  type,
+}: {
+  categories: PeriodCategory[];
+  currency: string;
+  totalMicros: string;
+  type: "expense" | "income";
+}) {
+  const total = BigInt(totalMicros);
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-xs font-semibold text-[var(--color-text-muted)]">
+        {TYPE_LABEL[type]}分类汇总
+      </p>
+      {categories.length > 0 ? (
+        <div className="flex flex-col divide-y divide-black/[0.04]">
+          {categories.map((category, index) => (
+            <div className="flex items-center gap-3 py-2.5" key={`${category.name}:${index}`}>
+              <CategoryIcon
+                color={STATS_PALETTE[index % STATS_PALETTE.length]}
+                icon={category.icon ?? undefined}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                    {category.name}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold text-[var(--color-text-primary)]">
+                    {amount(category.amountMicros, currency)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+                  占比 {categoryPercent(category.amountMicros, total).toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="py-3 text-sm text-[var(--color-text-muted)]">暂无分类数据</p>
+      )}
+    </div>
+  );
+}
+
+/** 任意日期范围统计：收支总额 + 分类饼图 + 一级分类汇总。 */
+export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats_period" }> }) {
+  const currency = useCardCurrency(card.currency);
+  const [type, setType] = useState<"expense" | "income">("expense");
+  const categories = type === "expense" ? card.expenseCategories : card.incomeCategories;
+  const totalMicros = type === "expense" ? card.expenseMicros : card.incomeMicros;
+  return (
+    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+      <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
+      <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+        {card.dateFrom} 至 {card.dateTo}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs text-[var(--color-text-muted)]">总支出</p>
+          <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.expense }}>
+            {amount(card.expenseMicros, currency)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-[var(--color-text-muted)]">总收入</p>
+          <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.income }}>
+            {amount(card.incomeMicros, currency)}
+          </p>
+        </div>
+      </div>
+      <Tabs
+        className="mt-4"
+        items={[
+          { label: "支出", value: "expense" },
+          { label: "收入", value: "income" },
+        ]}
+        onValueChange={(value) => setType(value as "expense" | "income")}
+        value={type}
+      />
+      <StatsCategoryDonut
+        categories={categories}
+        currency={currency}
+        totalMicros={totalMicros}
+        type={type}
+      />
+      <CategorySummary
+        categories={categories}
+        currency={currency}
+        totalMicros={totalMicros}
+        type={type}
+      />
     </div>
   );
 }
