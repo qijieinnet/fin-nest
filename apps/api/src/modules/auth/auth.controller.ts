@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Patch, Post, Req, UseGuards } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -12,6 +12,7 @@ import { AuthContext, RequestWithAuth, SessionAuthContext } from "./auth.types";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { VerifyPasswordDto } from "./dto/verify-password.dto";
 import { SessionAuthGuard } from "./session-auth.guard";
 
 @ApiTags("auth")
@@ -50,6 +51,18 @@ export class AuthController {
   @UseGuards(SessionAuthGuard)
   me(@CurrentAuth() auth: AuthContext) {
     return this.authService.me(auth as SessionAuthContext);
+  }
+
+  @Post("password/verify")
+  @HttpCode(204)
+  @ApiBearerAuth()
+  @ApiNoContentResponse({ description: "校验当前登录用户的密码（应用锁解锁用），错误返回 401" })
+  @UseGuards(SessionAuthGuard)
+  async verifyPassword(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: VerifyPasswordDto,
+  ): Promise<void> {
+    await this.authService.verifyCurrentPassword(auth as SessionAuthContext, body.password);
   }
 
   @Patch("password")

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { AppLockGate } from "./AppLockProvider";
 import { AuthProvider } from "./AuthProvider";
 import { ConfirmProvider } from "./ConfirmProvider";
 import { DecimalPlacesProvider } from "./DecimalPlacesProvider";
@@ -19,7 +20,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
             <DecimalPlacesProvider>
               <ToastProvider>
                 <ConfirmProvider>
-                  <SheetStackProvider>{children}</SheetStackProvider>
+                  <SheetStackProvider>
+                    <AppLockGate>{children}</AppLockGate>
+                  </SheetStackProvider>
                 </ConfirmProvider>
               </ToastProvider>
             </DecimalPlacesProvider>

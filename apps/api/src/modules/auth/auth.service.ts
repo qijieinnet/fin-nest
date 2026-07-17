@@ -208,6 +208,21 @@ export class AuthService {
     });
   }
 
+  /**
+   * 校验当前登录用户的密码（前端应用锁解锁用），不产生新 session。
+   * 复用登录限速器按用户维度限失败次数，防止拿到有效 token 后经此接口爆破密码。
+   */
+  async verifyCurrentPassword(auth: SessionAuthContext, password: string): Promise<void> {
+    const key = `unlock:${auth.userId}`;
+    this.loginRateLimiter.assertAllowed(key, LOGIN_MAX_FAILURES);
+    const user = await this.prisma.client.user.findUniqueOrThrow({ where: { id: auth.userId } });
+    if (!(await verifyPassword(password, user.passwordHash))) {
+      this.loginRateLimiter.recordFailure(key);
+      throw new AppError("INVALID_CREDENTIALS", "密码错误", 401);
+    }
+    this.loginRateLimiter.recordSuccess(key);
+  }
+
   async authenticateSessionRequest(request: RequestWithAuth): Promise<SessionAuthContext> {
     const token = this.extractSessionToken(request);
     if (!token) {

@@ -29,6 +29,7 @@ async function main() {
   await ensureApi();
   const owner = await register("owner");
   const requester = await register("requester");
+  await assertPasswordVerify(owner.token);
   const ledger = await api("POST", "/ledgers", {
     token: owner.token,
     expected: 201,
@@ -444,6 +445,24 @@ async function register(label) {
   });
   touched.userIds.add(result.user.id);
   return { token: result.token, userId: result.user.id };
+}
+
+// 应用锁解锁用的密码校验：正确密码 204，错误密码 401，未登录 401。
+async function assertPasswordVerify(token) {
+  await api("POST", "/auth/password/verify", {
+    token,
+    expected: 204,
+    body: { password: "Password123!" },
+  });
+  await api("POST", "/auth/password/verify", {
+    token,
+    expected: 401,
+    body: { password: "WrongPassword1!" },
+  });
+  await api("POST", "/auth/password/verify", {
+    expected: 401,
+    body: { password: "Password123!" },
+  });
 }
 
 async function assertAttachmentAuthorization(ledgerId, transactionId, ownerToken, requesterToken) {

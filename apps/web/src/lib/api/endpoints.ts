@@ -5,6 +5,8 @@ export const API_ENDPOINTS = {
   logout: "/auth/logout",
   me: "/auth/me",
   password: "/auth/password",
+  /** 校验当前登录用户密码（应用锁解锁用），成功 204、失败 401。 */
+  passwordVerify: "/auth/password/verify",
   /** 公开：是否允许注册，供登录/注册页控制入口显示。 */
   registrationStatus: "/auth/registration",
   ledgers: "/ledgers",

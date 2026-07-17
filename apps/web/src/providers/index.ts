@@ -1,3 +1,4 @@
+export { AppLockGate } from "./AppLockProvider";
 export { AppProviders } from "./AppProviders";
 export { AuthProvider, useAuth } from "./AuthProvider";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
