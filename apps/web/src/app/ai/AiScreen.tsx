@@ -14,6 +14,7 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { LoadingState } from "@/components/business";
 import {
@@ -61,7 +62,13 @@ import {
   TransactionDraftCard,
   TransactionsCard,
 } from "./_components/AiCards";
-import { AiMarkdown } from "./_components/AiMarkdown";
+
+// react-markdown + remark-gfm 体积较大（压缩前约 170K），动态拆出：AI 页外壳先渲染，
+// 消息区渲染时才加载；空闲预取 /ai 路由时也不必连带下载它。
+const AiMarkdown = dynamic(
+  () => import("./_components/AiMarkdown").then((mod) => ({ default: mod.AiMarkdown })),
+  { loading: () => null },
+);
 
 const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
 

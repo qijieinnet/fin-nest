@@ -2,11 +2,13 @@
 
 import { ChartPie, type LucideIcon, MoreHorizontal, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
 import { useAutoPending } from "@/lib/data/records";
 import { resolveNavMenuLayout } from "@/lib/nav/navMenus";
+import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
 
@@ -62,11 +64,28 @@ export function DesktopSidebar() {
     { label: "导入导出", route: routes.importExport },
   ];
 
-  const moreActive = isActive(pathname, routes.more);
+  // 空闲预取一级导航 + AI 的路由 chunk；「更多」子项数量多，改为 hover 时按需预取。
+  useIdleRoutePrefetch([...primary.map((item) => item.route), routes.ai]);
+
+  // 点击后立即把高亮切到目标项（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
+  // 避免目标页 chunk 加载期间侧边栏毫无响应、被误认为卡住。
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  useEffect(() => {
+    setPendingRoute(null);
+  }, [pathname]);
+  const displayPath = pendingRoute ?? pathname;
+
+  const moreActive = isActive(displayPath, routes.more);
 
   const go = (route: string) => {
-    if (pathname !== route) router.push(route);
+    if (displayPath === route) return;
+    setPendingRoute(route);
+    startTransition(() => router.push(route));
   };
+
+  // hover 即预取目标路由（幂等，已预取过则为 no-op），覆盖未在空闲预取名单里的「更多」子项。
+  const preload = (route: string) => router.prefetch(route);
 
   return (
     <aside className="desktop-sidebar">
@@ -81,13 +100,14 @@ export function DesktopSidebar() {
       <nav className="desktop-sidebar__nav">
         {primary.map((item) => {
           const Icon = item.icon!;
-          const active = isActive(pathname, item.route);
+          const active = isActive(displayPath, item.route);
           return (
             <button
               aria-current={active ? "page" : undefined}
               className={`desktop-nav-item${active ? " desktop-nav-item--active" : ""}`}
               key={item.route}
               onClick={() => go(item.route)}
+              onMouseEnter={() => preload(item.route)}
               type="button"
             >
               <DotBadge show={Boolean(item.dot)}>
@@ -109,13 +129,14 @@ export function DesktopSidebar() {
           </div>
           <div className="desktop-sidebar__subnav">
             {moreItems.map((item) => {
-              const active = isActive(pathname, item.route);
+              const active = isActive(displayPath, item.route);
               return (
                 <button
                   aria-current={active ? "page" : undefined}
                   className={`desktop-nav-item desktop-nav-item--sub${active ? " desktop-nav-item--active" : ""}`}
                   key={item.route}
                   onClick={() => go(item.route)}
+                  onMouseEnter={() => preload(item.route)}
                   type="button"
                 >
                   <DotBadge show={Boolean(item.dot)}>
@@ -131,9 +152,10 @@ export function DesktopSidebar() {
       {aiEnabled ? (
         <div className="desktop-sidebar__footer">
           <button
-            aria-current={isActive(pathname, routes.ai) ? "page" : undefined}
-            className={`desktop-nav-item${isActive(pathname, routes.ai) ? " desktop-nav-item--active" : ""}`}
+            aria-current={isActive(displayPath, routes.ai) ? "page" : undefined}
+            className={`desktop-nav-item${isActive(displayPath, routes.ai) ? " desktop-nav-item--active" : ""}`}
             onClick={() => go(routes.ai)}
+            onMouseEnter={() => preload(routes.ai)}
             type="button"
           >
             <Sparkles size={20} />

@@ -1,6 +1,6 @@
 # Fin Nest
 
-> 一款可自部署的**个人 / 家庭记账 Web 应用**——多用户、多账本、成员协作，覆盖记账、账户与净资产、计划与预算、自动 / 快捷记账、保险与物品档案、附件、统计、导入导出，数据完全掌握在自己手里。
+> 一款可自部署的**个人 / 家庭记账 Web 应用**——多用户、多账本、成员协作，覆盖记账、账户与净资产、计划与预算、自动 / 快捷记账、保险与物品档案、附件、统计、导入导出、AI 助手，数据完全掌握在自己手里。
 
 <p>
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg">
@@ -22,6 +22,7 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - 👨‍👩‍👧 **多用户 · 多账本 · 成员协作**：邀请码 → 加入申请 → owner 审批的完整协作流；账本级币种与权限隔离。
 - 💰 **面向财务正确性的后端**：金额一律整数微单位（micros），余额变更单一入口 + `SELECT ... FOR UPDATE` 行锁，编辑 / 删除走反向流水，关键写操作支持幂等键。
 - 📊 **不止流水账**：账户与净资产、计划与预算、自动记账、快捷模板、保险 / 物品 / 订阅档案、多维统计、Excel / JSON 导入导出与备份恢复。
+- 🤖 **AI 助手（可选）**：接任意 OpenAI-compatible 端点（DeepSeek / 通义 / 本地 Ollama 等），自然语言记账与查询统计；AI 只产出待确认草稿卡片、不直接写库，金额换算走确定性代码。
 - 📱 **移动优先 + 桌面双形态**：同一套代码响应式适配，移动端类原生手感（底部弹层、二级菜单），桌面端侧边栏 + Modal。
 - 🔒 **安全基线内置**：opaque token 鉴权（非 JWT、库存哈希）、scrypt 密码、双层登录限速、附件 MIME 白名单、生产环境弱密钥拒绝启动。
 
@@ -74,6 +75,14 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - 月度收支、分类占比与下钻、人员排行、趋势、净资产序列、现金流序列。
 - 口径统一采用**有效金额**（原始金额 − 关联合计）。
 
+### AI 助手（可选启用）
+- 配置 `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`（OpenAI-compatible `/chat/completions` 协议，可接 DeepSeek / 通义 / 本地 Ollama 等）即启用；未配置时接口返回未启用、前端自动隐藏入口。
+- 聊天页 `/ai`（移动端底部导航独立入口 / 桌面侧边栏入口）：自然语言记账与查询，SSE 流式输出，思维链不透出。
+- **自然语言记账**：LLM 通过工具调用只产出**记账草稿卡片**（不直接写库），用户直接确认或进表单编辑后保存，均带幂等键入账并回写卡片状态；支持按名称调用自己的快捷模板生成草稿（金额 / 日期 / 备注可覆盖）。
+- **查询与统计**：逐笔明细查询；日 / 周 / 月 / 季度 / 年 / 自定义区间收支统计（分类饼图 + 一级分类汇总，趋势类问题额外返回自动选粒度的折线图）；账户余额、预算进度卡片；另有计划进度、保险 / 物品 / 订阅档案、自动记账规则与待确认、提醒汇总等只读查询由模型文字转述。
+- **财务正确性延续**：金额换算（账本币种主单位 → micros）在确定性代码中完成；分类 / 账户 / 人员的真实 id 注入系统提示并由后端二次校验归属与类型；统计口径同样采用有效金额。
+- 会话按创建者私有并持久化（`ai_conversations` / `ai_messages`，软删）；工具循环上限 6 轮。
+
 ### 提醒红点
 - `reminder-summary` 聚合入口，一处汇总：自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 
@@ -86,7 +95,7 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - 下载由 API 鉴权后代理流式返回（不使用预签名 URL）；对象 key 不含原始文件名。
 - 删除业务对象联动清理附件，MinIO 删除失败入 `file.delete` job 自动重试。
 
-> 预留能力：`ServiceToken` 鉴权链路（scope / CIDR 白名单 / 代表用户）已建模但暂未接入业务端点，为将来 AI / 外部系统集成预留；AI 能力尚未实现。
+> 预留能力：`ServiceToken` 鉴权链路（scope / CIDR 白名单 / 代表用户）已建模但暂未接入业务端点，为将来外部系统集成（如 iOS 捷径）预留；应用内 AI 助手走用户自己的 session 鉴权，不经 service token。
 
 ---
 
@@ -184,6 +193,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `WEB_ORIGIN` | CORS 放行来源（逗号分隔） |
 | `TRUST_PROXY` | 有可信反代（nginx）时设 `true`，直连保持 `false`（详见「安全基线」） |
 | `APP_TIMEZONE` | 「今天 / 本月」的时区（默认 `Asia/Shanghai`），影响统计月份与自动记账触发时点 |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用，OpenAI-compatible `/chat/completions` 协议 |
 | `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
 | `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |
 | `API_INTERNAL_URL` | web 容器内转发 `/api` 的目标 |
@@ -219,7 +229,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 
 ---
 
-## 🧮 数据模型（37 个模型）
+## 🧮 数据模型（41 个模型）
 
 | 分组 | 模型 |
 |---|---|
@@ -229,8 +239,9 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | 账户 | Account, SubAccount, AccountAdjustment, AccountEntry |
 | 交易 | Transaction, TransactionAccountRelation, TransactionLink |
 | 自动化 | AutoRule, AutoPendingTransaction, QuickTemplate |
-| 计划预算 | Plan, BudgetSetting, CategoryBudget |
-| 档案 | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
+| 计划预算 | Plan, PlanShareToken, BudgetSetting, CategoryBudget |
+| 档案 | Insurance, InsuranceInsuredPerson, InsuranceTypeOrder, ItemType, Item, SubscriptionCategory, Subscription |
+| AI 助手 | AiConversation, AiMessage |
 | 文件 | File, Attachment |
 | 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
 

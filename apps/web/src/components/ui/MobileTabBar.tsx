@@ -2,9 +2,11 @@
 
 import { MoreHorizontal, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { useAiStatus } from "@/lib/data/ai";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { MOBILE_PRIMARY_NAV_LIMIT, resolveNavMenuLayout } from "@/lib/nav/navMenus";
+import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { routes } from "@/lib/route/routes";
 import { useLedger, usePreferences } from "@/providers";
 import { TabBar } from "./TabBar";
@@ -47,22 +49,37 @@ export function MobileTabBar() {
 
   const tabs = [...primary, MORE_TAB];
 
+  // 空闲预取全部可点导航路由，点击时目标页 chunk 已就绪（详见 hook 注释）。
+  useIdleRoutePrefetch([...tabs.map((tab) => tab.value), routes.ai]);
+
+  // 点击后立即高亮目标 tab（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
+  // 避免目标页 chunk 加载期间界面毫无响应、被误认为卡住。
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  useEffect(() => {
+    setPendingRoute(null);
+  }, [pathname]);
+
   // 命中一级菜单则高亮之，其余路由（统计、账本详情、更多等）统一归到「更多」。
   const match = primary.find(
     (tab) => pathname === tab.value || pathname.startsWith(`${tab.value}/`),
   );
-  const value = match?.value ?? routes.more;
+  const value = pendingRoute ?? match?.value ?? routes.more;
 
   // 桌面断点由 DesktopSidebar 承担导航，底部 TabBar 不渲染。
   if (isDesktop) return null;
+
+  const go = (next: string) => {
+    if (next === value) return;
+    setPendingRoute(next);
+    startTransition(() => router.push(next));
+  };
 
   const mainTabBar = (
     <TabBar
       className={aiEnabled ? "tab-bar--fit tab-bar--flush-right" : undefined}
       items={tabs}
-      onValueChange={(next) => {
-        if (next !== value) router.push(next);
-      }}
+      onValueChange={go}
       showLabels={preferences.showNavMenuLabels}
       value={value}
     />
@@ -77,7 +94,7 @@ export function MobileTabBar() {
               <TabBar
                 className="tab-bar--fit ai tab-bar--flush-left"
                 items={[AI_TAB]}
-                onValueChange={() => router.push(routes.ai)}
+                onValueChange={() => go(routes.ai)}
                 value=""
               />
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { type QueryClient, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   apiRequest,
   type Account,
@@ -359,6 +359,92 @@ export function useTransactionSummary(ledgerId: string | null, filters: Transact
       }),
     enabled: Boolean(ledgerId),
   });
+}
+
+/**
+ * 空闲时预取主导航 tab 的首屏数据（账单列表/汇总、账户、计划、预算进度及公共字典），
+ * 让切 tab 时数据已在缓存、直接渲染而非转菊花。key/queryFn/staleTime 必须与上方
+ * 对应 hook 保持一致，否则预取结果命中不了页面查询（改动 hook 时同步改这里）。
+ * 数据已新鲜时 prefetchQuery 是 no-op；失败静默（页面挂载后会自行重试并展示错误），
+ * 用 meta.suppressErrorToast 跳过全局错误 toast。
+ */
+export async function prefetchPrimaryLedgerData(
+  queryClient: QueryClient,
+  ledgerId: string,
+  billsQuery: TransactionListQuery,
+  month: string,
+): Promise<void> {
+  const meta = { suppressErrorToast: true };
+  const pageSize = 20;
+  await Promise.allSettled([
+    // 账单页：无限滚动首页 + 汇总卡片（对应 useInfiniteTransactions / useTransactionSummary）。
+    queryClient.prefetchInfiniteQuery({
+      queryKey: [...queryKeys.transactions(ledgerId, billsQuery), "paged"],
+      queryFn: ({ pageParam }) =>
+        apiRequest<Transaction[]>(ledgerApiPath(ledgerId, "/transactions"), {
+          query: { ...cleanQuery(billsQuery), limit: pageSize, offset: pageParam },
+        }),
+      initialPageParam: 0,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: [...queryKeys.transactions(ledgerId, billsQuery), "summary"],
+      queryFn: () =>
+        apiRequest<TransactionSummary>(ledgerApiPath(ledgerId, "/transactions/summary"), {
+          query: cleanQuery(billsQuery),
+        }),
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.budgetProgress(ledgerId, month),
+      queryFn: () =>
+        apiRequest<BudgetProgress>(ledgerApiPath(ledgerId, "/budgets/progress"), {
+          query: { month },
+        }),
+      staleTime: 15_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.accounts(ledgerId),
+      queryFn: () => apiRequest<Account[]>(ledgerApiPath(ledgerId, "/accounts")),
+      staleTime: 30_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.plans(ledgerId),
+      queryFn: () => apiRequest<Plan[]>(ledgerApiPath(ledgerId, "/plans")),
+      staleTime: 30_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.categories(ledgerId),
+      queryFn: () => apiRequest<Category[]>(ledgerApiPath(ledgerId, "/categories")),
+      staleTime: 60_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.people(ledgerId),
+      queryFn: () => apiRequest<Person[]>(ledgerApiPath(ledgerId, "/people")),
+      staleTime: 60_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.transactionCreators(ledgerId),
+      queryFn: () =>
+        apiRequest<TransactionCreator[]>(ledgerApiPath(ledgerId, "/transaction-creators")),
+      staleTime: 60_000,
+      meta,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.autoPending(ledgerId),
+      queryFn: () =>
+        apiRequest<AutoPendingTransaction[]>(ledgerApiPath(ledgerId, "/auto-pending-transactions"), {
+          query: { status: "pending" },
+        }),
+      staleTime: 15_000,
+      meta,
+    }),
+  ]);
 }
 
 export function useTransaction(ledgerId: string | null, transactionId: string) {

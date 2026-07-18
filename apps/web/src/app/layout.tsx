@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppProviders } from "@/providers";
+import { PrimaryDataPrefetcher } from "./_components/PrimaryDataPrefetcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -28,7 +29,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN">
       <body>
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>
+          <PrimaryDataPrefetcher />
+          {children}
+        </AppProviders>
       </body>
     </html>
   );
