@@ -7,6 +7,7 @@ import {
   History,
   Mic,
   MoreHorizontal,
+  NotebookPen,
   Plus,
   Send,
   Sparkles,
@@ -53,11 +54,14 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useToast } from "@/providers";
 import {
+  AccountBalancesCard,
+  BudgetProgressCard,
   StatsMonthCard,
   StatsPeriodCard,
   TransactionDraftCard,
   TransactionsCard,
 } from "./_components/AiCards";
+import { AiMarkdown } from "./_components/AiMarkdown";
 
 const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
 
@@ -316,7 +320,12 @@ export function AiScreen() {
   };
 
   const aiEnabled = aiStatusQuery.data?.enabled === true;
-  const loadingConversation = Boolean(conversationId) && conversationQuery.isPending;
+  // 仅当目标会话尚未在本地就绪时才显示骨架：新对话结束后已把 loadedConversationRef 指向新
+  // 会话（消息就在屏上），此时后台详情请求 pending 不应再盖骨架；从历史切到未加载的会话才显示。
+  const loadingConversation =
+    Boolean(conversationId) &&
+    conversationQuery.isPending &&
+    loadedConversationRef.current !== conversationId;
 
   // 输入栏按钮：生成中只显示停止；录音中显示「录音」按钮（点它暂停录音）；有内容则同时显示发送
   // （点发送会先停录音再发）。故录音且有内容时录音与发送并存，用户可二选一。
@@ -348,6 +357,13 @@ export function AiScreen() {
                       icon: <History size={18} />,
                       label: "历史记录",
                       onSelect: () => setHistoryOpen(true),
+                    },
+                  ],
+                  [
+                    {
+                      icon: <NotebookPen size={18} />,
+                      label: "手动记账",
+                      onSelect: () => router.push(routes.billNew),
                     },
                   ],
                 ]}
@@ -413,10 +429,14 @@ export function AiScreen() {
                       className={
                         message.role === "user"
                           ? "self-end max-w-[85%] rounded-[18px] rounded-br-[6px] bg-[var(--color-tint-strong)] px-4 py-2.5 text-[15px] text-white"
-                          : "self-start max-w-[92%] rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)] whitespace-pre-wrap"
+                          : "self-start max-w-[92%] rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)]"
                       }
                     >
-                      {message.content}
+                      {message.role === "assistant" ? (
+                        <AiMarkdown content={message.content} />
+                      ) : (
+                        message.content
+                      )}
                     </div>
                   ) : null}
                   {message.role === "assistant" && message.cards
@@ -442,6 +462,12 @@ export function AiScreen() {
                         if (card.kind === "stats_period") {
                           return <StatsPeriodCard card={card} key={key} />;
                         }
+                        if (card.kind === "account_balances") {
+                          return <AccountBalancesCard card={card} key={key} />;
+                        }
+                        if (card.kind === "budget_progress") {
+                          return <BudgetProgressCard card={card} key={key} />;
+                        }
                         return <StatsMonthCard card={card} key={key} />;
                       })
                     : null}
@@ -451,8 +477,8 @@ export function AiScreen() {
                 <div className="flex flex-col gap-2">
                   {/* 与持久化消息一致：出现卡片后不再展示正文增量。 */}
                   {streaming.content && streaming.cards.length === 0 ? (
-                    <div className="self-start max-w-[92%] whitespace-pre-wrap rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)]">
-                      {streaming.content}
+                    <div className="self-start max-w-[92%] rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)]">
+                      <AiMarkdown content={streaming.content} />
                     </div>
                   ) : streaming.cards.length === 0 ? (
                     <div className="self-start rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-muted)]">
@@ -478,6 +504,12 @@ export function AiScreen() {
                     if (card.kind === "stats_period") {
                       return <StatsPeriodCard card={card} key={key} />;
                     }
+                    if (card.kind === "account_balances") {
+                      return <AccountBalancesCard card={card} key={key} />;
+                    }
+                    if (card.kind === "budget_progress") {
+                      return <BudgetProgressCard card={card} key={key} />;
+                    }
                     return <StatsMonthCard card={card} key={key} />;
                   })}
                 </div>
@@ -502,7 +534,7 @@ export function AiScreen() {
                   handleSend();
                 }
               }}
-              placeholder={speech.listening ? "正在聆听…" : "例如：昨天打车 32 块"}
+              placeholder={speech.listening ? "正在聆听…" : "请输入"}
               rows={1}
               value={input}
             />

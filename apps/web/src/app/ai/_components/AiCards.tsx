@@ -76,6 +76,7 @@ export function TransactionDraftCard({
   const draft: AiDraftFields = card.draft;
   const currency = useCardCurrency(draft.currency);
   const confirmed = card.status === "confirmed";
+  const superseded = card.status === "superseded";
   const accountText =
     draft.type === "transfer"
       ? [draft.fromAccountName ?? "未指定", draft.toAccountName ?? "未指定"].join(" → ")
@@ -91,7 +92,11 @@ export function TransactionDraftCard({
     : undefined;
 
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div
+      className={`rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4${
+        superseded ? " opacity-60" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <span
           className="rounded-full px-2.5 py-0.5 text-xs font-bold"
@@ -102,7 +107,13 @@ export function TransactionDraftCard({
         >
           {TYPE_LABEL[draft.type] ?? draft.type}
         </span>
-        <span className="text-[20px] font-bold" style={{ color: TYPE_COLOR[draft.type] }}>
+        <span
+          className="text-[20px] font-bold"
+          style={{
+            color: TYPE_COLOR[draft.type],
+            textDecoration: superseded ? "line-through" : undefined,
+          }}
+        >
           {amount(draft.grossAmountMicros, currency)}
         </span>
       </div>
@@ -118,6 +129,8 @@ export function TransactionDraftCard({
           <Button block disabled icon={<Check size={16} />} variant="secondary">
             已记账
           </Button>
+        ) : superseded ? (
+          <p className="text-center text-xs text-[var(--color-text-muted)]">已作废（已被更正）</p>
         ) : card.confirmationBlockedReason ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-[var(--color-text-muted)]">
@@ -361,7 +374,12 @@ function CategorySummary({
 /** 任意日期范围统计：收支总额 + 分类饼图 + 一级分类汇总。 */
 export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats_period" }> }) {
   const currency = useCardCurrency(card.currency);
-  const [type, setType] = useState<"expense" | "income">("expense");
+  const hasExpense = card.expenseMicros !== "0";
+  const hasIncome = card.incomeMicros !== "0";
+  // 双边都有数据才展示差额、另一侧汇总与分类切换；单边时锁定到有数据的一侧。
+  const bothSides = hasExpense && hasIncome;
+  const [selectedType, setSelectedType] = useState<"expense" | "income">("expense");
+  const type = bothSides ? selectedType : hasIncome && !hasExpense ? "income" : "expense";
   const categories = type === "expense" ? card.expenseCategories : card.incomeCategories;
   const totalMicros = type === "expense" ? card.expenseMicros : card.incomeMicros;
   return (
@@ -370,41 +388,205 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
       <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
         {card.dateFrom} 至 {card.dateTo}
       </p>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-xs text-[var(--color-text-muted)]">总支出</p>
-          <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.expense }}>
-            {amount(card.expenseMicros, currency)}
+      {bothSides ? (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--color-text-muted)]">总支出</p>
+            <p
+              className="truncate text-[16px] font-bold [font-variant-numeric:tabular-nums]"
+              style={{ color: TYPE_COLOR.expense }}
+            >
+              {amount(card.expenseMicros, currency)}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--color-text-muted)]">总收入</p>
+            <p
+              className="truncate text-[16px] font-bold [font-variant-numeric:tabular-nums]"
+              style={{ color: TYPE_COLOR.income }}
+            >
+              {amount(card.incomeMicros, currency)}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--color-text-muted)]">差额</p>
+            <p className="truncate text-[16px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+              {amount((BigInt(card.incomeMicros) - BigInt(card.expenseMicros)).toString(), currency)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <p className="text-xs text-[var(--color-text-muted)]">
+            {type === "expense" ? "总支出" : "总收入"}
+          </p>
+          <p
+            className="text-[18px] font-bold [font-variant-numeric:tabular-nums]"
+            style={{ color: TYPE_COLOR[type] }}
+          >
+            {amount(totalMicros, currency)}
           </p>
         </div>
-        <div>
-          <p className="text-xs text-[var(--color-text-muted)]">总收入</p>
-          <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.income }}>
-            {amount(card.incomeMicros, currency)}
-          </p>
-        </div>
-      </div>
-      <Tabs
-        className="mt-4"
-        items={[
-          { label: "支出", value: "expense" },
-          { label: "收入", value: "income" },
-        ]}
-        onValueChange={(value) => setType(value as "expense" | "income")}
-        value={type}
-      />
-      <StatsCategoryDonut
-        categories={categories}
-        currency={currency}
-        totalMicros={totalMicros}
-        type={type}
-      />
+      )}
+      {bothSides ? (
+        <Tabs
+          className="mt-4"
+          items={[
+            { label: "支出", value: "expense" },
+            { label: "收入", value: "income" },
+          ]}
+          onValueChange={(value) => setSelectedType(value as "expense" | "income")}
+          value={type}
+        />
+      ) : null}
+      {/* 单一分类时饼图是无信息量的整圆，隐藏，只留分类汇总。 */}
+      {categories.length > 1 ? (
+        <StatsCategoryDonut
+          categories={categories}
+          currency={currency}
+          totalMicros={totalMicros}
+          type={type}
+        />
+      ) : null}
       <CategorySummary
         categories={categories}
         currency={currency}
         totalMicros={totalMicros}
         type={type}
       />
+    </div>
+  );
+}
+
+const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  savings: "储蓄",
+  credit: "信用",
+  invest: "投资",
+  receivable: "可收回",
+  payable: "需归还",
+};
+
+/** 账户余额卡：总资产/总负债/净资产 + 各账户余额（负债展示为负向红色）。 */
+export function AccountBalancesCard({
+  card,
+}: {
+  card: Extract<AiCard, { kind: "account_balances" }>;
+}) {
+  const currency = useCardCurrency(card.currency);
+  return (
+    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
+        <div className="text-right">
+          <p className="text-[11px] text-[var(--color-text-muted)]">净资产</p>
+          <p className="text-[18px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+            {amount(card.netWorthMicros, currency)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-muted)]">
+        <span>资产 {amount(card.totalAssetsMicros, currency)}</span>
+        <span>负债 {amount(card.totalLiabilitiesMicros, currency)}</span>
+      </div>
+      {card.accounts.length > 0 ? (
+        <div className="mt-3 flex flex-col divide-y divide-black/[0.04]">
+          {card.accounts.map((account, index) => (
+            <div className="flex items-center justify-between gap-3 py-2 text-sm" key={index}>
+              <div className="min-w-0">
+                <span className="truncate text-[var(--color-text-primary)]">{account.name}</span>
+                <span className="ml-2 text-xs text-[var(--color-text-muted)]">
+                  {ACCOUNT_TYPE_LABEL[account.type] ?? account.type}
+                </span>
+              </div>
+              <span
+                className="shrink-0 font-semibold [font-variant-numeric:tabular-nums]"
+                style={{
+                  color: account.isLiability
+                    ? "var(--color-accent-expense)"
+                    : "var(--color-text-primary)",
+                }}
+              >
+                {account.isLiability ? "-" : ""}
+                {amount(account.balanceMicros, currency)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-[var(--color-text-muted)]">暂无账户</p>
+      )}
+    </div>
+  );
+}
+
+function BudgetBar({ percent }: { percent: number }) {
+  const width = Math.max(0, Math.min(percent, 100));
+  const over = percent > 100;
+  return (
+    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-control-fill-muted)]">
+      <div
+        className="h-full rounded-full"
+        style={{
+          width: `${width}%`,
+          backgroundColor: over ? "var(--color-accent-expense)" : "var(--color-tint-strong)",
+        }}
+      />
+    </div>
+  );
+}
+
+/** 预算进度卡：总预算/已用/剩余 + 各分类进度条。 */
+export function BudgetProgressCard({
+  card,
+}: {
+  card: Extract<AiCard, { kind: "budget_progress" }>;
+}) {
+  const currency = useCardCurrency(card.currency);
+  if (!card.enabled) {
+    return (
+      <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+        <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算</p>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">该月未启用预算</p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算进度</p>
+        <p className="shrink-0 text-xs text-[var(--color-text-muted)]">{card.percent.toFixed(0)}%</p>
+      </div>
+      <div className="mt-2">
+        <div className="flex items-baseline justify-between gap-3 text-sm">
+          <span className="text-[var(--color-text-muted)]">已用</span>
+          <span className="text-[var(--color-text-primary)]">
+            {amount(card.usedMicros, currency)}
+            {card.totalBudgetMicros ? ` / ${amount(card.totalBudgetMicros, currency)}` : ""}
+          </span>
+        </div>
+        {card.totalBudgetMicros ? <BudgetBar percent={card.percent} /> : null}
+        {card.remainingMicros ? (
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            剩余 {amount(card.remainingMicros, currency)}
+          </p>
+        ) : null}
+      </div>
+      {card.categories.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-2.5">
+          {card.categories.map((item, index) => (
+            <div key={index}>
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="truncate text-[var(--color-text-primary)]">{item.name}</span>
+                <span className="shrink-0 text-xs text-[var(--color-text-muted)]">
+                  {amount(item.usedMicros, currency)}
+                  {item.budgetMicros ? ` / ${amount(item.budgetMicros, currency)}` : ""}
+                </span>
+              </div>
+              {item.budgetMicros ? <BudgetBar percent={item.percent} /> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

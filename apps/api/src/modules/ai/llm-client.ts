@@ -23,9 +23,20 @@ export type LlmTool = {
   };
 };
 
+export type LlmUsage = {
+  promptTokens: number;
+  completionTokens: number;
+};
+
 export type LlmReply = {
   content: string | null;
   toolCalls: LlmToolCall[];
+  usage?: LlmUsage;
+};
+
+type RawUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
 };
 
 type ChatCompletionResponse = {
@@ -35,6 +46,7 @@ type ChatCompletionResponse = {
       tool_calls?: LlmToolCall[];
     };
   }>;
+  usage?: RawUsage;
 };
 
 type ChatCompletionChunk = {
@@ -48,7 +60,16 @@ type ChatCompletionChunk = {
       }>;
     };
   }>;
+  usage?: RawUsage;
 };
+
+function packUsage(usage: RawUsage | undefined): LlmUsage | undefined {
+  if (!usage) return undefined;
+  return {
+    promptTokens: usage.prompt_tokens ?? 0,
+    completionTokens: usage.completion_tokens ?? 0,
+  };
+}
 
 const REQUEST_TIMEOUT_MS = 90_000;
 // 流式整体超时放宽：带思维链的模型（reasoning_content）首 token 前可能停顿较久。
@@ -81,7 +102,8 @@ export class LlmClient {
           messages,
           ...(tools.length > 0 ? { tools } : {}),
           temperature: 0.2,
-          ...(stream ? { stream: true } : {}),
+          // include_usage：让上游在流式末块附带 token 用量（OpenAI-compatible），用于用量记账。
+          ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
         }),
         signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
@@ -109,6 +131,7 @@ export class LlmClient {
     return {
       content: message.content ?? null,
       toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
+      usage: packUsage(data.usage),
     };
   }
 
@@ -128,8 +151,11 @@ export class LlmClient {
     }
 
     let content = "";
+    let usage: LlmUsage | undefined;
     const toolCalls = new Map<number, LlmToolCall>();
     const applyChunk = (chunk: ChatCompletionChunk) => {
+      // 用量随末块下发（choices 通常为空），单独提取。
+      if (chunk.usage) usage = packUsage(chunk.usage);
       const delta = chunk.choices?.[0]?.delta;
       if (!delta) return;
       if (delta.content) {
@@ -184,6 +210,7 @@ export class LlmClient {
     return {
       content: content || null,
       toolCalls: [...toolCalls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call),
+      usage,
     };
   }
 }

@@ -101,6 +101,143 @@ select:focus-visible {
   background: var(--color-bg-app);
 }
 
+/* AI 普通回复按 Markdown 排版；卡片消息仍由各业务卡片组件独立渲染。 */
+.ai-markdown {
+  line-height: 1.6;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ai-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-markdown p,
+.ai-markdown ul,
+.ai-markdown ol,
+.ai-markdown blockquote,
+.ai-markdown pre,
+.ai-markdown table,
+.ai-markdown hr {
+  margin: 0.65em 0;
+}
+
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3,
+.ai-markdown h4 {
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0.9em 0 0.4em;
+}
+
+.ai-markdown h1 {
+  font-size: 1.3em;
+}
+
+.ai-markdown h2 {
+  font-size: 1.18em;
+}
+
+.ai-markdown h3,
+.ai-markdown h4 {
+  font-size: 1.06em;
+}
+
+.ai-markdown ul,
+.ai-markdown ol {
+  padding-left: 1.4em;
+}
+
+.ai-markdown ul {
+  list-style: disc;
+}
+
+.ai-markdown ol {
+  list-style: decimal;
+}
+
+.ai-markdown li + li {
+  margin-top: 0.25em;
+}
+
+.ai-markdown li > p {
+  margin: 0.2em 0;
+}
+
+.ai-markdown a {
+  color: var(--color-tint-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ai-markdown blockquote {
+  border-left: 3px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  padding-left: 0.8em;
+}
+
+.ai-markdown code {
+  background: var(--color-control-fill-muted);
+  border-radius: 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.12em 0.32em;
+}
+
+.ai-markdown pre {
+  background: #202624;
+  border-radius: 10px;
+  color: #f4f6f5;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.8em 0.9em;
+}
+
+.ai-markdown pre code {
+  background: transparent;
+  border-radius: 0;
+  color: inherit;
+  padding: 0;
+  white-space: pre;
+}
+
+.ai-markdown table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ai-markdown th,
+.ai-markdown td {
+  border: 1px solid var(--color-border-subtle);
+  padding: 0.4em 0.55em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ai-markdown th {
+  background: var(--color-control-fill-muted);
+  font-weight: 600;
+}
+
+.ai-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.ai-markdown img {
+  border-radius: 10px;
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
 /* 固定页眉：实底盖住状态栏与按钮，底部用 ::after 渐隐过渡；仅滚动时显示，避免遮住顶部内容（与 .navigation-bar 一致）。 */
 .app-sticky-header::after {
   background: linear-gradient(180deg, var(--color-bg-app), rgba(254, 254, 254, 0));

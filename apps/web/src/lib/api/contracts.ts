@@ -796,10 +796,27 @@ export type AiStatsCategory = {
   amountMicros: string;
 };
 
+export type AiAccountBalance = {
+  name: string;
+  type: string;
+  balanceMicros: string;
+  /** 负债类账户（信用/需归还）：balanceMicros 记为正数的欠款，前端展示为负向。 */
+  isLiability: boolean;
+};
+
+export type AiBudgetCategory = {
+  name: string;
+  budgetMicros: string | null;
+  usedMicros: string;
+  remainingMicros: string | null;
+  percent: number;
+};
+
 export type AiCard =
   | {
       kind: "transaction_draft";
-      status: "proposed" | "confirmed";
+      // superseded：被后续更正草稿作废，不可再确认。
+      status: "proposed" | "confirmed" | "superseded";
       transactionId?: string;
       confirmationBlockedReason?: string;
       draft: AiDraftFields;
@@ -814,6 +831,7 @@ export type AiCard =
       rows: AiTransactionRow[];
     }
   | {
+      // 已无工具生成此卡；仅为渲染历史消息中的旧月度统计卡保留。
       kind: "stats_month";
       month: string;
       currency?: string;
@@ -831,6 +849,26 @@ export type AiCard =
       incomeMicros: string;
       expenseCategories: AiStatsCategory[];
       incomeCategories: AiStatsCategory[];
+    }
+  | {
+      kind: "account_balances";
+      title: string;
+      currency?: string;
+      totalAssetsMicros: string;
+      totalLiabilitiesMicros: string;
+      netWorthMicros: string;
+      accounts: AiAccountBalance[];
+    }
+  | {
+      kind: "budget_progress";
+      month: string;
+      currency?: string;
+      enabled: boolean;
+      totalBudgetMicros: string | null;
+      usedMicros: string;
+      remainingMicros: string | null;
+      percent: number;
+      categories: AiBudgetCategory[];
     };
 
 export type AiMessage = {

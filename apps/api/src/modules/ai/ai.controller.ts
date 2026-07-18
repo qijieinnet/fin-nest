@@ -93,6 +93,11 @@ export class AiController {
       if (response.destroyed || response.writableEnded) return;
       response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
+    // 周期心跳（SSE 注释帧）：思维链模型首 token 前可能长时间静默，防中间代理按空闲掐断连接。
+    const heartbeat = setInterval(() => {
+      if (response.destroyed || response.writableEnded) return;
+      response.write(`: ping\n\n`);
+    }, 15_000);
     try {
       const result = await this.ai.chatStream(
         ledgerId,
@@ -110,6 +115,7 @@ export class AiController {
         message: error instanceof AppError ? error.message : "AI 服务出错，请稍后重试",
       });
     } finally {
+      clearInterval(heartbeat);
       response.end();
     }
   }
