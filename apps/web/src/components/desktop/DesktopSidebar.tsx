@@ -6,7 +6,7 @@ import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
 import { useAutoPending } from "@/lib/data/records";
-import { navMenuByKey } from "@/lib/nav/navMenus";
+import { resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
 
@@ -34,24 +34,24 @@ export function DesktopSidebar() {
   const aiEnabled = aiStatusQuery.data?.enabled === true;
 
   // 一级导航：按用户在「系统设置 → 导航菜单」配置的顺序/可见性渲染，统计固定常驻。
-  const hidden = new Set(preferences.navMenuHidden);
-  const configured: NavItem[] = preferences.navMenuOrder.flatMap((key) => {
-    if (hidden.has(key)) return [];
-    const menu = navMenuByKey(key);
-    return menu ? [{ icon: menu.icon, label: menu.label, route: menu.route }] : [];
-  });
+  // 侧边栏可纵向展开，不限制一级容量；被隐藏的菜单落入 overflow，按配置顺序收进「更多」。
+  const { primary: configuredMenus, overflow } = resolveNavMenuLayout(
+    preferences.navMenuOrder,
+    preferences.navMenuHidden,
+  );
+  const configured: NavItem[] = configuredMenus.map((menu) => ({
+    icon: menu.icon,
+    label: menu.label,
+    route: menu.route,
+  }));
   const primary: NavItem[] = [
     ...configured,
     { icon: ChartPie, label: "统计", route: routes.stats },
   ];
 
-  // 「更多」里去掉已提升到一级导航的菜单，避免重复入口。
-  const visibleRoutes = new Set(configured.map((item) => item.route));
+  // 「更多」：被隐藏的一级菜单（按配置顺序）在前，其余二级功能入口固定在后。
   const moreItems: NavItem[] = [
-    { label: "账本管理", route: routes.ledgers },
-    { label: "保险管理", route: routes.insurances },
-    { label: "物品管理", route: routes.items },
-    { label: "订阅管理", route: routes.subscriptions },
+    ...overflow.map((menu) => ({ label: menu.label, route: menu.route })),
     ...(user?.isAdmin ? [{ label: "管理员功能", route: routes.admin }] : []),
     { label: "分类管理", route: routes.categories },
     { label: "人员管理", route: routes.people },
@@ -60,7 +60,7 @@ export function DesktopSidebar() {
     { label: "记账设置", route: routes.recordSettings },
     { label: "系统设置", route: routes.systemSettings },
     { label: "导入导出", route: routes.importExport },
-  ].filter((item) => !visibleRoutes.has(item.route));
+  ];
 
   const moreActive = isActive(pathname, routes.more);
 

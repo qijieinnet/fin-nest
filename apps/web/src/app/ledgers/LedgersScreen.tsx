@@ -3,7 +3,9 @@
 import { ChevronLeft, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
-import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
+import { IconButton, Button, MobileAppShell, MobilePage, MobileTabBar } from "@/components/ui";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, useSheetStack } from "@/providers";
 import { CreateLedgerSheet } from "./_components/CreateLedgerSheet";
@@ -16,6 +18,9 @@ export function LedgersScreen() {
   const { user } = useAuth();
   const { isLoading, ledgerId, ledgers } = useLedger();
   const { push } = useSheetStack();
+  const isDesktop = useIsDesktop();
+  // 用户把「账本」放到导航栏时作为一级页（内嵌底部导航、无返回）；在「更多」里则全屏 + 返回。
+  const isPrimary = useIsPrimaryNavMenu("ledgers");
 
   const goBack = () => {
     if (window.history.length > 1) {
@@ -45,11 +50,13 @@ export function LedgersScreen() {
         }
         description={user ? `${user.alias} · ${user.account}` : undefined}
         leading={
-          <IconButton
-            icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
-            onClick={goBack}
-          />
+          isDesktop || !isPrimary ? (
+            <IconButton
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label="返回"
+              onClick={goBack}
+            />
+          ) : undefined
         }
         navigationTitleAlign="left"
         title="账本管理"
@@ -94,6 +101,7 @@ export function LedgersScreen() {
           </Button>
         </div>
       </MobilePage>
+      {isPrimary ? <MobileTabBar /> : null}
     </MobileAppShell>
   );
 }

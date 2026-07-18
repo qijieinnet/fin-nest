@@ -74,3 +74,40 @@ export function normalizeNavMenuHidden(value: unknown): NavMenuKey[] {
   if (value === undefined) return [...DEFAULT_NAV_MENU_HIDDEN];
   return Array.isArray(value) ? value.filter(isNavMenuKey) : [];
 }
+
+/**
+ * 移动端底部导航栏最多容纳的一级菜单数（再加固定的「更多」共 5 个）。
+ * 决定某个菜单在移动端是「导航栏内嵌页」还是「更多里的全屏页」，见 useIsPrimaryNavMenu。
+ */
+export const MOBILE_PRIMARY_NAV_LIMIT = 4;
+
+export type NavMenuLayout = {
+  /** 进入一级导航栏的菜单：未隐藏项按配置顺序，取前 maxPrimary 个。 */
+  primary: NavMenuDef[];
+  /** 收进「更多」的菜单：被隐藏的 + 超出容量的，统一按配置顺序排列。 */
+  overflow: NavMenuDef[];
+};
+
+/**
+ * 依据「系统设置 → 导航菜单」的顺序/可见性解析一级导航布局：
+ * - 未隐藏的菜单按配置顺序进入 `primary`，超过 `maxPrimary` 的部分溢出到 `overflow`；
+ * - 被隐藏的菜单不会消失，一并进入 `overflow`；
+ * - `overflow` 始终按配置顺序排列，供「更多」按同一顺序展示。
+ * `maxPrimary` 省略（不限制）用于可纵向展开的桌面侧边栏；移动端底部导航传入具体容量。
+ */
+export function resolveNavMenuLayout(
+  order: NavMenuKey[],
+  hidden: Iterable<NavMenuKey>,
+  maxPrimary: number = Number.POSITIVE_INFINITY,
+): NavMenuLayout {
+  const hiddenSet = hidden instanceof Set ? hidden : new Set(hidden);
+  const visible = order
+    .map((key) => navMenuByKey(key))
+    .filter((menu): menu is NavMenuDef => menu !== undefined && !hiddenSet.has(menu.key));
+  const primary = visible.slice(0, maxPrimary);
+  const primaryKeys = new Set(primary.map((menu) => menu.key));
+  const overflow = order
+    .map((key) => navMenuByKey(key))
+    .filter((menu): menu is NavMenuDef => menu !== undefined && !primaryKeys.has(menu.key));
+  return { primary, overflow };
+}

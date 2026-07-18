@@ -27,6 +27,7 @@ import {
   IconButtonGroup,
   MobileAppShell,
   MobilePage,
+  MobileTabBar,
   PopoverMenu,
 } from "@/components/ui";
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/lib/api";
 import { useInsurances, usePeople } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { cn } from "@/lib/format/class-names";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -342,6 +344,8 @@ export function InsurancesScreen() {
   const confirm = useConfirm();
   const decimalPlaces = useDecimalPlaces();
   const isDesktop = useIsDesktop();
+  // 用户把「保险」放到导航栏时作为一级页（内嵌底部导航、无返回）；在「更多」里则全屏 + 返回。
+  const isPrimary = useIsPrimaryNavMenu("insurances");
   const insurancesQuery = useInsurances(ledgerId);
   const peopleQuery = usePeople(ledgerId);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -752,11 +756,13 @@ export function InsurancesScreen() {
         }
         description="集中管理家庭保单，记录保额、保费与到期日，并可上传保单附件。"
         leading={
-          <IconButton
-            icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回"}
-            onClick={goBack}
-          />
+          isDesktop || !isPrimary || sortMode ? (
+            <IconButton
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label={sortMode ? "退出排序" : "返回"}
+              onClick={goBack}
+            />
+          ) : undefined
         }
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "保险管理"}
@@ -877,6 +883,7 @@ export function InsurancesScreen() {
           </div>
         </div>
       ) : null}
+      {isPrimary && !sortMode ? <MobileTabBar /> : null}
     </MobileAppShell>
   );
 }

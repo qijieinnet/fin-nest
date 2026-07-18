@@ -27,6 +27,7 @@ import {
   IconButtonGroup,
   MobileAppShell,
   MobilePage,
+  MobileTabBar,
   PopoverMenu,
 } from "@/components/ui";
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/lib/api";
 import { useSubscriptionCategories, useSubscriptions } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { cn } from "@/lib/format/class-names";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -357,6 +359,8 @@ export function SubscriptionsScreen() {
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
   const isDesktop = useIsDesktop();
+  // 用户把「订阅」放到导航栏时作为一级页（内嵌底部导航、无返回）；在「更多」里则全屏 + 返回。
+  const isPrimary = useIsPrimaryNavMenu("subscriptions");
   const subscriptionsQuery = useSubscriptions(ledgerId);
   const categoriesQuery = useSubscriptionCategories(ledgerId);
   const [pendingDelete, setPendingDelete] = useState<Subscription | null>(null);
@@ -787,11 +791,13 @@ export function SubscriptionsScreen() {
         }
         description="集中管理 iCloud、Claude、Apple Music 等套餐订阅，记录费用与续费日，记账时关联订阅即可归集花费。左滑可编辑或删除。"
         leading={
-          <IconButton
-            icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回"}
-            onClick={goBack}
-          />
+          isDesktop || !isPrimary || sortMode ? (
+            <IconButton
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label={sortMode ? "退出排序" : "返回"}
+              onClick={goBack}
+            />
+          ) : undefined
         }
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "订阅管理"}
@@ -916,6 +922,7 @@ export function SubscriptionsScreen() {
           </div>
         </div>
       ) : null}
+      {isPrimary && !sortMode ? <MobileTabBar /> : null}
     </MobileAppShell>
   );
 }

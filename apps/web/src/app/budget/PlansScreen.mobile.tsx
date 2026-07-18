@@ -1,6 +1,7 @@
 "use client";
 
-import { Ban, ChevronRight, Plus } from "lucide-react";
+import { Ban, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   EdgeFade,
   IconButton,
@@ -13,6 +14,9 @@ import {
 import { EmptyState, LoadingState } from "@/components/business";
 import { type Plan, type PlanKind } from "@/lib/api";
 import { usePlanProgress, useStoppedPlans } from "@/lib/data/records";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
+import { routes } from "@/lib/route/routes";
 import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
@@ -104,8 +108,17 @@ export function StoppedPlansSheet({
 }
 
 export function PlansScreenMobile() {
+  const router = useRouter();
   const { push } = useSheetStack();
   const scrolled = usePageScrolled();
+  const isDesktop = useIsDesktop();
+  // 用户把「计划」收进「更多」时按全屏页处理（无底部导航、显示返回）；在导航栏里则内嵌底部导航。
+  const isPrimary = useIsPrimaryNavMenu("budget");
+  const showBack = !isDesktop && !isPrimary;
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push(routes.more);
+  };
 
   const model = useBudgetModel();
   const { ledgerId, tab, plans, tabPlans, stoppedTabPlans, foresightOn } = model;
@@ -157,6 +170,14 @@ export function PlansScreenMobile() {
         <header
           className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
         >
+          {showBack ? (
+            <IconButton
+              className="mr-auto"
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label="返回"
+              onClick={goBack}
+            />
+          ) : null}
           <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
             label="新建计划"
@@ -230,7 +251,7 @@ export function PlansScreenMobile() {
       </main>
 
       <EdgeFade />
-      <MobileTabBar />
+      {isPrimary ? <MobileTabBar /> : null}
     </MobileAppShell>
   );
 }

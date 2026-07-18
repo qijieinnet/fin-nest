@@ -18,9 +18,11 @@ export function EdgeFade() {
 
   return (
     <>
+      {/* 顶部渐隐：置于 z-10（内容之上、固定页眉 z-20 之下），
+          避免盖住 sticky 页眉顶部造成「朦胧」veil；无页眉的页面（如「更多」）仍正常淡出。 */}
       <div
         className={cn(
-          "pointer-events-none fixed inset-x-0 top-0 z-20 flex justify-center transition-opacity duration-200",
+          "pointer-events-none fixed inset-x-0 top-0 z-10 flex justify-center transition-opacity duration-200",
           scrolled ? "opacity-100" : "opacity-0",
         )}
       >

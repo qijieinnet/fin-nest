@@ -1188,6 +1188,7 @@ select:focus-visible {
 
 .tab-bar__label {
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .tab-bar__badge {
@@ -1217,12 +1218,24 @@ select:focus-visible {
   padding: 4px;
 }
 
+/* 横向内边距收窄：AI 分置布局下主导航需容纳 5 个（含更多）项，20px 会把窄屏挤到换行。 */
 .tab-bar--fit .tab-bar__item {
   padding: 0 20px;
 }
 
 .tab-bar--fit.ai .tab-bar__item {
   padding: 0 0px;
+}
+
+/* 贴屏幕左/右边缘时，去掉贴边一侧的圆角（AI 按钮贴左、主导航贴右）。 */
+.tab-bar--flush-left {
+  border-bottom-left-radius: 0;
+  border-top-left-radius: 0;
+}
+
+.tab-bar--flush-right {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .ui-icon-button {

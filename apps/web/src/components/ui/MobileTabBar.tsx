@@ -4,13 +4,10 @@ import { MoreHorizontal, Sparkles } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAiStatus } from "@/lib/data/ai";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
-import { navMenuByKey } from "@/lib/nav/navMenus";
+import { MOBILE_PRIMARY_NAV_LIMIT, resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
 import { useLedger, usePreferences } from "@/providers";
 import { TabBar } from "./TabBar";
-
-// 底部导航最多容纳的一级菜单数（再加固定的「更多」共 5 个，符合移动端 tab 密度）。
-const MAX_PRIMARY_TABS = 4;
 
 const MORE_TAB = {
   value: routes.more,
@@ -38,16 +35,15 @@ export function MobileTabBar() {
   const aiEnabled = aiStatusQuery.data?.enabled === true;
 
   // 与桌面侧边栏一致：按用户配置的顺序取未隐藏的一级菜单，超出容量的收进「更多」。
-  const hidden = new Set(preferences.navMenuHidden);
-  const primary = preferences.navMenuOrder
-    .flatMap((key) => {
-      if (hidden.has(key)) return [];
-      const menu = navMenuByKey(key);
-      if (!menu) return [];
-      const Icon = menu.icon;
-      return [{ value: menu.route, label: menu.label, icon: <Icon size={20} /> }];
-    })
-    .slice(0, MAX_PRIMARY_TABS);
+  const { primary: primaryMenus } = resolveNavMenuLayout(
+    preferences.navMenuOrder,
+    preferences.navMenuHidden,
+    MOBILE_PRIMARY_NAV_LIMIT,
+  );
+  const primary = primaryMenus.map((menu) => {
+    const Icon = menu.icon;
+    return { value: menu.route, label: menu.label, icon: <Icon size={20} /> };
+  });
 
   const tabs = [...primary, MORE_TAB];
 
@@ -62,7 +58,7 @@ export function MobileTabBar() {
 
   const mainTabBar = (
     <TabBar
-      className={aiEnabled ? "tab-bar--fit" : undefined}
+      className={aiEnabled ? "tab-bar--fit tab-bar--flush-right" : undefined}
       items={tabs}
       onValueChange={(next) => {
         if (next !== value) router.push(next);
@@ -75,10 +71,10 @@ export function MobileTabBar() {
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center">
       <div className="relative w-[min(100vw,var(--space-app-width))]">
         {aiEnabled ? (
-          <div className="absolute inset-x-3 bottom-[calc(14px+env(safe-area-inset-bottom))] flex items-stretch justify-between gap-2">
+          <div className="absolute inset-x-0 bottom-[calc(14px+env(safe-area-inset-bottom))] flex items-stretch justify-between gap-2">
             <div className="pointer-events-auto">
               <TabBar
-                className="tab-bar--fit ai"
+                className="tab-bar--fit ai tab-bar--flush-left"
                 items={[AI_TAB]}
                 onValueChange={() => router.push(routes.ai)}
                 value=""

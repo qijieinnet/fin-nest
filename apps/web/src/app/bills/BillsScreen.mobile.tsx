@@ -3,6 +3,7 @@
 import {
   BellRing,
   ChartPie,
+  ChevronLeft,
   ClipboardCheck,
   Ellipsis,
   Pencil,
@@ -26,6 +27,7 @@ import {
 import {
   DotBadge,
   EdgeFade,
+  IconButton,
   IconButtonGroup,
   MobileAppShell,
   MobileTabBar,
@@ -40,6 +42,8 @@ import {
   TRANSFER_ICON,
 } from "@/lib/data/options";
 import { useInsurances, useSubscriptions } from "@/lib/data/records";
+import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useDecimalPlaces, useLedger, usePreferences, useSheetStack } from "@/providers";
@@ -78,6 +82,14 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
 
 export function BillsScreenMobile() {
   const router = useRouter();
+  const isDesktop = useIsDesktop();
+  // 用户把「账单」收进「更多」时按全屏页处理（无底部导航、显示返回）；在导航栏里则内嵌底部导航。
+  const isPrimary = useIsPrimaryNavMenu("bills");
+  const showBack = !isDesktop && !isPrimary;
+  const goBack = () => {
+    if (window.history.length > 1) router.back();
+    else router.push(routes.more);
+  };
   const { currentLedger } = useLedger();
   const { push } = useSheetStack();
   const { preferences } = usePreferences();
@@ -123,6 +135,14 @@ export function BillsScreenMobile() {
         <header
           className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end gap-2 bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
         >
+          {showBack ? (
+            <IconButton
+              className="mr-auto"
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label="返回"
+              onClick={goBack}
+            />
+          ) : null}
           <div className="relative flex justify-end">
             <IconButtonGroup
               items={[
@@ -366,7 +386,7 @@ export function BillsScreenMobile() {
         </div>
       </div>
 
-      <MobileTabBar />
+      {isPrimary ? <MobileTabBar /> : null}
 
       <FilterSheet
         accountOptions={model.filterAccountOptions}

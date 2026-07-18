@@ -26,6 +26,7 @@ import {
   IconButtonGroup,
   MobileAppShell,
   MobilePage,
+  MobileTabBar,
   PopoverMenu,
 } from "@/components/ui";
 import {
@@ -37,6 +38,7 @@ import {
 } from "@/lib/api";
 import { useItems, useItemTypes } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { cn } from "@/lib/format/class-names";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -331,6 +333,8 @@ export function ItemsScreen() {
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
   const isDesktop = useIsDesktop();
+  // 用户把「物品」放到导航栏时作为一级页（内嵌底部导航、无返回）；在「更多」里则全屏 + 返回。
+  const isPrimary = useIsPrimaryNavMenu("items");
   const itemsQuery = useItems(ledgerId);
   const itemTypesQuery = useItemTypes(ledgerId);
   const [itemPendingDelete, setItemPendingDelete] = useState<ItemAsset | null>(null);
@@ -727,11 +731,13 @@ export function ItemsScreen() {
         }
         description="登记每件物品的购买价与预用年限，记账时关联物品即可自动归集耗材开销，折算年均、月均成本。左滑可编辑或删除。"
         leading={
-          <IconButton
-            icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回"}
-            onClick={goBack}
-          />
+          isDesktop || !isPrimary || sortMode ? (
+            <IconButton
+              icon={<ChevronLeft size={24} strokeWidth={2.3} />}
+              label={sortMode ? "退出排序" : "返回"}
+              onClick={goBack}
+            />
+          ) : undefined
         }
         navigationTitleAlign="left"
         title={sortMode ? "拖动排序" : "物品管理"}
@@ -872,6 +878,7 @@ export function ItemsScreen() {
           </div>
         </div>
       ) : null}
+      {isPrimary && !sortMode ? <MobileTabBar /> : null}
     </MobileAppShell>
   );
 }

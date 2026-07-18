@@ -1,16 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronRight,
-  KeyRound,
-  LogOut,
-  Package,
-  RefreshCw,
-  Shield,
-  ShieldCheck,
-  WalletCards,
-} from "lucide-react";
+import { ChevronRight, KeyRound, LogOut, Shield } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EdgeFade, MobileAppShell, MobileTabBar, PopoverMenu } from "@/components/ui";
@@ -26,14 +17,16 @@ import {
   useQuickTemplates,
   useSubscriptions,
 } from "@/lib/data/records";
+import { type NavMenuKey, resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
-import { useAuth, useLedger } from "@/providers";
+import { useAuth, useLedger, usePreferences } from "@/providers";
 
 export function MoreScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { clearUser, user } = useAuth();
   const { clearLedger, currentLedger, ledgers } = useLedger();
+  const { preferences } = usePreferences();
   const categoriesQuery = useCategories(currentLedger?.id ?? null);
   const peopleQuery = usePeople(currentLedger?.id ?? null);
   const autoRulesQuery = useAutoRules(currentLedger?.id ?? null);
@@ -89,6 +82,21 @@ export function MoreScreen() {
     ? "加载中"
     : `${subscriptionActiveCount} 个使用中`;
 
+  // 未进入底部导航栏的一级菜单（被隐藏的 + 超出容量的），按「系统设置」的顺序收进「更多」。
+  const { overflow: overflowMenus } = resolveNavMenuLayout(
+    preferences.navMenuOrder,
+    preferences.navMenuHidden,
+  );
+  const menuMeta: Record<NavMenuKey, { subtitle: string; count?: string }> = {
+    bills: { subtitle: "账单记录与流水" },
+    accounts: { subtitle: "账户与余额" },
+    budget: { subtitle: "预算与计划" },
+    ledgers: { subtitle: `当前 · ${currentLedger?.name ?? "未选择"}`, count: `${ledgers.length} 个账本` },
+    insurances: { subtitle: "保单与缴费管理", count: insuranceCountText },
+    items: { subtitle: "登记物品折算成本", count: itemCountText },
+    subscriptions: { subtitle: "套餐订阅与续费管理", count: subscriptionCountText },
+  };
+
   return (
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))] pt-[calc(8px+env(safe-area-inset-top))]">
@@ -140,109 +148,44 @@ export function MoreScreen() {
           />
         </section>
 
-        {/* 账本管理入口 */}
-        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-          <button
-            className="flex w-full items-center gap-3 p-4 text-left"
-            onClick={() => router.push(routes.ledgers)}
-            type="button"
-          >
-            <span
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
-            >
-              <WalletCards size={20} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base text-[var(--color-text-primary)]">账本管理</span>
-              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                当前 · {currentLedger?.name ?? "未选择"}
-              </span>
-            </span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {ledgers.length} 个账本
-            </span>
-            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
-          </button>
-        </section>
-
-        {/* 保险管理入口 */}
-        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-          <button
-            className="flex w-full items-center gap-3 p-4 text-left"
-            onClick={() => router.push(routes.insurances)}
-            type="button"
-          >
-            <span
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
-            >
-              <ShieldCheck size={20} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base text-[var(--color-text-primary)]">保险管理</span>
-              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                保单与缴费管理
-              </span>
-            </span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {insuranceCountText}
-            </span>
-            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
-          </button>
-        </section>
-
-        {/* 物品管理入口 */}
-        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-          <button
-            className="flex w-full items-center gap-3 p-4 text-left"
-            onClick={() => router.push(routes.items)}
-            type="button"
-          >
-            <span
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
-            >
-              <Package size={20} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base text-[var(--color-text-primary)]">物品管理</span>
-              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                登记物品折算成本
-              </span>
-            </span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {itemCountText}
-            </span>
-            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
-          </button>
-        </section>
-
-        {/* 订阅管理入口 */}
-        <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
-          <button
-            className="flex w-full items-center gap-3 p-4 text-left"
-            onClick={() => router.push(routes.subscriptions)}
-            type="button"
-          >
-            <span
-              aria-hidden
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
-            >
-              <RefreshCw size={20} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base text-[var(--color-text-primary)]">订阅管理</span>
-              <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                套餐订阅与续费管理
-              </span>
-            </span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {subscriptionCountText}
-            </span>
-            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
-          </button>
-        </section>
+        {/* 未固定到底部导航的一级菜单：按「系统设置 → 导航菜单」的顺序展示 */}
+        {overflowMenus.length > 0 ? (
+          <section className="mt-3.5 overflow-hidden rounded-[var(--radius-panel)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            {overflowMenus.map((menu) => {
+              const Icon = menu.icon;
+              const meta = menuMeta[menu.key];
+              return (
+                <button
+                  className="flex w-full items-center gap-3 p-4 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
+                  key={menu.key}
+                  onClick={() => router.push(menu.route)}
+                  type="button"
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+                  >
+                    <Icon size={20} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-base text-[var(--color-text-primary)]">
+                      {menu.label}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                      {meta.subtitle}
+                    </span>
+                  </span>
+                  {meta.count ? (
+                    <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+                      {meta.count}
+                    </span>
+                  ) : null}
+                  <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+                </button>
+              );
+            })}
+          </section>
+        ) : null}
 
         {/* 管理员功能入口（仅管理员可见） */}
         {user?.isAdmin ? (

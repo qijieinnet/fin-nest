@@ -2,10 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, History, Mic, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import {
+  ChevronLeft,
+  History,
+  Mic,
+  MoreHorizontal,
+  Plus,
+  Send,
+  Sparkles,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { LoadingState } from "@/components/business";
-import { BottomSheet, IconButton, MobileAppShell, NavigationBar } from "@/components/ui";
+import {
+  BottomSheet,
+  IconButton,
+  MobileAppShell,
+  NavigationBar,
+  PopoverMenu,
+} from "@/components/ui";
 import {
   aiConversationsPath,
   apiRequest,
@@ -78,6 +94,7 @@ export function AiScreen() {
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [input, setInput] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   // 正在确认的草稿卡（"messageId:cardIndex"），用于按钮 loading 态与防连点。
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
 
@@ -301,24 +318,42 @@ export function AiScreen() {
   const aiEnabled = aiStatusQuery.data?.enabled === true;
   const loadingConversation = Boolean(conversationId) && conversationQuery.isPending;
 
-  // 输入栏按钮三选一：生成中只显示停止；录音中或输入为空显示语音；有内容且非录音显示发送。
+  // 输入栏按钮：生成中只显示停止；录音中显示「录音」按钮（点它暂停录音）；有内容则同时显示发送
+  // （点发送会先停录音再发）。故录音且有内容时录音与发送并存，用户可二选一。
   const hasInput = input.trim().length > 0;
   const showStop = sending;
   const showMic = !sending && speech.supported && (speech.listening || !hasInput);
-  const showSend = !sending && !speech.listening && (hasInput || !speech.supported);
+  const showSend = !sending && (hasInput || !speech.supported);
 
   return (
     <MobileAppShell>
       <main className="flex h-dvh flex-col px-[var(--space-page-x)]">
         <NavigationBar
           action={
-            <div className="flex items-center gap-1">
+            <div className="relative">
               <IconButton
-                icon={<History size={20} />}
-                label="历史会话"
-                onClick={() => setHistoryOpen(true)}
+                icon={<MoreHorizontal size={22} strokeWidth={2.3} />}
+                label="更多"
+                onClick={() => setMoreMenuOpen((open) => !open)}
               />
-              <IconButton icon={<Plus size={20} />} label="新对话" onClick={startNewConversation} />
+              <PopoverMenu
+                groups={[
+                  [
+                    {
+                      icon: <Plus size={18} />,
+                      label: "新建对话",
+                      onSelect: startNewConversation,
+                    },
+                    {
+                      icon: <History size={18} />,
+                      label: "历史记录",
+                      onSelect: () => setHistoryOpen(true),
+                    },
+                  ],
+                ]}
+                onOpenChange={setMoreMenuOpen}
+                open={moreMenuOpen}
+              />
             </div>
           }
           leading={
@@ -328,7 +363,7 @@ export function AiScreen() {
               onClick={() => router.back()}
             />
           }
-          title="AI 助手"
+          title=""
           variant="inline"
         />
 
@@ -455,7 +490,7 @@ export function AiScreen() {
         {aiEnabled ? (
           <div className="sticky bottom-0 flex items-end gap-2 border-black/[0.05] bg-[var(--color-bg-app)] pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5">
             <textarea
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:shadow-none focus-visible:shadow-none"
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:shadow-none! focus-visible:shadow-none!"
               onChange={(event) => {
                 // 录音中手动改字则停止识别，避免后续转写覆盖手动编辑。
                 if (speech.listening) speech.stop();
