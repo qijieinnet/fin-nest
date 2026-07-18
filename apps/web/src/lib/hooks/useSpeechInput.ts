@@ -174,6 +174,16 @@ export function useSpeechInput({
     recognitionRef.current?.stop();
   }, []);
 
+  const cancel = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+    // 发送等已消费当前文本的场景不再接收最终定稿，否则迟到的 onresult 会把已清空的输入框写回。
+    recognition.onresult = null;
+    retryWithoutPhrasesRef.current = false;
+    recognition.abort();
+    setListening(false);
+  }, []);
+
   const start = useCallback(() => {
     if (recognitionRef.current) return;
     const Ctor = getSpeechRecognitionCtor();
@@ -248,5 +258,5 @@ export function useSpeechInput({
     }
   }, [lang]);
 
-  return { supported, listening, start, stop };
+  return { supported, listening, start, stop, cancel };
 }

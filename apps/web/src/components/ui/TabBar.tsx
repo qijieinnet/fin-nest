@@ -15,14 +15,15 @@ type TabBarProps = {
   className?: string;
   items: TabBarItem[];
   onValueChange: (value: string) => void;
+  showLabels?: boolean;
   value: string;
 };
 
-export function TabBar({ className, items, onValueChange, value }: TabBarProps) {
+export function TabBar({ className, items, onValueChange, showLabels = true, value }: TabBarProps) {
   return (
     <nav
       aria-label="主导航"
-      className={cn("tab-bar", className)}
+      className={cn("tab-bar", !showLabels && "tab-bar--icon-only", className)}
       style={{ "--tab-count": items.length } as CSSProperties}
     >
       {items.map((item) => {
@@ -41,7 +42,7 @@ export function TabBar({ className, items, onValueChange, value }: TabBarProps) 
                 <span className="tab-bar__badge">{item.badge > 99 ? "99+" : item.badge}</span>
               ) : null}
             </span>
-            <span className="tab-bar__label">{item.label}</span>
+            <span className={showLabels ? "tab-bar__label" : "sr-only"}>{item.label}</span>
           </button>
         );
       })}

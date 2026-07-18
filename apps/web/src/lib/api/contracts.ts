@@ -796,6 +796,15 @@ export type AiStatsCategory = {
   amountMicros: string;
 };
 
+export type AiStatsTrend = {
+  granularity: "day" | "week" | "month";
+  points: Array<{
+    label: string;
+    expenseMicros: string;
+    incomeMicros: string;
+  }>;
+};
+
 export type AiAccountBalance = {
   name: string;
   type: string;
@@ -849,6 +858,8 @@ export type AiCard =
       incomeMicros: string;
       expenseCategories: AiStatsCategory[];
       incomeCategories: AiStatsCategory[];
+      /** 新版统计卡的时间序列；旧历史卡片可能缺省。 */
+      trend?: AiStatsTrend;
     }
   | {
       kind: "account_balances";

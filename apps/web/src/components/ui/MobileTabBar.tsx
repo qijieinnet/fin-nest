@@ -63,6 +63,7 @@ export function MobileTabBar() {
       onValueChange={(next) => {
         if (next !== value) router.push(next);
       }}
+      showLabels={preferences.showNavMenuLabels}
       value={value}
     />
   );

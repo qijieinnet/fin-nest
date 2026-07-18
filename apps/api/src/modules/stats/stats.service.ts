@@ -62,6 +62,52 @@ function trailingMonths(month: string, count: number): string[] {
 type CashflowRange = "week" | "month1" | "month6" | "year";
 type CashflowBucket = { key: string; label: string };
 
+export type PeriodSeriesQuery = Omit<
+  StatsQueryDto,
+  "dateFrom" | "dateTo" | "categoryId" | "subcategoryId"
+> & {
+  dateFrom: string;
+  dateTo: string;
+  categoryIds?: string[];
+  subcategoryIds?: string[];
+};
+
+type PeriodSeriesGranularity = "day" | "week" | "month";
+
+/** 任意闭区间的趋势分桶：短区间按日、中区间按周、长区间按月，避免图表点位过密。 */
+export function periodSeriesBuckets(
+  dateFrom: string,
+  dateTo: string,
+): {
+  buckets: CashflowBucket[];
+  granularity: PeriodSeriesGranularity;
+} {
+  const start = parseDateOnly(dateFrom);
+  const end = parseDateOnly(dateTo);
+  const days = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  const granularity: PeriodSeriesGranularity = days <= 31 ? "day" : days <= 120 ? "week" : "month";
+  const buckets: CashflowBucket[] = [];
+
+  if (granularity === "month") {
+    let cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+    while (cursor <= last) {
+      const key = cursor.toISOString().slice(0, 7);
+      buckets.push({ key, label: `${cursor.getUTCFullYear()}/${cursor.getUTCMonth() + 1}` });
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    }
+    return { buckets, granularity };
+  }
+
+  const step = granularity === "day" ? 1 : 7;
+  for (let offset = 0; offset < days; offset += step) {
+    const date = addUtcDays(start, offset);
+    const key = date.toISOString().slice(0, 10);
+    buckets.push({ key, label: `${date.getUTCMonth() + 1}/${date.getUTCDate()}` });
+  }
+  return { buckets, granularity };
+}
+
 /**
  * 收支走势的分桶（UTC，与 `dateKey` 对齐）：
  * 近1周/近1个月按天（key = YYYY-MM-DD），近6个月/近1年按月（key = YYYY-MM）。
@@ -354,6 +400,67 @@ export class StatsService {
           incomeMicros: entry.income.toString(),
         };
       }),
+    };
+  }
+
+  /** AI/统计卡使用的任意日期范围走势，支持多分类合并并沿用有效金额口径。 */
+  async periodSeries(ledgerId: string, userId: string, query: PeriodSeriesQuery) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const { dateFrom, dateTo } = query;
+    const { buckets, granularity } = periodSeriesBuckets(dateFrom, dateTo);
+    const start = parseDateOnly(dateFrom);
+    const end = addUtcDays(parseDateOnly(dateTo), 1);
+    const categoryIds = query.categoryIds ?? [];
+    const subcategoryIds = query.subcategoryIds ?? [];
+    const categoryWhere: Prisma.TransactionWhereInput =
+      categoryIds.length > 0 || subcategoryIds.length > 0
+        ? {
+            OR: [
+              ...(categoryIds.length > 0 ? [{ categoryId: { in: categoryIds } }] : []),
+              ...(subcategoryIds.length > 0 ? [{ subcategoryId: { in: subcategoryIds } }] : []),
+            ],
+          }
+        : {};
+    const filterQuery: StatsQueryDto = {
+      ...(query.personId ? { personId: query.personId } : {}),
+      ...(query.accountId ? { accountId: query.accountId } : {}),
+    };
+    const transactions = await this.prisma.client.transaction.findMany({
+      where: {
+        ledgerId,
+        deletedAt: null,
+        type: { in: ["expense", "income"] },
+        occurredOn: { gte: start, lt: end },
+        ...(await this.buildFilterWhere(ledgerId, filterQuery)),
+        ...categoryWhere,
+      },
+      select: { type: true, occurredOn: true, effectiveAmountMicros: true },
+    });
+    const sums = new Map<string, { expense: bigint; income: bigint }>(
+      buckets.map((bucket) => [bucket.key, { expense: 0n, income: 0n }]),
+    );
+    for (const transaction of transactions) {
+      const day = dateKey(transaction.occurredOn);
+      let key = day;
+      if (granularity === "month") key = day.slice(0, 7);
+      if (granularity === "week") {
+        const offset = Math.floor(
+          (parseDateOnly(day).getTime() - start.getTime()) / 86_400_000 / 7,
+        );
+        key = buckets[offset]?.key ?? key;
+      }
+      const entry = sums.get(key);
+      if (!entry) continue;
+      if (transaction.type === "expense") entry.expense += transaction.effectiveAmountMicros;
+      else entry.income += transaction.effectiveAmountMicros;
+    }
+    return {
+      granularity,
+      points: buckets.map((bucket) => ({
+        label: bucket.label,
+        expenseMicros: sums.get(bucket.key)!.expense.toString(),
+        incomeMicros: sums.get(bucket.key)!.income.toString(),
+      })),
     };
   }
 

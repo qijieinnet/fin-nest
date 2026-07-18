@@ -42,6 +42,29 @@ function amount(micros: string, currency?: string): string {
   return formatMicros(micros, { currencySymbol: currencySymbol(currency) });
 }
 
+type TrendAmountUnit = "yuan" | "thousand" | "tenThousand";
+
+function trendAmountUnit(maxMicros: bigint): TrendAmountUnit {
+  if (maxMicros >= 10_000_000_000n) return "tenThousand";
+  if (maxMicros >= 1_000_000_000n) return "thousand";
+  return "yuan";
+}
+
+/** 与统计页趋势图一致的紧凑数值，全程使用 bigint 避免金额精度损失。 */
+function compactTrendValue(micros: bigint, unit: TrendAmountUnit): string {
+  const value = micros < 0n ? -micros : micros;
+  const sign = micros < 0n ? "-" : "";
+  if (unit === "tenThousand") {
+    const tenths = (value + 500_000_000n) / 1_000_000_000n;
+    return `${sign}${tenths / 10n}.${tenths % 10n}`;
+  }
+  if (unit === "thousand") {
+    const tenths = (value + 50_000_000n) / 100_000_000n;
+    return `${sign}${tenths / 10n}.${tenths % 10n}`;
+  }
+  return `${sign}${(value + 500_000n) / 1_000_000n}`;
+}
+
 function useCardCurrency(currency?: string): string {
   const { currentLedger } = useLedger();
   return currency ?? currentLedger?.currency ?? "CNY";
@@ -371,7 +394,118 @@ function CategorySummary({
   );
 }
 
-/** 任意日期范围统计：收支总额 + 分类饼图 + 一级分类汇总。 */
+function StatsTrendChart({
+  card,
+  currency,
+  type,
+}: {
+  card: Extract<AiCard, { kind: "stats_period" }>;
+  currency: string;
+  type: "expense" | "income";
+}) {
+  const points = card.trend?.points ?? [];
+  if (points.length < 2) return null;
+  const values = points.map((point) =>
+    BigInt(type === "expense" ? point.expenseMicros : point.incomeMicros),
+  );
+  const max = values.reduce((current, value) => (value > current ? value : current), 0n);
+  const displayUnit = trendAmountUnit(max);
+  const displayUnitLabel =
+    displayUnit === "tenThousand" ? "万元" : displayUnit === "thousand" ? "千元" : "元";
+  const width = 320;
+  const height = 164;
+  const padX = 10;
+  const padTop = 38;
+  const padBottom = 28;
+  const plotHeight = height - padTop - padBottom;
+  const dense = points.length > 12;
+  const coords = values.map((value, index) => {
+    const x = padX + (index / (values.length - 1)) * (width - padX * 2);
+    const ratio = max > 0n ? Number((value * 10_000n) / max) / 10_000 : 0;
+    return { x, y: padTop + plotHeight * (1 - ratio) };
+  });
+  const path = coords
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`)
+    .join(" ");
+  const labelEvery = points.length <= 12 ? 1 : Math.ceil(points.length / 6);
+  const granularityLabel =
+    card.trend?.granularity === "day"
+      ? "按日"
+      : card.trend?.granularity === "week"
+        ? "按周"
+        : "按月";
+
+  return (
+    <div className="mt-4 rounded-[16px] bg-[var(--color-control-fill-muted)] p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--color-text-primary)]">
+          {TYPE_LABEL[type]}趋势
+        </p>
+        <span className="text-[11px] text-[var(--color-text-muted)]">
+          {granularityLabel} · {displayUnitLabel}
+        </span>
+      </div>
+      <div className="mt-2">
+        <svg
+          aria-label={`${TYPE_LABEL[type]}趋势折线图，每个时间点均标注具体金额`}
+          className="h-[164px] w-full overflow-visible"
+          role="img"
+          viewBox={`0 0 ${width} ${height}`}
+        >
+          <line
+            stroke="var(--color-separator, rgba(0,0,0,0.08))"
+            x1={padX}
+            x2={width - padX}
+            y1={padTop + plotHeight}
+            y2={padTop + plotHeight}
+          />
+          <path
+            d={path}
+            fill="none"
+            stroke={TYPE_COLOR[type]}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+          />
+          {coords.map((point, index) => (
+            <g key={`${points[index]!.label}:${index}`}>
+              <circle cx={point.x} cy={point.y} fill={TYPE_COLOR[type]} r="3.5">
+                <title>{`${points[index]!.label}：${amount(values[index]!.toString(), currency)}`}</title>
+              </circle>
+              <text
+                fill="var(--color-text-primary)"
+                fontSize={dense ? "7" : "9"}
+                fontWeight="600"
+                textAnchor="middle"
+                style={dense ? { writingMode: "vertical-rl" } : undefined}
+                x={point.x}
+                y={dense ? Math.max(3, point.y - 31) : Math.max(10, point.y - 8)}
+              >
+                {compactTrendValue(values[index]!, displayUnit)}
+              </text>
+              {index % labelEvery === 0 || index === points.length - 1 ? (
+                <text
+                  fill="var(--color-text-muted)"
+                  fontSize="9"
+                  textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+                  x={point.x}
+                  y={height - 7}
+                >
+                  {card.trend?.granularity === "month"
+                    ? `${points[index]!.label.split("/").at(-1)}月`
+                    : points[index]!.label}
+                </text>
+              ) : null}
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/** 任意日期范围统计：收支总额 + 趋势折线图 + 分类饼图 + 一级分类汇总。 */
 export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats_period" }> }) {
   const currency = useCardCurrency(card.currency);
   const hasExpense = card.expenseMicros !== "0";
@@ -439,6 +573,7 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
           value={type}
         />
       ) : null}
+      <StatsTrendChart card={card} currency={currency} type={type} />
       {/* 单一分类时饼图是无信息量的整圆，隐藏，只留分类汇总。 */}
       {categories.length > 1 ? (
         <StatsCategoryDonut

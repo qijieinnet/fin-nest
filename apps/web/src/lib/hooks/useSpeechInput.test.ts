@@ -147,6 +147,20 @@ describe("useSpeechInput", () => {
     expect(FakeRecognition.instances).toHaveLength(1);
   });
 
+  it("ignores late transcript results after cancelling an active session", () => {
+    const { result: hook, onTranscript } = setup();
+    act(() => hook.current.start());
+    const recognition = FakeRecognition.instances[0]!;
+
+    act(() => recognition.emitResult(0, [result("昨天午饭", false)]));
+    expect(onTranscript).toHaveBeenCalledTimes(1);
+
+    act(() => hook.current.cancel());
+    expect(hook.current.listening).toBe(false);
+    act(() => recognition.emitResult(0, [result("昨天午饭四十五元", true)]));
+    expect(onTranscript).toHaveBeenCalledTimes(1);
+  });
+
   describe("热词（contextual biasing）", () => {
     function enablePhraseApi(availability = "available") {
       (window as unknown as { SpeechRecognitionPhrase?: unknown }).SpeechRecognitionPhrase =

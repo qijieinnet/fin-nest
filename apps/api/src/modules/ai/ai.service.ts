@@ -218,7 +218,7 @@ const TOOLS: LlmTool[] = [
     function: {
       name: "get_period_stats",
       description:
-        "查询任意时间范围的收支统计，返回支出总额、收入总额、分类饼图及一级分类汇总。适用于日、周、月、季度、年度、自定义区间等所有统计或汇总请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「餐饮里外卖占多少」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
+        "查询任意时间范围的收支统计，返回支出总额、收入总额、自动按日/周/月聚合的趋势图、分类饼图及一级分类汇总。适用于日、周、月、季度、年度、自定义区间等所有统计、汇总或趋势请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「最近一年的餐饮趋势」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
       parameters: {
         type: "object",
         properties: {
@@ -1028,7 +1028,17 @@ export class AiService {
       ...(args.personId ? { personId: args.personId } : {}),
       ...(args.accountId ? { accountId: args.accountId } : {}),
     };
-    const result = await this.stats.monthly(context.ledgerId, context.userId, query);
+    const [result, trend] = await Promise.all([
+      this.stats.monthly(context.ledgerId, context.userId, query),
+      this.stats.periodSeries(context.ledgerId, context.userId, {
+        dateFrom,
+        dateTo,
+        categoryIds,
+        subcategoryIds,
+        ...(args.personId ? { personId: args.personId } : {}),
+        ...(args.accountId ? { accountId: args.accountId } : {}),
+      }),
+    ]);
     const hasCategoryFilter = wantCategoryIds.size > 0 || wantSubcategoryIds.size > 0;
     // 选中的一级分类整块计入；否则下钻取选中的二级分类，避免只显示父类名误导。
     // 无分类过滤时按全部一级分类拆分（与全量统计一致）。
@@ -1079,6 +1089,7 @@ export class AiService {
       incomeMicros,
       expenseCategories,
       incomeCategories,
+      trend,
     });
     return {
       ok: true as const,
@@ -1700,7 +1711,7 @@ export class AiService {
       "## 能力",
       "1. 记账：用户描述支出/收入/转账时**必须**调用 draft_transaction 生成草稿（一句话多笔就多次调用），绝不能只在正文声称已生成；没有合适的分类就不传 categoryId、照常调用。草稿以卡片展示、需用户手动确认才入账，所以不要说「已记账」。",
       "2. 快捷模板：用户说「快速记账X」「用X模板记一笔」，或提到的名称与下方快捷模板列表匹配时，优先调用 apply_quick_template（传模板 id），不要用 draft_transaction 重新拼参数；用户话里带了金额/日期/备注就用参数覆盖，模板未设金额时先从话里提取金额传 amountYuan，提取不到就询问。",
-      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats；它会统一展示支出总额、收入总额、分类饼图和一级分类汇总。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryId 过滤参数。",
+      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats；它会统一展示支出总额、收入总额、按时间聚合的趋势图、分类饼图和一级分类汇总。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryIds 过滤参数。",
       "4. 明细：只有用户明确说「明细」「每笔」「有哪些交易」「列出来」时才调用 query_transactions。不能用交易明细卡代替统计卡。",
       "5. 余额：用户问账户余额、还有多少钱、欠多少、净资产时调用 get_account_balances。",
       "6. 预算：用户问预算用了多少、还剩多少时调用 get_budget_progress。",

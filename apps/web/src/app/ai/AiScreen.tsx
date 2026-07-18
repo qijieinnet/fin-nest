@@ -210,7 +210,7 @@ export function AiScreen() {
   const handleSend = (raw?: string) => {
     const content = (raw ?? input).trim();
     if (!content || sending || !ledgerId) return;
-    if (speech.listening) speech.stop();
+    if (speech.listening) speech.cancel();
     setInput("");
     setMessages((prev) => [
       ...prev,
@@ -372,6 +372,7 @@ export function AiScreen() {
               />
             </div>
           }
+          className="mb-0!"
           leading={
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
@@ -400,12 +401,14 @@ export function AiScreen() {
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
               <Sparkles className="text-[var(--color-tint-strong)]" size={30} />
               <div>
-                <p className="font-semibold text-[var(--color-text-primary)]">用一句话记账或查账</p>
+                <p className="font-semibold text-[var(--color-text-primary)]">
+                  我们先从哪里开始呢？
+                </p>
                 <p className="mt-1 text-sm text-[var(--color-text-muted)]">
                   记账草稿需要你确认后才会入账
                 </p>
               </div>
-              <div className="flex flex-col gap-2">
+              {/* <div className="flex flex-col gap-2">
                 {SUGGESTIONS.map((suggestion) => (
                   <button
                     className="rounded-full border border-black/[0.08] bg-[var(--color-bg-surface)] px-4 py-2 text-sm text-[var(--color-text-secondary)]"
@@ -416,7 +419,7 @@ export function AiScreen() {
                     {suggestion}
                   </button>
                 ))}
-              </div>
+              </div> */}
             </div>
           ) : (
             <div className="flex flex-col gap-3 pt-2">

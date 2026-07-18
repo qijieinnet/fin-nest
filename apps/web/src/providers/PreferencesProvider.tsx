@@ -22,6 +22,8 @@ export type Preferences = {
   navMenuOrder: NavMenuKey[];
   /** 从一级导航隐藏的菜单键（仍可从「更多」进入）。 */
   navMenuHidden: NavMenuKey[];
+  /** 主页浮动导航是否显示菜单名称，默认开启。 */
+  showNavMenuLabels: boolean;
 };
 
 const DEFAULT_PREFERENCES: Preferences = {
@@ -29,6 +31,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   launchLockEnabled: false,
   navMenuOrder: [...DEFAULT_NAV_MENU_ORDER],
   navMenuHidden: [...DEFAULT_NAV_MENU_HIDDEN],
+  showNavMenuLabels: true,
 };
 
 type PreferencesContextValue = {

@@ -1360,6 +1360,11 @@ select:focus-visible {
   padding: 0 20px;
 }
 
+/* 隐藏菜单名称时收紧浮动导航；文字仍以 sr-only 保留给辅助技术。 */
+.tab-bar--icon-only.tab-bar--fit .tab-bar__item {
+  padding: 0 20px;
+}
+
 .tab-bar--fit.ai .tab-bar__item {
   padding: 0 0px;
 }

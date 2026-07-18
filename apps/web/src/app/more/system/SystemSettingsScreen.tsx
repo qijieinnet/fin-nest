@@ -120,6 +120,23 @@ export function SystemSettingsScreen() {
           <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
             导航菜单
           </span>
+          <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            <div className="flex items-center gap-3 px-4 py-[15px]">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15.5px] text-[var(--color-text-primary)]">
+                  显示菜单名称
+                </span>
+                <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                  关闭后主页右侧导航菜单仅显示图标
+                </span>
+              </span>
+              <Switch
+                checked={preferences.showNavMenuLabels}
+                label="显示菜单名称"
+                onCheckedChange={(checked) => setPreference("showNavMenuLabels", checked)}
+              />
+            </div>
+          </section>
           <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
             开关控制该菜单是否在左侧导航栏显示，按住右侧图标拖动可调整顺序。关闭的菜单仍可从「更多」进入。
           </p>

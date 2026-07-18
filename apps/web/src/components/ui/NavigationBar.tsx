@@ -6,6 +6,7 @@ import { usePageScrolled } from "./usePageScrolled";
 
 type NavigationBarProps = {
   action?: ReactNode;
+  className?: string;
   leading?: ReactNode;
   subtitle?: string;
   title: string;
@@ -15,6 +16,7 @@ type NavigationBarProps = {
 
 export function NavigationBar({
   action,
+  className,
   leading,
   subtitle,
   title,
@@ -30,6 +32,7 @@ export function NavigationBar({
         `navigation-bar--${variant}`,
         `navigation-bar--title-${titleAlign}`,
         scrolled && "navigation-bar--scrolled",
+        className,
       )}
     >
       <div className="navigation-bar__row">
