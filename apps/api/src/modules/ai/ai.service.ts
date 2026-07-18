@@ -30,7 +30,7 @@ import {
   AiTransactionRow,
 } from "./ai-cards";
 import { microsToYuan, yuanToMicros } from "./ai-money";
-import { isValidDateKey, isValidMonthKey } from "./ai-validation";
+import { isTrendRequested, isValidDateKey, isValidMonthKey } from "./ai-validation";
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
@@ -142,6 +142,16 @@ type PeriodStatsToolArgs = {
   subcategoryIds?: string[];
   personId?: string;
   accountId?: string;
+  includeTrend?: boolean;
+};
+
+type ChatEmitter = {
+  delta: (text: string) => void;
+  card: (card: AiCard) => void;
+};
+
+type RespondTextToolArgs = {
+  content?: string;
 };
 
 type CancelDraftToolArgs = {
@@ -218,7 +228,7 @@ const TOOLS: LlmTool[] = [
     function: {
       name: "get_period_stats",
       description:
-        "查询任意时间范围的收支统计，返回支出总额、收入总额、自动按日/周/月聚合的趋势图、分类饼图及一级分类汇总。适用于日、周、月、季度、年度、自定义区间等所有统计、汇总或趋势请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「最近一年的餐饮趋势」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
+        "查询任意时间范围的收支统计，返回支出总额、收入总额、分类饼图及一级分类汇总；仅当 includeTrend=true 时额外返回按日/周/月聚合的趋势图。适用于日、周、月、季度、年度、自定义区间等所有统计、汇总或趋势请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「最近一年的餐饮趋势」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
       parameters: {
         type: "object",
         properties: {
@@ -244,6 +254,11 @@ const TOOLS: LlmTool[] = [
           accountId: {
             type: "string",
             description: "只统计涉及该资金账户的收支（须来自账本账户列表）",
+          },
+          includeTrend: {
+            type: "boolean",
+            description:
+              "只有用户意图明确涉及趋势、走势、曲线、波动或随时间变化时才传 true；普通金额统计、汇总、总计、分类占比必须省略或传 false",
           },
         },
         required: [],
@@ -359,6 +374,21 @@ const TOOLS: LlmTool[] = [
       description:
         "查询提醒汇总（应用红点）：自动记账待确认数、加入申请待审批数、30 天内到期保险数、30 天内续费订阅数、超限计划数、超支预算数。用户问「有什么要处理的」「有哪些提醒」时调用。",
       parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "respond_text",
+      description:
+        "仅当用户只是打招呼、询问如何使用应用、缺少生成草稿所必需的信息，或请求与账本工具能力无关时使用。凡是记账、统计、明细、余额、预算、计划、档案、自动化或提醒请求，都必须选择对应业务工具，不能用本工具代替。",
+      parameters: {
+        type: "object",
+        properties: {
+          content: { type: "string", description: "直接回复用户的简洁纯文本内容" },
+        },
+        required: ["content"],
+      },
     },
   },
   {
@@ -564,7 +594,7 @@ export class AiService {
     ledgerId: string,
     userId: string,
     input: ChatRequestDto,
-    emit: { delta: (text: string) => void; card: (card: AiCard) => void },
+    emit: ChatEmitter,
     signal?: AbortSignal,
   ) {
     return this.runChat(ledgerId, userId, input, emit, signal);
@@ -574,7 +604,7 @@ export class AiService {
     ledgerId: string,
     userId: string,
     input: ChatRequestDto,
-    emit?: { delta: (text: string) => void; card: (card: AiCard) => void },
+    emit?: ChatEmitter,
     signal?: AbortSignal,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
@@ -633,9 +663,14 @@ export class AiService {
       };
       let reply;
       try {
+        // 首轮必须选择结构化工具；纯文本场景通过 respond_text 显式退出，杜绝“口头声称已生成卡片”。
+        const options = {
+          signal,
+          toolChoice: round === 0 ? ("required" as const) : ("auto" as const),
+        };
         reply = emit
-          ? await this.llm.chatStream(messages, TOOLS, onDelta, signal)
-          : await this.llm.chat(messages, TOOLS);
+          ? await this.llm.chatStream(messages, TOOLS, onDelta, options)
+          : await this.llm.chat(messages, TOOLS, options);
       } catch (error) {
         // 用户中止：保留已生成的部分照常持久化；其余错误照抛。
         if (signal?.aborted) break;
@@ -646,13 +681,22 @@ export class AiService {
       completionTokens += reply.usage?.completionTokens ?? 0;
       if (reply.content?.trim()) contentParts.push(reply.content.trim());
       if (reply.toolCalls.length === 0) break;
-      messages.push({ role: "assistant", content: reply.content, tool_calls: reply.toolCalls });
+      messages.push({
+        role: "assistant",
+        // DeepSeek 工具续轮要求 assistant content 非 null，并保留 reasoning_content。
+        content: reply.content ?? "",
+        tool_calls: reply.toolCalls,
+        ...(reply.reasoningContent ? { reasoning_content: reply.reasoningContent } : {}),
+      });
+      const cardCountBeforeRound = cards.length;
       for (const call of reply.toolCalls) {
         const cardCountBefore = cards.length;
         const result = await this.executeTool(call, context, cards);
         messages.push({ role: "tool", tool_call_id: call.id, content: result });
         for (const card of cards.slice(cardCountBefore)) emit?.card(card);
       }
+      // 卡片已经包含完整结果，无需再等待模型生成一句重复总结。
+      if (cards.length > cardCountBeforeRound) break;
     }
     // 用量记账：便于自部署方观察上游 token 消耗与异常刷量（无独立表，落日志）。
     this.logger.log(
@@ -736,6 +780,8 @@ export class AiService {
           return JSON.stringify(await this.runPendingRecordsTool(context));
         case "get_reminder_summary":
           return JSON.stringify(await this.runReminderSummaryTool(context));
+        case "respond_text":
+          return JSON.stringify(this.runRespondTextTool(args as RespondTextToolArgs));
         case "cancel_draft":
           return JSON.stringify(
             await this.runCancelDraftTool(args as CancelDraftToolArgs, context),
@@ -874,6 +920,12 @@ export class AiService {
         note: draft.note,
       },
     };
+  }
+
+  private runRespondTextTool(args: RespondTextToolArgs) {
+    const content = args.content?.trim();
+    if (!content) return { ok: false as const, error: "content 不能为空" };
+    return { ok: true as const, content: content.slice(0, 1000) };
   }
 
   private async runQueryTool(args: QueryToolArgs, context: LedgerContext, cards: AiCard[]) {
@@ -1028,17 +1080,18 @@ export class AiService {
       ...(args.personId ? { personId: args.personId } : {}),
       ...(args.accountId ? { accountId: args.accountId } : {}),
     };
-    const [result, trend] = await Promise.all([
-      this.stats.monthly(context.ledgerId, context.userId, query),
-      this.stats.periodSeries(context.ledgerId, context.userId, {
-        dateFrom,
-        dateTo,
-        categoryIds,
-        subcategoryIds,
-        ...(args.personId ? { personId: args.personId } : {}),
-        ...(args.accountId ? { accountId: args.accountId } : {}),
-      }),
-    ]);
+    const statsPromise = this.stats.monthly(context.ledgerId, context.userId, query);
+    const trendPromise = isTrendRequested(args.includeTrend)
+      ? this.stats.periodSeries(context.ledgerId, context.userId, {
+          dateFrom,
+          dateTo,
+          categoryIds,
+          subcategoryIds,
+          ...(args.personId ? { personId: args.personId } : {}),
+          ...(args.accountId ? { accountId: args.accountId } : {}),
+        })
+      : Promise.resolve(undefined);
+    const [result, trend] = await Promise.all([statsPromise, trendPromise]);
     const hasCategoryFilter = wantCategoryIds.size > 0 || wantSubcategoryIds.size > 0;
     // 选中的一级分类整块计入；否则下钻取选中的二级分类，避免只显示父类名误导。
     // 无分类过滤时按全部一级分类拆分（与全量统计一致）。
@@ -1089,7 +1142,7 @@ export class AiService {
       incomeMicros,
       expenseCategories,
       incomeCategories,
-      trend,
+      ...(trend ? { trend } : {}),
     });
     return {
       ok: true as const,
@@ -1540,7 +1593,10 @@ export class AiService {
     const cards = (message.cards ?? null) as AiCard[] | null;
     if (!cards || cards.length === 0) return message.content || "（无内容）";
     const summaries = cards.map((card) => this.summarizeCard(card)).filter(Boolean);
-    const body = summaries.length > 0 ? `（已生成：${summaries.join("；")}）` : "（已生成卡片）";
+    const body =
+      summaries.length > 0
+        ? `【历史卡片状态，仅用于理解上下文，禁止在本轮回复中复述：${summaries.join("；")}】`
+        : "【历史消息曾包含卡片】";
     return message.content ? `${message.content}\n${body}` : body;
   }
 
@@ -1711,7 +1767,7 @@ export class AiService {
       "## 能力",
       "1. 记账：用户描述支出/收入/转账时**必须**调用 draft_transaction 生成草稿（一句话多笔就多次调用），绝不能只在正文声称已生成；没有合适的分类就不传 categoryId、照常调用。草稿以卡片展示、需用户手动确认才入账，所以不要说「已记账」。",
       "2. 快捷模板：用户说「快速记账X」「用X模板记一笔」，或提到的名称与下方快捷模板列表匹配时，优先调用 apply_quick_template（传模板 id），不要用 draft_transaction 重新拼参数；用户话里带了金额/日期/备注就用参数覆盖，模板未设金额时先从话里提取金额传 amountYuan，提取不到就询问。",
-      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats；它会统一展示支出总额、收入总额、按时间聚合的趋势图、分类饼图和一级分类汇总。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryIds 过滤参数。",
+      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats。只有用户意图明确涉及趋势、走势、曲线、波动或随时间变化时才传 includeTrend=true；普通金额统计、汇总、总计、分类占比不得开启趋势。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryIds 过滤参数。",
       "4. 明细：只有用户明确说「明细」「每笔」「有哪些交易」「列出来」时才调用 query_transactions。不能用交易明细卡代替统计卡。",
       "5. 余额：用户问账户余额、还有多少钱、欠多少、净资产时调用 get_account_balances。",
       "6. 预算：用户问预算用了多少、还剩多少时调用 get_budget_progress。",
@@ -1720,7 +1776,7 @@ export class AiService {
       "9. 自动化：问设了哪些自动记账规则调 query_auto_rules；问有哪些待确认的自动记账调 get_pending_records（只读，确认/删除请引导用户去「自动化」页操作）。",
       "10. 提醒：用户问有什么要处理的、有哪些提醒时调用 get_reminder_summary。",
       "11. 修改草稿：用户要改一笔刚生成但未确认的草稿（改金额/日期/分类等），先用 cancel_draft 传入其编号作废，再用 draft_transaction 生成更正后的新草稿；用户说不记了/删掉时只作废。",
-      "12. 其他与本账本数据相关的问题直接回答；无关的请求礼貌拒绝。",
+      "12. 纯文本：只有打招呼、询问如何使用应用、缺少生成草稿所必需的信息或工具能力之外的问题才调用 respond_text；涉及任何账本数据时不得用它绕过业务工具。",
       "",
       "## 规则",
       `- 金额使用账本币种 ${context.currency} 的主单位十进制字符串（如 "88.5"），最多 ${context.amountDecimalPlaces} 位小数，不做单位换算。`,
@@ -1733,6 +1789,7 @@ export class AiService {
       "- 用简体中文回复，简洁友好；已有卡片展示数据时文字只做一句总结。",
       "- 用纯文本回复，不要使用 Markdown 语法（**加粗**、列表符号等不会被渲染）。",
       "- 工具生成的卡片会直接展示给用户，正文绝不复述卡片里的金额/分类/日期等细节，一句话收尾即可。",
+      "- 历史消息中的「历史卡片状态」是系统补充的旧数据，只用于理解指代，绝不能复制到正文或据此声称本轮已生成卡片；本轮只有实际工具调用成功才算生成。",
       "- 计划/保险/物品/订阅/自动化/提醒查询工具不产生卡片，需要你把返回数据里用户关心的部分整理成简洁的纯文本回答；数据为空时如实说明。",
       "- 工具返回 ok:false 时修正参数重试；仍失败就向用户如实说明原因，不要假装成功。",
       "",

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { yuanToMicros } from "../dist/modules/ai/ai-money.js";
-import { isValidDateKey, isValidMonthKey } from "../dist/modules/ai/ai-validation.js";
+import { isTrendRequested, isValidDateKey, isValidMonthKey } from "../dist/modules/ai/ai-validation.js";
+import { LlmClient, shouldDisableThinking } from "../dist/modules/ai/llm-client.js";
 import { periodSeriesBuckets } from "../dist/modules/stats/stats.service.js";
 
 test("AI money parsing follows ledger precision", () => {
@@ -21,6 +22,63 @@ test("AI month validation requires a real calendar month", () => {
   assert.equal(isValidMonthKey("2026-07"), true);
   assert.equal(isValidMonthKey("2026-00"), false);
   assert.equal(isValidMonthKey("2026-13"), false);
+});
+
+test("AI stats trend is enabled only by a strict true intent flag", () => {
+  assert.equal(isTrendRequested(true), true);
+  assert.equal(isTrendRequested(false), false);
+  assert.equal(isTrendRequested(undefined), false);
+  assert.equal(isTrendRequested("true"), false);
+});
+
+test("AI disables thinking for DeepSeek tool-calling endpoints", () => {
+  assert.equal(shouldDisableThinking("https://api.deepseek.com", "deepseek-v4-flash"), true);
+  assert.equal(shouldDisableThinking("https://proxy.example.com/v1", "deepseek-v4-pro"), true);
+  assert.equal(shouldDisableThinking("https://api.openai.com/v1", "gpt-5.1"), false);
+});
+
+test("DeepSeek tool requests require a tool and preserve hidden reasoning metadata", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(init.body);
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: "",
+              reasoning_content: "hidden reasoning",
+              tool_calls: [],
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    const client = new LlmClient("https://api.deepseek.com", "test-key", "deepseek-v4-flash");
+    const reply = await client.chat(
+      [{ role: "user", content: "记一笔 10 元午饭" }],
+      [
+        {
+          type: "function",
+          function: {
+            name: "draft_transaction",
+            description: "生成草稿",
+            parameters: { type: "object", properties: {} },
+          },
+        },
+      ],
+      { toolChoice: "required" },
+    );
+    assert.equal(requestBody.tool_choice, "required");
+    assert.deepEqual(requestBody.thinking, { type: "disabled" });
+    assert.equal(reply.reasoningContent, "hidden reasoning");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("AI stats trend chooses a readable granularity for each span", () => {

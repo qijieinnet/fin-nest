@@ -488,7 +488,9 @@ function StatsTrendChart({
                 <text
                   fill="var(--color-text-muted)"
                   fontSize="9"
-                  textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+                  textAnchor={
+                    index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"
+                  }
                   x={point.x}
                   y={height - 7}
                 >
@@ -545,7 +547,10 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
           <div className="min-w-0">
             <p className="text-xs text-[var(--color-text-muted)]">差额</p>
             <p className="truncate text-[16px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-              {amount((BigInt(card.incomeMicros) - BigInt(card.expenseMicros)).toString(), currency)}
+              {amount(
+                (BigInt(card.incomeMicros) - BigInt(card.expenseMicros)).toString(),
+                currency,
+              )}
             </p>
           </div>
         </div>
@@ -689,7 +694,9 @@ export function BudgetProgressCard({
     <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算进度</p>
-        <p className="shrink-0 text-xs text-[var(--color-text-muted)]">{card.percent.toFixed(0)}%</p>
+        <p className="shrink-0 text-xs text-[var(--color-text-muted)]">
+          {card.percent.toFixed(0)}%
+        </p>
       </div>
       <div className="mt-2">
         <div className="flex items-baseline justify-between gap-3 text-sm">

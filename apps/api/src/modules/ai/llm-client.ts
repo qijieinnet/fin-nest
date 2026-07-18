@@ -11,7 +11,13 @@ export type LlmToolCall = {
 
 export type LlmMessage =
   | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: LlmToolCall[] }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: LlmToolCall[];
+      /** DeepSeek 思考模式的工具调用续轮要求原样带回，但不向用户展示。 */
+      reasoning_content?: string | null;
+    }
   | { role: "tool"; tool_call_id: string; content: string };
 
 export type LlmTool = {
@@ -30,8 +36,16 @@ export type LlmUsage = {
 
 export type LlmReply = {
   content: string | null;
+  reasoningContent: string | null;
   toolCalls: LlmToolCall[];
   usage?: LlmUsage;
+};
+
+export type LlmToolChoice = "auto" | "required";
+
+export type LlmCallOptions = {
+  signal?: AbortSignal;
+  toolChoice?: LlmToolChoice;
 };
 
 type RawUsage = {
@@ -43,6 +57,7 @@ type ChatCompletionResponse = {
   choices?: Array<{
     message?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: LlmToolCall[];
     };
   }>;
@@ -53,6 +68,7 @@ type ChatCompletionChunk = {
   choices?: Array<{
     delta?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: Array<{
         index: number;
         id?: string;
@@ -75,6 +91,18 @@ const REQUEST_TIMEOUT_MS = 90_000;
 // 流式整体超时放宽：带思维链的模型（reasoning_content）首 token 前可能停顿较久。
 const STREAM_TIMEOUT_MS = 300_000;
 
+/** DeepSeek V4 工具调用在非思考模式下更稳定，且可使用 required tool_choice。 */
+export function shouldDisableThinking(baseUrl: string, model: string): boolean {
+  let deepSeekHost = false;
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    deepSeekHost = hostname === "deepseek.com" || hostname.endsWith(".deepseek.com");
+  } catch {
+    // baseUrl 已由配置层校验；这里保留容错，按模型名继续判断。
+  }
+  return deepSeekHost || /^deepseek-v4(?:-|$)/i.test(model);
+}
+
 export class LlmClient {
   constructor(
     private readonly baseUrl: string,
@@ -86,8 +114,9 @@ export class LlmClient {
     messages: LlmMessage[],
     tools: LlmTool[],
     stream: boolean,
-    signal?: AbortSignal,
+    options: LlmCallOptions = {},
   ): Promise<Response> {
+    const { signal, toolChoice = "auto" } = options;
     const timeout = AbortSignal.timeout(stream ? STREAM_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
@@ -100,7 +129,10 @@ export class LlmClient {
         body: JSON.stringify({
           model: this.model,
           messages,
-          ...(tools.length > 0 ? { tools } : {}),
+          ...(tools.length > 0 ? { tools, tool_choice: toolChoice } : {}),
+          ...(shouldDisableThinking(this.baseUrl, this.model)
+            ? { thinking: { type: "disabled" } }
+            : {}),
           temperature: 0.2,
           // include_usage：让上游在流式末块附带 token 用量（OpenAI-compatible），用于用量记账。
           ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
@@ -121,8 +153,12 @@ export class LlmClient {
     return response;
   }
 
-  async chat(messages: LlmMessage[], tools: LlmTool[]): Promise<LlmReply> {
-    const response = await this.request(messages, tools, false);
+  async chat(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options: LlmCallOptions = {},
+  ): Promise<LlmReply> {
+    const response = await this.request(messages, tools, false, options);
     const data = (await response.json()) as ChatCompletionResponse;
     const message = data.choices?.[0]?.message;
     if (!message) {
@@ -130,6 +166,7 @@ export class LlmClient {
     }
     return {
       content: message.content ?? null,
+      reasoningContent: message.reasoning_content ?? null,
       toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
       usage: packUsage(data.usage),
     };
@@ -143,14 +180,15 @@ export class LlmClient {
     messages: LlmMessage[],
     tools: LlmTool[],
     onDelta: (text: string) => void,
-    signal?: AbortSignal,
+    options: LlmCallOptions = {},
   ): Promise<LlmReply> {
-    const response = await this.request(messages, tools, true, signal);
+    const response = await this.request(messages, tools, true, options);
     if (!response.body) {
       throw new AppError("AI_UPSTREAM_ERROR", "AI 服务未返回流式响应", 502);
     }
 
     let content = "";
+    let reasoningContent = "";
     let usage: LlmUsage | undefined;
     const toolCalls = new Map<number, LlmToolCall>();
     const applyChunk = (chunk: ChatCompletionChunk) => {
@@ -162,6 +200,7 @@ export class LlmClient {
         content += delta.content;
         onDelta(delta.content);
       }
+      if (delta.reasoning_content) reasoningContent += delta.reasoning_content;
       for (const fragment of delta.tool_calls ?? []) {
         let call = toolCalls.get(fragment.index);
         if (!call) {
@@ -173,7 +212,13 @@ export class LlmClient {
           toolCalls.set(fragment.index, call);
         }
         if (fragment.id) call.id = fragment.id;
-        if (fragment.function?.name) call.function.name = fragment.function.name;
+        if (fragment.function?.name) {
+          const name = fragment.function.name;
+          if (!call.function.name) call.function.name = name;
+          else if (call.function.name !== name && !call.function.name.endsWith(name)) {
+            call.function.name += name;
+          }
+        }
         if (fragment.function?.arguments) call.function.arguments += fragment.function.arguments;
       }
     };
@@ -209,6 +254,7 @@ export class LlmClient {
 
     return {
       content: content || null,
+      reasoningContent: reasoningContent || null,
       toolCalls: [...toolCalls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call),
       usage,
     };

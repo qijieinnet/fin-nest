@@ -19,3 +19,8 @@ export function isValidMonthKey(value: string): boolean {
   const month = Number(value.slice(5, 7));
   return month >= 1 && month <= 12;
 }
+
+/** 模型工具参数只有严格的布尔 true 才视为用户请求了趋势，避免字符串等异常值误触发。 */
+export function isTrendRequested(value: unknown): value is true {
+  return value === true;
+}
