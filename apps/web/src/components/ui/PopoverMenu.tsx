@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/format/class-names";
 import { Menu, type MenuItem } from "./Menu";
@@ -41,6 +41,27 @@ export function PopoverMenu({
   const markerRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);
+  // 关闭时先播退场动画（缩回触发角 + 淡出），到时再卸载，让「消失」沿「出现」的路径返回（§7）。
+  const [present, setPresent] = useState(open);
+  const [closing, setClosing] = useState(false);
+
+  // open 那一帧就在渲染期同步挂载（React 允许渲染期派生 state），
+  // 保证 useLayoutEffect 定位时锚点已渲染；退场期由 present 维持挂载直到计时结束。
+  if (open && !present) setPresent(true);
+
+  useEffect(() => {
+    if (open) {
+      setClosing(false);
+      return;
+    }
+    if (!present) return;
+    setClosing(true);
+    const timer = window.setTimeout(() => {
+      setPresent(false);
+      setClosing(false);
+    }, 160);
+    return () => window.clearTimeout(timer);
+  }, [open, present]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -80,7 +101,7 @@ export function PopoverMenu({
     };
   }, [open, groups, align]);
 
-  if (!open) return null;
+  if (!present) return null;
 
   // 内联标记：本体经 Portal 渲染，用它来定位锚点（其父元素即锚点容器）。
   const marker = <span aria-hidden ref={markerRef} style={{ display: "none" }} />;
@@ -103,6 +124,7 @@ export function PopoverMenu({
               "ui-popover-menu",
               align === "end" ? "ui-popover-menu--end" : "ui-popover-menu--start",
               placement?.direction === "up" ? "ui-popover-menu--up" : "ui-popover-menu--down",
+              closing && "ui-popover-menu--closing",
               className,
             )}
             ref={panelRef}

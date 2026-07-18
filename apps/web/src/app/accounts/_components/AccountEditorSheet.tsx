@@ -283,9 +283,6 @@ export function AccountEditorSheet({
       });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const isLend = type === "receivable" || type === "payable";

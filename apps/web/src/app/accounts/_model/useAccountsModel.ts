@@ -29,9 +29,8 @@ export function useAccountsModel() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: accountsKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 

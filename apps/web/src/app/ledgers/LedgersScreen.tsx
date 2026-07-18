@@ -59,6 +59,7 @@ export function LedgersScreen() {
           ) : undefined
         }
         navigationTitleAlign="left"
+        navigationVariant="large"
         title="账本管理"
       >
         <div className="flex flex-col">

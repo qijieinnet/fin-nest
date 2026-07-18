@@ -58,8 +58,6 @@ export function useBudgetModel() {
         message: enabled ? "已开启未到期的自动记账" : "已关闭未到期的自动记账",
       });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const removePlan = useMutation({
@@ -70,8 +68,6 @@ export function useBudgetModel() {
       clear();
       showToast({ tone: "success", message: "计划已删除" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const stopPlan = useMutation({
@@ -87,8 +83,6 @@ export function useBudgetModel() {
       clear();
       showToast({ tone: "success", message: "计划已停止" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "停止失败，请稍后重试") }),
   });
 
   const restorePlan = useMutation({
@@ -106,8 +100,6 @@ export function useBudgetModel() {
       clear();
       showToast({ tone: "success", message: "计划已恢复" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "恢复失败，请稍后重试") }),
   });
 
   const requestDeletePlan = async (plan: Plan) => {

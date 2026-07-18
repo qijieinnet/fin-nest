@@ -40,9 +40,6 @@ export function MembersSection({
       showToast({ tone: "success", message: "已移除成员" });
       setMemberPendingRemove(null);
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "移除失败") });
-    },
   });
 
   const members = membersQuery.data ?? [];

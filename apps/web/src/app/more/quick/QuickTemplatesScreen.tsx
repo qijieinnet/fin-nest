@@ -111,9 +111,6 @@ export function QuickTemplatesScreen() {
       }
       showToast({ tone: "success", message: "快速记账已删除" });
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
   });
 
   const goBack = () => {

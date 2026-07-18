@@ -58,9 +58,6 @@ export function SubscriptionCategoryEditorSheet({
       showToast({ tone: "success", message: isEditing ? "分类已更新" : "分类已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const remove = useMutation({
@@ -75,9 +72,6 @@ export function SubscriptionCategoryEditorSheet({
       await invalidateCategories();
       showToast({ tone: "success", message: "分类已删除" });
       pop();
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 

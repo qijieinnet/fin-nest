@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -10,6 +10,7 @@ import {
   type DesktopDialogVariant,
 } from "@/components/desktop/DesktopDialog";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { haptic } from "@/lib/haptics";
 
 type SheetShellProps = {
   children: ReactNode;
@@ -38,6 +39,9 @@ export function SheetShell({
 }: SheetShellProps) {
   const [mounted, setMounted] = useState(false);
   const isDesktop = useIsDesktop();
+  const reduceMotion = useReducedMotion();
+  // 拖拽只从顶部抓手发起（dragListener={false}），避免与弹层内部滚动打架。
+  const dragControls = useDragControls();
 
   useEffect(() => {
     setMounted(true);
@@ -58,7 +62,7 @@ export function SheetShell({
     };
   }, [open, isDesktop]);
 
-  const panelContent = renderPanel(
+  const innerContent = (
     <>
       {hideDefaultHeader ? null : (
         <div className="sheet-header">
@@ -69,16 +73,16 @@ export function SheetShell({
         </div>
       )}
       <div className="sheet-body">{children}</div>
-    </>,
+    </>
   );
 
   if (!mounted) return null;
 
-  // 桌面：居中 Modal / 右侧 Drawer，面板视觉仍由 renderPanel 的 Surface 提供。
+  // 桌面：居中 Modal / 右侧 Drawer，面板视觉仍由 renderPanel 的 Surface 提供（无抓手）。
   if (isDesktop) {
     return (
       <DesktopDialog onClose={onClose} open={open} title={title} variant={desktopVariant}>
-        {panelContent}
+        {renderPanel(innerContent)}
       </DesktopDialog>
     );
   }
@@ -99,12 +103,40 @@ export function SheetShell({
           />
           <motion.div
             className="sheet-panel-wrap"
-            initial={{ x: "-50%", y: "105%" }}
-            animate={{ x: "-50%", y: 0 }}
-            exit={{ x: "-50%", y: "105%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            initial={reduceMotion ? { x: "-50%", opacity: 0 } : { x: "-50%", y: "105%" }}
+            animate={reduceMotion ? { x: "-50%", opacity: 1 } : { x: "-50%", y: 0 }}
+            exit={reduceMotion ? { x: "-50%", opacity: 0 } : { x: "-50%", y: "105%" }}
+            transition={
+              reduceMotion
+                ? { duration: 0.18 }
+                : // Apple 式抽屉：短、几乎不回弹，退场稍快。
+                  { type: "spring", duration: 0.5, bounce: 0.18 }
+            }
+            // 下拉拖拽关闭：向下自由跟手，向上到位后橡皮筋阻尼；
+            // 释放时按距离(>120px)或速度(>600px/s)判定关闭，否则弹回原位。
+            drag="y"
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0 }}
+            dragElastic={0.12}
+            dragSnapToOrigin
+            onDragEnd={(_, info) => {
+              if (info.offset.y > 120 || info.velocity.y > 600) {
+                haptic("light");
+                onClose();
+              }
+            }}
           >
-            {panelContent}
+            {renderPanel(
+              <>
+                <span
+                  aria-hidden
+                  className="sheet-grabber"
+                  onPointerDown={(event) => dragControls.start(event)}
+                />
+                {innerContent}
+              </>,
+            )}
           </motion.div>
         </div>
       ) : null}

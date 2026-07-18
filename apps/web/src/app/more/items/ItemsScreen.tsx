@@ -410,8 +410,6 @@ export function ItemsScreen() {
       await invalidate(itemId);
       showToast({ tone: "success", message: "已恢复在用" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const remove = useMutation({
@@ -424,8 +422,6 @@ export function ItemsScreen() {
       clear();
       showToast({ tone: "success", message: "物品已删除" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const reorderTypes = useMutation({
@@ -434,9 +430,8 @@ export function ItemsScreen() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: itemTypesKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 
@@ -446,9 +441,8 @@ export function ItemsScreen() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: itemsKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 

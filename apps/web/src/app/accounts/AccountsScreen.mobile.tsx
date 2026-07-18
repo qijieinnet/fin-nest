@@ -112,7 +112,7 @@ export function AccountsScreenMobile() {
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+40px+env(safe-area-inset-bottom))]">
         <header
-          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
         >
           {showBack ? (
             <IconButton

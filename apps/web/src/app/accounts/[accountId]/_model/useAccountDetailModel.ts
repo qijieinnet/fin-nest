@@ -52,9 +52,6 @@ export function useAccountDetailModel(accountId: string) {
       showToast({ tone: "success", message: "账户已删除" });
       router.replace(routes.accounts);
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
   });
 
   const removeSub = useMutation({
@@ -66,9 +63,6 @@ export function useAccountDetailModel(accountId: string) {
     onSuccess: async () => {
       await invalidate();
       showToast({ tone: "success", message: "子账户已删除" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 
@@ -82,9 +76,6 @@ export function useAccountDetailModel(accountId: string) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
       showToast({ tone: "success", message: "设置已更新" });
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const reorderSubAccounts = useMutation({
@@ -93,9 +84,8 @@ export function useAccountDetailModel(accountId: string) {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 

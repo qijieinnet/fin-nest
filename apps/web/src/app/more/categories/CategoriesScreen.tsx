@@ -212,9 +212,8 @@ export function CategoriesScreen() {
         method: "PATCH",
         body: { type: kind, ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: categoriesKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 
@@ -224,9 +223,8 @@ export function CategoriesScreen() {
         ledgerApiPath(ledgerId!, `/categories/${categoryId}/subcategories/reorder`),
         { method: "PATCH", body: { ids: orderedIds } },
       ),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: categoriesKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 

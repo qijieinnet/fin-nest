@@ -44,9 +44,6 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
       showToast({ tone: "success", message: isEditing ? "人员已更新" : "人员已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
-    },
   });
 
   const remove = useMutation({
@@ -58,9 +55,6 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
       await invalidatePeople();
       showToast({ tone: "success", message: "人员已删除" });
       pop();
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 

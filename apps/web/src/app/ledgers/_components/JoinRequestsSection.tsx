@@ -41,9 +41,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
     onSuccess: async () => {
       await invalidate();
       showToast({ tone: "success", message: "已通过申请" });
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   const reject = useMutation({
     mutationFn: (requestId: string) =>
@@ -51,9 +49,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
     onSuccess: async () => {
       await invalidate();
       showToast({ tone: "info", message: "已拒绝申请" });
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   const requests = requestsQuery.data ?? [];
   const pending = approve.isPending || reject.isPending;

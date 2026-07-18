@@ -68,11 +68,10 @@ export function RecordSettingsScreen() {
       }
       return { previous };
     },
-    onError: (error, _patch, context) => {
+    onError: (_error, _patch, context) => {
       if (ledgerId && context?.previous) {
         queryClient.setQueryData(queryKeys.recordSetting(ledgerId), context.previous);
       }
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
     },
     onSettled: () => {
       if (ledgerId) queryClient.invalidateQueries({ queryKey: queryKeys.recordSetting(ledgerId) });

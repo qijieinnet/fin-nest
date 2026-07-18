@@ -37,6 +37,8 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const mutation = useMutation({
+    // 错误已在表单内联展示，跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () => {
       const body = { name: name.trim(), icon, amountDecimalPlaces: decimals };
       if (ledger) {

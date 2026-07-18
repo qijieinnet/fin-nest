@@ -33,9 +33,6 @@ export function SubAccountRenameSheet({ ledgerId, subAccount }: SubAccountRename
       showToast({ tone: "success", message: "子账户已更新" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   return (

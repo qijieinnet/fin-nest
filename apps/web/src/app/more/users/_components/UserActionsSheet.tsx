@@ -46,8 +46,6 @@ export function UserActionsSheet({ initialUser, currentUserId }: UserActionsShee
       await invalidateList();
       showToast({ tone: "success", message: data.disabledAt ? "已禁用用户" : "已启用用户" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const adminMutation = useMutation({
@@ -61,8 +59,6 @@ export function UserActionsSheet({ initialUser, currentUserId }: UserActionsShee
       await invalidateList();
       showToast({ tone: "success", message: data.isAdmin ? "已设为管理员" : "已取消管理员" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const busy = statusMutation.isPending || adminMutation.isPending;

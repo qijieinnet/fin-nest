@@ -405,8 +405,6 @@ export function InsurancesScreen() {
       ]);
       showToast({ tone: "success", message: expired ? "保单已归档" : "已终止续保" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const resume = useMutation({
@@ -421,8 +419,6 @@ export function InsurancesScreen() {
       ]);
       showToast({ tone: "success", message: "已恢复保单" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const remove = useMutation({
@@ -434,8 +430,6 @@ export function InsurancesScreen() {
       await invalidate();
       showToast({ tone: "success", message: "保单已删除" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const reorderInsurances = useMutation({
@@ -444,9 +438,8 @@ export function InsurancesScreen() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: insurancesKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 
@@ -456,12 +449,8 @@ export function InsurancesScreen() {
         method: "PATCH",
         body: { types },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: insurancesKey });
-      showToast({
-        tone: "error",
-        message: getApiErrorMessage(error, "分类排序保存失败，请重试"),
-      });
     },
   });
 

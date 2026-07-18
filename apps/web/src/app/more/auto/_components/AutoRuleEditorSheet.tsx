@@ -372,9 +372,6 @@ export function AutoRuleEditorSheet({
       showToast({ tone: "success", message: isEditing ? "自动记账已更新" : "自动记账已创建" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const parsedAmount = parseMoneyToMicros(amount);

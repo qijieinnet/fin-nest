@@ -24,6 +24,8 @@ export function JoinLedgerForm({ onSuccess }: JoinLedgerFormProps) {
   const [message, setMessage] = useState("");
 
   const mutation = useMutation({
+    // 错误已在表单内联展示，跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () =>
       apiRequest<LedgerJoinRequest>(API_ENDPOINTS.joinRequests, {
         method: "POST",

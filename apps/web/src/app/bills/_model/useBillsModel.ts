@@ -158,9 +158,7 @@ export function useBillsModel() {
       ]);
       showToast({ tone: "success", message: "已删除" });
       setTransactionPendingDelete(null);
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   // 批量修改：逐笔在服务端以现有数据重建后覆盖单字段，成功后刷新列表/账户/预算并提示更新/跳过条数。
   const batchUpdateMutation = useMutation({
@@ -177,9 +175,7 @@ export function useBillsModel() {
       ]);
       const skippedNote = result.skipped > 0 ? `，跳过 ${result.skipped} 笔` : "";
       showToast({ tone: "success", message: `已修改 ${result.updated} 笔${skippedNote}` });
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   return {
     ledgerId,

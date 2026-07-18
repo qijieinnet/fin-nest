@@ -175,9 +175,6 @@ export function AiScreen() {
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
       ]);
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "入账失败，请重试") });
-    },
     onSettled: () => setConfirmingKey(null),
   });
 
@@ -618,14 +615,7 @@ export function AiScreen() {
                       deleteConversation.mutate(conversation.id, {
                         onSuccess: () => {
                           if (conversation.id === conversationId) startNewConversation();
-                        },
-                        onError: (error) => {
-                          showToast({
-                            tone: "error",
-                            message: getApiErrorMessage(error, "删除失败"),
-                          });
-                        },
-                      });
+                        },                      });
                     }}
                   />
                 </div>

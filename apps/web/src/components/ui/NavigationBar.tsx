@@ -24,6 +24,8 @@ export function NavigationBar({
   variant = "large",
 }: NavigationBarProps) {
   const scrolled = usePageScrolled();
+  // large 变体走 iOS 大标题接力：顶部大标题在流内，滚动后收拢，行内浮现小标题。
+  const collapsible = variant === "large";
 
   return (
     <header
@@ -32,17 +34,31 @@ export function NavigationBar({
         `navigation-bar--${variant}`,
         `navigation-bar--title-${titleAlign}`,
         scrolled && "navigation-bar--scrolled",
+        collapsible && scrolled && "navigation-bar--collapsed",
         className,
       )}
     >
       <div className="navigation-bar__row">
         <div className="navigation-bar__leading">{leading}</div>
-        <div className="navigation-bar__title-group">
+        {collapsible ? (
+          // 行内小标题：静止时透明，收拢后淡入（标题接力的落点）。
+          <div className="navigation-bar__compact-title" aria-hidden={!scrolled}>
+            {title}
+          </div>
+        ) : (
+          <div className="navigation-bar__title-group">
+            <h1 className="navigation-bar__title">{title}</h1>
+            {subtitle ? <p className="navigation-bar__subtitle">{subtitle}</p> : null}
+          </div>
+        )}
+        <div className="navigation-bar__action">{action}</div>
+      </div>
+      {collapsible ? (
+        <div className="navigation-bar__large">
           <h1 className="navigation-bar__title">{title}</h1>
           {subtitle ? <p className="navigation-bar__subtitle">{subtitle}</p> : null}
         </div>
-        <div className="navigation-bar__action">{action}</div>
-      </div>
+      ) : null}
     </header>
   );
 }

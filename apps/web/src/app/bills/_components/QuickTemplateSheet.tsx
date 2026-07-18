@@ -44,9 +44,7 @@ export function QuickTemplateSheet({
       ]);
       showToast({ tone: "success", message: "已按模板记一笔" });
       close();
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   const templates = templatesQuery.data ?? [];
 

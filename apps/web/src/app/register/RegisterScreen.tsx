@@ -33,6 +33,8 @@ export function RegisterScreen() {
     queryKey: queryKeys.registrationSetting,
     queryFn: () => apiRequest<RegistrationStatus>(API_ENDPOINTS.registrationStatus),
     staleTime: 60_000,
+    // 失败时有安全默认值，无需打扰用户。
+    meta: { suppressErrorToast: true },
   });
   // 未加载完成前按允许处理，避免正常场景闪现“已关闭”。
   const registrationEnabled = registrationQuery.data?.registrationEnabled ?? true;
@@ -42,6 +44,8 @@ export function RegisterScreen() {
   const accountInvalid = account.length > 0 && !ACCOUNT_PATTERN.test(account);
 
   const mutation = useMutation({
+    // 错误已在表单内联展示（auth-error），跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () =>
       apiRequest<AuthResult>(API_ENDPOINTS.register, {
         method: "POST",

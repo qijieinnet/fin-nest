@@ -28,8 +28,21 @@
   --color-disabled-text: rgba(99, 112, 107, 0.48);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--color-tint) 20%, transparent);
 
+  /* Motion —— 时长梯度：按压/小控件用 press~fast，弹层/大位移用 normal~slow。 */
+  --motion-duration-press: 120ms;
   --motion-duration-fast: 140ms;
   --motion-duration-normal: 220ms;
+  --motion-duration-slow: 340ms;
+
+  /* Motion —— 缓动 token（内置 ease 太弱，统一走这几条强曲线）：
+     out      入场/退场/按压回弹，起步快、收尾缓（iOS 观感）
+     out-soft 悬停/配色/小位移，比 out 温和，不过冲
+     in-out   屏内移动/形变，两端对称
+     drawer   底部抽屉/大位移，iOS 抽屉专用曲线 */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
   --space-page-x: 20px;
   --space-sheet-x: 18px;
@@ -99,6 +112,24 @@ select:focus-visible {
 
 .app-background {
   background: var(--color-bg-app);
+}
+
+/* 钻入型页面（MobilePage）路由挂载时的一次性入场：轻微上浮 + 淡入。
+   用 fill-mode: backwards——动画结束不保留 transform，避免残留 transform
+   破坏内部 sticky 导航 / portal 定位；主 tab 页不走 MobilePage，保持切换零动画。 */
+.mobile-page {
+  animation: mobile-page-enter var(--motion-duration-normal) var(--ease-out) backwards;
+}
+
+@keyframes mobile-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* AI 普通回复按 Markdown 排版；卡片消息仍由各业务卡片组件独立渲染。 */
@@ -238,7 +269,22 @@ select:focus-visible {
   max-width: 100%;
 }
 
-/* 固定页眉：实底盖住状态栏与按钮，底部用 ::after 渐隐过渡；仅滚动时显示，避免遮住顶部内容（与 .navigation-bar 一致）。 */
+/* 固定页眉：静止时与页面同色无缝（盖住状态栏），滚动时材质化成毛玻璃、
+   内容从下方模糊透过（apple-design §12）；底部用 ::after 渐隐软化边缘而非硬线。 */
+.app-sticky-header {
+  background: var(--color-bg-app);
+  transition:
+    background var(--motion-duration-normal) var(--ease-out-soft),
+    -webkit-backdrop-filter var(--motion-duration-normal) var(--ease-out-soft),
+    backdrop-filter var(--motion-duration-normal) var(--ease-out-soft);
+}
+
+.app-sticky-header--scrolled {
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  background: color-mix(in srgb, var(--color-bg-app) 72%, transparent);
+}
+
 .app-sticky-header::after {
   background: linear-gradient(180deg, var(--color-bg-app), rgba(254, 254, 254, 0));
   content: "";
@@ -249,7 +295,7 @@ select:focus-visible {
   position: absolute;
   right: 0;
   top: 100%;
-  transition: opacity 180ms ease;
+  transition: opacity var(--motion-duration-normal) var(--ease-out-soft);
 }
 
 .app-sticky-header--scrolled::after {
@@ -278,10 +324,10 @@ select:focus-visible {
   min-height: var(--space-control-height);
   padding: 0 16px;
   transition:
-    transform var(--motion-duration-fast) ease,
-    background var(--motion-duration-fast) ease,
-    color var(--motion-duration-fast) ease,
-    opacity var(--motion-duration-fast) ease;
+    transform var(--motion-duration-press) var(--ease-out),
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    color var(--motion-duration-fast) var(--ease-out-soft),
+    opacity var(--motion-duration-fast) var(--ease-out-soft);
   white-space: nowrap;
 }
 
@@ -382,8 +428,8 @@ select:focus-visible {
   min-width: 0;
   padding: 0 12px;
   transition:
-    background var(--motion-duration-fast) ease,
-    box-shadow var(--motion-duration-fast) ease;
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    box-shadow var(--motion-duration-fast) var(--ease-out-soft);
 }
 
 .ui-input-shell:focus-within {
@@ -644,8 +690,8 @@ select:focus-visible {
   justify-content: flex-start;
   padding: 2px;
   transition:
-    background var(--motion-duration-normal) ease,
-    opacity var(--motion-duration-fast) ease;
+    background var(--motion-duration-normal) var(--ease-out-soft),
+    opacity var(--motion-duration-fast) var(--ease-out-soft);
   width: 51px;
 }
 
@@ -665,7 +711,7 @@ select:focus-visible {
     0 3px 8px rgba(0, 0, 0, 0.16),
     0 1px 1px rgba(0, 0, 0, 0.08);
   height: 27px;
-  transition: transform var(--motion-duration-normal) cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--motion-duration-normal) var(--ease-out);
   width: 27px;
 }
 
@@ -701,9 +747,9 @@ select:focus-visible {
   padding: 0 10px;
   text-align: center;
   transition:
-    background var(--motion-duration-normal) ease,
-    color var(--motion-duration-fast) ease,
-    transform var(--motion-duration-fast) ease;
+    background var(--motion-duration-normal) var(--ease-out),
+    color var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
   white-space: nowrap;
 }
 
@@ -746,10 +792,10 @@ select:focus-visible {
 
 .ui-surface--interactive {
   transition:
-    transform var(--motion-duration-fast) ease,
-    background var(--motion-duration-fast) ease,
-    box-shadow var(--motion-duration-fast) ease,
-    filter var(--motion-duration-fast) ease;
+    transform var(--motion-duration-press) var(--ease-out),
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    box-shadow var(--motion-duration-fast) var(--ease-out-soft),
+    filter var(--motion-duration-fast) var(--ease-out-soft);
 }
 
 .ui-surface--pressed,
@@ -862,7 +908,7 @@ select:focus-visible {
 }
 
 .ui-popover-menu {
-  animation: ui-popover-menu-pop var(--motion-duration-fast) ease;
+  animation: ui-popover-menu-pop var(--motion-duration-fast) var(--ease-out);
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Portal 到 body 后以 fixed 定位，位置由内联样式给出，避免被 overflow 容器截断。 */
@@ -894,6 +940,44 @@ select:focus-visible {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* 退场：缩回触发角 + 淡出，与入场镜像（§7）；transform-origin 沿用各方向规则。 */
+.ui-popover-menu--closing {
+  animation: ui-popover-menu-unpop var(--motion-duration-fast) var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes ui-popover-menu-unpop {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+/* 减弱动态：入场/退场只做透明度、不缩放。 */
+@media (prefers-reduced-motion: reduce) {
+  .ui-popover-menu {
+    animation-name: ui-popover-menu-fade;
+  }
+
+  .ui-popover-menu--closing {
+    animation-direction: reverse;
+    animation-name: ui-popover-menu-fade;
+  }
+}
+
+@keyframes ui-popover-menu-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -1059,6 +1143,25 @@ select:focus-visible {
   box-shadow: var(--shadow-floating);
 }
 
+/* iOS 抓手：既是下拉关闭的发起区（touch-action:none 独占纵向手势），也是可拖拽的视觉提示。 */
+.sheet-grabber {
+  -webkit-tap-highlight-color: transparent;
+  align-self: center;
+  background: var(--color-text-muted);
+  border-radius: 999px;
+  cursor: grab;
+  flex: 0 0 auto;
+  height: 5px;
+  margin: 2px 0 8px;
+  opacity: 0.32;
+  touch-action: none;
+  width: 40px;
+}
+
+.sheet-grabber:active {
+  cursor: grabbing;
+}
+
 .sheet-header {
   align-items: center;
   display: flex;
@@ -1152,13 +1255,37 @@ select:focus-visible {
 }
 
 .navigation-bar {
-  /* 实色背景无缝衔接手机顶部状态栏，撑满安全区盖住状态栏；底部用 ::after 渐隐过渡。 */
+  /* 静止时实色无缝衔接状态栏；滚动时材质化成毛玻璃、内容从下方模糊透过
+     （apple-design §12），底部用 ::after 渐隐软化边缘。 */
   background: var(--color-bg-app);
   margin: 0 calc(var(--space-page-x) * -1) 18px;
   padding: env(safe-area-inset-top) var(--space-page-x) 0;
   position: sticky;
   top: 0;
   z-index: 20;
+  transition:
+    background var(--motion-duration-normal) var(--ease-out-soft),
+    -webkit-backdrop-filter var(--motion-duration-normal) var(--ease-out-soft),
+    backdrop-filter var(--motion-duration-normal) var(--ease-out-soft);
+}
+
+.navigation-bar--scrolled {
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  background: color-mix(in srgb, var(--color-bg-app) 72%, transparent);
+}
+
+/* 降低透明度偏好：去掉毛玻璃，滚动态回落为实色页面底（.navigation-bar
+   已在下方通用降级块处理，这里补 .app-sticky-header）。 */
+@media (prefers-reduced-transparency: reduce) {
+  .app-sticky-header {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .app-sticky-header--scrolled {
+    background: var(--color-bg-app);
+  }
 }
 
 .navigation-bar::after {
@@ -1171,7 +1298,7 @@ select:focus-visible {
   position: absolute;
   right: 0;
   top: 100%;
-  transition: opacity 180ms ease;
+  transition: opacity var(--motion-duration-normal) var(--ease-out-soft);
 }
 
 .navigation-bar--scrolled::after {
@@ -1245,6 +1372,55 @@ select:focus-visible {
   display: none;
 }
 
+/* ---- large 变体：iOS 大标题滚动收拢（标题接力） ---- */
+
+/* 行内小标题：静止时透明，收拢后淡入到位。 */
+.navigation-bar__compact-title {
+  color: var(--color-text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  min-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  transform: translateY(4px);
+  transition:
+    opacity var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-normal) var(--ease-out);
+  white-space: nowrap;
+}
+
+.navigation-bar--collapsed .navigation-bar__compact-title {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 流内大标题：静止时展开，滚动后高度收拢 + 上移淡出。 */
+.navigation-bar__large {
+  max-height: 80px;
+  opacity: 1;
+  overflow: hidden;
+  padding-top: 2px;
+  transform: translateY(0);
+  transition:
+    max-height var(--motion-duration-normal) var(--ease-out),
+    opacity var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-normal) var(--ease-out);
+}
+
+.navigation-bar--collapsed .navigation-bar__large {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  transform: translateY(-6px);
+}
+
+.navigation-bar__large .navigation-bar__subtitle {
+  display: block;
+}
+
 .tab-bar {
   -webkit-backdrop-filter: blur(30px) saturate(1.55);
   backdrop-filter: blur(30px) saturate(1.55);
@@ -1297,9 +1473,9 @@ select:focus-visible {
   position: relative;
   z-index: 1;
   transition:
-    background var(--motion-duration-fast) ease,
-    color var(--motion-duration-fast) ease,
-    transform var(--motion-duration-fast) ease;
+    background var(--motion-duration-normal) var(--ease-out),
+    color var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
 }
 
 .tab-bar__item:active {
@@ -1427,7 +1603,9 @@ select:focus-visible {
   .ui-tabs__item,
   .tab-bar__item,
   .ui-switch,
-  .ui-switch__thumb {
+  .ui-switch__thumb,
+  .navigation-bar__large,
+  .navigation-bar__compact-title {
     transition: none;
   }
 
@@ -1436,6 +1614,20 @@ select:focus-visible {
   .tab-bar__item:active,
   .ui-tabs__item:active {
     transform: none;
+  }
+
+  /* 入场动画降级：保留淡入、去掉位移。 */
+  .mobile-page {
+    animation-name: mobile-page-fade;
+  }
+}
+
+@keyframes mobile-page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
@@ -3276,7 +3468,7 @@ select:focus-visible {
   min-width: 0;
   position: relative;
   touch-action: pan-y;
-  transition: transform 0.22s cubic-bezier(0.3, 0.8, 0.3, 1);
+  transition: transform var(--motion-duration-normal) var(--ease-drawer);
   z-index: 2;
 }
 
@@ -4273,7 +4465,7 @@ select:focus-visible {
   border-radius: inherit;
   display: block;
   height: 100%;
-  transition: width 0.4s ease;
+  transition: width var(--motion-duration-slow) var(--ease-out);
 }
 
 .biz-plan-limit-card {
@@ -4468,7 +4660,7 @@ select:focus-visible {
   border-radius: inherit;
   display: block;
   height: 100%;
-  transition: width 0.4s ease;
+  transition: width var(--motion-duration-slow) var(--ease-out);
 }
 
 .biz-progress__meta {
@@ -5507,5 +5699,5 @@ select:focus-visible {
   height: 100%;
   border-radius: 999px;
   background: var(--color-tint);
-  transition: width 0.3s;
+  transition: width var(--motion-duration-slow) var(--ease-out);
 }

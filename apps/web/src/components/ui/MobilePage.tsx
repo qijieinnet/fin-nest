@@ -21,7 +21,7 @@ export function MobilePage({
   title,
 }: MobilePageProps) {
   return (
-    <main className="min-h-dvh px-[var(--space-page-x)] pb-[calc(var(--space-tab-bar-height)+env(safe-area-inset-bottom))] pt-0">
+    <main className="mobile-page min-h-dvh px-[var(--space-page-x)] pb-[calc(var(--space-tab-bar-height)+env(safe-area-inset-bottom))] pt-0">
       <NavigationBar
         action={action}
         leading={leading}

@@ -485,9 +485,7 @@ export function useTransactionFormModel({
       }
       if (onSaved) await onSaved(transaction);
       else router.back();
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   useEffect(() => {
     onCanSubmitChange?.(!validationMessage && !mutation.isPending);

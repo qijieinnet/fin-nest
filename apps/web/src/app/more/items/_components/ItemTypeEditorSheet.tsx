@@ -46,9 +46,6 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
       showToast({ tone: "success", message: isEditing ? "类型已更新" : "类型已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const remove = useMutation({
@@ -62,9 +59,6 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
       await invalidateTypes();
       showToast({ tone: "success", message: "类型已删除" });
       pop();
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 

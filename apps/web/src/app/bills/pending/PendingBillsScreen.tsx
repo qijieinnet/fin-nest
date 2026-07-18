@@ -63,9 +63,6 @@ export function PendingBillsScreen() {
       await invalidateAfterConfirm();
       showToast({ tone: "success", message: "已确认入账" });
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "确认失败，请稍后重试") });
-    },
   });
 
   const confirmBatch = useMutation({
@@ -78,9 +75,6 @@ export function PendingBillsScreen() {
       await invalidateAfterConfirm();
       showToast({ tone: "success", message: "待确认记录已全部入账" });
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "批量确认失败，请稍后重试") });
-    },
   });
 
   const deletePending = useMutation({
@@ -92,9 +86,6 @@ export function PendingBillsScreen() {
       await invalidatePending();
       showToast({ tone: "success", message: "已删除这条待确认" });
       setPendingDelete(null);
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 

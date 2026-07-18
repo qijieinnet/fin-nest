@@ -45,9 +45,6 @@ export function PlanShareSheet({ ledgerId, planId }: PlanShareSheetProps) {
       setCreatedUrl(shareUrlFor(result.token));
       await invalidate();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "生成失败，请稍后重试") });
-    },
   });
 
   const revoke = useMutation({
@@ -59,9 +56,6 @@ export function PlanShareSheet({ ledgerId, planId }: PlanShareSheetProps) {
       setCreatedUrl(null);
       await invalidate();
       showToast({ tone: "success", message: "分享链接已停用" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "停用失败，请稍后重试") });
     },
   });
 

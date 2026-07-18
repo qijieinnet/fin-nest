@@ -429,8 +429,6 @@ export function SubscriptionsScreen() {
       await invalidate(subscriptionId);
       showToast({ tone: "success", message: "已退订" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const resume = useMutation({
@@ -442,8 +440,6 @@ export function SubscriptionsScreen() {
       await invalidate(subscriptionId);
       showToast({ tone: "success", message: "已恢复订阅" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const remove = useMutation({
@@ -457,8 +453,6 @@ export function SubscriptionsScreen() {
       clear();
       showToast({ tone: "success", message: "订阅已删除" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const reorderCategories = useMutation({
@@ -467,9 +461,8 @@ export function SubscriptionsScreen() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: categoriesKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 
@@ -479,9 +472,8 @@ export function SubscriptionsScreen() {
         method: "PATCH",
         body: { ids: orderedIds },
       }),
-    onError: (error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionsKey });
-      showToast({ tone: "error", message: getApiErrorMessage(error, "排序保存失败，请重试") });
     },
   });
 

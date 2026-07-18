@@ -41,9 +41,6 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
       showToast({ tone: "success", message: "子账户已删除" });
       router.replace(routes.account(accountId));
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
-    },
   });
 
   const updateSubNetWorth = useMutation({
@@ -55,9 +52,6 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
       showToast({ tone: "success", message: "设置已更新" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
     },
   });
 

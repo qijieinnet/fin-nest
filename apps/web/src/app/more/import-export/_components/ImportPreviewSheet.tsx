@@ -42,6 +42,8 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
   const [result, setResult] = useState<ImportResult>(initial);
 
   const commit = useMutation({
+    // 后台任务失败是普通 Error（含定制文案），本地 onError 自行处理，跳过全局 toast。
+    meta: { suppressErrorToast: true },
     // 提交入队后台任务后轮询结果：请求本身秒回，不再受长事务 / 代理超时影响。
     mutationFn: async (): Promise<ImportResult> => {
       const body = new FormData();

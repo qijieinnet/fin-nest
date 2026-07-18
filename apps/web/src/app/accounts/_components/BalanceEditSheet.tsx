@@ -59,9 +59,6 @@ export function BalanceEditSheet({
       showToast({ tone: "success", message: "余额已更新" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   return (

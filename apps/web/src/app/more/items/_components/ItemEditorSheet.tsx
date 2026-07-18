@@ -274,9 +274,6 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
       showToast({ tone: "success", message: isEditing ? "物品已更新" : "物品已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const openTypeManager = () => {

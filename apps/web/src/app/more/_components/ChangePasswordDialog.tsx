@@ -31,6 +31,8 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
   }, []);
 
   const mutation = useMutation({
+    // 错误已在对话框内联展示（setFormError），跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () =>
       apiRequest<void>(API_ENDPOINTS.password, {
         method: "PATCH",

@@ -101,9 +101,6 @@ export function AutoScreen() {
     onSuccess: async () => {
       await invalidateAutomation();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "切换失败，请稍后重试") });
-    },
   });
 
   const deleteRule = useMutation({
@@ -113,9 +110,6 @@ export function AutoScreen() {
       await invalidateAutomation();
       if (stack.length > 0) pop();
       showToast({ tone: "success", message: "自动记账已删除" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") });
     },
   });
 
@@ -127,9 +121,6 @@ export function AutoScreen() {
     onSuccess: async () => {
       await invalidateAfterConfirm();
       showToast({ tone: "success", message: "已确认入账" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "确认失败，请稍后重试") });
     },
   });
 
@@ -143,9 +134,6 @@ export function AutoScreen() {
       await invalidateAfterConfirm();
       showToast({ tone: "success", message: "待确认记录已全部入账" });
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "批量确认失败，请稍后重试") });
-    },
   });
 
   const deletePending = useMutation({
@@ -156,9 +144,6 @@ export function AutoScreen() {
     onSuccess: async () => {
       await invalidateAutomation();
       showToast({ tone: "success", message: "已忽略这条待确认" });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "忽略失败，请稍后重试") });
     },
   });
 

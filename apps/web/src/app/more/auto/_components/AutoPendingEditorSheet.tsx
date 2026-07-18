@@ -125,9 +125,6 @@ export function AutoPendingEditorSheet({
       showToast({ tone: "success", message: "待确认记录已更新" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const parsedAmount = parseMoneyToMicros(amount);

@@ -93,9 +93,6 @@ export function InsuranceDetailSheet({
       queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId, insuranceId) }),
     ]);
 
-  const onMutationError = (error: unknown) =>
-    showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
-
   const terminateInternal = useMutation({
     mutationFn: () =>
       apiRequest(ledgerApiPath(ledgerId, `/insurances/${insuranceId}/terminate`), {
@@ -105,9 +102,7 @@ export function InsuranceDetailSheet({
       await invalidateInsurance();
       const expired = insuranceStatus(detailQuery.data ?? { terminatedAt: null, endDate: null, remindLeadValue: null, remindLeadUnit: null }).key === "expired";
       showToast({ tone: "success", message: expired ? "保单已归档" : "已终止续保" });
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   const resumeInternal = useMutation({
     mutationFn: () =>
@@ -115,9 +110,7 @@ export function InsuranceDetailSheet({
     onSuccess: async () => {
       await invalidateInsurance();
       showToast({ tone: "success", message: "已恢复保单" });
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   const removeInternal = useMutation({
     mutationFn: () =>
@@ -126,9 +119,7 @@ export function InsuranceDetailSheet({
       await invalidateInsurance();
       showToast({ tone: "success", message: "保单已删除" });
       pop();
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   if (!insurance) {
     return <LoadingState rows={5} title="加载保单" />;

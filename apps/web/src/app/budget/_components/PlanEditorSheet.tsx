@@ -265,9 +265,6 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
       showToast({ tone: "success", message: isEditing ? "计划已更新" : "计划已创建" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   return (

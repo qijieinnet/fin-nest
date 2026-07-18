@@ -2,6 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
+import { haptic } from "@/lib/haptics";
 
 type SwitchProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> & {
   checked: boolean;
@@ -24,7 +25,10 @@ export function Switch({
       aria-label={typeof label === "string" ? label : undefined}
       className={cn("ui-switch", checked && "ui-switch--checked", className)}
       disabled={disabled}
-      onClick={() => onCheckedChange?.(!checked)}
+      onClick={() => {
+        haptic("light");
+        onCheckedChange?.(!checked);
+      }}
       role="switch"
       type={type}
       {...props}

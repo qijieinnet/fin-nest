@@ -34,9 +34,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
       apiRequest<LedgerInvite>(ledgerInvitesPath(ledgerId), { method: "POST", body: {} }),
     onSuccess: (invite) => {
       push({ title: "邀请码", content: <ShareInviteSheet invite={invite} /> });
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   const deleteLedger = useMutation({
     mutationFn: () => apiRequest<void>(ledgerPath(ledgerId), { method: "DELETE" }),
@@ -45,9 +43,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
       setLedgerPendingDelete(false);
       showToast({ tone: "success", message: "账本已删除" });
       pop();
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   if (!ledger) {
     return (

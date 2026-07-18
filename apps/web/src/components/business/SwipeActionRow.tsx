@@ -1,8 +1,10 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/format/class-names";
+import { haptic } from "@/lib/haptics";
 
 export type SwipeAction = {
   icon?: ReactNode;
@@ -34,6 +36,17 @@ function actionsWidth(count: number): number {
   return count > 0 ? Math.min(count * 58 + 24, 156) : 0;
 }
 
+/** 越界后的橡皮筋阻尼系数：拖过可展开宽度时，位移只按 35% 生效。 */
+const RUBBER_BAND = 0.35;
+/** 判定「已滑够」的距离占比：越过展开宽度的 40% 即吸附到打开。 */
+const OPEN_DISTANCE_RATIO = 0.4;
+/** 速度甩动阈值（px/ms）：超过即按方向直接吸附，不看距离。 */
+const FLICK_VELOCITY = 0.35;
+/** 判定进入横向手势前需要的最小位移，避免和纵向滚动/点击打架。 */
+const AXIS_LOCK_THRESHOLD = 6;
+
+type Axis = "unknown" | "x" | "y";
+
 export function SwipeActionRow({
   actions = [],
   children,
@@ -43,11 +56,43 @@ export function SwipeActionRow({
 }: SwipeActionRowProps) {
   const rowId = useId();
   const [open, setOpen] = useState<OpenSide>(null);
-  const startXRef = useRef(0);
-  const draggingRef = useRef(false);
+  const reduceMotion = useReducedMotion();
+  const contentRef = useRef<HTMLDivElement>(null);
+
   const trailingWidth = actionsWidth(actions.length);
   const leadingWidth = actionsWidth(leadingActions.length);
   const openWidth = open === "trailing" ? trailingWidth : open === "leading" ? leadingWidth : 0;
+
+  // 手势过程用 ref 直接改 DOM，避免每帧 re-render。
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const baseOffsetRef = useRef(0);
+  const currentOffsetRef = useRef(0);
+  const axisRef = useRef<Axis>("unknown");
+  const draggingRef = useRef(false);
+  const lastXRef = useRef(0);
+  const lastTRef = useRef(0);
+  const velocityRef = useRef(0);
+
+  const restingOffset = useCallback(
+    (side: OpenSide) =>
+      side === "trailing" ? -trailingWidth : side === "leading" ? leadingWidth : 0,
+    [leadingWidth, trailingWidth],
+  );
+
+  /** 把内容平移到指定位移；animate=true 时带缓动收尾，false 时跟手无过渡。 */
+  const applyOffset = useCallback((px: number, animate: boolean) => {
+    const el = contentRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "" : "none";
+    el.style.transform = px === 0 ? "" : `translateX(${px}px)`;
+    currentOffsetRef.current = px;
+  }, []);
+
+  // open 变化（含外部点击关闭）时，带缓动吸附到静止位。
+  useEffect(() => {
+    applyOffset(restingOffset(open), true);
+  }, [applyOffset, open, restingOffset]);
 
   useEffect(() => {
     function handleActivate(event: Event) {
@@ -63,55 +108,90 @@ export function SwipeActionRow({
     window.dispatchEvent(new CustomEvent(swipeRowActivateEvent, { detail: { id: rowId } }));
   }
 
-  function startDrag(clientX: number) {
-    if (actions.length > 0 || leadingActions.length > 0) notifyActive();
+  function clampWithRubber(offset: number): number {
+    const min = actions.length > 0 ? -trailingWidth : 0;
+    const max = leadingActions.length > 0 ? leadingWidth : 0;
+    if (offset < min) return min + (offset - min) * RUBBER_BAND;
+    if (offset > max) return max + (offset - max) * RUBBER_BAND;
+    return offset;
+  }
+
+  function beginDrag(clientX: number, clientY: number) {
     startXRef.current = clientX;
+    startYRef.current = clientY;
+    lastXRef.current = clientX;
+    lastTRef.current = performance.now();
+    velocityRef.current = 0;
+    baseOffsetRef.current = restingOffset(open);
+    axisRef.current = "unknown";
     draggingRef.current = true;
   }
 
-  function updateDrag(clientX: number) {
+  function moveDrag(clientX: number, clientY: number) {
     if (!draggingRef.current) return;
-    const delta = clientX - startXRef.current;
-    // 向左拖：露出尾部动作；已展开头部动作时先收起。
-    if (delta < -28) {
-      if (open === "leading") setOpen(null);
-      else if (actions.length > 0) {
-        notifyActive();
-        setOpen("trailing");
+    const dx = clientX - startXRef.current;
+    const dy = clientY - startYRef.current;
+
+    // 首次显著位移时锁定方向：纵向占优则放弃手势，交回原生滚动。
+    if (axisRef.current === "unknown") {
+      if (Math.abs(dx) < AXIS_LOCK_THRESHOLD && Math.abs(dy) < AXIS_LOCK_THRESHOLD) return;
+      axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (axisRef.current === "x") {
+        // 有可展开动作才吸附友邻关闭。
+        if (actions.length > 0 || leadingActions.length > 0) notifyActive();
+        applyOffset(currentOffsetRef.current, false); // 关闭过渡，进入跟手
       }
     }
-    // 向右拖：露出头部动作；已展开尾部动作时先收起。
-    if (delta > 28) {
-      if (open === "trailing") setOpen(null);
-      else if (leadingActions.length > 0) {
-        notifyActive();
-        setOpen("leading");
-      }
-    }
+    if (axisRef.current !== "x") return;
+
+    // 采样瞬时速度（带方向）。
+    const now = performance.now();
+    const dt = now - lastTRef.current;
+    if (dt > 0) velocityRef.current = (clientX - lastXRef.current) / dt;
+    lastXRef.current = clientX;
+    lastTRef.current = now;
+
+    applyOffset(clampWithRubber(baseOffsetRef.current + dx), false);
   }
 
-  function endDrag() {
+  function settleDrag() {
+    if (!draggingRef.current) return;
     draggingRef.current = false;
-  }
+    if (axisRef.current !== "x") {
+      axisRef.current = "unknown";
+      return;
+    }
+    axisRef.current = "unknown";
 
-  function closeAfter(action: SwipeAction) {
-    action.onClick();
-    setOpen(null);
+    const cur = currentOffsetRef.current;
+    const v = velocityRef.current;
+    let target: OpenSide = null;
+
+    if (cur < 0 && trailingWidth > 0) {
+      const passed = cur <= -trailingWidth * OPEN_DISTANCE_RATIO;
+      const flickOpen = v < -FLICK_VELOCITY;
+      const flickClose = v > FLICK_VELOCITY;
+      target = flickOpen || (passed && !flickClose) ? "trailing" : null;
+    } else if (cur > 0 && leadingWidth > 0) {
+      const passed = cur >= leadingWidth * OPEN_DISTANCE_RATIO;
+      const flickOpen = v > FLICK_VELOCITY;
+      const flickClose = v < -FLICK_VELOCITY;
+      target = flickOpen || (passed && !flickClose) ? "leading" : null;
+    }
+
+    // 吸附到「打开」时给一次轻触感（露出动作，apple-design §13）。
+    if (target && target !== open) haptic("light");
+    // 带缓动吸附到目标；若目标与当前 open 相同，effect 不触发，这里兜底动画。
+    applyOffset(restingOffset(target), true);
+    setOpen(target);
   }
 
   function handlePointerUp(event: PointerEvent<HTMLElement>) {
-    endDrag();
+    settleDrag();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
-
-  const contentTransform =
-    open === "trailing"
-      ? `translateX(-${trailingWidth}px)`
-      : open === "leading"
-        ? `translateX(${leadingWidth}px)`
-        : undefined;
 
   const scrimStyle: CSSProperties =
     open === "leading"
@@ -130,7 +210,10 @@ export function SwipeActionRow({
             aria-label={action.label}
             className={cn("biz-swipe-action", `biz-swipe-action--${action.tone ?? "neutral"}`)}
             key={action.label}
-            onClick={() => closeAfter(action)}
+            onClick={() => {
+              action.onClick();
+              setOpen(null);
+            }}
             tabIndex={open === side ? 0 : -1}
             type="button"
           >
@@ -143,7 +226,10 @@ export function SwipeActionRow({
   }
 
   return (
-    <div
+    <motion.div
+      // 删除等移除时高度收拢 + 淡出，下方行顺势上移（需父级 AnimatePresence 才生效）。
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+      transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
         "biz-swipe-row",
         open && "biz-swipe-row--open",
@@ -155,21 +241,21 @@ export function SwipeActionRow({
       {actions.length > 0 ? renderActions(actions, "trailing", trailingWidth) : null}
       <div
         className="biz-swipe-row__content"
+        ref={contentRef}
         onPointerDown={(event) => {
           // 桌面端（鼠标/触控笔）不进入滑动手势：不劫持指针，click 直接作用于内部按钮打开详情。
           if (desktopClickable && event.pointerType !== "touch") return;
-          startDrag(event.clientX);
+          beginDrag(event.clientX, event.clientY);
           // Capture so move/up keep firing even if the finger leaves the row.
           if (event.currentTarget.hasPointerCapture?.(event.pointerId) === false) {
             event.currentTarget.setPointerCapture(event.pointerId);
           }
         }}
         onPointerMove={(event) => {
-          updateDrag(event.clientX);
+          moveDrag(event.clientX, event.clientY);
         }}
         onPointerUp={handlePointerUp}
-        onPointerCancel={endDrag}
-        style={{ transform: contentTransform }}
+        onPointerCancel={handlePointerUp}
       >
         {children}
       </div>
@@ -178,14 +264,14 @@ export function SwipeActionRow({
           aria-label="收起操作"
           className="biz-swipe-row__scrim"
           onClick={() => setOpen(null)}
-          onPointerDown={(event) => startDrag(event.clientX)}
-          onPointerMove={(event) => updateDrag(event.clientX)}
+          onPointerDown={(event) => beginDrag(event.clientX, event.clientY)}
+          onPointerMove={(event) => moveDrag(event.clientX, event.clientY)}
           onPointerUp={handlePointerUp}
-          onPointerCancel={endDrag}
+          onPointerCancel={handlePointerUp}
           style={{ ...scrimStyle, ...(openWidth ? undefined : { display: "none" }) }}
           type="button"
         />
       ) : null}
-    </div>
+    </motion.div>
   );
 }

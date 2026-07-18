@@ -43,9 +43,6 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
       showToast({ tone: "success", message: "子账户已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   return (

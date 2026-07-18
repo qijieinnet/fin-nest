@@ -82,11 +82,7 @@ export function ImportExportScreen() {
         hideDefaultHeader: true,
         content: <ImportPreviewSheet file={file} initial={result} ledgerId={ledgerId!} />,
       });
-    },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "文件解析失败，请检查格式") });
-    },
-  });
+    },  });
 
   const onExcelFileSelected = (file: File | null) => {
     if (!file || !ledgerId) return;

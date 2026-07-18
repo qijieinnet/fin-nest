@@ -350,9 +350,7 @@ export function BillDetailScreen({
       // 弹层模式下关闭详情回到列表（列表查询已失效会自动刷新）；整页模式回账单页。
       if (embedded) onClose?.();
       else router.replace(routes.bills);
-    },
-    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
-  });
+    },  });
 
   const invalidatePending = async () => {
     if (!ledgerId) return;
@@ -377,8 +375,6 @@ export function BillDetailScreen({
       showToast({ tone: "success", message: "已确认入账" });
       router.replace(routes.billsPending);
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "确认失败，请稍后重试") }),
   });
 
   const deletePendingMutation = useMutation({
@@ -391,8 +387,6 @@ export function BillDetailScreen({
       showToast({ tone: "success", message: "已删除这条待确认" });
       router.replace(routes.billsPending);
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败，请稍后重试") }),
   });
 
   const openPendingEditor = () => {

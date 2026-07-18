@@ -380,9 +380,6 @@ export function SubscriptionEditorSheet({
       showToast({ tone: "success", message: isEditing ? "订阅已更新" : "订阅已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   const openCategoryManager = () => {

@@ -48,6 +48,8 @@ export function CategoryEditorSheet({
   };
 
   const save = useMutation<Category | Subcategory>({
+    // 错误已在表单内联展示，跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () => {
       const body = { name: name.trim(), icon, sortOrder };
       if (isSubcategory) {
@@ -84,6 +86,8 @@ export function CategoryEditorSheet({
   });
 
   const remove = useMutation({
+    // 错误已在表单内联展示，跳过全局 toast 避免双重提示。
+    meta: { suppressErrorToast: true },
     mutationFn: () => {
       if (isSubcategory) {
         if (!parentCategory || !subcategory) throw new Error("缺少二级分类");

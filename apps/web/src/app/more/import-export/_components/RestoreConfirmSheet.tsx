@@ -34,9 +34,6 @@ export function RestoreConfirmSheet({ file, ledgerId, ledgerName }: RestoreConfi
       showToast({ tone: "success", message: "账本已从备份恢复" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "恢复失败，请稍后重试") });
-    },
   });
 
   const canRestore = confirmName.trim() === ledgerName && !restore.isPending;

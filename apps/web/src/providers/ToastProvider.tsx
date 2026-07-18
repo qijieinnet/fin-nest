@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Toast, type ToastItem, type ToastTone } from "@/components/ui";
 import { createClientId } from "@/lib/id/client-id";
+import { registerToastHandler } from "@/lib/toast/toast-bus";
 
 type ToastInput = {
   message: string;
@@ -53,6 +54,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       timers.clear();
     };
   }, []);
+
+  // 把 showToast 暴露给非组件树内的全局错误处理（QueryClient onError）。
+  useEffect(() => registerToastHandler(showToast), [showToast]);
 
   const value = useMemo(() => ({ dismiss, showToast }), [dismiss, showToast]);
 

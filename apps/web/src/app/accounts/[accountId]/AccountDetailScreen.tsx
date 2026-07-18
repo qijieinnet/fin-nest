@@ -341,7 +341,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-12">
         <header
-          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-between bg-[var(--color-bg-app)] px-4 pt-[calc(12px+env(safe-area-inset-top))] pb-2`}
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-between px-4 pt-[calc(12px+env(safe-area-inset-top))] pb-2`}
         >
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}

@@ -104,9 +104,6 @@ export function SubscriptionDetailSheet({
       queryClient.invalidateQueries({ queryKey: queryKeys.subscription(ledgerId, subscriptionId) }),
     ]);
 
-  const onMutationError = (error: unknown) =>
-    showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
-
   const confirmRenewal = useMutation({
     mutationFn: () =>
       apiRequest<Subscription>(
@@ -117,9 +114,7 @@ export function SubscriptionDetailSheet({
       await invalidateSubscription();
       showToast({ tone: "success", message: "已确认续费，续费日已顺延" });
       pop();
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   // 未传入外部回调时（如从续费确认列表打开），详情自行处理退订/恢复/删除。
   const terminateInternal = useMutation({
@@ -130,9 +125,7 @@ export function SubscriptionDetailSheet({
     onSuccess: async () => {
       await invalidateSubscription();
       showToast({ tone: "success", message: "已退订" });
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   const resumeInternal = useMutation({
     mutationFn: () =>
@@ -142,9 +135,7 @@ export function SubscriptionDetailSheet({
     onSuccess: async () => {
       await invalidateSubscription();
       showToast({ tone: "success", message: "已恢复订阅" });
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   const removeInternal = useMutation({
     mutationFn: () =>
@@ -156,9 +147,7 @@ export function SubscriptionDetailSheet({
       setConfirmingDelete(false);
       showToast({ tone: "success", message: "订阅已删除" });
       pop();
-    },
-    onError: onMutationError,
-  });
+    },  });
 
   if (!subscription) {
     return <LoadingState rows={5} title="加载订阅" />;

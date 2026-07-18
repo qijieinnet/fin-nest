@@ -43,8 +43,6 @@ export function AdminScreen() {
       queryClient.setQueryData(queryKeys.registrationSetting, data);
       showToast({ tone: "success", message: data.registrationEnabled ? "已开放注册" : "已关闭注册" });
     },
-    onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") }),
   });
 
   const goBack = () => {

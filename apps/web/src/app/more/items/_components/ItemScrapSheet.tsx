@@ -93,9 +93,6 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
       showToast({ tone: "success", message: "已标记报废 / 出售" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败，请稍后重试") });
-    },
   });
 
   return (

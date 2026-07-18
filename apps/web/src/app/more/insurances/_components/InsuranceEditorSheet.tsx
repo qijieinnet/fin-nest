@@ -446,9 +446,6 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       showToast({ tone: "success", message: isEditing ? "保单已更新" : "保单已添加" });
       pop();
     },
-    onError: (error) => {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败，请稍后重试") });
-    },
   });
 
   function addFiles(files: File[]) {

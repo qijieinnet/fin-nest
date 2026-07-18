@@ -11,6 +11,7 @@ import {
   Trash2,
   WalletCards,
 } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -133,7 +134,7 @@ export function BillsScreenMobile() {
     <MobileAppShell>
       <main className="min-h-dvh px-4 pb-[calc(var(--space-tab-bar-height)+60px+env(safe-area-inset-bottom))]">
         <header
-          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end gap-2 bg-[var(--color-bg-app)] px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
+          className={`app-sticky-header${scrolled ? " app-sticky-header--scrolled" : ""} sticky top-0 z-20 -mx-4 flex items-center justify-end gap-2 px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-3`}
         >
           {showBack ? (
             <IconButton
@@ -323,7 +324,8 @@ export function BillsScreenMobile() {
                   key={group.date}
                   totalMicros={group.expenseMicros > 0n ? group.expenseMicros : undefined}
                 >
-                  {group.items.map((transaction) => (
+                  <AnimatePresence initial={false}>
+                    {group.items.map((transaction) => (
                     <SwipeActionRow
                       actions={[
                         {
@@ -348,7 +350,8 @@ export function BillsScreenMobile() {
                         {...rowProps(transaction, model.accounts, model.categoryLookup)}
                       />
                     </SwipeActionRow>
-                  ))}
+                    ))}
+                  </AnimatePresence>
                 </TransactionGroup>
               ))}
             </div>
