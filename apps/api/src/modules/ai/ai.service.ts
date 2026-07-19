@@ -517,8 +517,23 @@ export class AiService {
     if (!preMessage) throw new AppError("AI_MESSAGE_NOT_FOUND", "消息不存在", 404);
     await this.assertConversation(ledgerId, preMessage.conversationId, userId);
 
+    // 手动作废：仅把 proposed 草稿置为 superseded，不入账、无需交易，与 AI 的 cancel_draft 同路。
+    if (input.status === "superseded") {
+      const superseded = await this.supersedeDraftCard(ledgerId, messageId, input.cardIndex);
+      if (!superseded) {
+        throw new AppError("AI_CARD_NOT_PROPOSED", "该草稿已确认或已作废，无法作废", 409);
+      }
+      const message = await this.prisma.client.aiMessage.findFirstOrThrow({
+        where: { id: messageId, ledgerId, role: "assistant" },
+      });
+      return this.packMessage(message);
+    }
+
+    // status=confirmed 时 DTO 保证 transactionId 存在，这里收窄类型。
+    const transactionId = input.transactionId;
+    if (!transactionId) throw new AppError("AI_CARD_TRANSACTION_NOT_FOUND", "交易不存在", 400);
     const transaction = await this.prisma.client.transaction.findFirst({
-      where: { id: input.transactionId, ledgerId, deletedAt: null },
+      where: { id: transactionId, ledgerId, deletedAt: null },
       select: { id: true },
     });
     if (!transaction) throw new AppError("AI_CARD_TRANSACTION_NOT_FOUND", "交易不存在", 400);
@@ -529,7 +544,7 @@ export class AiService {
       messageId,
       input.cardIndex,
       userId,
-      input.transactionId,
+      transactionId,
     );
 
     const updated = await this.prisma.client.$transaction(async (tx) => {
@@ -552,7 +567,7 @@ export class AiService {
       cards[input.cardIndex] = {
         ...card,
         status: "confirmed",
-        transactionId: input.transactionId,
+        transactionId,
       };
       return tx.aiMessage.update({
         where: { id: message.id },

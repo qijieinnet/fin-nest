@@ -7,7 +7,7 @@ import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
 import { useAutoPending } from "@/lib/data/records";
-import { resolveNavMenuLayout } from "@/lib/nav/navMenus";
+import { resolveNavMenuLayout, SECONDARY_PREFETCH_ROUTES } from "@/lib/nav/navMenus";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
@@ -64,8 +64,12 @@ export function DesktopSidebar() {
     { label: "导入导出", route: routes.importExport },
   ];
 
-  // 空闲预取一级导航 + AI 的路由 chunk；「更多」子项数量多，改为 hover 时按需预取。
-  useIdleRoutePrefetch([...primary.map((item) => item.route), routes.ai]);
+  // 空闲预取一级导航 + AI + 记一笔/保险/物品/订阅的路由 chunk；其余「更多」子项数量多，仍走 hover 按需预取。
+  useIdleRoutePrefetch([
+    ...primary.map((item) => item.route),
+    routes.ai,
+    ...SECONDARY_PREFETCH_ROUTES,
+  ]);
 
   // 点击后立即把高亮切到目标项（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
   // 避免目标页 chunk 加载期间侧边栏毫无响应、被误认为卡住。

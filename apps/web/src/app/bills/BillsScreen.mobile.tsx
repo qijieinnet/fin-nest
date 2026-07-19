@@ -45,6 +45,7 @@ import {
 import { useInsurances, useSubscriptions } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
+import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useDecimalPlaces, useLedger, usePreferences, useSheetStack } from "@/providers";
@@ -129,6 +130,11 @@ export function BillsScreenMobile() {
   const model = useBillsModel();
   const { totals, budget } = model;
   const balanceMicros = model.balanceMicros;
+
+  // 账单详情是动态路由（/bills/[id]），代码 chunk 全 id 共用：列表就绪后借第一条空闲预热一次，
+  // 之后点任意一行都不必现场下载详情页 chunk。空数组时 hook 为 no-op（详见 hook 注释）。
+  const firstBillId = model.transactions[0]?.id;
+  useIdleRoutePrefetch(firstBillId ? [routes.bill(firstBillId)] : []);
 
   return (
     <MobileAppShell>

@@ -40,6 +40,19 @@ export const NAV_MENUS: NavMenuDef[] = [
 
 export const NAV_MENU_KEYS: NavMenuKey[] = NAV_MENUS.map((menu) => menu.key);
 
+/**
+ * 高频但不常驻一级导航的路由，空闲时一并预取其代码 chunk（见 useIdleRoutePrefetch）：
+ * - 记一笔：账单页最常点的动作，移动端是独立路由；
+ * - 保险/物品/订阅：可提升为一级导航的业务页，默认收在「更多」里，用户点进前先备好。
+ * 通用「更多」子项（分类/成员/设置等）仍走 hover 按需预取，不进这份常驻名单。
+ */
+export const SECONDARY_PREFETCH_ROUTES: readonly string[] = [
+  routes.billNew,
+  routes.insurances,
+  routes.items,
+  routes.subscriptions,
+];
+
 const NAV_MENU_BY_KEY = new Map(NAV_MENUS.map((menu) => [menu.key, menu]));
 
 export function navMenuByKey(key: NavMenuKey): NavMenuDef | undefined {

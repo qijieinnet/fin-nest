@@ -9,6 +9,7 @@ import {
   type AiMessage,
   type TransactionDetail,
 } from "@/lib/api";
+import { patchAiConversationMessage } from "@/lib/data/ai";
 import {
   AI_DRAFT_SEED_KEY,
   aiCardIdempotencyKey,
@@ -54,20 +55,26 @@ export function NewBillScreen() {
       return;
     }
     try {
-      await apiRequest<AiMessage>(aiMessageCardStatePath(ledgerId, handoff.messageId), {
-        method: "POST",
-        body: {
-          cardIndex: handoff.cardIndex,
-          status: "confirmed",
-          transactionId: transaction.id,
+      const updatedMessage = await apiRequest<AiMessage>(
+        aiMessageCardStatePath(ledgerId, handoff.messageId),
+        {
+          method: "POST",
+          body: {
+            cardIndex: handoff.cardIndex,
+            status: "confirmed",
+            transactionId: transaction.id,
+          },
         },
-      });
+      );
+      // 直接把回写后的消息写进会话缓存：返回聊天页（会话经缓存恢复）时卡片即显示「已记账」，
+      // 不依赖后台 refetch（会被 AiScreen 的「同会话不重载」守卫拦掉）。
+      patchAiConversationMessage(queryClient, ledgerId, handoff.conversationId, updatedMessage);
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConversation(ledgerId, handoff.conversationId),
       });
     } catch {
       // 交易和直接确认共用同一个幂等键，即使状态回写暂时失败也不会重复入账。
-      showToast({ tone: "error", message: "交易已保存，但 AI 卡片状态同步失败" });
+      // showToast({ tone: "error", message: "交易已保存，但 AI 卡片状态同步失败" });
     } finally {
       router.back();
     }

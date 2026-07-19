@@ -84,17 +84,23 @@ function DraftRow({ label, value }: { label: string; value?: string }) {
 export function TransactionDraftCard({
   card,
   confirming,
+  voiding = false,
   disabled = false,
   onConfirm,
   onEdit,
+  onVoid,
 }: {
   card: Extract<AiCard, { kind: "transaction_draft" }>;
   confirming: boolean;
+  /** 正在作废该草稿，按钮 loading 态并防连点。 */
+  voiding?: boolean;
   /** 流式生成中消息尚未持久化（无 messageId），按钮暂不可用。 */
   disabled?: boolean;
   onConfirm: () => void;
   /** 带草稿跳转记一笔表单（预填后手动补充/修改再保存）。 */
   onEdit?: () => void;
+  /** 手动作废草稿（不入账）。 */
+  onVoid?: () => void;
 }) {
   const draft: AiDraftFields = card.draft;
   const currency = useCardCurrency(draft.currency);
@@ -116,9 +122,7 @@ export function TransactionDraftCard({
 
   return (
     <div
-      className={`rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4${
-        superseded ? " opacity-60" : ""
-      }`}
+      className={`ai-card${superseded ? " opacity-60" : ""}`}
     >
       <div className="flex items-center justify-between gap-3">
         <span
@@ -159,27 +163,56 @@ export function TransactionDraftCard({
             <p className="text-xs text-[var(--color-text-muted)]">
               {card.confirmationBlockedReason}
             </p>
-            {onEdit ? (
-              <Button block disabled={disabled || confirming} onClick={onEdit} variant="secondary">
-                去编辑
-              </Button>
-            ) : null}
+            <div className="flex gap-2">
+              {onVoid ? (
+                <Button
+                  className="flex-1"
+                  disabled={disabled || confirming || voiding}
+                  loading={voiding}
+                  onClick={onVoid}
+                  variant="secondary"
+                >
+                  作废
+                </Button>
+              ) : null}
+              {onEdit ? (
+                <Button
+                  className="flex-1"
+                  disabled={disabled || confirming || voiding}
+                  onClick={onEdit}
+                  variant="secondary"
+                >
+                  编辑
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="flex gap-2">
+            {onVoid ? (
+              <Button
+                className="flex-1"
+                disabled={disabled || confirming || voiding}
+                loading={voiding}
+                onClick={onVoid}
+                variant="secondary"
+              >
+                作废
+              </Button>
+            ) : null}
             {onEdit ? (
               <Button
                 className="flex-1"
-                disabled={disabled || confirming}
+                disabled={disabled || confirming || voiding}
                 onClick={onEdit}
                 variant="secondary"
               >
-                去编辑
+                编辑
               </Button>
             ) : null}
             <Button
               className="flex-[2]"
-              disabled={disabled}
+              disabled={disabled || voiding}
               loading={confirming}
               onClick={onConfirm}
             >
@@ -196,7 +229,7 @@ export function TransactionDraftCard({
 export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "transactions" }> }) {
   const currency = useCardCurrency(card.currency);
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div className="ai-card">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
         <p className="shrink-0 text-xs text-[var(--color-text-muted)]">共 {card.count} 笔</p>
@@ -242,7 +275,7 @@ export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "tran
 export function StatsMonthCard({ card }: { card: Extract<AiCard, { kind: "stats_month" }> }) {
   const currency = useCardCurrency(card.currency);
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div className="ai-card">
       <p className="font-bold text-[var(--color-text-primary)]">{card.month} 月度统计</p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
@@ -519,7 +552,7 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
   const categories = type === "expense" ? card.expenseCategories : card.incomeCategories;
   const totalMicros = type === "expense" ? card.expenseMicros : card.incomeMicros;
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div className="ai-card">
       <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
       <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
         {card.dateFrom} 至 {card.dateTo}
@@ -614,7 +647,7 @@ export function AccountBalancesCard({
 }) {
   const currency = useCardCurrency(card.currency);
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div className="ai-card">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
         <div className="text-right">
@@ -684,14 +717,14 @@ export function BudgetProgressCard({
   const currency = useCardCurrency(card.currency);
   if (!card.enabled) {
     return (
-      <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+      <div className="ai-card">
         <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算</p>
         <p className="mt-2 text-sm text-[var(--color-text-muted)]">该月未启用预算</p>
       </div>
     );
   }
   return (
-    <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-4">
+    <div className="ai-card">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算进度</p>
         <p className="shrink-0 text-xs text-[var(--color-text-muted)]">

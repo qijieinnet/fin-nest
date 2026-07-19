@@ -20,9 +20,16 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+// 极短时间内内容完全相同的 toast 视为重复来源（如嵌套 mutation 的全局 onError 双触发、
+// 本地 onError 与全局兜底并发），只显示一条。窗口取 800ms，足够覆盖同一次交互内的并发触发，
+// 又不会误合并用户先后两次真实操作。
+const TOAST_DEDUPE_WINDOW_MS = 800;
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const timersRef = useRef<Map<string, number>>(new Map());
+  // key(tone|title|message) -> { id, at }，用于短窗口内去重。
+  const recentRef = useRef<Map<string, { id: string; at: number }>>(new Map());
 
   const dismiss = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -35,11 +42,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback(
     ({ message, title, tone = "info" }: ToastInput) => {
+      const now = Date.now();
+      const key = `${tone}|${title ?? ""}|${message}`;
+      const recent = recentRef.current;
+      // 顺带清理过期项，避免 map 无限增长。
+      for (const [k, entry] of recent) {
+        if (now - entry.at > TOAST_DEDUPE_WINDOW_MS) recent.delete(k);
+      }
+      const existing = recent.get(key);
+      if (existing) return existing.id;
+
       const id = createClientId("toast");
       const toast: ToastItem = { id, message, title, tone };
       setToasts((current) => [...current, toast].slice(-3));
       const timer = window.setTimeout(() => dismiss(id), 3200);
       timersRef.current.set(id, timer);
+      recent.set(key, { id, at: now });
       return id;
     },
     [dismiss],

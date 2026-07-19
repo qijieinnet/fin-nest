@@ -5,7 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { useAiStatus } from "@/lib/data/ai";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
-import { MOBILE_PRIMARY_NAV_LIMIT, resolveNavMenuLayout } from "@/lib/nav/navMenus";
+import {
+  MOBILE_PRIMARY_NAV_LIMIT,
+  resolveNavMenuLayout,
+  SECONDARY_PREFETCH_ROUTES,
+} from "@/lib/nav/navMenus";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { routes } from "@/lib/route/routes";
 import { useLedger, usePreferences } from "@/providers";
@@ -49,8 +53,8 @@ export function MobileTabBar() {
 
   const tabs = [...primary, MORE_TAB];
 
-  // 空闲预取全部可点导航路由，点击时目标页 chunk 已就绪（详见 hook 注释）。
-  useIdleRoutePrefetch([...tabs.map((tab) => tab.value), routes.ai]);
+  // 空闲预取全部可点导航路由 + AI + 记一笔/保险/物品/订阅，点击时目标页 chunk 已就绪（详见 hook 注释）。
+  useIdleRoutePrefetch([...tabs.map((tab) => tab.value), routes.ai, ...SECONDARY_PREFETCH_ROUTES]);
 
   // 点击后立即高亮目标 tab（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
   // 避免目标页 chunk 加载期间界面毫无响应、被误认为卡住。

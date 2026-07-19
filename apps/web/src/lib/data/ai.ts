@@ -1,6 +1,12 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   aiChatPath,
   aiChatStreamPath,
@@ -163,9 +169,33 @@ export function useDeleteAiConversation(ledgerId: string | null) {
   });
 }
 
-/** 草稿卡确认入账后回写卡片状态（消息级更新，聊天页本地同步即可，不强制刷新会话）。 */
+/**
+ * 把一条更新后的消息写回会话详情缓存：草稿卡确认/作废后，即使离开 AI 页再返回（会话详情走
+ * 缓存重放），恢复出的卡片也能显示为已记账/已作废，而不是过期的待确认状态。
+ */
+export function patchAiConversationMessage(
+  queryClient: QueryClient,
+  ledgerId: string,
+  conversationId: string,
+  message: AiMessage,
+): void {
+  queryClient.setQueryData<AiConversationDetail>(
+    queryKeys.aiConversation(ledgerId, conversationId),
+    (old) =>
+      old
+        ? { ...old, messages: old.messages.map((m) => (m.id === message.id ? message : m)) }
+        : old,
+  );
+}
+
+/**
+ * 草稿卡确认入账后回写卡片状态（消息级更新，聊天页本地同步即可，不强制刷新会话）。
+ * 仅作为外层编排 mutation（confirmDraft）的内层调用，错误由外层统一提示，
+ * 故 suppress 全局错误 toast，避免内外两层各弹一次（双重提示）。
+ */
 export function useUpdateAiCardState(ledgerId: string | null) {
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (input: { messageId: string; cardIndex: number; transactionId: string }) =>
       apiRequest<AiMessage>(aiMessageCardStatePath(ledgerId!, input.messageId), {
         method: "POST",
@@ -173,6 +203,24 @@ export function useUpdateAiCardState(ledgerId: string | null) {
           cardIndex: input.cardIndex,
           status: "confirmed",
           transactionId: input.transactionId,
+        },
+      }),
+  });
+}
+
+/**
+ * 手动作废草稿卡：置为 superseded，不入账（与 AI 的 cancel_draft 同效）。
+ * 同为外层 voidDraft 的内层调用，suppress 全局 toast，错误由外层统一提示。
+ */
+export function useVoidAiCard(ledgerId: string | null) {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (input: { messageId: string; cardIndex: number }) =>
+      apiRequest<AiMessage>(aiMessageCardStatePath(ledgerId!, input.messageId), {
+        method: "POST",
+        body: {
+          cardIndex: input.cardIndex,
+          status: "superseded",
         },
       }),
   });

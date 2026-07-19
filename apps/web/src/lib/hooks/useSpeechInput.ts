@@ -61,6 +61,13 @@ const PHRASE_BOOST = 10;
 const MAX_PHRASES = 100;
 
 /**
+ * 启动看门狗时长：recognition.start() 后多久没有任何识别结果就判定会话失效。
+ * iOS PWA 从后台切回后 start() 常会"成功"但底层 audio session 已死，
+ * 之后不再触发 onresult/onerror/onend，listening 会永久卡在 true。
+ */
+const STARTUP_TIMEOUT_MS = 5000;
+
+/**
  * 把热词写入 recognition.phrases（Web Speech API contextual biasing）。
  * 浏览器不支持该接口或写入失败时静默放弃，不影响识别本身。
  */
@@ -121,6 +128,12 @@ export function useSpeechInput({
   const retryWithoutPhrasesRef = useRef(false);
   // 热词只在本地（on-device）识别下生效：available() 确认语言包就绪后才置 true。
   const localPhrasesReadyRef = useRef(false);
+  // 启动看门狗计时器与"是否已收到首个结果"标记（见 STARTUP_TIMEOUT_MS）。
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gotResultRef = useRef(false);
+  // 看门狗触发后先静默重启一次（可能恢复失效会话），仍无果才提示；onend 里凭此重启。
+  const startupRetryRef = useRef(false);
+  const restartOnEndRef = useRef(false);
 
   const phrasesRef = useRef(phrases);
   phrasesRef.current = phrases;
@@ -128,6 +141,31 @@ export function useSpeechInput({
   onTranscriptRef.current = onTranscript;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogRef.current !== null) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }, []);
+
+  // 彻底拆除当前识别会话并同步复位状态：解绑回调后再 abort，
+  // 避免 onend 触发自动重启逻辑，也不依赖 iOS 可能不发的 onend 来复位 listening。
+  const teardown = useCallback(() => {
+    clearWatchdog();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    retryWithoutPhrasesRef.current = false;
+    restartOnEndRef.current = false;
+    startupRetryRef.current = false;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      recognition.abort();
+    }
+    setListening(false);
+  }, [clearWatchdog]);
 
   useEffect(() => {
     setSupported(getSpeechRecognitionCtor() !== null);
@@ -163,100 +201,146 @@ export function useSpeechInput({
 
   useEffect(
     () => () => {
+      if (watchdogRef.current !== null) clearTimeout(watchdogRef.current);
       recognitionRef.current?.abort();
       recognitionRef.current = null;
     },
     [],
   );
 
+  // iOS PWA 切到后台会挂起语音识别的 audio session，切回来后旧会话已失效却不发 onend，
+  // 再次录音就会卡在假"正在录音"。进入后台时整体拆除，回前台由用户手势重新开始。
+  useEffect(() => {
+    const handleHidden = () => {
+      if (document.visibilityState === "hidden") teardown();
+    };
+    document.addEventListener("visibilitychange", handleHidden);
+    window.addEventListener("pagehide", teardown);
+    return () => {
+      document.removeEventListener("visibilitychange", handleHidden);
+      window.removeEventListener("pagehide", teardown);
+    };
+  }, [teardown]);
+
   const stop = useCallback(() => {
+    // 用户主动停止：先撤下看门狗，避免 stop 后 onend 迟到期间看门狗误判并重启录音。
+    clearWatchdog();
     // stop 而非 abort：让浏览器把最后一段临时结果定稿后再触发 onend。
     recognitionRef.current?.stop();
-  }, []);
+  }, [clearWatchdog]);
 
-  const cancel = useCallback(() => {
-    const recognition = recognitionRef.current;
-    if (!recognition) return;
-    // 发送等已消费当前文本的场景不再接收最终定稿，否则迟到的 onresult 会把已清空的输入框写回。
-    recognition.onresult = null;
-    retryWithoutPhrasesRef.current = false;
-    recognition.abort();
-    setListening(false);
-  }, []);
+  // 发送等已消费当前文本的场景：整体拆除，丢弃迟到定稿，避免覆盖已清空的输入框。
+  const cancel = teardown;
 
-  const start = useCallback(() => {
-    if (recognitionRef.current) return;
-    const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return;
+  const startInternal = useCallback(
+    (isRestart: boolean) => {
+      if (recognitionRef.current) return;
+      const Ctor = getSpeechRecognitionCtor();
+      if (!Ctor) return;
+      // 全新一次录音（非内部自动重启）：复位看门狗重试计数。
+      if (!isRestart) startupRetryRef.current = false;
 
-    const recognition = new Ctor();
-    recognition.lang = lang;
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    const useLocalPhrases =
-      !phrasesUnsupportedRef.current &&
-      localPhrasesReadyRef.current &&
-      (phrasesRef.current?.length ?? 0) > 0;
-    if (useLocalPhrases) {
-      recognition.processLocally = true;
-      applyPhrases(recognition, phrasesRef.current!);
-    }
-    finalTranscriptRef.current = "";
-
-    recognition.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const text = result?.[0]?.transcript ?? "";
-        if (result?.isFinal) finalTranscriptRef.current += text;
-        else interim += text;
+      const recognition = new Ctor();
+      recognition.lang = lang;
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      const useLocalPhrases =
+        !phrasesUnsupportedRef.current &&
+        localPhrasesReadyRef.current &&
+        (phrasesRef.current?.length ?? 0) > 0;
+      if (useLocalPhrases) {
+        recognition.processLocally = true;
+        applyPhrases(recognition, phrasesRef.current!);
       }
-      onTranscriptRef.current(finalTranscriptRef.current + interim);
-    };
+      finalTranscriptRef.current = "";
+      gotResultRef.current = false;
 
-    recognition.onerror = (event) => {
-      // 静音结束（no-speech）与主动中止（aborted）不算错误，不打扰用户。
-      const code = event.error;
-      if (code === "no-speech" || code === "aborted") return;
-      if (code === "phrases-not-supported") {
-        phrasesUnsupportedRef.current = true;
-        retryWithoutPhrasesRef.current = true;
-        return;
-      }
-      // 本地识别实际不可用（语言包状态与 available() 结果不符等）：降级云端重启。
-      if (code === "language-not-supported" && useLocalPhrases) {
-        localPhrasesReadyRef.current = false;
-        retryWithoutPhrasesRef.current = true;
-        return;
-      }
-      onErrorRef.current?.(
-        code === "not-allowed" || code === "service-not-allowed"
-          ? "麦克风权限被拒绝，请在浏览器设置中允许使用麦克风"
-          : "语音识别失败，请重试或改用键盘输入",
-      );
-    };
+      recognition.onresult = (event) => {
+        // 收到首个结果即证明会话有效，撤下启动看门狗。
+        gotResultRef.current = true;
+        clearWatchdog();
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const text = result?.[0]?.transcript ?? "";
+          if (result?.isFinal) finalTranscriptRef.current += text;
+          else interim += text;
+        }
+        onTranscriptRef.current(finalTranscriptRef.current + interim);
+      };
 
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      if (retryWithoutPhrasesRef.current) {
-        // 热词导致识别中止：立即无热词重启（unsupported 已置位，不会再传），保持录音状态。
-        retryWithoutPhrasesRef.current = false;
-        start();
-        return;
-      }
-      setListening(false);
-    };
+      recognition.onerror = (event) => {
+        // 静音结束（no-speech）与主动中止（aborted）不算错误，不打扰用户。
+        const code = event.error;
+        if (code === "no-speech" || code === "aborted") return;
+        if (code === "phrases-not-supported") {
+          phrasesUnsupportedRef.current = true;
+          retryWithoutPhrasesRef.current = true;
+          return;
+        }
+        // 本地识别实际不可用（语言包状态与 available() 结果不符等）：降级云端重启。
+        if (code === "language-not-supported" && useLocalPhrases) {
+          localPhrasesReadyRef.current = false;
+          retryWithoutPhrasesRef.current = true;
+          return;
+        }
+        onErrorRef.current?.(
+          code === "not-allowed" || code === "service-not-allowed"
+            ? "麦克风权限被拒绝，请在浏览器设置中允许使用麦克风"
+            : "语音识别失败，请重试或改用键盘输入",
+        );
+      };
 
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setListening(true);
-    } catch {
-      recognitionRef.current = null;
-      setListening(false);
-      onErrorRef.current?.("语音识别启动失败，请重试");
-    }
-  }, [lang]);
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        clearWatchdog();
+        if (retryWithoutPhrasesRef.current) {
+          // 热词导致识别中止：立即无热词重启（unsupported 已置位，不会再传），保持录音状态。
+          retryWithoutPhrasesRef.current = false;
+          startInternal(true);
+          return;
+        }
+        if (restartOnEndRef.current) {
+          // 看门狗判定会话失效后的一次静默重启，尝试恢复失效的 audio session。
+          restartOnEndRef.current = false;
+          startInternal(true);
+          return;
+        }
+        setListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+        setListening(true);
+        clearWatchdog();
+        watchdogRef.current = setTimeout(() => {
+          watchdogRef.current = null;
+          // 已出结果或会话已结束：一切正常，无需介入。
+          if (gotResultRef.current || !recognitionRef.current) return;
+          if (!startupRetryRef.current) {
+            // 首次超时：静默中止并在 onend 里重启一次（restartOnEnd），保持录音状态。
+            startupRetryRef.current = true;
+            restartOnEndRef.current = true;
+            recognitionRef.current.abort();
+          } else {
+            // 重启后仍无结果：判定确实起不来，提示用户重试。
+            startupRetryRef.current = false;
+            onErrorRef.current?.("录音未能启动，请重试后再说话");
+            recognitionRef.current.abort();
+          }
+        }, STARTUP_TIMEOUT_MS);
+      } catch {
+        recognitionRef.current = null;
+        clearWatchdog();
+        setListening(false);
+        onErrorRef.current?.("语音识别启动失败，请重试");
+      }
+    },
+    [lang, clearWatchdog],
+  );
+
+  const start = useCallback(() => startInternal(false), [startInternal]);
 
   return { supported, listening, start, stop, cancel };
 }

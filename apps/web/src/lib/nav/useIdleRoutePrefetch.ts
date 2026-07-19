@@ -11,8 +11,9 @@ import { useEffect } from "react";
  */
 export function useIdleRoutePrefetch(routesToPrefetch: readonly string[]): void {
   const router = useRouter();
-  // 调用方每次渲染都会新建数组，用内容签名做依赖，避免重复调度。
-  const signature = routesToPrefetch.join("|");
+  // 调用方每次渲染都会新建数组，用内容签名做依赖，避免重复调度；去重后再拼签名，
+  // 兼容多份名单（一级导航 + SECONDARY_PREFETCH_ROUTES）可能重叠的情形。
+  const signature = [...new Set(routesToPrefetch)].join("|");
 
   useEffect(() => {
     if (!signature) return;

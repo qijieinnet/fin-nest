@@ -302,6 +302,332 @@ select:focus-visible {
   opacity: 1;
 }
 
+/* AI 对话输入条（apple-design 实践）：
+   §12 材质 — 悬浮的半透明毛玻璃胶囊，消息从其下方模糊透过；顶缘用渐隐软化，
+   消息滚到条下方时融入而非被硬线切断。
+   §1 响应 — 圆钮按压即时缩放反馈；发送钮出现时以缩放+淡入"物质化"登场。
+   §16 简洁/克制 — 单一主操作（发送/停止），录音为次级，去装饰、间距成体系。 */
+.ai-composer {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 calc(10px + env(safe-area-inset-bottom));
+  /* 顶缘渐隐：透明 → 页面底色，滚动内容软化融入悬浮条（§12 scroll edge）。 */
+  background: linear-gradient(180deg, transparent, var(--color-bg-app) 18px);
+}
+
+.ai-composer__field {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 26px;
+  background: var(--color-bg-surface);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  /* 顶缘一道亮线 = 光打在材质上；下方一层柔和投影托起悬浮感（§12）。 */
+  box-shadow:
+    0 6px 22px -16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transition:
+    border-color var(--motion-duration-normal) var(--ease-out-soft),
+    box-shadow var(--motion-duration-normal) var(--ease-out-soft);
+}
+
+/* 聚焦时不加任何边框/描边（内层 textarea 与外层胶囊都不要），仅微微加深投影作反馈。 */
+.ai-composer__field:focus-within {
+  box-shadow:
+    0 8px 26px -16px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.ai-composer__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  max-height: 140px;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  resize: none;
+  /* 16px 避免 iOS 聚焦缩放；轻负字距贴合 Apple 正文观感（§15）。 */
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  outline: none;
+  /* 覆盖全局 textarea:focus-visible 的 focus-ring，避免输入框内出现一圈内边框。 */
+  box-shadow: none;
+}
+
+.ai-composer__input:focus,
+.ai-composer__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ai-composer__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ai-composer__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform var(--motion-duration-press) var(--ease-out),
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    color var(--motion-duration-fast) var(--ease-out-soft),
+    opacity var(--motion-duration-fast) var(--ease-out-soft);
+}
+
+/* §1 响应：反馈落在按压上，且即时。 */
+.ai-composer__btn:active {
+  transform: scale(0.9);
+}
+
+.ai-composer__btn--mic {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+
+.ai-composer__btn--mic.is-listening {
+  background: color-mix(in srgb, var(--color-accent-expense) 12%, transparent);
+  color: var(--color-accent-expense);
+}
+
+.ai-composer__btn--send {
+  background: var(--color-tint);
+  color: var(--color-tint-contrast);
+  box-shadow: 0 4px 12px -6px color-mix(in srgb, var(--color-tint) 80%, transparent);
+}
+
+.ai-composer__btn--send:disabled {
+  background: var(--color-control-fill-muted);
+  color: var(--color-disabled-text);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.ai-composer__btn--send:disabled:active {
+  transform: none;
+}
+
+/* 发送/停止钮出现即"物质化"：从小而透到位（§1/§8，非手势驱动，用关键帧安全）。 */
+.ai-composer__btn--enter {
+  animation: ai-composer-pop var(--motion-duration-normal) var(--ease-out) backwards;
+}
+
+@keyframes ai-composer-pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-composer__btn {
+    transition: background var(--motion-duration-fast) var(--ease-out-soft);
+  }
+  .ai-composer__btn:active {
+    transform: none;
+  }
+  .ai-composer__btn--enter {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .ai-composer__field {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(255, 255, 255, 0.96);
+  }
+}
+
+/* ── AI 对话主体样式（apple-design 实践）─────────────────────────────
+   §12 材质：AI 侧气泡与卡片为半透明材质，用户侧品牌色实心；顶缘亮线 + 柔投影托起。
+   §15 排版：正文 15px、行高 1.5、轻负字距；层级靠字重而非纯尺寸。
+   §16 简洁 / §一致：气泡与卡片共用同一套圆角/边框/投影语言。 */
+
+/* 消息列表：气泡纵向流，成组间距成体系。 */
+.ai-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.ai-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 气泡基类 */
+.ai-msg {
+  max-width: 85%;
+  padding: 9px 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  border-radius: 20px;
+  overflow-wrap: anywhere;
+  animation: ai-msg-in var(--motion-duration-normal) var(--ease-out) backwards;
+}
+
+.ai-msg--user {
+  align-self: flex-end;
+  border-bottom-right-radius: 7px;
+  background: var(--color-tint);
+  color: #fff;
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--color-tint) 72%, transparent);
+}
+
+.ai-msg--ai {
+  align-self: flex-start;
+  max-width: 92%;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom-left-radius: 7px;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  box-shadow:
+    0 6px 18px -14px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* 气泡入场：轻微上浮淡入，非手势驱动，用关键帧安全（§1/§8）。 */
+@keyframes ai-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 「思考中」三点跳动指示器（§1 持续反馈）。 */
+.ai-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+}
+
+.ai-typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+  animation: ai-typing-bounce 1.3s var(--ease-out-soft) infinite;
+}
+
+.ai-typing span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.ai-typing span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes ai-typing-bounce {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* AI 结果卡：与气泡同语言的材质卡片（§一致 / §12）。 */
+.ai-card {
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 18px;
+  background: var(--color-bg-surface);
+  box-shadow:
+    0 6px 20px -14px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  animation: ai-msg-in var(--motion-duration-normal) var(--ease-out) backwards;
+}
+
+/* 空态：柔和的引导，图标托在渐变徽章里（§16 克制 / §craft）。 */
+.ai-empty {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding-bottom: 8vh;
+}
+
+.ai-empty__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 22px;
+  color: var(--color-tint-contrast);
+  background: linear-gradient(160deg, #16a6ff, var(--color-tint-strong));
+  box-shadow:
+    0 14px 30px -14px color-mix(in srgb, var(--color-tint-strong) 70%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.ai-empty__title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+.ai-empty__hint {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-msg,
+  .ai-card {
+    animation: none;
+  }
+  .ai-typing span {
+    animation: ai-typing-pulse 1.3s ease-in-out infinite;
+  }
+}
+
+@keyframes ai-typing-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .ui-button,
 .ui-icon-button,
 .ui-menu__item,
@@ -1272,7 +1598,15 @@ select:focus-visible {
 .navigation-bar--scrolled {
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   backdrop-filter: blur(24px) saturate(1.6);
-  background: color-mix(in srgb, var(--color-bg-app) 72%, transparent);
+  /* 顶部一小段保持实色，与 iOS 状态栏（theme-color 同为 --color-bg-app）无缝衔接，
+     再向下渐隐为半透明毛玻璃，避免 PWA 状态栏与页头之间出现生硬分界。 */
+  background: linear-gradient(
+    180deg,
+    var(--color-bg-app) 0,
+    var(--color-bg-app) calc(env(safe-area-inset-top) + 10px),
+    color-mix(in srgb, var(--color-bg-app) 72%, transparent)
+      calc(env(safe-area-inset-top) + 34px)
+  );
 }
 
 /* 降低透明度偏好：去掉毛玻璃，滚动态回落为实色页面底（.navigation-bar

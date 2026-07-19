@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowUp,
   ChevronLeft,
   History,
   Mic,
   MoreHorizontal,
   NotebookPen,
   Plus,
-  Send,
   Sparkles,
   Square,
   Trash2,
@@ -27,7 +27,6 @@ import {
 import {
   aiConversationsPath,
   apiRequest,
-  getApiErrorMessage,
   ledgerApiPath,
   type AiCard,
   type AiConversationSummary,
@@ -43,8 +42,11 @@ import {
   useInfiniteAiConversations,
   useDeleteAiConversation,
   useUpdateAiCardState,
+  useVoidAiCard,
+  patchAiConversationMessage,
 } from "@/lib/data/ai";
 import {
+  AI_ACTIVE_CONVERSATION_KEY,
   AI_DRAFT_SEED_KEY,
   aiCardIdempotencyKey,
   type AiDraftHandoff,
@@ -108,6 +110,8 @@ export function AiScreen() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   // 正在确认的草稿卡（"messageId:cardIndex"），用于按钮 loading 态与防连点。
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
+  // 正在作废的草稿卡（"messageId:cardIndex"），同上。
+  const [voidingKey, setVoidingKey] = useState<string | null>(null);
 
   const conversationQuery = useAiConversation(ledgerId, conversationId);
   const conversationsQuery = useInfiniteAiConversations(historyOpen ? ledgerId : null);
@@ -131,6 +135,7 @@ export function AiScreen() {
   }, [historyOpen, hasNextPage, isFetchingNextPage, fetchNextPage]);
   const deleteConversation = useDeleteAiConversation(ledgerId);
   const updateCardState = useUpdateAiCardState(ledgerId);
+  const voidCard = useVoidAiCard(ledgerId);
   // 流式进行中的助手消息（未持久化）：delta 增量拼正文、card 事件实时追加；done 后替换为持久化消息。
   const [streaming, setStreaming] = useState<{ content: string; cards: AiCard[] } | null>(null);
   const sending = streaming !== null;
@@ -145,6 +150,30 @@ export function AiScreen() {
     loadedConversationRef.current = conversationData.conversation.id;
     setMessages(conversationData.messages);
   }, [conversationData]);
+
+  // 去记一笔/编辑草稿会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话 id，
+  // 让用户回到原对话（消息从服务端重新加载），而不是空白的新对话。
+  const activeRestoredRef = useRef(false);
+  useEffect(() => {
+    if (activeRestoredRef.current) return;
+    activeRestoredRef.current = true;
+    try {
+      const saved = sessionStorage.getItem(AI_ACTIVE_CONVERSATION_KEY);
+      if (saved) setConversationId(saved);
+    } catch {
+      // 读取失败按新对话处理
+    }
+  }, []);
+  // 恢复完成后再持久化，避免首帧的 null 覆盖掉已存会话 id。
+  useEffect(() => {
+    if (!activeRestoredRef.current) return;
+    try {
+      if (conversationId) sessionStorage.setItem(AI_ACTIVE_CONVERSATION_KEY, conversationId);
+      else sessionStorage.removeItem(AI_ACTIVE_CONVERSATION_KEY);
+    } catch {
+      // 持久化失败不影响使用
+    }
+  }, [conversationId]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -174,6 +203,10 @@ export function AiScreen() {
       setMessages((prev) =>
         prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
       );
+      // 同步会话详情缓存，离开再返回时恢复的卡片仍显示「已记账」。
+      if (conversationId) {
+        patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
+      }
       showToast({ tone: "success", message: "已入账" });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
@@ -183,6 +216,22 @@ export function AiScreen() {
       ]);
     },
     onSettled: () => setConfirmingKey(null),
+  });
+
+  const voidDraft = useMutation({
+    mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
+      voidCard.mutateAsync({ messageId: message.id, cardIndex }),
+    onSuccess: (updatedMessage) => {
+      setMessages((prev) =>
+        prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
+      );
+      if (conversationId) {
+        patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
+      }
+      showToast({ tone: "success", message: "已作废" });
+    },
+    // 错误提示交给全局 onError 统一处理（内层 voidCard 已 suppress），避免重复。
+    onSettled: () => setVoidingKey(null),
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -402,15 +451,13 @@ export function AiScreen() {
           ) : loadingConversation ? (
             <LoadingState rows={3} title="加载会话" />
           ) : messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-              <Sparkles className="text-[var(--color-tint-strong)]" size={30} />
+            <div className="ai-empty">
+              <div className="ai-empty__badge">
+                <Sparkles size={30} strokeWidth={2.1} />
+              </div>
               <div>
-                <p className="font-semibold text-[var(--color-text-primary)]">
-                  我们先从哪里开始呢？
-                </p>
-                <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                  记账草稿需要你确认后才会入账
-                </p>
+                <p className="ai-empty__title">我们先从哪里开始呢？</p>
+                <p className="ai-empty__hint">记账草稿需要你确认后才会入账</p>
               </div>
               {/* <div className="flex flex-col gap-2">
                 {SUGGESTIONS.map((suggestion) => (
@@ -426,19 +473,13 @@ export function AiScreen() {
               </div> */}
             </div>
           ) : (
-            <div className="flex flex-col gap-3 pt-2">
+            <div className="ai-thread">
               {messages.map((message) => (
-                <div className="flex flex-col gap-2" key={message.id}>
+                <div className="ai-turn" key={message.id}>
                   {/* 有卡片时正文不展示（模型正文只是卡片的复述），避免信息重复。 */}
                   {message.content &&
                   !(message.role === "assistant" && (message.cards?.length ?? 0) > 0) ? (
-                    <div
-                      className={
-                        message.role === "user"
-                          ? "self-end max-w-[85%] rounded-[18px] rounded-br-[6px] bg-[var(--color-tint-strong)] px-4 py-2.5 text-[15px] text-white"
-                          : "self-start max-w-[92%] rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)]"
-                      }
-                    >
+                    <div className={message.role === "user" ? "ai-msg ai-msg--user" : "ai-msg ai-msg--ai"}>
                       {message.role === "assistant" ? (
                         <AiMarkdown content={message.content} />
                       ) : (
@@ -460,6 +501,11 @@ export function AiScreen() {
                                 confirmDraft.mutate({ message, cardIndex });
                               }}
                               onEdit={() => handleEdit(message.id, cardIndex, card.draft)}
+                              onVoid={() => {
+                                setVoidingKey(key);
+                                voidDraft.mutate({ message, cardIndex });
+                              }}
+                              voiding={voidingKey === key && voidDraft.isPending}
                             />
                           );
                         }
@@ -481,15 +527,19 @@ export function AiScreen() {
                 </div>
               ))}
               {streaming ? (
-                <div className="flex flex-col gap-2">
+                <div className="ai-turn">
                   {/* 与持久化消息一致：出现卡片后不再展示正文增量。 */}
                   {streaming.content && streaming.cards.length === 0 ? (
-                    <div className="self-start max-w-[92%] rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-primary)]">
+                    <div className="ai-msg ai-msg--ai">
                       <AiMarkdown content={streaming.content} />
                     </div>
                   ) : streaming.cards.length === 0 ? (
-                    <div className="self-start rounded-[18px] rounded-bl-[6px] bg-[var(--color-bg-surface)] px-4 py-2.5 text-[15px] text-[var(--color-text-muted)]">
-                      思考中…
+                    <div className="ai-msg ai-msg--ai" aria-label="思考中">
+                      <span className="ai-typing">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
                     </div>
                   ) : null}
                   {streaming.cards.map((card, cardIndex) => {
@@ -527,54 +577,61 @@ export function AiScreen() {
         </div>
 
         {aiEnabled ? (
-          <div className="sticky bottom-0 flex items-end gap-2 border-black/[0.05] bg-[var(--color-bg-app)] pb-[calc(10px+env(safe-area-inset-bottom))] pt-2.5">
-            <textarea
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-[16px] border border-black/[0.08] bg-[var(--color-bg-surface)] px-3.5 py-2.5 text-[15px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:shadow-none! focus-visible:shadow-none!"
-              onChange={(event) => {
-                // 录音中手动改字则停止识别，避免后续转写覆盖手动编辑。
-                if (speech.listening) speech.stop();
-                setInput(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder={speech.listening ? "正在聆听…" : "请输入"}
-              rows={1}
-              value={input}
-            />
-            {showMic ? (
-              <IconButton
-                icon={
-                  <Mic
-                    className={
-                      speech.listening ? "animate-pulse text-[var(--color-accent-expense)]" : ""
-                    }
-                    size={20}
-                  />
-                }
-                label={speech.listening ? "停止语音输入" : "语音输入"}
-                onClick={handleVoiceToggle}
+          <div className="ai-composer">
+            {/* 录音/发送/停止钮视觉上落在输入框内：外层胶囊持材质与边框，textarea 去边框透明、
+                按钮靠底对齐（多行时钮固定在底部，apple-design §16 简洁 + §12 材质）。 */}
+            <div className="ai-composer__field">
+              <textarea
+                className="ai-composer__input"
+                onChange={(event) => {
+                  // 录音中手动改字则停止识别，避免后续转写覆盖手动编辑。
+                  if (speech.listening) speech.stop();
+                  setInput(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={speech.listening ? "正在聆听…" : "请输入"}
+                rows={1}
+                value={input}
               />
-            ) : null}
-            {showStop ? (
-              <IconButton
-                icon={<Square fill="currentColor" size={16} />}
-                label="停止生成"
-                onClick={handleStop}
-                variant="primary"
-              />
-            ) : showSend ? (
-              <IconButton
-                disabled={!hasInput}
-                icon={<Send size={20} />}
-                label="发送"
-                onClick={() => handleSend()}
-                variant="primary"
-              />
-            ) : null}
+              {showMic ? (
+                <button
+                  aria-label={speech.listening ? "停止语音输入" : "语音输入"}
+                  className={`ai-composer__btn ai-composer__btn--mic${speech.listening ? " is-listening" : ""}`}
+                  onClick={handleVoiceToggle}
+                  title={speech.listening ? "停止语音输入" : "语音输入"}
+                  type="button"
+                >
+                  <Mic className={speech.listening ? "animate-pulse" : ""} size={20} />
+                </button>
+              ) : null}
+              {showStop ? (
+                <button
+                  aria-label="停止生成"
+                  className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
+                  onClick={handleStop}
+                  title="停止生成"
+                  type="button"
+                >
+                  <Square fill="currentColor" size={15} />
+                </button>
+              ) : showSend ? (
+                <button
+                  aria-label="发送"
+                  className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
+                  disabled={!hasInput}
+                  onClick={() => handleSend()}
+                  title="发送"
+                  type="button"
+                >
+                  <ArrowUp size={20} strokeWidth={2.6} />
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </main>
