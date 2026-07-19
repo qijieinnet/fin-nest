@@ -22,6 +22,7 @@ import { StatsService } from "../stats/stats.service";
 import { StatsQueryDto } from "../stats/dto/stats-query.dto";
 import { TransactionsService } from "../transactions/transactions.service";
 import {
+  AI_CARDS_ONLY_PLACEHOLDER,
   AiAccountBalance,
   AiBudgetCategory,
   AiCard,
@@ -301,7 +302,10 @@ const TOOLS: LlmTool[] = [
       parameters: {
         type: "object",
         properties: {
-          templateId: { type: "string", description: "快捷模板 id（须来自账本数据的快捷模板列表）" },
+          templateId: {
+            type: "string",
+            description: "快捷模板 id（须来自账本数据的快捷模板列表）",
+          },
           amountYuan: {
             type: "string",
             description: '覆盖金额，账本币种主单位十进制字符串，如 "88.5"；模板未设金额时必填',
@@ -721,7 +725,7 @@ export class AiService {
     const content =
       contentParts.join("\n\n") ||
       (cards.length > 0
-        ? "已生成上面的卡片，请查看。"
+        ? AI_CARDS_ONLY_PLACEHOLDER
         : signal?.aborted
           ? "（已停止生成）"
           : "抱歉，这次没有得到有效回复，请换个说法再试一次。");
@@ -1746,9 +1750,9 @@ export class AiService {
         note: template.note,
         hasLinks: Boolean(
           template.relationPayload ??
-            template.insuranceId ??
-            template.itemId ??
-            template.subscriptionId,
+          template.insuranceId ??
+          template.itemId ??
+          template.subscriptionId,
         ),
       })),
       acctRequired: setting.acctRequired,
@@ -1829,7 +1833,10 @@ export class AiService {
         ? context.people.map((person) => `- ${person.name} id=${person.id}`)
         : ["（无）"]),
       ...(context.quickTemplates.length > 0
-        ? ["### 快捷模板", ...context.quickTemplates.map((template) => this.quickTemplateLine(context, template))]
+        ? [
+            "### 快捷模板",
+            ...context.quickTemplates.map((template) => this.quickTemplateLine(context, template)),
+          ]
         : []),
       ...(context.outstandingDrafts.length > 0
         ? [

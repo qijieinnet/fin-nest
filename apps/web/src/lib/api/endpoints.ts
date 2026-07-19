@@ -110,3 +110,13 @@ export function aiChatStreamPath(ledgerId: string): string {
 export function aiMessageCardStatePath(ledgerId: string, messageId: string): string {
   return ledgerApiPath(ledgerId, `/ai/messages/${encodeURIComponent(messageId)}/card-state`);
 }
+
+export const FEISHU_ENDPOINTS = {
+  status: "/feishu/status",
+  bindings: "/feishu/bindings",
+  bindCodes: "/feishu/bind-codes",
+} as const;
+
+export function feishuBindingPath(bindingId: string): string {
+  return `/feishu/bindings/${encodeURIComponent(bindingId)}`;
+}

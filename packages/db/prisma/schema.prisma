@@ -779,3 +779,75 @@ model AiMessage {
   @@index([conversationId, createdAt])
   @@map("ai_messages")
 }
+
+// 飞书机器人（可选启用，见 docs/FEISHU_BOT_PLAN.md）。
+// 未配置 FEISHU_APP_ID/SECRET 时这几张表不会被写入。
+
+/// 飞书账号 ↔ fin-nest 用户绑定。账本是可切换的「当前选择」，对应 Web 端 LedgerProvider 的模型。
+/// openId 刻意不加 @unique：解绑走软删，同一 openId 需要能再次绑定。
+/// 「同一时刻一个 openId 只有一条生效绑定」由 migration.sql 里的部分唯一索引保证
+/// （feishu_bindings_open_id_active_key ... WHERE revoked_at IS NULL）。
+model FeishuBinding {
+  id              String    @id @default(uuid()) @db.Uuid
+  openId          String    @map("open_id")
+  unionId         String?   @map("union_id")
+  // 飞书昵称，仅用于在 Web 上让用户认出「绑的是哪个飞书号」；绑定时由飞书接口取得（P2），
+  // P1 阶段为空，前端回退显示 open_id 尾段。
+  displayName     String?   @map("display_name")
+  userId          String    @map("user_id") @db.Uuid
+  currentLedgerId String    @map("current_ledger_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([openId])
+  @@index([userId])
+  @@map("feishu_bindings")
+}
+
+/// AI 会话按 (open_id, chat_id) 隔离：同一用户在私聊与各群里的上下文互不串味。
+/// 闲置超过窗口期或切换账本后重置，指向新的 AiConversation。
+model FeishuChatSession {
+  id             String   @id @default(uuid()) @db.Uuid
+  openId         String   @map("open_id")
+  chatId         String   @map("chat_id")
+  conversationId String   @map("conversation_id") @db.Uuid
+  lastActiveAt   DateTime @default(now()) @map("last_active_at") @db.Timestamptz(6)
+
+  @@unique([openId, chatId])
+  @@map("feishu_chat_sessions")
+}
+
+/// 一次性绑定码。明文只在生成时返回一次，库中只存 sha256，对齐 LedgerInvite / ServiceToken。
+/// 消费必须用带条件的 updateMany 抢占（usedAt IS NULL），「先查再改」会让并发绑定都通过。
+model FeishuBindCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  userId    String    @map("user_id") @db.Uuid
+  ledgerId  String    @map("ledger_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("feishu_bind_codes")
+}
+
+/// 事件去重 + 收件箱。事件 handler 只做「落库 + ack」，实际处理由异步消费者取 pending 行完成，
+/// 因此进程重启不会丢已 ack 的消息（启动时重新入队 pending 与超时 processing）。
+/// eventId 唯一即天然去重，飞书重推直接冲突返回。
+model FeishuEvent {
+  id         String    @id @default(uuid()) @db.Uuid
+  eventId    String    @unique @map("event_id")
+  eventType  String    @map("event_type")
+  payload    Json      @db.JsonB
+  // pending | processing | done | failed
+  status     String    @default("pending")
+  attempts   Int       @default(0)
+  lastError  String?   @map("last_error")
+  startedAt  DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@map("feishu_events")
+}

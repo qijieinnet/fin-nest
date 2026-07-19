@@ -54,6 +54,10 @@ export const queryKeys = {
   aiConversations: (ledgerId: string) => ["ledger", ledgerId, "ai", "conversations"] as const,
   aiConversation: (ledgerId: string, conversationId: string) =>
     ["ledger", ledgerId, "ai", "conversations", conversationId] as const,
+  // 飞书绑定是用户级的（不随账本变化），但 key 根不是 "auth"/"ledgers"，
+  // 因此切换账本时会被一并清理。这是有意的：绑定卡片上展示当前账本名，重取一次更省心。
+  feishuStatus: ["feishu", "status"] as const,
+  feishuBindings: ["feishu", "bindings"] as const,
 };
 
 /**

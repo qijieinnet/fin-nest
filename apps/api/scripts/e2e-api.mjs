@@ -1,4 +1,3 @@
-/* global Blob, console, fetch, FormData, process, setTimeout */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import path from "node:path";

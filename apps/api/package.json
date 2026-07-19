@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "e2e": "pnpm run build && node scripts/e2e-api.mjs",
     "test:ai": "pnpm run build && node --test scripts/ai-logic.test.mjs",
+    "test:feishu": "pnpm run build && node --test scripts/feishu-logic.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },
@@ -16,6 +17,7 @@
     "@fin-nest/config": "workspace:*",
     "@fin-nest/db": "workspace:*",
     "@fin-nest/shared": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.71.1",
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
     "@nestjs/platform-express": "^11.1.27",

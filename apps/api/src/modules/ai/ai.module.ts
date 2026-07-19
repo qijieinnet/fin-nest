@@ -27,5 +27,7 @@ import { AiService } from "./ai.service";
   ],
   controllers: [AiController],
   providers: [AiService],
+  // 飞书机器人复用同一套对话与工具调用能力（见 docs/FEISHU_BOT_PLAN.md）。
+  exports: [AiService],
 })
 export class AiModule {}

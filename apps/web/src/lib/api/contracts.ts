@@ -908,3 +908,26 @@ export type AiChatStreamEvents = {
   done: AiChatResult;
   error: { message: string };
 };
+
+// --- 飞书机器人（可选启用，见 docs/FEISHU_BOT_PLAN.md）---
+
+export type FeishuStatus = {
+  enabled: boolean;
+};
+
+export type FeishuBinding = {
+  id: string;
+  /** 飞书昵称；P1 阶段服务端尚未取得，为空时前端回退显示 openIdSuffix。 */
+  displayName: string | null;
+  /** open_id 尾 6 位，仅用于区分多个绑定，不展示完整 id。 */
+  openIdSuffix: string;
+  currentLedgerId: string;
+  currentLedgerName: string | null;
+  createdAt: string;
+};
+
+/** 明文绑定码仅在生成时返回一次，服务端只存 sha256。 */
+export type FeishuBindCode = {
+  code: string;
+  expiresAt: string;
+};

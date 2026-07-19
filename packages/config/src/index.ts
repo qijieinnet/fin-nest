@@ -77,6 +77,11 @@ const EnvSchema = z.object({
   AI_BASE_URL: z.string().url().optional(),
   AI_API_KEY: z.string().min(1).optional(),
   AI_MODEL: z.string().min(1).optional(),
+
+  // 飞书机器人（可选）：两者都配置时启用，走长连接（WSClient），不需要公网回调地址，
+  // 因而也不需要 Encrypt Key / Verification Token。未配置时整个飞书模块不注册、不建连接。
+  FEISHU_APP_ID: z.string().min(1).optional(),
+  FEISHU_APP_SECRET: z.string().min(1).optional(),
 }).superRefine((config, ctx) => {
   // 生产环境禁止 MinIO 弱凭证：secret 是附件存储的唯一门禁，默认值等于对外裸奔。
   const weakSecrets = new Set(["minioadmin", "change-me-please"]);
@@ -85,6 +90,18 @@ const EnvSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["MINIO_SECRET_KEY"],
       message: "production 环境必须显式设置强 MINIO_SECRET_KEY（不能用 minioadmin / change-me-please）",
+    });
+  }
+
+  // 只配一半是典型的部署漏配：静默禁用会让人以为「代码没生效」，不如启动就报错。
+  const feishuKeys = ["FEISHU_APP_ID", "FEISHU_APP_SECRET"] as const;
+  const feishuSet = feishuKeys.filter((key) => config[key] !== undefined);
+  if (feishuSet.length > 0 && feishuSet.length < feishuKeys.length) {
+    const missing = feishuKeys.filter((key) => config[key] === undefined);
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [missing[0]!],
+      message: `飞书机器人需要同时配置 ${feishuKeys.join(" 和 ")}，当前缺少 ${missing.join(", ")}`,
     });
   }
 });

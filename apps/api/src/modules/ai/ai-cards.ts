@@ -1,6 +1,15 @@
 // AI 聊天消息携带的结构化卡片。存入 ai_messages.cards（JSONB），前端按 kind 渲染。
 // 金额一律 micros 字符串（JSON 无 bigint）；确认草稿后由前端回写 status/transactionId。
 
+/**
+ * 模型只产出卡片、没产出文字时的占位正文。
+ *
+ * Web 端卡片渲染在正文上方，所以「上面的卡片」措辞成立。其它渲染端（如飞书，卡片是
+ * 紧随其后的独立消息）应当识别出这是占位而非模型的真实输出，跳过不显示——
+ * 因此抽成常量而不是散落的字符串字面量。
+ */
+export const AI_CARDS_ONLY_PLACEHOLDER = "已生成上面的卡片，请查看。";
+
 export type AiDraftFields = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;

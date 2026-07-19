@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
 
@@ -27,6 +28,15 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    // 纯 JS 脚本（e2e/单测 runner 等）不经 TS 检查，`no-undef` 对它们仍然生效，
+    // 需要显式声明 Node 运行时全局（fetch/Response/process…）。
+    // TS 文件不需要：typescript-eslint 的 eslint-recommended 已为其关闭 `no-undef`。
+    files: ["**/*.mjs", "**/*.js"],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 );

@@ -10,6 +10,7 @@ export const routes = {
   quickTemplates: "/more/quick",
   recordSettings: "/more/settings",
   systemSettings: "/more/system",
+  feishu: "/more/feishu",
   insurances: "/more/insurances",
   items: "/more/items",
   subscriptions: "/more/subscriptions",

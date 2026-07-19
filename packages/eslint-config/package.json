@@ -14,5 +14,8 @@
   },
   "peerDependencies": {
     "eslint": "^9.8.0"
+  },
+  "devDependencies": {
+    "globals": "^17.7.0"
   }
 }

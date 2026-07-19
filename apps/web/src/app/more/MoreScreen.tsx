@@ -17,6 +17,7 @@ import {
   useQuickTemplates,
   useSubscriptions,
 } from "@/lib/data/records";
+import { useFeishuStatus } from "@/lib/data/feishu";
 import { type NavMenuKey, resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
@@ -35,6 +36,8 @@ export function MoreScreen() {
   const insurancesQuery = useInsurances(currentLedger?.id ?? null);
   const itemsQuery = useItems(currentLedger?.id ?? null);
   const subscriptionsQuery = useSubscriptions(currentLedger?.id ?? null);
+  // 未配置飞书时隐藏入口，与 AI 助手同一处理。
+  const feishuStatusQuery = useFeishuStatus();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
@@ -276,6 +279,21 @@ export function MoreScreen() {
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">账单页显示偏好</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
+          {feishuStatusQuery.data?.enabled ? (
+            <button
+              className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+              onClick={() => router.push(routes.feishu)}
+              type="button"
+            >
+              <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">
+                飞书机器人
+              </span>
+              <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+                在飞书里记账
+              </span>
+              <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+            </button>
+          ) : null}
           <button
             className="flex w-full items-center px-[18px] py-[15px] text-left"
             onClick={() => router.push(routes.importExport)}
