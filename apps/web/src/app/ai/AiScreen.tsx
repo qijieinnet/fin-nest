@@ -106,6 +106,17 @@ export function AiScreen() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [input, setInput] = useState("");
+  // 输入框随内容自动增高：先归零测量 scrollHeight，再钳到 CSS max-height。
+  // 未超上限时隐藏滚动条（否则空行/单行会因亚像素取整误显），超出后才允许内部滚动。
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const maxHeight = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
+    el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [input]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   // 正在确认的草稿卡（"messageId:cardIndex"），用于按钮 loading 态与防连点。
@@ -582,6 +593,7 @@ export function AiScreen() {
                 按钮靠底对齐（多行时钮固定在底部，apple-design §16 简洁 + §12 材质）。 */}
             <div className="ai-composer__field">
               <textarea
+                ref={inputRef}
                 className="ai-composer__input"
                 onChange={(event) => {
                   // 录音中手动改字则停止识别，避免后续转写覆盖手动编辑。

@@ -269,20 +269,22 @@ select:focus-visible {
   max-width: 100%;
 }
 
-/* 固定页眉：静止时与页面同色无缝（盖住状态栏），滚动时材质化成毛玻璃、
-   内容从下方模糊透过（apple-design §12）；底部用 ::after 渐隐软化边缘而非硬线。 */
+/* 固定页眉：毛玻璃常驻——顶部一小段与状态栏（theme-color 同为 --color-bg-app）
+   实色无缝衔接，向下渐隐为半透明，页面内容随时从其下方模糊透过（apple-design §12）；
+   滚动时再点亮底部 ::after 渐隐软化边缘而非硬线。 */
 .app-sticky-header {
-  background: var(--color-bg-app);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  background: linear-gradient(
+    180deg,
+    var(--color-bg-app) 0,
+    var(--color-bg-app) calc(env(safe-area-inset-top) + 10px),
+    color-mix(in srgb, var(--color-bg-app) 72%, transparent) calc(env(safe-area-inset-top) + 34px)
+  );
   transition:
     background var(--motion-duration-normal) var(--ease-out-soft),
     -webkit-backdrop-filter var(--motion-duration-normal) var(--ease-out-soft),
     backdrop-filter var(--motion-duration-normal) var(--ease-out-soft);
-}
-
-.app-sticky-header--scrolled {
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  backdrop-filter: blur(24px) saturate(1.6);
-  background: color-mix(in srgb, var(--color-bg-app) 72%, transparent);
 }
 
 .app-sticky-header::after {
@@ -477,7 +479,7 @@ select:focus-visible {
 
 /* 气泡基类 */
 .ai-msg {
-  max-width: 85%;
+  /* max-width: 85%; */
   padding: 9px 14px;
   font-size: 15px;
   line-height: 1.5;
@@ -497,7 +499,7 @@ select:focus-visible {
 
 .ai-msg--ai {
   align-self: flex-start;
-  max-width: 92%;
+  /* max-width: 92%; */
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-bottom-left-radius: 7px;
   background: var(--color-bg-surface);
@@ -1581,9 +1583,17 @@ select:focus-visible {
 }
 
 .navigation-bar {
-  /* 静止时实色无缝衔接状态栏；滚动时材质化成毛玻璃、内容从下方模糊透过
-     （apple-design §12），底部用 ::after 渐隐软化边缘。 */
-  background: var(--color-bg-app);
+  /* 毛玻璃常驻：顶部一小段与状态栏（theme-color 同为 --color-bg-app）实色无缝衔接，
+     向下渐隐为半透明，内容随时从其下方模糊透过（apple-design §12），
+     避免 PWA 状态栏与页头之间出现生硬分界；底部用 ::after 渐隐软化边缘。 */
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  background: linear-gradient(
+    180deg,
+    var(--color-bg-app) 0,
+    var(--color-bg-app) calc(env(safe-area-inset-top) + 10px),
+    color-mix(in srgb, var(--color-bg-app) 72%, transparent) calc(env(safe-area-inset-top) + 34px)
+  );
   margin: 0 calc(var(--space-page-x) * -1) 18px;
   padding: env(safe-area-inset-top) var(--space-page-x) 0;
   position: sticky;
@@ -1595,29 +1605,12 @@ select:focus-visible {
     backdrop-filter var(--motion-duration-normal) var(--ease-out-soft);
 }
 
-.navigation-bar--scrolled {
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  backdrop-filter: blur(24px) saturate(1.6);
-  /* 顶部一小段保持实色，与 iOS 状态栏（theme-color 同为 --color-bg-app）无缝衔接，
-     再向下渐隐为半透明毛玻璃，避免 PWA 状态栏与页头之间出现生硬分界。 */
-  background: linear-gradient(
-    180deg,
-    var(--color-bg-app) 0,
-    var(--color-bg-app) calc(env(safe-area-inset-top) + 10px),
-    color-mix(in srgb, var(--color-bg-app) 72%, transparent)
-      calc(env(safe-area-inset-top) + 34px)
-  );
-}
-
-/* 降低透明度偏好：去掉毛玻璃，滚动态回落为实色页面底（.navigation-bar
+/* 降低透明度偏好：去掉毛玻璃，回落为实色页面底（.navigation-bar
    已在下方通用降级块处理，这里补 .app-sticky-header）。 */
 @media (prefers-reduced-transparency: reduce) {
   .app-sticky-header {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-  }
-
-  .app-sticky-header--scrolled {
     background: var(--color-bg-app);
   }
 }
