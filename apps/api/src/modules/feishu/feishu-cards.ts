@@ -1,5 +1,6 @@
 import type { AiCard, AiDraftFields } from "../ai/ai-cards";
-import { formatMicros, percentOf, progressBar } from "./feishu-money";
+import { microsToYuan } from "../ai/ai-money";
+import { formatMicros, progressBar } from "./feishu-money";
 
 /**
  * AiCard → 飞书交互卡片 JSON。纯函数，可离线单测。
@@ -8,7 +9,9 @@ import { formatMicros, percentOf, progressBar } from "./feishu-money";
  * - 金额一律走 `formatMicros`（bigint），**禁止 number 参与换算**（硬规则 1）；
  * - 按钮 value **只放 messageId + cardIndex**。userId / ledgerId 是客户端可篡改的输入，
  *   服务端一律从库里反查（见 docs/FEISHU_BOT_PLAN.md §8）；
- * - 飞书卡片渲染不了图表，趋势/占比一律降级为文本。
+ * - 图表数值走 `chartValue`：micros → 主单位的换算全程 bigint，只在交给 VChart 的
+ *   最后一步转 number。飞书图表的数值轴是线性轴，喂字符串画不出正确的柱高/折线。
+ *   这不违反硬规则 1——转换发生在渲染边界，不参与任何金额计算（与前端 AiCards 同做法）。
  */
 
 export type FeishuCardBody = Record<string, unknown>;
@@ -28,8 +31,11 @@ export type DraftActionValue = {
   cardIndex: number;
 };
 
-/** 列表类卡片最多展示的行数，超出提示去 Web 查看。 */
+/** 分类、账户等摘要列表最多展示的行数。 */
 const MAX_ROWS = 10;
+
+/** 交易明细卡最多展示 50 笔，与 `query_transactions` 的查询上限一致。 */
+const MAX_TRANSACTION_ROWS = 50;
 
 /**
  * 全角空格（U+3000）。飞书卡片没有表格布局，用它在等宽的中文文本里拉开列间距，
@@ -59,6 +65,17 @@ export function renderCard(card: AiCard, ctx: CardRenderContext): FeishuCardBody
   }
 }
 
+/** 大模型正文使用 JSON 2.0 Markdown 卡片发送，普通 text 消息不会解析 Markdown。 */
+export function renderMarkdownCard(content: string): FeishuCardBody {
+  return {
+    schema: "2.0",
+    config: { width_mode: "fill" },
+    body: {
+      elements: [{ tag: "markdown", content }],
+    },
+  };
+}
+
 // ------------------------------------------------------------------ 记账草稿
 
 function renderDraftCard(
@@ -76,13 +93,13 @@ function renderDraftCard(
     elements.push({
       tag: "action",
       actions: [
-        button("确认入账", "primary", {
-          action: "confirm_draft",
+        button("作废", "default", {
+          action: "discard_draft",
           messageId: ctx.messageId,
           cardIndex: ctx.cardIndex,
         }),
-        button("作废", "default", {
-          action: "discard_draft",
+        button("确认入账", "primary", {
+          action: "confirm_draft",
           messageId: ctx.messageId,
           cardIndex: ctx.cardIndex,
         }),
@@ -141,38 +158,70 @@ function renderTransactionsCard(
 ): FeishuCardBody {
   const currency = card.currency ?? ctx.currency;
   const elements: FeishuCardBody[] = [
-    fieldGrid([
-      `**支出**\n${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}`,
-      `**收入**\n${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`,
-    ]),
-    { tag: "hr" },
+    {
+      tag: "markdown",
+      content:
+        `**支出** ${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}` +
+        `${COLUMN_GAP}${COLUMN_GAP}**收入** ${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`,
+    },
   ];
 
-  const rows = card.rows.slice(0, MAX_ROWS);
+  const rows = card.rows.slice(0, MAX_TRANSACTION_ROWS);
   if (rows.length === 0) {
-    elements.push(divText("没有符合条件的记录。"));
+    elements.push({ tag: "markdown", content: "没有符合条件的记录。" });
   } else {
-    elements.push(
-      divText(
-        rows
-          .map((row) => {
-            const label = row.categoryName ? escapeMd(row.categoryName) : "未分类";
-            const amount = formatMicros(row.effectiveAmountMicros, ctx.decimalPlaces, currency);
-            const suffix = row.note ? ` · ${escapeMd(row.note)}` : "";
-            return `${row.occurredOn}${COLUMN_GAP}${label}${COLUMN_GAP}${amount}${suffix}`;
-          })
-          .join("\n"),
-      ),
-    );
+    elements.push({
+      tag: "table",
+      page_size: 10,
+      row_height: "low",
+      freeze_first_column: true,
+      header_style: {
+        text_align: "left",
+        text_size: "normal",
+        background_style: "grey",
+        text_color: "default",
+        bold: true,
+        lines: 1,
+      },
+      columns: [
+        { name: "date", display_name: "日期", data_type: "text", width: "120px" },
+        { name: "type", display_name: "类型", data_type: "text", width: "80px" },
+        { name: "category", display_name: "分类", data_type: "text", width: "100px" },
+        { name: "person", display_name: "人员", data_type: "text", width: "100px" },
+        { name: "creator", display_name: "记账人", data_type: "text", width: "100px" },
+        {
+          name: "amount",
+          display_name: "金额",
+          data_type: "text",
+          width: "110px",
+          horizontal_align: "right",
+        },
+        { name: "note", display_name: "备注", data_type: "text", width: "160px" },
+      ],
+      rows: rows.map((row) => ({
+        date: row.occurredOn,
+        type: TYPE_LABELS[row.type] ?? row.type,
+        category: truncateTableText(
+          row.subcategoryName ?? row.categoryName ?? (row.type === "transfer" ? "转账" : "未分类"),
+          32,
+        ),
+        person: row.personName ? truncateTableText(row.personName, 24) : "—",
+        creator: row.creatorName ? truncateTableText(row.creatorName, 24) : "—",
+        amount: formatMicros(row.effectiveAmountMicros, ctx.decimalPlaces, currency),
+        note: row.note ? truncateTableText(row.note, 48) : "—",
+      })),
+    });
   }
 
-  if (card.rows.length > MAX_ROWS) {
-    elements.push(
-      note(`仅显示前 ${MAX_ROWS} 笔，余下 ${card.rows.length - MAX_ROWS} 笔请到网页端查看`),
-    );
+  // `rows` 在 AiService 中已经截成最多 50 笔，必须用汇总 count 判断是否还有未展示记录。
+  if (card.count > rows.length) {
+    elements.push({
+      tag: "markdown",
+      content: `*仅显示前 ${rows.length} 笔，余下 ${card.count - rows.length} 笔请到网页端查看*`,
+    });
   }
 
-  return cardBody({
+  return cardBodyV2({
     title: `${card.title} · ${card.count} 笔`,
     template: "wathet",
     elements,
@@ -186,51 +235,99 @@ type StatsLike = Extract<AiCard, { kind: "stats_period" | "stats_month" }>;
 function renderStatsCard(card: StatsLike, ctx: CardRenderContext): FeishuCardBody {
   const currency = card.currency ?? ctx.currency;
   const elements: FeishuCardBody[] = [
-    fieldGrid([
-      `**支出**\n${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}`,
-      `**收入**\n${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`,
-    ]),
+    {
+      tag: "markdown",
+      content:
+        `**支出** ${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}` +
+        `${COLUMN_GAP}${COLUMN_GAP}**收入** ${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`,
+    },
   ];
 
   const expenseCategories =
     card.kind === "stats_period" ? card.expenseCategories : card.topExpenseCategories;
-  if (expenseCategories.length > 0) {
-    elements.push({ tag: "hr" });
-    elements.push(
-      divText(
-        `**支出分类**\n${expenseCategories
-          .slice(0, MAX_ROWS)
-          .map((category) => {
-            const amount = "amountMicros" in category ? category.amountMicros : "0";
-            const share = percentOf(amount, card.expenseMicros);
-            return `${escapeMd(category.name)}${COLUMN_GAP}${formatMicros(amount, ctx.decimalPlaces, currency)}${COLUMN_GAP}${share.toFixed(1)}%`;
-          })
-          .join("\n")}`,
-      ),
-    );
+  const hasCategoryChart = expenseCategories.length > 0;
+  if (hasCategoryChart) {
+    elements.push(expenseCategoryChart(expenseCategories));
   }
 
-  // 飞书卡片渲染不了折线，趋势降级为逐点文本。
-  if (card.kind === "stats_period" && card.trend) {
-    const granularity = { day: "日", week: "周", month: "月" }[card.trend.granularity];
-    elements.push({ tag: "hr" });
-    elements.push(
-      divText(
-        `**趋势（按${granularity}）**\n${card.trend.points
-          .map(
-            (point) =>
-              `${point.label}${COLUMN_GAP}支出 ${formatMicros(point.expenseMicros, ctx.decimalPlaces, currency)}${COLUMN_GAP}收入 ${formatMicros(point.incomeMicros, ctx.decimalPlaces, currency)}`,
-          )
-          .join("\n")}`,
-      ),
-    );
+  const trend = card.kind === "stats_period" ? card.trend : null;
+  const hasTrendChart = Boolean(trend && trend.points.length > 0);
+  if (trend && hasTrendChart) {
+    const granularity = { day: "日", week: "周", month: "月" }[trend.granularity];
+    elements.push(trendChart(`收支趋势（按${granularity}）`, trend.points));
+  }
+
+  // 显式判断「两张图都没有」，而不是数 elements 长度——后者依赖「摘要恰好占 1 个元素」，
+  // 以后在摘要后面插任何元素，这个空数据提示就会静默失效。
+  if (!hasCategoryChart && !hasTrendChart) {
+    elements.push({ tag: "markdown", content: "暂无可绘制的分类或趋势数据。" });
   }
 
   const title =
     card.kind === "stats_period"
       ? `${card.title}（${card.dateFrom} ~ ${card.dateTo}）`
       : `${card.month} 收支`;
-  return cardBody({ title, template: "indigo", elements });
+  return cardBodyV2({ title, template: "indigo", elements });
+}
+
+function expenseCategoryChart(
+  categories: Array<{ name: string; amountMicros: string }>,
+): FeishuCardBody {
+  return {
+    tag: "chart",
+    element_id: "expense_chart",
+    aspect_ratio: "16:9",
+    color_theme: "rainbow",
+    preview: true,
+    chart_spec: {
+      type: "bar",
+      title: { text: "支出分类" },
+      data: {
+        values: categories.slice(0, MAX_ROWS).map((category) => ({
+          type: truncateTableText(category.name, 20),
+          value: chartValue(category.amountMicros),
+        })),
+      },
+      xField: "type",
+      yField: "value",
+      label: { visible: true },
+    },
+  };
+}
+
+function trendChart(
+  title: string,
+  points: Array<{ label: string; expenseMicros: string; incomeMicros: string }>,
+): FeishuCardBody {
+  return {
+    tag: "chart",
+    element_id: "trend_chart",
+    aspect_ratio: "16:9",
+    color_theme: "complementary",
+    preview: true,
+    chart_spec: {
+      type: "line",
+      title: { text: title },
+      data: {
+        values: points.flatMap((point) => [
+          {
+            date: truncateTableText(point.label, 24),
+            type: "支出",
+            value: chartValue(point.expenseMicros),
+          },
+          {
+            date: truncateTableText(point.label, 24),
+            type: "收入",
+            value: chartValue(point.incomeMicros),
+          },
+        ]),
+      },
+      xField: "date",
+      yField: "value",
+      seriesField: "type",
+      legends: { visible: true, orient: "bottom" },
+    },
+  };
 }
 
 // ------------------------------------------------------------------ 账户余额
@@ -334,6 +431,26 @@ function cardBody(input: {
   };
 }
 
+/** 原生表格等新版组件使用的 JSON 2.0 卡片结构。 */
+function cardBodyV2(input: {
+  title: string;
+  template: string;
+  elements: FeishuCardBody[];
+}): FeishuCardBody {
+  return {
+    schema: "2.0",
+    config: {
+      width_mode: "fill",
+      summary: { content: input.title },
+    },
+    header: {
+      template: input.template,
+      title: { tag: "plain_text", content: input.title },
+    },
+    body: { elements: input.elements },
+  };
+}
+
 function divText(content: string): FeishuCardBody {
   return { tag: "div", text: { tag: "lark_md", content } };
 }
@@ -360,6 +477,24 @@ function button(text: string, type: string, value: DraftActionValue): FeishuCard
     type,
     value,
   };
+}
+
+/**
+ * micros → 图表数值（账本主单位）。
+ *
+ * 换算本身在 `microsToYuan` 里全程 bigint 完成，这里只把最终结果转成 number 交给 VChart：
+ * 飞书图表的数值轴是线性轴，字符串画不出正确的柱高与折线。转换只发生在渲染边界，
+ * 不参与任何金额计算，因此不触碰硬规则 1（前端 AiCards 也是同样的处理方式）。
+ */
+function chartValue(micros: string): number {
+  return Number(microsToYuan(BigInt(micros)));
+}
+
+/** 表格单元格保持单行并限制长度，避免 50 行明细突破飞书单卡体积限制。 */
+function truncateTableText(text: string, maxLength = 60): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const chars = Array.from(normalized);
+  return chars.length <= maxLength ? normalized : `${chars.slice(0, maxLength - 1).join("")}…`;
 }
 
 /** lark_md 里 `*` `_` 等有语义，用户备注/分类名可能含这些字符，转义掉避免串版。 */

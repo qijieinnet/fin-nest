@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AiService } from "../dist/modules/ai/ai.service.js";
 import { yuanToMicros } from "../dist/modules/ai/ai-money.js";
-import { isTrendRequested, isValidDateKey, isValidMonthKey } from "../dist/modules/ai/ai-validation.js";
+import {
+  isTrendRequested,
+  isValidDateKey,
+  isValidMonthKey,
+} from "../dist/modules/ai/ai-validation.js";
 import { LlmClient, shouldDisableThinking } from "../dist/modules/ai/llm-client.js";
 import { periodSeriesBuckets } from "../dist/modules/stats/stats.service.js";
+import { transactionOrderBy } from "../dist/modules/transactions/transactions.service.js";
 
 test("AI money parsing follows ledger precision", () => {
   assert.equal(yuanToMicros("88.50", 2), 88_500_000n);
@@ -97,4 +103,139 @@ test("AI yearly stats trend returns twelve ordered monthly points", () => {
       { key: "2026-07", label: "2026/7" },
     ],
   );
+});
+
+test("transaction query supports both date fields and directions", () => {
+  assert.deepEqual(transactionOrderBy({}), [
+    { occurredOn: "desc" },
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+  assert.deepEqual(transactionOrderBy({ sortBy: "occurredOn", sortOrder: "asc" }), [
+    { occurredOn: "asc" },
+    { createdAt: "asc" },
+    { id: "asc" },
+  ]);
+  assert.deepEqual(transactionOrderBy({ sortBy: "createdAt", sortOrder: "asc" }), [
+    { createdAt: "asc" },
+    { id: "asc" },
+  ]);
+  assert.deepEqual(transactionOrderBy({ sortBy: "createdAt", sortOrder: "desc" }), [
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+});
+
+test("AI transaction query forwards the selected creator as createdBy", async () => {
+  const queries = [];
+  const service = Object.create(AiService.prototype);
+  service.transactions = {
+    list: async (_ledgerId, _userId, query) => {
+      queries.push(query);
+      return [
+        {
+          occurredOn: new Date("2026-07-01T00:00:00.000Z"),
+          type: "expense",
+          effectiveAmountMicros: 1_000_000n,
+          categoryId: null,
+          subcategoryId: null,
+          categorySnapshot: null,
+          personId: null,
+          personSnapshot: null,
+          createdBy: "creator-1",
+          note: null,
+        },
+      ];
+    },
+    summary: async (_ledgerId, _userId, query) => {
+      queries.push(query);
+      return { count: 1, expenseMicros: 1_000_000n, incomeMicros: 0n };
+    },
+  };
+  const context = {
+    ledgerId: "ledger-1",
+    userId: "user-1",
+    currency: "CNY",
+    amountDecimalPlaces: 2,
+    categories: [],
+    accounts: [],
+    people: [],
+    transactionCreators: [{ userId: "creator-1", name: "菜菜" }],
+    quickTemplates: [],
+    acctRequired: false,
+    personRequired: false,
+    outstandingDrafts: [],
+  };
+  const cards = [];
+
+  const result = await service.runQueryTool(
+    {
+      createdByUserId: "creator-1",
+      dateFrom: "2026-06-21",
+      dateTo: "2026-07-20",
+      sortBy: "createdAt",
+      sortOrder: "asc",
+    },
+    context,
+    cards,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every((query) => query.createdBy === "creator-1"));
+  assert.ok(queries.every((query) => query.sortBy === "createdAt" && query.sortOrder === "asc"));
+  assert.equal(cards[0].rows[0].creatorName, "菜菜");
+
+  const invalid = await service.runQueryTool({ createdByUserId: "unknown-creator" }, context, []);
+  assert.deepEqual(invalid, {
+    ok: false,
+    error: "createdByUserId 不在账本记账人列表中",
+  });
+});
+
+test("AI transaction query gives the card every row but the model only a sample", async () => {
+  const service = Object.create(AiService.prototype);
+  const rows = Array.from({ length: 50 }, (_, index) => ({
+    occurredOn: new Date("2026-07-01T00:00:00.000Z"),
+    type: "expense",
+    effectiveAmountMicros: BigInt(index + 1) * 1_000_000n,
+    categoryId: null,
+    subcategoryId: null,
+    categorySnapshot: null,
+    personId: null,
+    personSnapshot: null,
+    createdBy: "creator-1",
+    note: `第${index + 1}笔`,
+  }));
+  service.transactions = {
+    list: async () => rows,
+    summary: async () => ({ count: 120, expenseMicros: 1_275_000_000n, incomeMicros: 0n }),
+  };
+  const context = {
+    ledgerId: "ledger-1",
+    userId: "user-1",
+    currency: "CNY",
+    amountDecimalPlaces: 2,
+    categories: [],
+    accounts: [],
+    people: [],
+    transactionCreators: [{ userId: "creator-1", name: "菜菜" }],
+    quickTemplates: [],
+    acctRequired: false,
+    personRequired: false,
+    outstandingDrafts: [],
+  };
+  const cards = [];
+
+  const result = await service.runQueryTool({ limit: 50 }, context, cards);
+
+  // 卡片是用户读明细的地方，拿到全部 50 行；模型只需要够转述的样本。
+  assert.equal(cards[0].rows.length, 50);
+  assert.equal(result.transactions.length, 20);
+  assert.equal(result.transactions[0].note, "第1笔");
+  assert.equal(result.transactions.at(-1).note, "第20笔");
+  // 总数仍如实告知，模型不会把样本当成全部。
+  assert.equal(result.count, 120);
+  assert.ok(result.transactionsNote.includes("共 120 笔"));
+  assert.ok(result.transactionsNote.includes("仅列前 20 笔"));
 });

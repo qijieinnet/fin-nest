@@ -187,12 +187,17 @@ export class FeishuBindingService {
    * 「先查再改」在并发下会让两条绑定消息都通过，因此用带条件的 updateMany 抢占
    * （与「确认待确认交易」同一手法），整体放在事务里：
    * 抢占失败 → 码无效/已用/过期；抢占成功 → 软删该 open_id 的旧绑定，再插入新绑定。
+   *
+   * 绑定码有 10 分钟有效期，生成时校验过的账本在此期间可能失效，因此抢占成功后
+   * 还要在事务内二次校验账本未删除、用户仍是成员（见下方），避免绑到失效账本上。
+   *
+   * 刻意不接收昵称：拉昵称要打飞书通讯录接口，放在这之前等于让错码 / 已被限速的尝试
+   * 也能触发出站调用（限速在本方法第二行）。昵称由调用方在绑定成功后经 setDisplayName 补写。
    */
   async consumeBindCode(input: {
     code: string;
     openId: string;
     unionId?: string | null;
-    displayName?: string | null;
   }): Promise<{ userId: string; ledgerId: string }> {
     this.assertEnabled();
     this.rateLimiter.assertAllowed(input.openId);
@@ -215,6 +220,29 @@ export class FeishuBindingService {
           throw new AppError("FEISHU_BIND_CODE_INVALID", "绑定码无效或已过期", 400);
         }
 
+        // 二次校验绑定码指向的账本仍然可用：码生成时（createBindCode）校验过一次，但码有
+        // 10 分钟有效期，期间账本可能被软删、用户可能被移出成员。若此时不拦下，绑定会显示
+        // 成功，用户发消息时才在 assertMember 处报「账本不存在」，体验割裂。
+        // 校验失败抛错即回滚事务，绑定码不被消耗（仍按 10 分钟自然过期）。
+        const ledger = await tx.ledger.findFirst({
+          where: { id: bindCode.ledgerId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!ledger) {
+          throw new AppError(
+            "FEISHU_BIND_LEDGER_GONE",
+            "绑定码对应的账本已删除，请到网页端选择其他账本重新生成绑定码",
+            400,
+          );
+        }
+        const membership = await tx.ledgerMember.findFirst({
+          where: { ledgerId: bindCode.ledgerId, userId: bindCode.userId, removedAt: null },
+          select: { id: true },
+        });
+        if (!membership) {
+          throw new AppError("FEISHU_BIND_NOT_MEMBER", "你已不再是该账本的成员，无法绑定", 400);
+        }
+
         // 部分唯一索引要求同一 open_id 同时只有一条生效绑定，重复绑定即换绑。
         await tx.feishuBinding.updateMany({
           where: { openId: input.openId, revokedAt: null },
@@ -224,7 +252,6 @@ export class FeishuBindingService {
           data: {
             openId: input.openId,
             unionId: input.unionId ?? null,
-            displayName: input.displayName ?? null,
             userId: bindCode.userId,
             currentLedgerId: bindCode.ledgerId,
           },
@@ -254,6 +281,20 @@ export class FeishuBindingService {
       }
       throw error;
     }
+  }
+
+  /**
+   * 绑定成功后补写飞书昵称（供 Web 端辨认「绑的是哪个飞书号」）。
+   *
+   * 与绑定分开是为了让拉昵称的出站调用只发生在绑定确实成功之后（见 consumeBindCode 注释）。
+   * 昵称是纯展示字段，拿不到就保持 null，Web 端降级显示 open_id 尾段。
+   */
+  async setDisplayName(openId: string, displayName: string | null): Promise<void> {
+    if (!displayName) return;
+    await this.prisma.client.feishuBinding.updateMany({
+      where: { openId, revokedAt: null },
+      data: { displayName },
+    });
   }
 
   /** 按 open_id 解析身份；未绑定返回 null（调用方引导去 Web 生成绑定码）。 */

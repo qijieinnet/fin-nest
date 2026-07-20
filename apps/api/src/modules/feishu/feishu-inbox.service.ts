@@ -10,6 +10,10 @@ const CLAIM_BATCH_SIZE = 10;
 /** 超过此时长仍处于 processing 视为孤儿（进程被杀），重新入队。 */
 const PROCESSING_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
+/** 终态事件（done / failed）保留 7 天，过期即删，避免 payload 无限堆积（见 §4）。 */
+const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+/** 清理是低频维护动作，每轮 tick（2s）都跑太浪费，节流到每小时至多一次。 */
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 type ClaimedEvent = {
   id: string;
@@ -32,6 +36,7 @@ export class FeishuInboxService implements OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopped = false;
+  private lastCleanupAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -71,16 +76,30 @@ export class FeishuInboxService implements OnModuleDestroy {
   }
 
   /**
-   * 把上次进程留下的 processing 行放回 pending。
+   * 回收上次进程留下的 processing 孤儿。
    * 单实例假设下，启动时任何 processing 都是孤儿；多副本部署需要改成带租约/心跳的认领。
+   *
+   * 未耗尽重试预算（attempts < MAX_ATTEMPTS）的重置为 pending 重新入队；已耗尽的标记
+   * failed——否则「每次处理都让进程崩溃」的事件会绕过 processOne 的次数检查被无限重试。
    */
   private async requeueOrphaned(): Promise<void> {
     const requeued = await this.prisma.client.feishuEvent.updateMany({
-      where: { status: "processing" },
+      where: { status: "processing", attempts: { lt: MAX_ATTEMPTS } },
       data: { status: "pending", startedAt: null },
+    });
+    const exhausted = await this.prisma.client.feishuEvent.updateMany({
+      where: { status: "processing", attempts: { gte: MAX_ATTEMPTS } },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        lastError: `重试 ${MAX_ATTEMPTS} 次仍失败（进程中断）`,
+      },
     });
     if (requeued.count > 0) {
       this.logger.warn(`重新入队 ${requeued.count} 条中断的飞书事件`);
+    }
+    if (exhausted.count > 0) {
+      this.logger.error(`${exhausted.count} 条飞书事件重试超限，已标记失败`);
     }
   }
 
@@ -89,6 +108,8 @@ export class FeishuInboxService implements OnModuleDestroy {
     if (this.running || this.stopped) return;
     this.running = true;
     try {
+      await this.failExhaustedOrphans();
+      await this.maybeCleanupOldEvents();
       const claimed = await this.claimBatch();
       if (claimed.length === 0) return;
       await this.processBatch(claimed);
@@ -104,6 +125,10 @@ export class FeishuInboxService implements OnModuleDestroy {
   /**
    * 原子认领：`FOR UPDATE SKIP LOCKED` 保证同一行不会被认领两次，
    * 也让将来多副本部署天然安全（Prisma 的 updateMany 拿不到被改的行，只能用 raw）。
+   *
+   * 只认领 `attempts < MAX_ATTEMPTS` 的事件：认领会把 attempts +1，因此一条事件最多被
+   * 认领 MAX_ATTEMPTS 次。这是重试上界的第一道闸——进程崩溃 / 处理挂起等走不到
+   * processOne 失败分支的路径，也不会因此被无限认领。
    */
   private async claimBatch(): Promise<ClaimedEvent[]> {
     const staleBefore = new Date(Date.now() - PROCESSING_TIMEOUT_MS);
@@ -112,14 +137,60 @@ export class FeishuInboxService implements OnModuleDestroy {
          SET status = 'processing', started_at = now(), attempts = attempts + 1
        WHERE id IN (
          SELECT id FROM feishu_events
-          WHERE status = 'pending'
-             OR (status = 'processing' AND started_at < ${staleBefore})
+          WHERE (status = 'pending'
+             OR (status = 'processing' AND started_at < ${staleBefore}))
+            AND attempts < ${MAX_ATTEMPTS}
           ORDER BY created_at
           LIMIT ${CLAIM_BATCH_SIZE}
           FOR UPDATE SKIP LOCKED
        )
       RETURNING id, event_id AS "eventId", event_type AS "eventType", payload, attempts
     `;
+  }
+
+  /**
+   * 运行期把「处理超时且已耗尽重试预算」的孤儿事件落到 failed 终态。
+   *
+   * claimBatch 的超时回收只认领 attempts < MAX_ATTEMPTS 的事件，因此一条反复挂起的
+   * 事件达到上限后不会再被认领；若不在这里标记 failed，它会永远卡在 processing。
+   * 普通处理失败由 processOne 自行标记，不经过这里。
+   */
+  private async failExhaustedOrphans(): Promise<void> {
+    const staleBefore = new Date(Date.now() - PROCESSING_TIMEOUT_MS);
+    const exhausted = await this.prisma.client.feishuEvent.updateMany({
+      where: {
+        status: "processing",
+        startedAt: { lt: staleBefore },
+        attempts: { gte: MAX_ATTEMPTS },
+      },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        lastError: `重试 ${MAX_ATTEMPTS} 次仍失败（处理超时）`,
+      },
+    });
+    if (exhausted.count > 0) {
+      this.logger.error(`${exhausted.count} 条飞书事件重试超限，已标记失败`);
+    }
+  }
+
+  /**
+   * 删除完成超过 7 天的终态事件（done / failed），控制 feishu_events 表体积。
+   *
+   * 只碰终态行——pending / processing 可能仍在等待处理或重试，绝不能删。
+   * 按 finishedAt 截断（finish 时必写入），节流到每小时一次，开销可忽略。
+   */
+  private async maybeCleanupOldEvents(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastCleanupAt < CLEANUP_INTERVAL_MS) return;
+    this.lastCleanupAt = now;
+    const cutoff = new Date(now - EVENT_RETENTION_MS);
+    const deleted = await this.prisma.client.feishuEvent.deleteMany({
+      where: { status: { in: ["done", "failed"] }, finishedAt: { lt: cutoff } },
+    });
+    if (deleted.count > 0) {
+      this.logger.log(`清理 ${deleted.count} 条完成超过 7 天的飞书事件`);
+    }
   }
 
   /**

@@ -51,6 +51,28 @@ export class FeishuClient {
     return this.sendMessage(chatId, "interactive", JSON.stringify(card));
   }
 
+  /**
+   * 获取用户昵称，用于在 Web 端认出「绑的是哪个飞书号」。
+   *
+   * 需要应用开通 `contact:user.base:readonly` 权限且用户在通讯录可见范围内；未开通或
+   * 查询失败时返回 null——绑定流程据此降级为「飞书账号 ···尾段」，**不阻断绑定**。
+   */
+  async getUserDisplayName(openId: string): Promise<string | null> {
+    try {
+      const data = await this.request<{ user?: { name?: string } }>(
+        "GET",
+        `/contact/v3/users/${encodeURIComponent(openId)}?user_id_type=open_id`,
+      );
+      const name = data?.user?.name;
+      return name && name.length > 0 ? name : null;
+    } catch (error) {
+      this.logger.warn(
+        `获取飞书用户昵称失败，绑定将不显示昵称：${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
   private async sendMessage(
     chatId: string,
     msgType: string,

@@ -60,15 +60,6 @@ function groupThousands(digits: string): string {
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** 有效金额可能为 0，除零时返回 0 而不是 NaN。 */
-export function percentOf(part: string | bigint, total: string | bigint): number {
-  const partValue = typeof part === "bigint" ? part : BigInt(part);
-  const totalValue = typeof total === "bigint" ? total : BigInt(total);
-  if (totalValue === 0n) return 0;
-  // 百分比只用于展示，转 number 前先放大到万分位再缩，避免大额溢出精度。
-  return Number((partValue * 10000n) / totalValue) / 100;
-}
-
 /** 文本进度条：飞书卡片没有原生进度组件，用方块字符代替。 */
 export function progressBar(percent: number, width = 10): string {
   const clamped = Math.max(0, Math.min(100, percent));

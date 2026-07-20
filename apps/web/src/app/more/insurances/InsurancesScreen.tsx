@@ -59,6 +59,7 @@ import {
   INSURANCE_TYPES,
   annualPremiumMicros,
   dueReminderInsurances,
+  formatDateLabel,
   formatMoney,
   insuranceStatus,
   insuranceTypeMeta,
@@ -632,11 +633,18 @@ export function InsurancesScreen() {
               {metaText}
             </span>
           </span>
-          {insurance.premiumMicros ? (
-            <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)]">
-              {formatMoney(insurance.premiumMicros)}
-            </span>
-          ) : null}
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            {insurance.premiumMicros ? (
+              <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+                {formatMoney(insurance.premiumMicros)}
+              </span>
+            ) : null}
+            {insurance.endDate && status.key !== "terminated" ? (
+              <span className="text-[11px] text-[var(--color-text-muted)]">
+                {formatDateLabel(insurance.endDate)} 续保
+              </span>
+            ) : null}
+          </span>
         </button>
       </SwipeActionRow>
     );

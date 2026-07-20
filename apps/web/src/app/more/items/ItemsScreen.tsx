@@ -56,6 +56,7 @@ import { ItemEditorSheet } from "./_components/ItemEditorSheet";
 import { ItemScrapSheet } from "./_components/ItemScrapSheet";
 import { ItemSortList, type ItemSortGroup } from "./_components/ItemSortList";
 import {
+  formatAverage,
   formatDateLabel,
   formatFixed1,
   formatMoney,
@@ -570,13 +571,17 @@ export function ItemsScreen() {
     const type = itemTypes.find((entry) => entry.id === item.typeId);
     const typeName = type?.name ?? "其他";
     const status = itemStatus(item);
-    const metaText = [typeName, item.purchaseDate ? formatDateLabel(item.purchaseDate) : null]
+    const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
+    const metaText = [
+      // typeName,
+      item.purchaseDate ? formatDateLabel(item.purchaseDate) : null,
+      item.purchaseDate ? `${formatFixed1(itemUsedYears(item))} 年` : "未填购买日",
+    ]
       .filter(Boolean)
       .join(" · ");
-    const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
     const usedText = item.purchaseDate
-      ? `用 ${formatFixed1(itemUsedYears(item))} 年`
-      : "未填购买日";
+      ? `月均 ${formatAverage(total, itemUsedMonths(item))}`
+      : null;
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,

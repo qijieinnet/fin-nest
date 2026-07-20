@@ -26,6 +26,15 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
 
 const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
 
+export function transactionOrderBy(
+  query: Pick<ListTransactionsQueryDto, "sortBy" | "sortOrder">,
+): Prisma.TransactionOrderByWithRelationInput[] {
+  const direction = query.sortOrder ?? "desc";
+  return query.sortBy === "createdAt"
+    ? [{ createdAt: direction }, { id: direction }]
+    : [{ occurredOn: direction }, { createdAt: direction }, { id: direction }];
+}
+
 function relationAccountEntry(relationKind: string, amountMicros: bigint) {
   if (relationKind === "receivable_from_expense") {
     return { entryType: "receivable_increase", amountDeltaMicros: amountMicros };
@@ -146,7 +155,7 @@ export class TransactionsService {
     await this.ledgers.assertMember(ledgerId, userId);
     return this.prisma.client.transaction.findMany({
       where: await this.buildListWhere(ledgerId, query),
-      orderBy: [{ occurredOn: "desc" }, { createdAt: "desc" }],
+      orderBy: transactionOrderBy(query),
       take: query.limit ?? 200,
       skip: query.offset ?? 0,
     });

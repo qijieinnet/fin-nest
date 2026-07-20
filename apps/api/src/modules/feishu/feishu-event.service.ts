@@ -4,13 +4,16 @@ import { AI_CARDS_ONLY_PLACEHOLDER, type AiCard } from "../ai/ai-cards";
 import { AiService } from "../ai/ai.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { FeishuBindingService } from "./feishu-binding.service";
-import { renderCard } from "./feishu-cards";
+import { renderCard, renderMarkdownCard } from "./feishu-cards";
 import { FeishuClient } from "./feishu-client";
 import { HELP_TEXT, parseCommand } from "./feishu-commands";
 import type { FeishuIncomingMessage } from "./feishu-events";
 
 /** 会话闲置超过此时长即开新 AiConversation，语义上相当于「换个话题」。 */
 const SESSION_IDLE_MS = 30 * 60 * 1000;
+
+/** 账本级校验（LedgersService.assertMember）在账本被删 / 成员被移除时抛出的错误码。 */
+const LEDGER_GONE_CODES = new Set(["LEDGER_ACCESS_DENIED", "LEDGER_NOT_FOUND"]);
 
 /**
  * 单条飞书消息的处理逻辑。
@@ -88,6 +91,9 @@ export class FeishuEventService {
         openId: message.openId,
         unionId: message.unionId,
       });
+      // 昵称只在绑定确实成功后才拉：consumeBindCode 内的限速要先生效，否则错码 / 已被
+      // 限速的尝试也会每条打一次飞书通讯录接口。纯展示字段，失败不影响绑定已经生效的事实。
+      await this.rememberDisplayName(message.openId);
       // 换绑后旧会话的上下文属于上一个账号/账本，必须清掉。
       await this.clearSession(message.openId, message.chatId);
       const ledger = await this.prisma.client.ledger.findFirst({
@@ -100,6 +106,21 @@ export class FeishuEventService {
       );
     } catch (error) {
       await this.client.sendText(message.chatId, this.describeError(error));
+    }
+  }
+
+  /**
+   * 拉飞书昵称并补写到绑定上。整段吞掉异常：此时绑定已经落库生效，
+   * 若让展示字段的失败冒泡到 handleBind 的 catch，用户会收到「绑定失败」的错误回复。
+   */
+  private async rememberDisplayName(openId: string): Promise<void> {
+    try {
+      const displayName = await this.client.getUserDisplayName(openId);
+      await this.bindings.setDisplayName(openId, displayName);
+    } catch (error) {
+      this.logger.warn(
+        `补写飞书昵称失败，绑定不受影响：${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -211,7 +232,7 @@ export class FeishuEventService {
     // 在飞书里既冗余又指错方向，直接跳过；模型真正说的话仍然照发。
     const content = rawContent === AI_CARDS_ONLY_PLACEHOLDER ? "" : rawContent;
 
-    if (content.length > 0) await this.client.sendText(chatId, content);
+    if (content.length > 0) await this.client.sendCard(chatId, renderMarkdownCard(content));
     if (cards.length === 0) {
       if (content.length === 0) await this.client.sendText(chatId, "（无内容）");
       return;
@@ -263,7 +284,18 @@ export class FeishuEventService {
 
   /** 面向用户的错误话术：AppError 用其 message，其余一律兜底，不把内部细节抛给用户。 */
   private describeError(error: unknown): string {
-    if (error instanceof AppError) return `⚠️ ${error.message}`;
+    if (error instanceof AppError) {
+      // 绑定时校验过的账本，之后仍可能被删除、或用户被移出成员，此时账本级校验抛这两个码。
+      // 原文案（「无账本访问权限」/「账本不存在」）不说明下一步，用户只会以为机器人坏了，
+      // 因此换成带引导的话术（对齐 chatWithSessionRecovery 对会话失效的兜底思路）。
+      if (LEDGER_GONE_CODES.has(error.code)) {
+        return [
+          "⚠️ 当前绑定的账本已不可用（可能已被删除，或你已被移出成员）。",
+          "发送「切换账本」查看你还有哪些账本。",
+        ].join("\n");
+      }
+      return `⚠️ ${error.message}`;
+    }
     this.logger.error(
       `处理飞书消息失败：${error instanceof Error ? error.message : String(error)}`,
     );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeCardAction } from "../dist/modules/feishu/feishu-card-action.service.js";
-import { escapeMd, renderCard } from "../dist/modules/feishu/feishu-cards.js";
+import { escapeMd, renderCard, renderMarkdownCard } from "../dist/modules/feishu/feishu-cards.js";
 import { parseCommand } from "../dist/modules/feishu/feishu-commands.js";
 import {
   aiCardIdempotencyKey,
@@ -12,7 +12,7 @@ import {
   normalizeMessageEvent,
   stripMentionPlaceholders,
 } from "../dist/modules/feishu/feishu-events.js";
-import { formatMicros, percentOf } from "../dist/modules/feishu/feishu-money.js";
+import { formatMicros } from "../dist/modules/feishu/feishu-money.js";
 
 // ---------------------------------------------------------------- 指令解析
 
@@ -167,11 +167,6 @@ test("异常小数位退回 2 位而不是崩掉", () => {
   assert.equal(formatMicros("1000000", -1, null), "1.00");
 });
 
-test("占比除零返回 0", () => {
-  assert.equal(percentOf("50000000", "100000000"), 50);
-  assert.equal(percentOf("1", "0"), 0);
-});
-
 // ---------------------------------------------------------------- 卡片渲染
 
 const ctx = { decimalPlaces: 2, currency: "CNY", messageId: "msg-1", cardIndex: 3 };
@@ -203,12 +198,23 @@ function findButtons(node, found = []) {
   return found;
 }
 
-test("待确认草稿卡带确认与作废按钮", () => {
+function cardElements(card) {
+  return card.body?.elements ?? card.elements;
+}
+
+test("大模型正文使用 JSON 2.0 Markdown 卡片并保留 Markdown 语法", () => {
+  const content = "## 本月小结\n\n- **餐饮**：¥35.00\n- [查看详情](https://example.com)";
+  const rendered = renderMarkdownCard(content);
+  assert.equal(rendered.schema, "2.0");
+  assert.deepEqual(cardElements(rendered), [{ tag: "markdown", content }]);
+});
+
+test("待确认草稿卡先显示作废、再显示确认入账按钮", () => {
   const buttons = findButtons(renderCard(draftCard(), ctx));
   assert.equal(buttons.length, 2);
   assert.deepEqual(
     buttons.map((b) => b.value.action),
-    ["confirm_draft", "discard_draft"],
+    ["discard_draft", "confirm_draft"],
   );
 });
 
@@ -283,9 +289,129 @@ test("六种卡片都能渲染出合法结构", () => {
   for (const card of cards) {
     const rendered = renderCard(card, ctx);
     assert.ok(rendered.header, `${card.kind} 缺 header`);
-    assert.ok(Array.isArray(rendered.elements), `${card.kind} 的 elements 不是数组`);
-    assert.ok(rendered.elements.length > 0, `${card.kind} 没有内容`);
+    const elements = cardElements(rendered);
+    assert.ok(Array.isArray(elements), `${card.kind} 的 elements 不是数组`);
+    assert.ok(elements.length > 0, `${card.kind} 没有内容`);
   }
+});
+
+test("交易明细使用 JSON 2.0 原生表格并展示最多 50 笔", () => {
+  const rows = Array.from({ length: 50 }, (_, index) => ({
+    occurredOn: "2026-07-20",
+    type: "expense",
+    effectiveAmountMicros: "1000000",
+    categoryName: "很长的分类名称".repeat(20),
+    subcategoryName: `二级分类${index + 1}${"很长的二级分类".repeat(20)}`,
+    personName: `人员${index + 1}${"很长的人员名称".repeat(20)}`,
+    creatorName: `记账人${index + 1}${"很长的记账人名称".repeat(20)}`,
+    note: `第${index + 1}笔${"很长的备注".repeat(40)}`,
+  }));
+  const rendered = renderCard(
+    {
+      kind: "transactions",
+      title: "查询结果",
+      count: 51,
+      expenseMicros: "51000000",
+      incomeMicros: "0",
+      rows,
+    },
+    ctx,
+  );
+  assert.equal(rendered.schema, "2.0");
+  const elements = cardElements(rendered);
+  const table = elements.find((element) => element.tag === "table");
+  assert.ok(table);
+  assert.equal(table.page_size, 10);
+  assert.equal(table.rows.length, 50);
+  assert.deepEqual(
+    table.columns.map((column) => column.display_name),
+    ["日期", "类型", "分类", "人员", "记账人", "金额", "备注"],
+  );
+  for (const column of table.columns) {
+    const width = Number.parseInt(column.width, 10);
+    assert.ok(width >= 80 && width <= 600, `${column.display_name} 列宽不符合飞书 80px–600px 限制`);
+  }
+  assert.equal(table.columns[0].width, "120px");
+  assert.ok(table.rows[0].category.startsWith("二级分类1"));
+  assert.ok(!table.rows[0].category.includes("很长的分类名称"));
+  assert.ok(table.rows[0].person.startsWith("人员1"));
+  assert.ok(table.rows[0].creator.startsWith("记账人1"));
+  const json = JSON.stringify(rendered);
+  assert.ok(json.includes("第50笔"));
+  assert.ok(json.includes("仅显示前 50 笔，余下 1 笔请到网页端查看"));
+  assert.equal(elements.at(-1).tag, "markdown");
+  assert.ok(Buffer.byteLength(json, "utf8") < 30 * 1024, "50 行长文本卡片应低于 30 KB");
+});
+
+test("统计卡只使用支出分类柱状图，并在有趋势时展示折线图", () => {
+  const rendered = renderCard(
+    {
+      kind: "stats_period",
+      title: "近 30 天统计",
+      dateFrom: "2026-06-21",
+      dateTo: "2026-07-20",
+      expenseMicros: "123456789",
+      incomeMicros: "80000000",
+      expenseCategories: [
+        { name: "餐饮", amountMicros: "10050000" },
+        { name: "交通", amountMicros: "5000000" },
+      ],
+      incomeCategories: [{ name: "工资", amountMicros: "80000000" }],
+      trend: {
+        granularity: "week",
+        points: [
+          { label: "06-21 ~ 06-27", expenseMicros: "30000000", incomeMicros: "0" },
+          { label: "06-28 ~ 07-04", expenseMicros: "45500000", incomeMicros: "80000000" },
+        ],
+      },
+    },
+    ctx,
+  );
+
+  assert.equal(rendered.schema, "2.0");
+  const charts = cardElements(rendered).filter((element) => element.tag === "chart");
+  assert.deepEqual(
+    charts.map((chart) => chart.chart_spec.type),
+    ["bar", "line"],
+  );
+  assert.deepEqual(
+    charts.map((chart) => chart.element_id),
+    ["expense_chart", "trend_chart"],
+  );
+  // 飞书图表的数值轴是线性轴：值必须是 number，字符串画不出正确的柱高/折线。
+  assert.equal(charts[0].chart_spec.data.values[0].value, 10.05);
+  assert.equal(charts[1].chart_spec.data.values[0].value, 30);
+  assert.equal(charts[1].chart_spec.data.values[1].value, 0);
+  for (const chart of charts) {
+    for (const point of chart.chart_spec.data.values) {
+      assert.equal(typeof point.value, "number", "图表数值必须是 number");
+      assert.ok(Number.isFinite(point.value), "图表数值不能是 NaN/Infinity");
+    }
+  }
+  assert.equal(JSON.stringify(rendered).includes("income_chart"), false);
+  assert.ok(Buffer.byteLength(JSON.stringify(rendered), "utf8") < 30 * 1024);
+});
+
+test("统计卡没有分类和趋势时保留摘要与无数据提示", () => {
+  const rendered = renderCard(
+    {
+      kind: "stats_period",
+      title: "空统计",
+      dateFrom: "2026-07-20",
+      dateTo: "2026-07-20",
+      expenseMicros: "0",
+      incomeMicros: "0",
+      expenseCategories: [],
+      incomeCategories: [],
+    },
+    ctx,
+  );
+  const elements = cardElements(rendered);
+  assert.equal(
+    elements.some((element) => element.tag === "chart"),
+    false,
+  );
+  assert.ok(JSON.stringify(rendered).includes("暂无可绘制的分类或趋势数据"));
 });
 
 test("未设预算时给引导而不是空进度条", () => {

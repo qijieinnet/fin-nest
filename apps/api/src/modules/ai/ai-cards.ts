@@ -41,6 +41,9 @@ export type AiTransactionRow = {
   type: string;
   effectiveAmountMicros: string;
   categoryName?: string;
+  subcategoryName?: string;
+  personName?: string;
+  creatorName?: string;
   note?: string;
 };
 

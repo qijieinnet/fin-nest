@@ -138,7 +138,7 @@ CREATE UNIQUE INDEX feishu_bindings_open_id_active_key
 
 解绑走软删（`revokedAt`），符合硬规则第 8 条；部分唯一索引保证「同一时刻一个 openId 只有一条生效绑定」，同时允许历史绑定留痕与重新绑定。
 
-`feishu_events.payload` 保留原始事件，便于排障；建议加一条清理策略（done 状态保留 7 天），可挂到现有 `background_jobs` 或后续再说。
+`feishu_events.payload` 保留原始事件，便于排障；清理由收件箱负责——每小时清理一次完成超过 7 天的终态（done / failed）事件（`feishu-inbox.service.ts` 的 `maybeCleanupOldEvents`），pending / processing 不受影响。
 
 ## 5. 身份绑定
 
@@ -209,14 +209,16 @@ await this.tx.run(async (tx) => {
 
 `feishu-cards.ts` 把 `AiCard`（[ai-cards.ts:69](../apps/api/src/modules/ai/ai-cards.ts:69)）映射为飞书卡片 JSON。金额一律 micros 字符串，渲染时按账本币种与小数位格式化——**禁止 `number` 参与换算**（硬规则 1）。
 
-| `kind`              | 飞书渲染                                                               |
-| ------------------- | ---------------------------------------------------------------------- |
-| `transaction_draft` | 交互卡片：字段列表 + `[确认入账] [作废]`；确认后整卡替换为「已记账」态 |
-| `transactions`      | 表格卡片，超 10 行截断并提示「余下 N 笔请到 Web 查看」                 |
-| `stats_period`      | 收支汇总 + 分类列表；`trend` **降级**为文本序列（飞书不渲染折线）      |
-| `account_balances`  | 按类型分组列表 + 净资产汇总；`isLiability` 展示为负向                  |
-| `budget_progress`   | 百分比 + 字符进度条（`████░░░░ 52%`）                                  |
-| `stats_month`       | 同 `stats_period`（历史卡，飞书侧不会新产生）                          |
+大模型正文不使用普通 `text` 消息发送，而是包装为 JSON 2.0 `markdown` 卡片，确保标题、列表、加粗、链接等 Markdown 语法可正常渲染；业务数据卡片仍各自独占一条消息。
+
+| `kind`              | 飞书渲染                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `transaction_draft` | 交互卡片：字段列表 + `[作废] [确认入账]`；确认后整卡替换为「已记账」态                                            |
+| `transactions`      | JSON 2.0 原生表格，每页 10 行、最多 50 行；展示日期/类型/二级分类/人员/记账人/金额/备注，超出后在底部提示剩余笔数 |
+| `stats_period`      | JSON 2.0 原生图表：收支汇总 + 支出分类柱状图；有 `trend` 时追加收支折线图，无数据时保留文字提示                   |
+| `account_balances`  | 按类型分组列表 + 净资产汇总；`isLiability` 展示为负向                                                             |
+| `budget_progress`   | 百分比 + 字符进度条（`████░░░░ 52%`）                                                                             |
+| `stats_month`       | 收支汇总 + 支出分类柱状图（历史卡，飞书侧不会新产生）                                                             |
 
 ## 8. 卡片操作鉴权
 
@@ -330,6 +332,5 @@ apps/api/package.json                                # + @larksuiteoapi/node-sdk
 - **卡片渲染与按钮确认尚未真机验证**：卡片 JSON schema、`PATCH /im/v1/messages` 回写、
   `card.action.trigger` 的实际 payload 形状都只有离线单测覆盖。
 - **`切换账本` 仍是名称匹配**而非选择卡片；同名账本明确拒绝而不是猜。
-- **e2e 用例未补**：§12 表里列的绑定码并发消费、越权、会话隔离、事件去重等 DB 级用例
-  还没写进 `pnpm e2e:api`——目前这些路径只有代码审查保证，没有自动化回归。
-- **`feishu_events` 无清理策略**：payload 会一直堆积，见 §4 末尾。
+- **e2e 用例部分已补**：绑定码并发消费、事件去重、解绑后重新绑定已写进 `pnpm e2e:api`
+  （`feishuDbConstraints`）；卡片操作越权、会话按 chat 隔离需要 service 层集成测试 harness，暂未覆盖。

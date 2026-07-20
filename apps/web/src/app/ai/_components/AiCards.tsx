@@ -121,9 +121,7 @@ export function TransactionDraftCard({
     : undefined;
 
   return (
-    <div
-      className={`ai-card${superseded ? " opacity-60" : ""}`}
-    >
+    <div className={`ai-card${superseded ? " opacity-60" : ""}`}>
       <div className="flex items-center justify-between gap-3">
         <span
           className="rounded-full px-2.5 py-0.5 text-xs font-bold"
@@ -246,7 +244,7 @@ export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "tran
             <div className="flex items-center justify-between gap-3 py-2 text-sm" key={index}>
               <div className="min-w-0">
                 <p className="truncate text-[var(--color-text-primary)]">
-                  {row.categoryName ?? TYPE_LABEL[row.type] ?? row.type}
+                  {row.subcategoryName ?? row.categoryName ?? TYPE_LABEL[row.type] ?? row.type}
                 </p>
                 <p className="truncate text-xs text-[var(--color-text-muted)]">
                   {row.occurredOn}

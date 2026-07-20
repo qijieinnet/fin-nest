@@ -1,6 +1,6 @@
 # Fin Nest
 
-> 一款可自部署的**个人 / 家庭记账 Web 应用**——多用户、多账本、成员协作，覆盖记账、账户与净资产、计划与预算、自动 / 快捷记账、保险与物品档案、附件、统计、导入导出、AI 助手，数据完全掌握在自己手里。
+> 一款可自部署的**个人 / 家庭记账 Web 应用**——多用户、多账本、成员协作，覆盖记账、账户与净资产、计划与预算、自动 / 快捷记账、保险与物品档案、附件、统计、导入导出、AI 助手、飞书机器人，数据完全掌握在自己手里。
 
 <p>
   <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg">
@@ -23,6 +23,7 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - 💰 **面向财务正确性的后端**：金额一律整数微单位（micros），余额变更单一入口 + `SELECT ... FOR UPDATE` 行锁，编辑 / 删除走反向流水，关键写操作支持幂等键。
 - 📊 **不止流水账**：账户与净资产、计划与预算、自动记账、快捷模板、保险 / 物品 / 订阅档案、多维统计、Excel / JSON 导入导出与备份恢复。
 - 🤖 **AI 助手（可选）**：接任意 OpenAI-compatible 端点（DeepSeek / 通义 / 本地 Ollama 等），自然语言记账与查询统计；AI 只产出待确认草稿卡片、不直接写库，金额换算走确定性代码。
+- 💬 **飞书机器人（可选）**：在飞书私聊里自然语言记账与查询，能力对齐 Web 端 AI 助手；草稿卡片一键确认入账 / 作废，与 Web 共用幂等键，跨端重复点击也不会重复入账。
 - 📱 **移动优先 + 桌面双形态**：同一套代码响应式适配，移动端类原生手感（底部弹层、二级菜单），桌面端侧边栏 + Modal。
 - 🔒 **安全基线内置**：opaque token 鉴权（非 JWT、库存哈希）、scrypt 密码、双层登录限速、附件 MIME 白名单、生产环境弱密钥拒绝启动。
 
@@ -83,6 +84,13 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - **财务正确性延续**：金额换算（账本币种主单位 → micros）在确定性代码中完成；分类 / 账户 / 人员的真实 id 注入系统提示并由后端二次校验归属与类型；统计口径同样采用有效金额。
 - 会话按创建者私有并持久化（`ai_conversations` / `ai_messages`，软删）；工具循环上限 6 轮。
 
+### 飞书机器人（可选启用）
+- 配置 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`（飞书自建应用）即启用；采用**长连接**形态，API 主动连飞书，无需公网回调地址与签名校验。未配置时不建连、前端自动隐藏入口。
+- **身份绑定**：Web 端「更多 → 飞书机器人」生成一次性绑定码（10 分钟有效、明文只返回一次、库内只存哈希），私聊机器人发送「绑定 <码>」完成绑定；绑定码仅限私聊使用，群内发送会被拒绝。支持解绑（软删）与切换账本。绑定时会尝试拉取飞书昵称供 Web 端辨认（需应用开通 `contact:user.base:readonly` 权限；未开通时降级显示 open_id 尾段，不影响绑定）。
+- **自然语言记账与查询**：私聊直接发文本、群聊 @ 机器人，复用 AI 助手能力；记账草稿以交互卡片呈现，在飞书内点「确认入账 / 作废」，与 Web 端共用同一幂等键，跨端重复点击不重复入账。
+- **卡片操作鉴权**：点击者必须已绑定，且其绑定身份须为卡片所属会话的本人，防止群内他人点按钮往你账本写账。
+- **事件可靠投递**：消息事件先落库（`feishu_events`，`event_id` 唯一去重）再异步消费，进程重启不丢已收消息；卡片按钮回调同步处理以保证手感。
+
 ### 提醒红点
 - `reminder-summary` 聚合入口，一处汇总：自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 
@@ -122,7 +130,7 @@ apps/
   web/      # Next.js Web（纯前端交互层，经同源 /api 代理调 API）
 packages/
   backend/        # api/worker 共享平台：Prisma 注入、事务、幂等、审计、异常过滤、BigInt 序列化
-  db/             # Prisma schema + 迁移 + client（37 个模型）
+  db/             # Prisma schema + 迁移 + client（45 个模型）
   shared/         # 前后端共享常量 / 类型（金额单位等）
   config/         # 运行时环境变量读取与校验（zod）
   eslint-config/  # 共享 ESLint flat config
@@ -194,6 +202,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `TRUST_PROXY` | 有可信反代（nginx）时设 `true`，直连保持 `false`（详见「安全基线」） |
 | `APP_TIMEZONE` | 「今天 / 本月」的时区（默认 `Asia/Shanghai`），影响统计月份与自动记账触发时点 |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用，OpenAI-compatible `/chat/completions` 协议 |
+| `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书机器人（可选）：两项都配置才启用，长连接形态无需回调地址 |
 | `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
 | `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |
 | `API_INTERNAL_URL` | web 容器内转发 `/api` 的目标 |
@@ -229,7 +238,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 
 ---
 
-## 🧮 数据模型（41 个模型）
+## 🧮 数据模型（45 个模型）
 
 | 分组 | 模型 |
 |---|---|
@@ -242,6 +251,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | 计划预算 | Plan, PlanShareToken, BudgetSetting, CategoryBudget |
 | 档案 | Insurance, InsuranceInsuredPerson, InsuranceTypeOrder, ItemType, Item, SubscriptionCategory, Subscription |
 | AI 助手 | AiConversation, AiMessage |
+| 飞书机器人 | FeishuBinding, FeishuChatSession, FeishuBindCode, FeishuEvent |
 | 文件 | File, Attachment |
 | 平台 | AuditLog, BackgroundJob, IdempotencyKey, ImportJob |
 
@@ -266,6 +276,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) | 项目权威入口（功能、约束、工作流、部署） |
 | [`docs/DESKTOP_UI_PLAN.md`](docs/DESKTOP_UI_PLAN.md) | 桌面端 UI 改造方案 |
 | [`docs/DESKTOP_UI_CHECKLIST.md`](docs/DESKTOP_UI_CHECKLIST.md) | 桌面端双端走查清单 |
+| [`docs/FEISHU_BOT_PLAN.md`](docs/FEISHU_BOT_PLAN.md) | 飞书机器人接入方案（事件链路、绑定、卡片、鉴权） |
 | [`infra/docker/README.md`](infra/docker/README.md) | Docker 部署细节 |
 | [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) | AI 协作须知（硬规则 + 指向 PROJECT_GUIDE） |
 

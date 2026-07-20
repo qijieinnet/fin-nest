@@ -177,6 +177,8 @@ async function main() {
   });
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
 
+  await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
+
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
   console.log(
@@ -194,6 +196,7 @@ async function main() {
           "batch_update",
           "effective_amount_queries",
           "idempotency",
+          "feishu_db_constraints",
         ],
       },
       null,
@@ -843,6 +846,50 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
   });
 }
 
+// 飞书机器人的 DB 级不变式：这些约束是绑定 / 去重链路正确性的地基，纯 Prisma 即可验证，
+// 不依赖真实飞书连接，也不依赖 FEISHU_APP_ID/SECRET 是否配置（对应 FEISHU_BOT_PLAN.md §12）。
+async function feishuDbConstraints({ userId, ledgerId }) {
+  const isUniqueViolation = (error) => error?.code === "P2002";
+  const openId = `e2e-open-${stamp}`;
+
+  // ① 事件去重：event_id 唯一约束即天然去重，飞书重推同一 event_id 直接冲突。
+  //    建为 done 状态，避免被正在轮询的收件箱捡走（仅验证唯一约束，与状态无关）。
+  const eventId = `e2e-evt-${stamp}`;
+  const eventRow = { eventId, eventType: "im.message.receive_v1", payload: { e2e: true } };
+  await prisma.feishuEvent.create({ data: { ...eventRow, status: "done" } });
+  await assert.rejects(prisma.feishuEvent.create({ data: eventRow }), isUniqueViolation);
+
+  // ② 绑定码原子消费：两条并发的带条件 updateMany 抢占同一未用码，只有一条 count=1。
+  //    这正是 consumeBindCode 防「并发双绑」的手法（先查再改会让两条都通过）。
+  const codeHash = `e2e-code-${stamp}`;
+  await prisma.feishuBindCode.create({
+    data: { codeHash, userId, ledgerId, expiresAt: new Date(Date.now() + 60_000) },
+  });
+  const claimOnce = () =>
+    prisma.feishuBindCode.updateMany({
+      where: { codeHash, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+  const claims = await Promise.all([claimOnce(), claimOnce()]);
+  assert.equal(claims[0].count + claims[1].count, 1);
+
+  // ③ 部分唯一索引：同一 open_id 同时只能有一条生效绑定（revoked_at IS NULL）；
+  //    软删旧绑定后即可用同一飞书号重新绑定。
+  const first = await prisma.feishuBinding.create({
+    data: { openId, userId, currentLedgerId: ledgerId },
+  });
+  await assert.rejects(
+    prisma.feishuBinding.create({ data: { openId, userId, currentLedgerId: ledgerId } }),
+    isUniqueViolation,
+  );
+  await prisma.feishuBinding.update({ where: { id: first.id }, data: { revokedAt: new Date() } });
+  const second = await prisma.feishuBinding.create({
+    data: { openId, userId, currentLedgerId: ledgerId },
+  });
+  assert.equal(second.openId, openId);
+  assert.equal(second.revokedAt, null);
+}
+
 async function accountBalance(ledgerId, accountId, token) {
   const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
   return accounts.find((item) => item.id === accountId)?.balanceMicros;
@@ -899,6 +946,16 @@ async function cleanup() {
   });
   const ledgerIds = knownLedgers.map((ledger) => ledger.id);
   try {
+    // 飞书 e2e 数据：绑定 / 绑定码按用户清，事件按 event_id 前缀清。
+    await prisma.feishuBinding
+      .deleteMany({ where: { userId: { in: userIds } } })
+      .catch(() => undefined);
+    await prisma.feishuBindCode
+      .deleteMany({ where: { userId: { in: userIds } } })
+      .catch(() => undefined);
+    await prisma.feishuEvent
+      .deleteMany({ where: { eventId: { contains: stamp } } })
+      .catch(() => undefined);
     if (ledgerIds.length) {
       const insuranceIds = (
         await prisma.insurance.findMany({

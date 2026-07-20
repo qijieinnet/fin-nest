@@ -326,6 +326,8 @@ export type TransactionListQuery = {
   dateTo?: string;
   createdFrom?: string;
   createdTo?: string;
+  sortBy?: "occurredOn" | "createdAt";
+  sortOrder?: "asc" | "desc";
   amountMinMicros?: string;
   amountMaxMicros?: string;
   note?: string;
@@ -787,6 +789,9 @@ export type AiTransactionRow = {
   effectiveAmountMicros?: string;
   grossAmountMicros?: string;
   categoryName?: string;
+  subcategoryName?: string;
+  personName?: string;
+  creatorName?: string;
   note?: string;
 };
 
