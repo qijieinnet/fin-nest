@@ -42,6 +42,17 @@ export class FeishuWsService implements OnModuleInit, OnModuleDestroy {
       // info 级别会输出 SDK 自身的连接与事件分发日志。长连接「连上了但收不到事件」
       // 基本都是开放平台侧的订阅/权限没配好，这些日志是唯一的线索来源。
       loggerLevel: Lark.LoggerLevel.info,
+      // SDK 自带无限重连（autoReconnect 默认 true、reconnectCount = -1），但它只在
+      // socket 触发 close 时才启动。NAT/路由器静默丢流的半开连接永远不会 close：
+      // ping 写进内核缓冲区就算成功，pong 永远不来，于是「连着但收不到事件」的假死
+      // 能持续到进程重启。pingTimeout 是唯一能识破这种情况的开关，且默认关闭。
+      // 取值必须小于 SDK 的 ping 间隔（120s），否则看门狗还没到点就被下一次 ping 重置。
+      wsConfig: { pingTimeout: 60 },
+      // 握手本身也可能卡死在 DNS / 代理上，默认是无限等。
+      handshakeTimeoutMs: 15_000,
+      onReconnecting: () => this.logger.warn("飞书长连接断开，重连中"),
+      onReconnected: () => this.logger.log("飞书长连接已恢复"),
+      onError: (error) => this.logger.error(`飞书长连接失败：${error.message}`),
     });
 
     const dispatcher = new Lark.EventDispatcher({}).register({

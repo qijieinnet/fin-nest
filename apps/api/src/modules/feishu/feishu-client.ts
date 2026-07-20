@@ -52,6 +52,45 @@ export class FeishuClient {
   }
 
   /**
+   * 给消息加表情回复，返回 reaction_id（删除时要用）。
+   *
+   * 用途是「正在处理」的可视反馈：AI 一轮对话含最多 6 轮工具循环，几十秒里用户
+   * 看不到任何动静，容易以为机器人死了。
+   *
+   * 失败一律吞掉返回 null：表情是锦上添花，绝不能因为没开 `im:message.reaction`
+   * 权限就挡住真正的回复。
+   */
+  async addReaction(messageId: string, emojiType: string): Promise<string | null> {
+    try {
+      const data = await this.request<{ reaction_id?: string }>(
+        "POST",
+        `/im/v1/messages/${encodeURIComponent(messageId)}/reactions`,
+        { reaction_type: { emoji_type: emojiType } },
+      );
+      return data?.reaction_id ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `添加飞书表情回复失败（需开通 im:message.reaction 权限）：${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  /** 撤掉 {@link addReaction} 加的表情。同样吞掉失败——残留一个表情不值得打断流程。 */
+  async removeReaction(messageId: string, reactionId: string): Promise<void> {
+    try {
+      await this.request(
+        "DELETE",
+        `/im/v1/messages/${encodeURIComponent(messageId)}/reactions/${encodeURIComponent(reactionId)}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `移除飞书表情回复失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
    * 获取用户昵称，用于在 Web 端认出「绑的是哪个飞书号」。
    *
    * 需要应用开通 `contact:user.base:readonly` 权限且用户在通讯录可见范围内；未开通或

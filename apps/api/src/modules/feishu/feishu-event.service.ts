@@ -16,6 +16,14 @@ const SESSION_IDLE_MS = 30 * 60 * 1000;
 const LEDGER_GONE_CODES = new Set(["LEDGER_ACCESS_DENIED", "LEDGER_NOT_FOUND"]);
 
 /**
+ * 「正在输入」表情的飞书 emoji_type。
+ *
+ * 飞书没有给机器人开放真正的输入状态 API，表情回复是最接近的替代：贴在用户那条
+ * 消息上，处理完撤掉。只用于 AI 对话——绑定 / 帮助 / 切换账本都是秒回，贴了反而闪。
+ */
+const TYPING_EMOJI = "Typing";
+
+/**
  * 单条飞书消息的处理逻辑。
  *
  * 入口刻意接受**已归一化的消息对象**而不是从 WSClient 直接读，
@@ -175,11 +183,16 @@ export class FeishuEventService {
   ): Promise<void> {
     if (text.length === 0) return;
 
+    // 贴在 try 外：加表情本身不抛（失败返回 null），且必须在 finally 能看到 reactionId。
+    const reactionId = await this.client.addReaction(message.messageId, TYPING_EMOJI);
     try {
       const result = await this.chatWithSessionRecovery(message, userId, ledgerId, text);
       await this.sendReply(message.chatId, ledgerId, result);
     } catch (error) {
       await this.client.sendText(message.chatId, this.describeError(error));
+    } finally {
+      // 走 finally：出错路径也要撤，否则一条失败的消息会永远挂着「正在输入」。
+      if (reactionId) await this.client.removeReaction(message.messageId, reactionId);
     }
   }
 

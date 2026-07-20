@@ -112,6 +112,8 @@ WORKDIR /app
 COPY --from=build /app/apps/web/.next/standalone ./
 # Next standalone 在 pnpm 布局下可能漏追踪 @swc/helpers 的实际包目录；server.js 启动时仍会通过 next 的 require hook 访问它。
 COPY --from=build /app/node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers ./node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers
+# Next 16.2 的 app-render 运行时还会相对引用 dist/lib/framework 下的常量，standalone 追踪有时不会带上。
+COPY --from=build /app/node_modules/.pnpm/next@16.2.9_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/lib/framework ./node_modules/.pnpm/next@16.2.9_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/lib/framework
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 EXPOSE 4001
 ENTRYPOINT ["/usr/bin/tini", "--"]

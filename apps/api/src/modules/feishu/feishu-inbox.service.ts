@@ -14,6 +14,10 @@ const MAX_ATTEMPTS = 3;
 const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 /** 清理是低频维护动作，每轮 tick（2s）都跑太浪费，节流到每小时至多一次。 */
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+/** 单轮 tick 超过此时长仍未结束，视为卡死并告警（见 tick 注释）。 */
+const STUCK_TICK_THRESHOLD_MS = 5 * 60 * 1000;
+/** 卡死告警的重复间隔，避免每 2s 刷一条。 */
+const STUCK_WARN_INTERVAL_MS = 5 * 60 * 1000;
 
 type ClaimedEvent = {
   id: string;
@@ -37,6 +41,8 @@ export class FeishuInboxService implements OnModuleDestroy {
   private running = false;
   private stopped = false;
   private lastCleanupAt = 0;
+  private tickStartedAt = 0;
+  private lastStuckWarnAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -105,8 +111,16 @@ export class FeishuInboxService implements OnModuleDestroy {
 
   private async tick(): Promise<void> {
     // 单轮串行：上一轮没跑完就跳过，避免 LLM 慢时堆叠出并发风暴。
-    if (this.running || this.stopped) return;
+    //
+    // 代价是 running 一旦因某轮 tick 永不 resolve 而卡住，轮询就静默停摆——连接健康、
+    // 事件照常入库，但没人消费，现象和长连接假死一模一样却毫无日志。这里不自动打破
+    // 闩（并发跑同一批事件更危险），只把它变成可见的：卡超过阈值就周期性告警。
+    if (this.running || this.stopped) {
+      this.warnIfTickStuck();
+      return;
+    }
     this.running = true;
+    this.tickStartedAt = Date.now();
     try {
       await this.failExhaustedOrphans();
       await this.maybeCleanupOldEvents();
@@ -119,7 +133,22 @@ export class FeishuInboxService implements OnModuleDestroy {
       );
     } finally {
       this.running = false;
+      this.tickStartedAt = 0;
+      this.lastStuckWarnAt = 0;
     }
+  }
+
+  /** 当前 tick 已跑超过阈值时告警，按 STUCK_WARN_INTERVAL_MS 节流。 */
+  private warnIfTickStuck(): void {
+    if (!this.running || this.tickStartedAt === 0) return;
+    const now = Date.now();
+    const elapsed = now - this.tickStartedAt;
+    if (elapsed < STUCK_TICK_THRESHOLD_MS) return;
+    if (now - this.lastStuckWarnAt < STUCK_WARN_INTERVAL_MS) return;
+    this.lastStuckWarnAt = now;
+    this.logger.error(
+      `飞书收件箱轮询已卡住 ${Math.round(elapsed / 1000)}s，期间不会消费任何新事件`,
+    );
   }
 
   /**
