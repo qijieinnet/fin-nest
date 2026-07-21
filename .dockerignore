@@ -19,6 +19,8 @@ packages/db/generated
 # 版本库与杂项
 .git
 .gitignore
+.github
+scripts
 **/*.log
 coverage
 .DS_Store
