@@ -68,6 +68,28 @@ RUN pnpm --config.inject-workspace-packages=true --filter @fin-nest/api    deplo
  && pnpm --config.inject-workspace-packages=true --filter @fin-nest/worker deploy --prod --store-dir /pnpm/store /prod/worker \
  && pnpm --config.inject-workspace-packages=true --filter @fin-nest/db     deploy        --store-dir /pnpm/store /prod/migrate
 
+# Next standalone 的产物追踪是静态分析，两类文件它看不到，缺了会让 web 容器启动即崩：
+#   - @swc/helpers：经 next 的 require hook 在运行时动态加载，没有静态 import 可追
+#   - next/dist/lib/framework：app-render 以相对路径引用的常量，不在模块图里
+# 真身都在 pnpm 的 .pnpm/<pkg>@<版本>_<peer 哈希>/ 下，目录名随依赖升级而变，
+# 故这里用 glob 定位后归拢到 /prod/web-extra（保持相对 /app 的原始层级），由 web 阶段整体叠加。
+# set -e + glob 匹配不到即失败：宁可构建期红，也不要产出缺文件的镜像到生产才崩。
+# 末尾额外在顶层 node_modules 放一份 @swc/helpers：Node 解析时向上逐级查找，
+# 这样无论从 .pnpm 深处还是 apps/web/server.js 发起都能命中。
+RUN set -eux; \
+    stage() { \
+      count="$(ls -d $1 2>/dev/null | wc -l | tr -d '[:space:]')"; \
+      [ "$count" = "1" ] || { echo "期望恰好 1 个匹配，实得 $count: $1" >&2; exit 1; }; \
+      src="$(ls -d $1)"; rel="${src#/app/}"; \
+      mkdir -p "/prod/web-extra/$(dirname "$rel")"; \
+      cp -r "$src" "/prod/web-extra/$(dirname "$rel")/"; \
+    }; \
+    stage '/app/node_modules/.pnpm/@swc+helpers@*/node_modules/@swc/helpers'; \
+    stage '/app/node_modules/.pnpm/next@*/node_modules/next/dist/lib/framework'; \
+    mkdir -p /prod/web-extra/node_modules/@swc; \
+    cp -r /app/node_modules/.pnpm/@swc+helpers@*/node_modules/@swc/helpers \
+          /prod/web-extra/node_modules/@swc/
+
 # ---------------------------------------------------------------------------
 # api：运行 NestJS API。
 # ---------------------------------------------------------------------------
@@ -110,10 +132,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 # standalone 以仓库根为追踪根，故其内部结构为 apps/web/server.js + 根级 node_modules。
 COPY --from=build /app/apps/web/.next/standalone ./
-# Next standalone 在 pnpm 布局下可能漏追踪 @swc/helpers 的实际包目录；server.js 启动时仍会通过 next 的 require hook 访问它。
-COPY --from=build /app/node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers ./node_modules/.pnpm/@swc+helpers@0.5.15/node_modules/@swc/helpers
-# Next 16.2 的 app-render 运行时还会相对引用 dist/lib/framework 下的常量，standalone 追踪有时不会带上。
-COPY --from=build /app/node_modules/.pnpm/next@16.2.9_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/lib/framework ./node_modules/.pnpm/next@16.2.9_react-dom@19.2.7_react@19.2.7__react@19.2.7/node_modules/next/dist/lib/framework
+# 补齐 standalone 追踪漏掉的包（见 build 阶段末尾的归拢步骤）。
+COPY --from=build /prod/web-extra ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 EXPOSE 4001
 ENTRYPOINT ["/usr/bin/tini", "--"]

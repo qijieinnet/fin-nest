@@ -1,0 +1,26 @@
+# 轻量校验：仓库有四份 compose 需要手工保持同步，没有编译期保护。
+# 这里把「改了一份忘了另一份」这类漏改挡在合并前。
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # 只装根 workspace 的依赖（校验脚本仅需 js-yaml），不装各 app 的重依赖。
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter .
+
+      - run: pnpm check:compose

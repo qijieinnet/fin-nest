@@ -1,6 +1,20 @@
 # Docker 部署
 
-Fin Nest 的容器化打包与编排说明。根目录 `Dockerfile` 为多阶段多目标，可单独构建每个服务；`infra/compose/docker-compose.prod.yml` 提供整栈一键部署。
+Fin Nest 的容器化打包与编排说明。根目录 `Dockerfile` 为多阶段多目标，可单独构建每个服务；根目录 `docker-compose.yml` 拉取预构建镜像整栈部署，`infra/compose/docker-compose.prod.yml` 则从源码构建。
+
+## 预构建镜像（GHCR）
+
+推 `v*` tag 时由 `.github/workflows/release-images.yml` 自动构建并推送到 GHCR：
+
+```
+ghcr.io/qijieinnet/fin-nest-{api,worker,migrate,web}:{完整版本, 主.次, latest}
+```
+
+架构为 `linux/amd64` + `linux/arm64`。workflow 分「按架构在原生 runner 上分别构建 → 合并 manifest」两段——arm64 用 `ubuntu-24.04-arm`（公开仓库免费），避免 QEMU 模拟下 pnpm install + Next 构建慢 5～10 倍。
+
+预发布 tag（含 `-`，如 `v1.2.0-rc.1`）不会移动 `latest`。
+
+日常部署用根目录 `docker-compose.yml`，见 [README 的生产部署章节](../../README.md#-生产部署docker)。
 
 ## 镜像目标（单独打包）
 

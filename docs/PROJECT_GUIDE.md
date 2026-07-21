@@ -116,7 +116,19 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 
 ## 8. 部署与环境变量
 
-生产：`pnpm docker:up`（`infra/compose/docker-compose.prod.yml`，`.env.docker`）——postgres、minio、minio-init、migrate（一次性显式迁移）、api、worker、web 容器；对外只需暴露 web（4001），可选前置 nginx（`infra/nginx/fin-nest.conf.example`）统一域名/TLS。
+生产两条路，容器组成相同（postgres、minio、minio-init、migrate（一次性显式迁移）、api、worker、web）：
+
+- **拉预构建镜像（推荐）**：`pnpm compose:up`（根目录 `docker-compose.yml`，`.env.docker`）——用 GHCR 上的多架构镜像，无需本地构建；版本由 `FIN_NEST_VERSION` 控制（镜像 tag 不带 `v`：git tag `v1.2.0` → 镜像 `1.2.0`）。镜像由推 `v*` tag 触发 `.github/workflows/release-images.yml` 发布。
+- **变量内联（NAS / Portainer 等不读 `.env` 的界面）**：根目录 `docker-compose.inline.yml`（含内置 postgres + minio）与 `docker-compose.inline-external.yml`（只跑应用，DB 与对象存储全外部）——变量内联、无插值、无 `profiles`（这类界面不读 `.env`，也不会设 `COMPOSE_PROFILES`，带 `profiles` 会让 postgres/minio 不启动）。
+
+> 共四份 compose：`docker-compose.yml`（.env 版，**校验基准**）、两份 inline 版、`infra/compose/docker-compose.prod.yml`（源码构建版）。**改任意一份的服务定义/环境变量，其余几份要同步**。
+>
+> 由 `pnpm check:compose`（`scripts/check-compose-consistency.mjs`，CI 每次 PR 跑）自动校验五类问题：api/worker 环境变量键集合跨文件一致（`AI_*` / `FEISHU_*` 允许以注释形式存在，但必须出现）、同文件内 `DATABASE_URL` / `MINIO_*` / `WEB_ORIGIN` 取值一致、`minio-init` 命令行里的密钥与 `MINIO_SECRET_KEY` 一致、inline 版不得含 `${}` 插值或 `profiles`、对外只暴露 web 端口。新增环境变量时先加到基准文件，再按报错补齐其余几份。
+- **从源码构建**：`pnpm docker:up`（`infra/compose/docker-compose.prod.yml`，`.env.docker`）。
+
+对外只需暴露 web（4001），可选前置 nginx（`infra/nginx/fin-nest.conf.example`）统一域名/TLS。
+
+注意：`web` 镜像里 Next 的 `/api` rewrite 目标在**构建期**固化为 `http://api:4000`（`API_INTERNAL_URL` 是构建参数，运行时改无效），因此 compose 中 API 服务名必须是 `api`。运行时的 `API_INTERNAL_URL` 只影响 SSR 阶段的直连。
 
 关键环境变量（`packages/config/src/index.ts` 是唯一权威定义）：
 
