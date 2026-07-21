@@ -28,6 +28,13 @@ x-app-env: &app-env
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   MINIO_BUCKET: ${MINIO_BUCKET:-fin-nest}
+  # AI 助手（可选）：三者都配置时启用，未配置则相关端点返回未启用、前端隐藏入口。
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-}
+  # 飞书机器人（可选）：两者需同时配置，只配一半会启动报错。
+  FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+  FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
 
 services:
   postgres:
@@ -114,8 +121,12 @@ services:
     environment:
       <<: *app-env
       API_PORT: "4000"
+    # 默认只绑本机回环，对外只暴露 web（4001）一个端口。
+    # web 容器走 docker 网络访问 api，不依赖这个发布端口；发布到 127.0.0.1 仅为
+    # 宿主机 curl 调试 / 前置 nginx 反代 /api。确需跨机直连才设 API_EXPOSE_BIND=0.0.0.0，
+    # 此时 API 直接对外，必须保持 TRUST_PROXY=false，否则 XFF 可伪造、登录限速被绕过。
     ports:
-      - "${API_EXPOSE_PORT:-4000}:4000"
+      - "${API_EXPOSE_BIND:-127.0.0.1}:${API_EXPOSE_PORT:-4000}:4000"
     healthcheck:
       test:
         [
