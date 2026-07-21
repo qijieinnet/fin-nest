@@ -1,0 +1,164 @@
+# Fin Nest 自部署编排 —— 变量内联 + 全外部依赖版：只跑应用本身
+# （migrate / api / worker / web），数据库与对象存储都用你已有的。
+# 所有配置直接写在文件里，不需要 .env 文件。
+#
+# 同系列的另外两份：
+#   docker-compose.yml         变量走 .env 文件（命令行部署，配置与文件分离）
+#   docker-compose.inline.yml  变量内联 + 内置 postgres 与 minio（开箱即用）
+#
+# 只想外置其中一个？从 docker-compose.inline.yml 出发，删掉不需要的那个服务
+# （postgres / minio + minio-init）和对应的卷，再把相应变量指向外部即可。
+#
+# ============================================================================
+# 部署前必须修改下面 4 组「★ 必改」。
+# 注意本文件没有变量插值，同一个值在多处重复出现，必须全部改成同一个：
+#
+#   ★1 DATABASE_URL         3 处：migrate / api / worker，三处必须完全一致
+#   ★2 对象存储连接          2 组：api / worker 的 MINIO_* 整块，两组必须一致
+#   ★3 对象存储密钥          2 处：api / worker 的 MINIO_SECRET_KEY
+#                           保留 change-me-please 时 API 会拒绝启动并报错，这是故意的
+#   ★4 WEB_ORIGIN           2 处：api / worker，改成实际访问地址如 http://192.168.1.10:4001
+#
+# 校验：全文搜 change-me-please 应命中 2 处、YOUR-DB- 6 处、YOUR-S3- 4 处，全部替换掉。
+# ============================================================================
+#
+# --- 外部数据库的三个常见坑 ---
+#
+# 1) 数据库必须先建好。migrate 只建表，不会替你创建 database 本身。
+#    先在你的 PostgreSQL 上执行：
+#      CREATE DATABASE finnest;
+#      CREATE USER finnest WITH PASSWORD '你的密码';
+#      GRANT ALL PRIVILEGES ON DATABASE finnest TO finnest;
+#      \c finnest
+#      GRANT ALL ON SCHEMA public TO finnest;    -- PG 15+ 需要，否则迁移建表报权限错
+#
+# 2) 数据库跑在同一台宿主机上时，不能写 localhost——那是容器自己的回环地址。
+#    要么写宿主机的局域网 IP（如 192.168.1.10），
+#    要么用 host.docker.internal 并给 migrate / api / worker 三个服务都加上：
+#      extra_hosts:
+#        - "host.docker.internal:host-gateway"
+#    （Linux / 多数 NAS 上 host.docker.internal 默认不存在，必须加 extra_hosts 才生效）
+#
+# 3) 数据库如果也在 docker 里但不属于本编排，需要让两边在同一个 docker 网络，
+#    否则用服务名连不通；最省事的做法仍是填宿主机 IP + 映射出来的端口。
+#
+# --- 外部对象存储要注意 ---
+#
+# 1) bucket 需要你自己先建好，并设为非公开（本编排没有 minio-init 帮你建）。
+#    权限完全由 API 控制，bucket 一旦公开等于附件裸奔。
+# 2) 用真正的 S3（AWS / 阿里云 OSS / Cloudflare R2 等）时：
+#    MINIO_USE_SSL 设 true、MINIO_PORT 设 443、MINIO_ENDPOINT 只填主机名（不带 https://）。
+# 3) 应用只在上传/下载附件与备份导出时访问对象存储，启动阶段不做连通性检查——
+#    所以配错不会导致启动失败，而是等到用附件功能时才报错。配完建议实际传一个附件验证。
+#    （反过来说：即便你完全没有对象存储，应用也能起来，只是附件与备份不可用。
+#     但 MINIO_SECRET_KEY 仍必须改掉，production 下弱密钥会被拒绝启动。）
+#
+# 部署后浏览器访问 http://<主机地址>:4001
+#
+# 升级：把 :latest 改成具体版本（如 :1.2.0）后重新部署即可。
+#       镜像 tag 不带 v 前缀：git tag v1.2.0 对应镜像 tag 1.2.0。
+#
+# 数据安全：迁移只用 prisma migrate deploy，仅应用未执行的迁移，绝不重置已有数据；
+#          对接一个已有数据的库同样安全。
+
+name: fin-nest
+
+services:
+  # 一次性迁移：应用未执行的数据库迁移后退出。执行完即退出，属正常。
+  # 无内置数据库，故不等待任何健康检查——请确保外部库已就绪可连。
+  migrate:
+    image: ghcr.io/qijieinnet/fin-nest-migrate:latest
+    container_name: fin-nest-migrate
+    environment:
+      # ★1 必改：指向你的外部 PostgreSQL（三处 DATABASE_URL 必须完全一致）
+      DATABASE_URL: postgresql://finnest:YOUR-DB-PASSWORD@YOUR-DB-HOST:5432/finnest?schema=public
+    restart: "no"
+
+  # 服务名必须保持 api：web 镜像里 Next 的 /api 转发目标在构建期固化为 http://api:4000，
+  # 改名会导致前端所有请求 502。
+  api:
+    image: ghcr.io/qijieinnet/fin-nest-api:latest
+    container_name: fin-nest-api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      API_PORT: "4000"
+      # ★1 必改：与 migrate / worker 的 DATABASE_URL 保持一致
+      DATABASE_URL: postgresql://finnest:YOUR-DB-PASSWORD@YOUR-DB-HOST:5432/finnest?schema=public
+      # ★4 必改：改成实际访问地址，如 http://192.168.1.10:4001（多个用逗号分隔）
+      WEB_ORIGIN: http://localhost:4001
+      APP_TIMEZONE: Asia/Shanghai
+      # API 不直接对外（未发布端口），保持 false；否则 XFF 可伪造、登录限速会被绕过。
+      TRUST_PROXY: "false"
+      # ★2 必改：指向你的外部 S3 / MinIO（与 worker 那组保持一致）
+      MINIO_ENDPOINT: YOUR-S3-HOST
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: YOUR-S3-ACCESS-KEY
+      # ★3 必改：对象存储密钥
+      MINIO_SECRET_KEY: change-me-please
+      MINIO_BUCKET: fin-nest
+      # AI 助手（可选）：三者都填才启用，留空则前端隐藏入口。
+      # AI_BASE_URL: https://api.deepseek.com/v1
+      # AI_API_KEY: sk-xxx
+      # AI_MODEL: deepseek-chat
+      # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
+      # FEISHU_APP_ID: cli_xxx
+      # FEISHU_APP_SECRET: xxx
+    # 不发布端口：web 容器通过 docker 网络访问 api，对外只暴露 web 一个端口。
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    image: ghcr.io/qijieinnet/fin-nest-worker:latest
+    container_name: fin-nest-worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      # ★1 必改：与 migrate / api 的 DATABASE_URL 保持一致
+      DATABASE_URL: postgresql://finnest:YOUR-DB-PASSWORD@YOUR-DB-HOST:5432/finnest?schema=public
+      # ★4 必改：与 api 的 WEB_ORIGIN 保持一致
+      WEB_ORIGIN: http://localhost:4001
+      APP_TIMEZONE: Asia/Shanghai
+      TRUST_PROXY: "false"
+      # ★2 必改：与 api 的 MINIO_* 整块保持一致
+      MINIO_ENDPOINT: YOUR-S3-HOST
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: YOUR-S3-ACCESS-KEY
+      # ★3 必改：对象存储密钥
+      MINIO_SECRET_KEY: change-me-please
+      MINIO_BUCKET: fin-nest
+      WORKER_POLL_INTERVAL_MS: "30000"
+
+  web:
+    image: ghcr.io/qijieinnet/fin-nest-web:latest
+    container_name: fin-nest-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: "4001"
+      HOSTNAME: "0.0.0.0"
+      API_INTERNAL_URL: http://api:4000
+    # 全栈唯一对外端口。改左侧数字可换宿主机端口，如 "8080:4001"
+    # （改了记得同步上面 ★4 的 WEB_ORIGIN）。
+    ports:
+      - "4001:4001"

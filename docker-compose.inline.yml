@@ -1,0 +1,194 @@
+# Fin Nest 自部署编排 —— 变量内联版：所有配置直接写在文件里，不需要 .env 文件。
+#
+# 适用于任何「只能提供一份 compose、无法配套 .env」的场景：群晖 Container Manager、
+# QNAP Container Station、TrueNAS、Portainer 等 NAS / 面板界面，或是直接贴进
+# 某台机器手改后 `docker compose -f docker-compose.inline.yml up -d`。
+# 这类环境通常不读 .env，也不会设置 COMPOSE_PROFILES，
+# 因此本文件不使用任何 ${变量} 插值，也不使用 profiles。
+#
+# 同系列的另外两份：
+#   docker-compose.yml                    变量走 .env 文件（命令行部署，配置与文件分离）
+#   docker-compose.inline-external.yml    全外部依赖版（不含内置 postgres 与 minio）
+#
+# ============================================================================
+# 部署前必须修改下面 4 组「★ 必改」，否则要么起不来，要么不安全。
+# 注意本文件没有变量插值，同一个密码在多处重复出现，必须全部改成同一个值：
+#
+#   ★1 数据库密码            1 处：postgres 的 POSTGRES_PASSWORD
+#   ★2 DATABASE_URL         3 处：migrate / api / worker，密码段必须与 ★1 完全一致
+#   ★3 附件存储密钥          4 处：minio 的 MINIO_ROOT_PASSWORD、minio-init 的 entrypoint
+#                                 命令行、api 与 worker 的 MINIO_SECRET_KEY，四处必须一致
+#                           （minio-init 那处在一行 shell 命令里，最容易漏，别忘了）
+#                           保留 change-me-please 时 API 会拒绝启动并报错，这是故意的
+#   ★4 WEB_ORIGIN           2 处：api / worker，改成实际访问地址如 http://192.168.1.10:4001
+#
+# 全文搜索 change-me-please，应当恰好命中 8 处（本说明里的 1 处不算），全部替换掉。
+# ============================================================================
+#
+# 部署后浏览器访问 http://<主机地址>:4001
+#
+# 升级：把 :latest 改成具体版本（如 :1.2.0）后重新部署即可。
+#       镜像 tag 不带 v 前缀：git tag v1.2.0 对应镜像 tag 1.2.0。
+#
+# 数据安全：postgres / minio 数据存于命名卷，重新部署不会丢；
+#          迁移只用 prisma migrate deploy，仅应用未执行的迁移，绝不重置已有数据。
+
+name: fin-nest
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: fin-nest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finnest
+      # ★1 必改：数据库密码（改完记得同步 ★2 的 DATABASE_URL）
+      POSTGRES_PASSWORD: change-me-please
+      POSTGRES_DB: finnest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finnest -d finnest"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: fin-nest-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      # ★3 必改：附件存储密钥（本文件共 3 处，必须完全一致）
+      MINIO_ROOT_PASSWORD: change-me-please
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 一次性初始化：创建私有 bucket（不公开，权限由 API 控制）。执行完即退出，属正常。
+  minio-init:
+    image: minio/mc:latest
+    container_name: fin-nest-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin change-me-please &&
+      mc mb --ignore-existing local/fin-nest &&
+      mc anonymous set none local/fin-nest &&
+      echo 'minio bucket ready: fin-nest'
+      "
+    restart: "no"
+
+  # 一次性迁移：应用未执行的数据库迁移后退出。执行完即退出，属正常。
+  migrate:
+    image: ghcr.io/qijieinnet/fin-nest-migrate:latest
+    container_name: fin-nest-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # ★2 必改：密码部分必须与 ★1 的 POSTGRES_PASSWORD 一致
+      DATABASE_URL: postgresql://finnest:change-me-please@postgres:5432/finnest?schema=public
+    restart: "no"
+
+  # 服务名必须保持 api：web 镜像里 Next 的 /api 转发目标在构建期固化为 http://api:4000，
+  # 改名会导致前端所有请求 502。
+  api:
+    image: ghcr.io/qijieinnet/fin-nest-api:latest
+    container_name: fin-nest-api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      API_PORT: "4000"
+      # ★2 必改：密码部分必须与 ★1 的 POSTGRES_PASSWORD 一致
+      DATABASE_URL: postgresql://finnest:change-me-please@postgres:5432/finnest?schema=public
+      # ★4 必改：改成实际访问地址，如 http://192.168.1.10:4001（多个用逗号分隔）
+      WEB_ORIGIN: http://localhost:4001
+      APP_TIMEZONE: Asia/Shanghai
+      # API 不直接对外（未发布端口），保持 false；否则 XFF 可伪造、登录限速会被绕过。
+      TRUST_PROXY: "false"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minioadmin
+      # ★3 必改：必须与 minio 的 MINIO_ROOT_PASSWORD 一致
+      MINIO_SECRET_KEY: change-me-please
+      MINIO_BUCKET: fin-nest
+      # AI 助手（可选）：三者都填才启用，留空则前端隐藏入口。
+      # AI_BASE_URL: https://api.deepseek.com/v1
+      # AI_API_KEY: sk-xxx
+      # AI_MODEL: deepseek-chat
+      # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
+      # FEISHU_APP_ID: cli_xxx
+      # FEISHU_APP_SECRET: xxx
+    # 不发布端口：web 容器通过 docker 网络访问 api，对外只暴露 web 一个端口。
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    image: ghcr.io/qijieinnet/fin-nest-worker:latest
+    container_name: fin-nest-worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      # ★2 必改：密码部分必须与 ★1 的 POSTGRES_PASSWORD 一致
+      DATABASE_URL: postgresql://finnest:change-me-please@postgres:5432/finnest?schema=public
+      # ★4 必改：与 api 的 WEB_ORIGIN 保持一致
+      WEB_ORIGIN: http://localhost:4001
+      APP_TIMEZONE: Asia/Shanghai
+      TRUST_PROXY: "false"
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_USE_SSL: "false"
+      MINIO_ACCESS_KEY: minioadmin
+      # ★3 必改：必须与 minio 的 MINIO_ROOT_PASSWORD 一致
+      MINIO_SECRET_KEY: change-me-please
+      MINIO_BUCKET: fin-nest
+      WORKER_POLL_INTERVAL_MS: "30000"
+
+  web:
+    image: ghcr.io/qijieinnet/fin-nest-web:latest
+    container_name: fin-nest-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: "4001"
+      HOSTNAME: "0.0.0.0"
+      API_INTERNAL_URL: http://api:4000
+    # 全栈唯一对外端口。改左侧数字可换宿主机端口，如 "8080:4001"
+    # （改了记得同步上面 ★4 的 WEB_ORIGIN）。
+    ports:
+      - "4001:4001"
+
+volumes:
+  pgdata:
+  miniodata:

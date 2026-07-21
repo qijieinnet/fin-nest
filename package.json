@@ -24,16 +24,26 @@
     "db:studio": "pnpm --filter @fin-nest/db run studio",
     "infra:up": "docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d",
     "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down",
+    "compose:up": "docker compose --env-file .env.docker up -d",
+    "compose:pull": "docker compose --env-file .env.docker pull",
+    "compose:logs": "docker compose --env-file .env.docker logs -f",
+    "compose:down": "docker compose --env-file .env.docker down",
     "docker:build": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker build",
     "docker:up": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker up -d --build",
     "docker:down": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker down",
     "docker:logs": "docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker logs -f"
   },
   "devDependencies": {
+    "js-yaml": "^5.2.1",
     "prettier": "^3.8.5",
     "typescript": "^5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "prisma", "sharp"]
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp"
+    ]
   }
 }

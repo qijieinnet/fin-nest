@@ -1,0 +1,184 @@
+# Fin Nest 自部署编排（拉取预构建镜像，无需本地构建）。
+#
+# 用法（在仓库根目录，或只下载本文件 + .env.docker.example 到任意空目录）：
+#   cp .env.docker.example .env.docker
+#   # 编辑 .env.docker：至少改 POSTGRES_PASSWORD、MINIO_SECRET_KEY、DATABASE_URL 里的密码
+#   docker compose --env-file .env.docker up -d
+#   浏览器访问 http://<host>:4001
+#
+# 注意必须显式带 --env-file .env.docker：compose 默认读的是同目录 `.env`，
+# 而仓库根的 `.env` 是本地开发配置（指向宿主机数据库），直接 up 会读错。
+# 仓库外的独立部署目录里没有这个冲突，把文件命名为 `.env` 直接 up 也可以。
+# 也可用封装好的：pnpm compose:up / compose:pull / compose:logs / compose:down
+#
+# 升级：
+#   docker compose --env-file .env.docker pull && docker compose --env-file .env.docker up -d
+#   镜像版本由 FIN_NEST_VERSION 控制（默认 latest；生产建议钉具体版本）。
+#   镜像 tag 不带 v 前缀：git tag v1.2.0 -> 镜像 tag 1.2.0。
+#
+# 想从源码构建（开发/改代码）请改用：
+#   docker compose -f infra/compose/docker-compose.prod.yml --env-file .env.docker up -d --build
+#
+# 数据安全：
+#   - postgres 数据存于命名卷 pgdata，`down` 不会删除（除非显式 `down -v`）。
+#   - 迁移只用 `prisma migrate deploy`（migrate 服务），仅应用未执行的迁移，绝不重置/清空已有数据。
+#
+# 使用外部数据库 / 对象存储：
+#   在 .env.docker 中设 COMPOSE_PROFILES= （置空，不启用 bundled），
+#   并把 DATABASE_URL / MINIO_* 指向外部地址即可；此时不会启动内置 postgres / minio。
+
+# 固定项目名，确保数据卷名（fin-nest_pgdata 等）稳定，不随执行目录变化。
+name: fin-nest
+
+# 注意：web 镜像内 Next 的 /api rewrite 目标在构建期烘焙为 http://api:4000，
+# 因此 API 服务必须叫 `api`，改名会导致前端所有请求 502。
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:4001}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+  TRUST_PROXY: ${TRUST_PROXY:-false}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+  MINIO_PORT: ${MINIO_PORT:-9000}
+  MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  # 附件存储的唯一门禁，production 下 API 会拒绝弱密钥启动，故这里强制必填。
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?请在 .env 中设置强 MINIO_SECRET_KEY}
+  MINIO_BUCKET: ${MINIO_BUCKET:-fin-nest}
+  # AI 助手（可选）：三者都配置时启用，未配置则相关端点返回未启用、前端隐藏入口。
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-}
+  # 飞书机器人（可选）：两者需同时配置，只配一半会启动报错。
+  FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+  FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: fin-nest-postgres
+    profiles: ["bundled"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finnest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-finnest}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finnest} -d ${POSTGRES_DB:-finnest}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: fin-nest-minio
+    profiles: ["bundled"]
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?请在 .env 中设置强 MINIO_SECRET_KEY}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # 一次性初始化：创建私有 bucket（默认不公开，权限由 API 控制）。
+  minio-init:
+    image: minio/mc:latest
+    container_name: fin-nest-minio-init
+    profiles: ["bundled"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY} &&
+      mc mb --ignore-existing local/${MINIO_BUCKET:-fin-nest} &&
+      mc anonymous set none local/${MINIO_BUCKET:-fin-nest} &&
+      echo 'minio bucket ready: ${MINIO_BUCKET:-fin-nest}'
+      "
+    restart: "no"
+
+  # 一次性迁移：应用未执行的数据库迁移后退出。绝不清空已有数据。
+  migrate:
+    image: ghcr.io/qijieinnet/fin-nest-migrate:${FIN_NEST_VERSION:-latest}
+    container_name: fin-nest-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?请在 .env 中设置 DATABASE_URL}
+    restart: "no"
+
+  api:
+    image: ghcr.io/qijieinnet/fin-nest-api:${FIN_NEST_VERSION:-latest}
+    container_name: fin-nest-api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+        required: false
+    environment:
+      <<: *app-env
+      API_PORT: "4000"
+    # 默认只绑本机回环：web 容器走 docker 网络访问 api，不依赖这个发布端口。
+    # 发布到 127.0.0.1 便于宿主机上 curl 调试，也正好满足前置 nginx 反代 /api 的用法。
+    # 确需从其他机器直连 API（如 NEXT_PUBLIC_API_BASE_URL=auto）才把 API_EXPOSE_BIND 设为 0.0.0.0，
+    # 此时 API 直接对外，务必保持 TRUST_PROXY=false，否则 X-Forwarded-For 可伪造、登录限速被绕过。
+    ports:
+      - "${API_EXPOSE_BIND:-127.0.0.1}:${API_EXPOSE_PORT:-4000}:4000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    image: ghcr.io/qijieinnet/fin-nest-worker:${FIN_NEST_VERSION:-latest}
+    container_name: fin-nest-worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+        required: false
+    environment:
+      <<: *app-env
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-30000}
+
+  web:
+    image: ghcr.io/qijieinnet/fin-nest-web:${FIN_NEST_VERSION:-latest}
+    container_name: fin-nest-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: "4001"
+      HOSTNAME: "0.0.0.0"
+      # 仅影响 SSR 阶段的直连（浏览器侧 /api 的转发目标已在镜像构建期固化为 http://api:4000）。
+      API_INTERNAL_URL: http://api:4000
+    ports:
+      - "${WEB_PORT:-4001}:4001"
+
+volumes:
+  pgdata:
+  miniodata:
