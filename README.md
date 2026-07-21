@@ -173,18 +173,61 @@ pnpm dev                      # 启动 API（:4000，文档 /docs）+ Web（:400
 
 ## 🐳 生产部署（Docker）
 
-一条命令拉起内置 PostgreSQL + MinIO + 迁移 + api + worker + web 全栈：
+一条命令拉起内置 PostgreSQL + MinIO + 迁移 + api + worker + web 全栈。
+
+### 方式一：拉取预构建镜像（推荐）
+
+无需本地构建，直接拉 GHCR 上的多架构镜像（`linux/amd64` + `linux/arm64`，NAS / 树莓派 / Apple Silicon 通用）：
 
 ```bash
-cp .env.docker.example .env.docker      # 修改密码、域名等
-pnpm docker:up                          # = docker compose -f infra/compose/docker-compose.prod.yml up -d --build
+cp .env.docker.example .env.docker      # 至少改 POSTGRES_PASSWORD、MINIO_SECRET_KEY
+docker compose --env-file .env.docker up -d
 # 浏览器访问 http://<host>:4001
 ```
 
+不在仓库内部署时，只需下载 [`docker-compose.yml`](docker-compose.yml) 和 [`.env.docker.example`](.env.docker.example) 两个文件到任意空目录即可，上面的命令原样可用。
+
+> 在仓库内可用等价的简写：`pnpm compose:up` / `compose:pull` / `compose:logs` / `compose:down`。这些是 `package.json` 里的 scripts，**独立部署目录没有 `package.json`，用不了**，请用完整的 `docker compose` 命令。
+
+镜像版本由 `.env.docker` 的 `FIN_NEST_VERSION` 控制，默认 `latest`；**生产建议钉具体版本**，升级可控、可回滚。注意镜像 tag 不带 `v` 前缀——git tag `v1.2.0` 对应镜像 tag `1.2.0`（也可只钉次版本 `1.2`）。升级：
+
+```bash
+docker compose --env-file .env.docker pull
+docker compose --env-file .env.docker up -d
+```
+
+### 方式一之二：变量内联（不需要 `.env` 文件）
+
+群晖 Container Manager、QNAP Container Station、TrueNAS、Portainer 这类「粘贴一份 compose 就能部署」的界面通常不读 `.env`，用变量内联版——所有配置直接写在文件里，无变量插值、无 `profiles`（这两样在这类界面上都会失效，`profiles` 更会导致数据库和存储**根本不启动**）：
+
+| 文件 | 适用 |
+| --- | --- |
+| [`docker-compose.inline.yml`](docker-compose.inline.yml) | 含内置 PostgreSQL + MinIO，开箱即用 |
+| [`docker-compose.inline-external.yml`](docker-compose.inline-external.yml) | 只跑应用，数据库与对象存储都用已有的 |
+
+只想外置其中一个的话，从 `docker-compose.inline.yml` 出发删掉不需要的服务和卷即可，文件头有说明。
+
+把文件内容粘进 compose 编辑框，改掉标了 `★ 必改` 的几组值即可。注意没有变量插值，**同一个值在多处重复出现**，必须全部改成同一个（文件头列了每组的准确处数和用于自查的搜索关键字）。最容易漏的是 `minio-init` 那处——它藏在一行 shell 命令里，不在 `environment:` 块中。
+
+其中附件存储密钥保留默认值时 **API 会拒绝启动并报错**，这是故意的防呆——不是部署失败。
+
+用外部依赖时另需注意：数据库要**先建好**（迁移只建表，不会创建 database 本身），数据库在同一台宿主机上时不能填 `localhost`（那是容器自己的回环地址），对象存储的 bucket 也要自己建并保持非公开——详见 `docker-compose.inline-external.yml` 文件头的「常见坑」两节。
+
+### 方式二：从源码构建（开发 / 改了代码）
+
+```bash
+cp .env.docker.example .env.docker
+pnpm docker:up                          # = docker compose -f infra/compose/docker-compose.prod.yml up -d --build
+```
+
+### 通用说明
+
 启动顺序由 compose 编排：`postgres` 就绪 → `migrate` 应用迁移并退出 → `api` / `worker` 启动 → `web` 启动。对外只需暴露 `web`（4001），`web` 容器内已把 `/api` 转发到 `api` 服务，同源访问；如需统一域名 / TLS 可在前面加 nginx（见 `infra/nginx/fin-nest.conf.example`）。
 
-- **使用外部数据库 / 对象存储**：在 `.env.docker` 中置空 `COMPOSE_PROFILES=`，并把 `DATABASE_URL` / `MINIO_*` 指向外部服务，再执行相同的 `pnpm docker:up`。
-- **数据安全**：内置 postgres 数据存于命名卷 `pgdata`，`docker:down` 不会删卷；迁移一律走 `prisma migrate deploy`，**只应用未执行的迁移，绝不重置已有数据**。
+- **API 服务不能改名**：`web` 镜像里 Next 的 `/api` 转发目标在**构建期**固化为 `http://api:4000`，compose 中的服务名必须保持 `api`，否则前端所有请求 502。
+- **API 端口默认只绑 `127.0.0.1`**：`web` 容器走 docker 网络访问 API，不依赖发布端口。发布到本机回环仅为宿主机调试 / 前置 nginx 反代。确需其他机器直连 API 才把 `API_EXPOSE_BIND` 设为 `0.0.0.0`，且此时必须保持 `TRUST_PROXY=false`。
+- **使用外部数据库 / 对象存储**：在 `.env.docker` 中置空 `COMPOSE_PROFILES=`，并把 `DATABASE_URL` / `MINIO_*` 指向外部服务，再执行相同的启动命令。
+- **数据安全**：内置 postgres 数据存于命名卷 `pgdata`，`down` 不会删卷；迁移一律走 `prisma migrate deploy`，**只应用未执行的迁移，绝不重置已有数据**。
 
 更多细节（单目标镜像构建、单独运行等）见 [`infra/docker/README.md`](infra/docker/README.md)。
 
@@ -220,7 +263,9 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `pnpm infra:up` / `infra:down` | 启停本地依赖容器（postgres + minio） |
 | `pnpm db:migrate` / `db:deploy` / `db:studio` | Prisma 迁移（dev / prod）与 Studio |
 | `pnpm e2e:api` | 后端端到端测试（自动拉起 API，需本地 DB） |
-| `pnpm docker:up` / `docker:down` / `docker:logs` | 生产整栈 compose |
+| `pnpm check:compose` | 校验四份 compose 的一致性（CI 每次 PR 跑） |
+| `pnpm compose:up` / `compose:pull` / `compose:logs` / `compose:down` | 生产整栈（拉取预构建镜像） |
+| `pnpm docker:up` / `docker:down` / `docker:logs` | 生产整栈（从源码构建） |
 
 > 数据库迁移是**显式步骤**，API / Worker 启动时不自动并发迁移。
 
