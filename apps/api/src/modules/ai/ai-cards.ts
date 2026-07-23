@@ -53,6 +53,12 @@ export type AiStatsCategory = {
   amountMicros: string;
 };
 
+/**
+ * 统计卡关注的收支方向：用户只问支出就别把收入摆上来（反之亦然）。
+ * both 才同时展示两边。旧历史卡片没有这个字段，按 both 渲染。
+ */
+export type AiStatsDirection = "expense" | "income" | "both";
+
 export type AiStatsTrend = {
   granularity: "day" | "week" | "month";
   points: Array<{
@@ -111,6 +117,8 @@ export type AiCard =
       dateFrom: string;
       dateTo: string;
       currency?: string;
+      /** 缺省（旧卡片）视为 both；非 both 时另一侧的金额/分类恒为空。 */
+      direction?: AiStatsDirection;
       expenseMicros: string;
       incomeMicros: string;
       expenseCategories: AiStatsCategory[];

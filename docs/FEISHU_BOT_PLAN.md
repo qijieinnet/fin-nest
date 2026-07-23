@@ -311,7 +311,7 @@ apps/api/package.json                                # + @larksuiteoapi/node-sdk
 
 **必须真机验证（无法离线）**：WSClient 连接与 ack/重推语义、卡片 JSON 的实际渲染效果、`tenant_access_token` 流程。
 
-**外部前置条件**：真实 `FEISHU_APP_ID/SECRET`，以及一个可建自建应用的飞书企业（需管理员开通机器人能力 + `im:message`、`im:message:send_as_bot` 权限）。
+**外部前置条件**：真实 `FEISHU_APP_ID/SECRET`，以及一个可建自建应用的飞书企业（需管理员开通机器人能力 + `im:message`、`im:message:send_as_bot` 权限）。另可选开 `im:message.reactions:write_only`——只用于「正在处理」的表情反馈，不开只会打一条 WARN，回复照常。
 
 ## 13. 实施顺序
 

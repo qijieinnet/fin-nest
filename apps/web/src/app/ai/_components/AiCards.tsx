@@ -541,12 +541,22 @@ function StatsTrendChart({
 /** 任意日期范围统计：收支总额 + 趋势折线图 + 分类饼图 + 一级分类汇总。 */
 export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats_period" }> }) {
   const currency = useCardCurrency(card.currency);
+  const direction = card.direction ?? "both";
   const hasExpense = card.expenseMicros !== "0";
   const hasIncome = card.incomeMicros !== "0";
-  // 双边都有数据才展示差额、另一侧汇总与分类切换；单边时锁定到有数据的一侧。
-  const bothSides = hasExpense && hasIncome;
+  // 用户只问一边时锁定那一边；问收支时双边都有数据才展示差额、另一侧汇总与分类切换。
+  const bothSides = direction === "both" && hasExpense && hasIncome;
   const [selectedType, setSelectedType] = useState<"expense" | "income">("expense");
-  const type = bothSides ? selectedType : hasIncome && !hasExpense ? "income" : "expense";
+  const type =
+    direction === "expense"
+      ? "expense"
+      : direction === "income"
+        ? "income"
+        : bothSides
+          ? selectedType
+          : hasIncome && !hasExpense
+            ? "income"
+            : "expense";
   const categories = type === "expense" ? card.expenseCategories : card.incomeCategories;
   const totalMicros = type === "expense" ? card.expenseMicros : card.incomeMicros;
   return (

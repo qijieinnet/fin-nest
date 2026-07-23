@@ -859,6 +859,8 @@ export type AiCard =
       dateFrom: string;
       dateTo: string;
       currency?: string;
+      /** 用户问的方向；非 both 时另一侧恒为空。旧历史卡片缺省，按 both 渲染。 */
+      direction?: "expense" | "income" | "both";
       expenseMicros: string;
       incomeMicros: string;
       expenseCategories: AiStatsCategory[];

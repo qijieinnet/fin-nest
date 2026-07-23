@@ -28,6 +28,8 @@ import {
   AiCard,
   AiDraftFields,
   AiStatsCategory,
+  AiStatsDirection,
+  AiStatsTrend,
   AiTransactionRow,
 } from "./ai-cards";
 import { microsToYuan, yuanToMicros } from "./ai-money";
@@ -152,6 +154,7 @@ type PeriodStatsToolArgs = {
   subcategoryIds?: string[];
   personId?: string;
   accountId?: string;
+  direction?: string;
   includeTrend?: boolean;
 };
 
@@ -254,7 +257,7 @@ const TOOLS: LlmTool[] = [
     function: {
       name: "get_period_stats",
       description:
-        "查询任意时间范围的收支统计，返回支出总额、收入总额、分类饼图及一级分类汇总；仅当 includeTrend=true 时额外返回按日/周/月聚合的趋势图。适用于日、周、月、季度、年度、自定义区间等所有统计、汇总或趋势请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「最近一年的餐饮趋势」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
+        "查询任意时间范围的收支统计，按 direction 返回支出和/或收入的总额、分类饼图及一级分类汇总；仅当 includeTrend=true 时额外返回按日/周/月聚合的趋势图。适用于日、周、月、季度、年度、自定义区间等所有统计、汇总或趋势请求。可按分类/二级分类/人员/账户过滤，例如「给妈妈花了多少」「招行卡这个月支出」「最近一年的餐饮趋势」。问「A 和 B 一共花了多少」时，把 A、B 的分类 id 一起放进 categoryIds/subcategoryIds 数组，合并为一次调用、一张卡，不要分多次调用。",
       parameters: {
         type: "object",
         properties: {
@@ -281,13 +284,19 @@ const TOOLS: LlmTool[] = [
             type: "string",
             description: "只统计涉及该资金账户的收支（须来自账本账户列表）",
           },
+          direction: {
+            type: "string",
+            enum: ["expense", "income", "both"],
+            description:
+              "统计方向，必传：用户只问支出/花销/花了多少/消费传 expense；只问收入/赚了多少/进账传 income；明确要收支对比、结余、盈余、两边都要时才传 both。传了支出分类就用 expense，传了收入分类就用 income。不确定且用户没提收入时按 expense。",
+          },
           includeTrend: {
             type: "boolean",
             description:
               "只有用户意图明确涉及趋势、走势、曲线、波动或随时间变化时才传 true；普通金额统计、汇总、总计、分类占比必须省略或传 false",
           },
         },
-        required: [],
+        required: ["direction"],
       },
     },
   },
@@ -1124,6 +1133,13 @@ export class AiService {
     cards: AiCard[],
   ) {
     const fail = (error: string) => ({ ok: false as const, error });
+    if (args.direction && !["expense", "income", "both"].includes(args.direction)) {
+      return fail("direction 必须是 expense/income/both");
+    }
+    // 模型漏传时按 both 兜底：宁可多给一侧，也不臆测用户问的是哪边。
+    const direction = (args.direction ?? "both") as AiStatsDirection;
+    const wantExpense = direction !== "income";
+    const wantIncome = direction !== "expense";
     if (Boolean(args.dateFrom) !== Boolean(args.dateTo)) {
       return fail("dateFrom 和 dateTo 必须同时提供");
     }
@@ -1204,12 +1220,27 @@ export class AiService {
       }
       return { list, totalMicros: total };
     };
-    const expense = packSide(result.expense.categories);
-    const income = packSide(result.income.categories);
+    // 只问一边时另一边整体清空：卡片、趋势与返回给模型的数据都不带对侧，避免答非所问。
+    const expense = wantExpense
+      ? packSide(result.expense.categories)
+      : { list: [] as AiStatsCategory[], totalMicros: 0n };
+    const income = wantIncome
+      ? packSide(result.income.categories)
+      : { list: [] as AiStatsCategory[], totalMicros: 0n };
     const expenseCategories = expense.list;
     const incomeCategories = income.list;
     const expenseMicros = expense.totalMicros.toString();
     const incomeMicros = income.totalMicros.toString();
+    const packedTrend: AiStatsTrend | undefined = trend
+      ? {
+          granularity: trend.granularity,
+          points: trend.points.map((point) => ({
+            label: point.label,
+            expenseMicros: wantExpense ? point.expenseMicros : "0",
+            incomeMicros: wantIncome ? point.incomeMicros : "0",
+          })),
+        }
+      : undefined;
 
     // 标题追加过滤条件，避免用户误读为全量统计。
     const filterLabels = [
@@ -1218,7 +1249,7 @@ export class AiService {
       args.personId ? context.people.find((item) => item.id === args.personId)?.name : undefined,
       account?.name,
     ].filter((label): label is string => Boolean(label));
-    const baseTitle = this.periodStatsTitle(dateFrom, dateTo);
+    const baseTitle = this.periodStatsTitle(dateFrom, dateTo, direction);
     const title = filterLabels.length > 0 ? `${baseTitle}（${filterLabels.join("·")}）` : baseTitle;
 
     cards.push({
@@ -1227,27 +1258,36 @@ export class AiService {
       dateFrom,
       dateTo,
       currency: context.currency,
+      direction,
       expenseMicros,
       incomeMicros,
       expenseCategories,
       incomeCategories,
-      ...(trend ? { trend } : {}),
+      ...(packedTrend ? { trend: packedTrend } : {}),
     });
+    // 与卡片一致：选中的分类/二级分类粒度；未查询的一侧完全不出现在返回里。
+    const packCategories = (list: AiStatsCategory[]) =>
+      list.slice(0, 10).map((item) => ({
+        name: item.name,
+        amountYuan: microsToYuan(BigInt(item.amountMicros)),
+      }));
     return {
       ok: true as const,
       dateFrom,
       dateTo,
-      expenseYuan: microsToYuan(expense.totalMicros),
-      incomeYuan: microsToYuan(income.totalMicros),
-      // 与卡片一致：选中的分类/二级分类粒度。
-      expenseCategories: expenseCategories.slice(0, 10).map((item) => ({
-        name: item.name,
-        amountYuan: microsToYuan(BigInt(item.amountMicros)),
-      })),
-      incomeCategories: incomeCategories.slice(0, 10).map((item) => ({
-        name: item.name,
-        amountYuan: microsToYuan(BigInt(item.amountMicros)),
-      })),
+      direction,
+      ...(wantExpense
+        ? {
+            expenseYuan: microsToYuan(expense.totalMicros),
+            expenseCategories: packCategories(expenseCategories),
+          }
+        : {}),
+      ...(wantIncome
+        ? {
+            incomeYuan: microsToYuan(income.totalMicros),
+            incomeCategories: packCategories(incomeCategories),
+          }
+        : {}),
     };
   }
 
@@ -1730,26 +1770,29 @@ export class AiService {
     return parts.join(" ");
   }
 
-  private periodStatsTitle(dateFrom: string, dateTo: string): string {
-    if (dateFrom === dateTo) return `${dateFrom} 收支统计`;
+  private periodStatsTitle(dateFrom: string, dateTo: string, direction: AiStatsDirection): string {
+    // 标题跟着方向走：只问支出的卡片叫「X 月支出统计」，别再挂「收支」。
+    const suffix =
+      direction === "expense" ? "支出统计" : direction === "income" ? "收入统计" : "收支统计";
+    if (dateFrom === dateTo) return `${dateFrom} ${suffix}`;
     const year = dateFrom.slice(0, 4);
     if (dateFrom === `${year}-01-01` && dateTo === `${year}-12-31`) {
-      return `${year} 年收支统计`;
+      return `${year} 年${suffix}`;
     }
     if (dateFrom === `${year}-01-01` && dateTo === todayKey()) {
-      return `${year} 年至今收支统计`;
+      return `${year} 年至今${suffix}`;
     }
     const month = dateFrom.slice(0, 7);
     const nextMonth = new Date(`${month}-01T00:00:00.000Z`);
     nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
     const monthEnd = new Date(nextMonth.getTime() - 86_400_000).toISOString().slice(0, 10);
     if (dateFrom === `${month}-01` && dateTo === monthEnd) {
-      return `${Number(month.slice(5, 7))} 月收支统计`;
+      return `${Number(month.slice(5, 7))} 月${suffix}`;
     }
     if (dateFrom === `${month}-01` && dateTo === todayKey()) {
-      return `${Number(month.slice(5, 7))} 月至今收支统计`;
+      return `${Number(month.slice(5, 7))} 月至今${suffix}`;
     }
-    return `${dateFrom} 至 ${dateTo} 收支统计`;
+    return `${dateFrom} 至 ${dateTo} ${suffix}`;
   }
 
   // ---------- 上下文与辅助 ----------
@@ -1861,7 +1904,7 @@ export class AiService {
       "## 能力",
       "1. 记账：用户描述支出/收入/转账时**必须**调用 draft_transaction 生成草稿（一句话多笔就多次调用），绝不能只在正文声称已生成；没有合适的分类就不传 categoryId、照常调用。草稿以卡片展示、需用户手动确认才入账，所以不要说「已记账」。",
       "2. 快捷模板：用户说「快速记账X」「用X模板记一笔」，或提到的名称与下方快捷模板列表匹配时，优先调用 apply_quick_template（传模板 id），不要用 draft_transaction 重新拼参数；用户话里带了金额/日期/备注就用参数覆盖，模板未设金额时先从话里提取金额传 amountYuan，提取不到就询问。",
-      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats。只有用户意图明确涉及趋势、走势、曲线、波动或随时间变化时才传 includeTrend=true；普通金额统计、汇总、总计、分类占比不得开启趋势。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryIds 过滤参数。",
+      "3. 统计：用户说统计、汇总、总计、趋势、分类占比，或询问某日/周/月/季度/年花了多少时，必须调用 get_period_stats。必须按用户问的方向传 direction：只问支出（花了多少、开销、消费、某支出分类）传 expense，只问收入（赚了多少、进账、工资、某收入分类）传 income，只有明确要收支对比/结余/两边都要时才传 both；用户没提收入就不要传 both。工具只会返回 direction 对应的一侧，正文也只谈这一侧，不要补充另一侧。只有用户意图明确涉及趋势、走势、曲线、波动或随时间变化时才传 includeTrend=true；普通金额统计、汇总、总计、分类占比不得开启趋势。按某人/某账户/某分类的花费，用它的 personId/accountId/categoryIds 过滤参数。",
       "4. 明细：只有用户明确说「明细」「每笔」「有哪些交易」「列出来」时才调用 query_transactions。不能用交易明细卡代替统计卡。按记账人筛选时传 createdByUserId：如「菜菜记录的」「菜菜记的」「菜菜创建的」中的菜菜是记账人；按交易人员筛选时才传 personId：如「给妈妈花的」「人员是妈妈」，两者绝不能混淆。排序时，「日期/交易日期」对应 sortBy=occurredOn，「记账日期/记录时间/创建时间」对应 sortBy=createdAt；「从小到大/最早到最晚」对应 sortOrder=asc，「从大到小/最新到最早」对应 sortOrder=desc。",
       "5. 余额：用户问账户余额、还有多少钱、欠多少、净资产时调用 get_account_balances。",
       "6. 预算：用户问预算用了多少、还剩多少时调用 get_budget_progress。",

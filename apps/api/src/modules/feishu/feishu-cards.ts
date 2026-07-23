@@ -234,27 +234,52 @@ type StatsLike = Extract<AiCard, { kind: "stats_period" | "stats_month" }>;
 
 function renderStatsCard(card: StatsLike, ctx: CardRenderContext): FeishuCardBody {
   const currency = card.currency ?? ctx.currency;
+  // 只问一边的统计卡不展示另一边（旧卡片无 direction，按 both 渲染）。
+  const direction = card.kind === "stats_period" ? (card.direction ?? "both") : "both";
+  const showExpense = direction !== "income";
+  const showIncome = direction !== "expense";
+  // 双边都展示时补上差额（收入 − 支出），与 Web 统计卡的三列摘要一致。
+  const balanceMicros = BigInt(card.incomeMicros) - BigInt(card.expenseMicros);
   const elements: FeishuCardBody[] = [
     {
       tag: "markdown",
-      content:
-        `**支出** ${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}` +
-        `${COLUMN_GAP}${COLUMN_GAP}**收入** ${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`,
+      content: [
+        ...(showExpense
+          ? [`**支出** ${formatMicros(card.expenseMicros, ctx.decimalPlaces, currency)}`]
+          : []),
+        ...(showIncome
+          ? [`**收入** ${formatMicros(card.incomeMicros, ctx.decimalPlaces, currency)}`]
+          : []),
+        ...(showExpense && showIncome
+          ? [`**差额** ${formatMicros(balanceMicros, ctx.decimalPlaces, currency)}`]
+          : []),
+      ].join(`${COLUMN_GAP}${COLUMN_GAP}`),
     },
   ];
 
-  const expenseCategories =
-    card.kind === "stats_period" ? card.expenseCategories : card.topExpenseCategories;
-  const hasCategoryChart = expenseCategories.length > 0;
+  // 旧月度卡只有支出分类；新卡按方向取对应一侧（direction=income 时只可能是 stats_period）。
+  const categories =
+    card.kind === "stats_period"
+      ? showExpense
+        ? card.expenseCategories
+        : card.incomeCategories
+      : card.topExpenseCategories;
+  const hasCategoryChart = categories.length > 0;
   if (hasCategoryChart) {
-    elements.push(expenseCategoryChart(expenseCategories));
+    elements.push(categoryChart(showExpense ? "支出分类" : "收入分类", categories));
   }
 
   const trend = card.kind === "stats_period" ? card.trend : null;
   const hasTrendChart = Boolean(trend && trend.points.length > 0);
   if (trend && hasTrendChart) {
     const granularity = { day: "日", week: "周", month: "月" }[trend.granularity];
-    elements.push(trendChart(`收支趋势（按${granularity}）`, trend.points));
+    const trendLabel = !showIncome ? "支出趋势" : !showExpense ? "收入趋势" : "收支趋势";
+    elements.push(
+      trendChart(`${trendLabel}（按${granularity}）`, trend.points, {
+        showExpense,
+        showIncome,
+      }),
+    );
   }
 
   // 显式判断「两张图都没有」，而不是数 elements 长度——后者依赖「摘要恰好占 1 个元素」，
@@ -270,7 +295,8 @@ function renderStatsCard(card: StatsLike, ctx: CardRenderContext): FeishuCardBod
   return cardBodyV2({ title, template: "indigo", elements });
 }
 
-function expenseCategoryChart(
+function categoryChart(
+  title: string,
   categories: Array<{ name: string; amountMicros: string }>,
 ): FeishuCardBody {
   return {
@@ -281,7 +307,7 @@ function expenseCategoryChart(
     preview: true,
     chart_spec: {
       type: "bar",
-      title: { text: "支出分类" },
+      title: { text: title },
       data: {
         values: categories.slice(0, MAX_ROWS).map((category) => ({
           type: truncateTableText(category.name, 20),
@@ -298,6 +324,7 @@ function expenseCategoryChart(
 function trendChart(
   title: string,
   points: Array<{ label: string; expenseMicros: string; incomeMicros: string }>,
+  sides: { showExpense: boolean; showIncome: boolean },
 ): FeishuCardBody {
   return {
     tag: "chart",
@@ -310,16 +337,24 @@ function trendChart(
       title: { text: title },
       data: {
         values: points.flatMap((point) => [
-          {
-            date: truncateTableText(point.label, 24),
-            type: "支出",
-            value: chartValue(point.expenseMicros),
-          },
-          {
-            date: truncateTableText(point.label, 24),
-            type: "收入",
-            value: chartValue(point.incomeMicros),
-          },
+          ...(sides.showExpense
+            ? [
+                {
+                  date: truncateTableText(point.label, 24),
+                  type: "支出",
+                  value: chartValue(point.expenseMicros),
+                },
+              ]
+            : []),
+          ...(sides.showIncome
+            ? [
+                {
+                  date: truncateTableText(point.label, 24),
+                  type: "收入",
+                  value: chartValue(point.incomeMicros),
+                },
+              ]
+            : []),
         ]),
       },
       xField: "date",

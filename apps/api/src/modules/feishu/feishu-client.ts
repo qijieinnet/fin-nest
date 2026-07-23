@@ -57,8 +57,8 @@ export class FeishuClient {
    * 用途是「正在处理」的可视反馈：AI 一轮对话含最多 6 轮工具循环，几十秒里用户
    * 看不到任何动静，容易以为机器人死了。
    *
-   * 失败一律吞掉返回 null：表情是锦上添花，绝不能因为没开 `im:message.reaction`
-   * 权限就挡住真正的回复。
+   * 失败一律吞掉返回 null：表情是锦上添花，绝不能因为没开 `im:message.reactions:write_only`
+   * 权限就挡住真正的回复（发消息走 `im:message:send_as_bot`，是另一套权限）。
    */
   async addReaction(messageId: string, emojiType: string): Promise<string | null> {
     try {
@@ -70,7 +70,7 @@ export class FeishuClient {
       return data?.reaction_id ?? null;
     } catch (error) {
       this.logger.warn(
-        `添加飞书表情回复失败（需开通 im:message.reaction 权限）：${error instanceof Error ? error.message : String(error)}`,
+        `添加飞书表情回复失败（需开通 im:message.reactions:write_only 权限，不影响正常回复）：${error instanceof Error ? error.message : String(error)}`,
       );
       return null;
     }

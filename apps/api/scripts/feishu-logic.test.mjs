@@ -369,6 +369,11 @@ test("统计卡只使用支出分类柱状图，并在有趋势时展示折线�
   );
 
   assert.equal(rendered.schema, "2.0");
+  // 收支双边的摘要必须给出差额（收入 − 支出），与 Web 统计卡一致。
+  const summary = cardElements(rendered).find((element) => element.tag === "markdown");
+  assert.ok(summary.content.includes("**支出** ¥123.46"));
+  assert.ok(summary.content.includes("**收入** ¥80.00"));
+  assert.ok(summary.content.includes("**差额** -¥43.46"));
   const charts = cardElements(rendered).filter((element) => element.tag === "chart");
   assert.deepEqual(
     charts.map((chart) => chart.chart_spec.type),
@@ -390,6 +395,79 @@ test("统计卡只使用支出分类柱状图，并在有趋势时展示折线�
   }
   assert.equal(JSON.stringify(rendered).includes("income_chart"), false);
   assert.ok(Buffer.byteLength(JSON.stringify(rendered), "utf8") < 30 * 1024);
+});
+
+test("direction=expense 的统计卡不出现收入摘要与收入折线", () => {
+  const rendered = renderCard(
+    {
+      kind: "stats_period",
+      title: "7 月支出统计",
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31",
+      direction: "expense",
+      expenseMicros: "123456789",
+      incomeMicros: "0",
+      expenseCategories: [{ name: "餐饮", amountMicros: "10050000" }],
+      incomeCategories: [],
+      trend: {
+        granularity: "week",
+        points: [
+          { label: "07-01 ~ 07-07", expenseMicros: "30000000", incomeMicros: "0" },
+          { label: "07-08 ~ 07-14", expenseMicros: "45500000", incomeMicros: "0" },
+        ],
+      },
+    },
+    ctx,
+  );
+  const elements = cardElements(rendered);
+  const summary = elements.find((element) => element.tag === "markdown");
+  assert.ok(summary.content.includes("支出"));
+  assert.equal(summary.content.includes("收入"), false);
+  // 单边统计没有可言的差额，不能凭 0 收入算出一个「差额」。
+  assert.equal(summary.content.includes("差额"), false);
+  const charts = elements.filter((element) => element.tag === "chart");
+  assert.equal(charts[0].chart_spec.title.text, "支出分类");
+  assert.ok(charts[1].chart_spec.title.text.startsWith("支出趋势"));
+  assert.deepEqual(
+    [...new Set(charts[1].chart_spec.data.values.map((point) => point.type))],
+    ["支出"],
+  );
+});
+
+test("direction=income 的统计卡只画收入分类与收入趋势", () => {
+  const rendered = renderCard(
+    {
+      kind: "stats_period",
+      title: "7 月收入统计",
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31",
+      direction: "income",
+      expenseMicros: "0",
+      incomeMicros: "80000000",
+      expenseCategories: [],
+      incomeCategories: [{ name: "工资", amountMicros: "80000000" }],
+      trend: {
+        granularity: "week",
+        points: [
+          { label: "07-01 ~ 07-07", expenseMicros: "0", incomeMicros: "80000000" },
+          { label: "07-08 ~ 07-14", expenseMicros: "0", incomeMicros: "0" },
+        ],
+      },
+    },
+    ctx,
+  );
+  const elements = cardElements(rendered);
+  const summary = elements.find((element) => element.tag === "markdown");
+  assert.ok(summary.content.includes("收入"));
+  assert.equal(summary.content.includes("支出"), false);
+  const charts = elements.filter((element) => element.tag === "chart");
+  assert.equal(charts[0].chart_spec.title.text, "收入分类");
+  assert.equal(charts[0].chart_spec.data.values[0].type, "工资");
+  assert.ok(charts[1].chart_spec.title.text.startsWith("收入趋势"));
+  assert.deepEqual(
+    [...new Set(charts[1].chart_spec.data.values.map((point) => point.type))],
+    ["收入"],
+  );
 });
 
 test("统计卡没有分类和趋势时保留摘要与无数据提示", () => {
