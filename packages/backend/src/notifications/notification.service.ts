@@ -2,10 +2,12 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Notification, Prisma } from "@fin-nest/db";
 import { FeishuClient } from "../feishu/feishu-client";
 import { PrismaService } from "../prisma/prisma.service";
-import { renderNotificationCard, renderNotificationText } from "./notification-card";
+import { cycleKeyOfOccurrence } from "../reminders/reminder-schedule";
+import { renderNotificationCard } from "./notification-card";
 import {
   NotificationActionState,
   NotificationPayload,
+  NotificationSourceType,
   ReminderOccurrence,
 } from "./notifications.types";
 
@@ -112,6 +114,27 @@ export class NotificationService {
   }
 
   /**
+   * 找出这些对象里「已被处理过的提醒周期」，供调度器抑制同一周期的后续档位
+   * ——用户在提前 30 天那档就点了确认，提前 7 天那档不该再骚扰他。
+   *
+   * 判据是「同一周期内任一档的卡片被点过按钮」：occurrenceKey 形如
+   * `{sourceType}:{id}:{基准日}:{档位}`，去掉档位段就是周期键。
+   * 注意这只覆盖「在飞书里处理」；在网页端续费/改到期日会改变基准日，
+   * 后续档位的周期键随之变化，天然不会再发。
+   */
+  async handledCycleKeys(
+    sourceType: NotificationSourceType,
+    sourceIds: string[],
+  ): Promise<Set<string>> {
+    if (!sourceIds.length) return new Set();
+    const handled = await this.prisma.client.notification.findMany({
+      where: { sourceType, sourceId: { in: sourceIds }, actionState: { not: null } },
+      select: { occurrenceKey: true },
+    });
+    return new Set(handled.map((row) => cycleKeyOfOccurrence(row.occurrenceKey)));
+  }
+
+  /**
    * 抢占一次提醒事件的按钮动作。返回 false 表示已被别人（或自己在别的设备上）处理过。
    *
    * 按 `occurrenceKey` 而非行 id 抢占：一次提醒给每个接收人各发一张卡，每张都能点，
@@ -146,15 +169,12 @@ export class NotificationService {
       throw new Error(`Unsupported notification channel: ${notification.channel}`);
     }
     const payload = normalizePayload(notification.payload);
-    // 有按钮就发交互卡片；纯信息推送退回文本，省得为一条没动作的提醒渲染空卡。
-    if (payload.actions?.length) {
-      await this.feishu.sendCardToUser(
-        notification.targetRef,
-        renderNotificationCard(notification.id, payload),
-      );
-      return;
-    }
-    await this.feishu.sendTextToUser(notification.targetRef, renderNotificationText(payload));
+    // 一律发卡片：没有按钮的提醒（如保单到期）也要保留标题与字段网格的排版，
+    // 退回纯文本等于把「谁、哪一笔、什么金额」压成一坨看不清的行。
+    await this.feishu.sendCardToUser(
+      notification.targetRef,
+      renderNotificationCard(notification.id, payload),
+    );
   }
 }
 
@@ -167,7 +187,9 @@ export function normalizePayload(rawPayload: Prisma.JsonValue): NotificationPayl
     kind: payload.kind ?? "subscription_due",
     title: payload.title ?? "提醒",
     leadDescription: payload.leadDescription ?? "",
-    lines: Array.isArray(payload.lines) ? payload.lines : [],
+    amount: payload.amount?.text ? payload.amount : undefined,
+    fields: Array.isArray(payload.fields) ? payload.fields : [],
+    lines: Array.isArray(payload.lines) ? payload.lines : undefined,
     actions: Array.isArray(payload.actions) ? payload.actions : undefined,
   };
 }

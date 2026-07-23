@@ -1,9 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import {
   AppError,
+  earliestSchedule,
   parseDateOnly,
   PrismaService,
   ReminderTargetsService,
+  ReminderTargetSummary,
+  sortSchedules,
   subscriptionReminderDate,
   todayKey,
 } from "@fin-nest/backend";
@@ -11,6 +14,7 @@ import { Prisma } from "@fin-nest/db";
 import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { CreateInsuranceDto, UpdateInsuranceDto } from "./dto/insurance.dto";
+import { ReminderScheduleDto } from "./dto/reminder-schedule.dto";
 import {
   CreateItemDto,
   CreateItemTypeDto,
@@ -25,13 +29,37 @@ import {
   UpdateSubscriptionDto,
 } from "./dto/subscription.dto";
 
+/** 业务行上的提醒镜像列。事实来源是 reminder_schedules，这三列只是「最早那一档」的派生缓存。 */
+type ReminderMirror = {
+  remindLeadValue: number | null;
+  remindLeadUnit: string | null;
+  remindTime: string | null;
+};
+
 /**
- * 到期提醒是否处于开启状态。判据与前端表单一致：提前量的值与单位同时存在。
- * 传入的是**写库之后**的行，因此 PATCH 里没提到的字段也已经落到实际值上。
+ * 由档位列表算出镜像列：取提前量最大的那一档（最早触发）。
+ *
+ * 前端的「即将到期」标签、红点汇总、自动确认续费的匹配窗口都读这三列，取最早那一档
+ * 才与「用户第一次被提醒」的时刻对齐；取晚了会漏判自动续费。空数组 = 关闭提醒。
  */
-function remindActive(sub: { remindLeadValue: number | null; remindLeadUnit: string | null }): boolean {
-  return Boolean(sub.remindLeadValue && sub.remindLeadUnit);
+function reminderMirror(reminders: ReminderScheduleDto[] | undefined): ReminderMirror {
+  const earliest = earliestSchedule(reminders ?? []);
+  if (!earliest) return { remindLeadValue: null, remindLeadUnit: null, remindTime: null };
+  return {
+    remindLeadValue: earliest.leadValue,
+    remindLeadUnit: earliest.leadUnit,
+    remindTime: earliest.remindTime,
+  };
 }
+
+/** 响应体里的一档提醒。 */
+type ReminderScheduleView = {
+  id: string;
+  leadValue: number;
+  leadUnit: string;
+  remindTime: string;
+  feishuBindings: ReminderTargetSummary[];
+};
 
 /**
  * 按计费周期把续费日往后推一个周期（UTC-midnight 存储）。
@@ -126,36 +154,44 @@ export class AssetsService {
       entries.push(entry);
       peopleByInsuranceId.set(entry.insuranceId, entries);
     }
+    const reminders = await this.loadReminderSchedules(
+      "insurance",
+      insurances.map((insurance) => insurance.id),
+    );
     return insurances.map((insurance) => ({
       ...insurance,
       insuredPeople: peopleByInsuranceId.get(insurance.id) ?? [],
       typeSortOrder: typeOrderByType.get(insurance.type) ?? 0,
+      reminders: reminders.get(insurance.id) ?? [],
     }));
   }
 
   async getInsurance(ledgerId: string, insuranceId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     const insurance = await this.assertInsurance(ledgerId, insuranceId);
-    const [insuredPeople, links] = await Promise.all([
+    const [insuredPeople, links, reminders] = await Promise.all([
       this.prisma.client.insuranceInsuredPerson.findMany({ where: { insuranceId } }),
       this.linkedTransactions(ledgerId, "insurance", insuranceId),
+      this.reminderSchedulesField("insurance", insuranceId),
     ]);
-    return { ...insurance, insuredPeople, ...links };
+    return { ...insurance, insuredPeople, ...links, ...reminders };
   }
 
   async createInsurance(ledgerId: string, userId: string, input: CreateInsuranceDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.$transaction(async (tx) => {
+    const insurance = await this.prisma.client.$transaction(async (tx) => {
       await this.ensureInsuranceTypeOrder(tx, ledgerId, input.type);
       const sortOrder = await tx.insurance.count({
         where: { ledgerId, deletedAt: null, type: input.type },
       });
-      const insurance = await tx.insurance.create({
+      const created = await tx.insurance.create({
         data: this.insuranceData(ledgerId, userId, input, sortOrder),
       });
-      await this.replaceInsuredPeople(tx, ledgerId, insurance.id, input.insuredPersonIds ?? []);
-      return insurance;
+      await this.replaceInsuredPeople(tx, ledgerId, created.id, input.insuredPersonIds ?? []);
+      await this.replaceReminderSchedules(tx, ledgerId, "insurance", created.id, input.reminders ?? []);
+      return created;
     });
+    return { ...insurance, ...(await this.reminderSchedulesField("insurance", insurance.id)) };
   }
 
   async updateInsurance(
@@ -166,7 +202,7 @@ export class AssetsService {
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertInsurance(ledgerId, insuranceId);
-    return this.prisma.client.$transaction(async (tx) => {
+    const insurance = await this.prisma.client.$transaction(async (tx) => {
       const changingType = Boolean(input.type && input.type !== existing.type);
       if (changingType) await this.ensureInsuranceTypeOrder(tx, ledgerId, input.type!);
       const updateData = this.insuranceUpdateData(userId, input);
@@ -175,14 +211,19 @@ export class AssetsService {
           where: { ledgerId, deletedAt: null, type: input.type! },
         });
       }
-      const insurance = await tx.insurance.update({
+      const updated = await tx.insurance.update({
         where: { id: insuranceId },
         data: updateData,
       });
       if (input.insuredPersonIds)
         await this.replaceInsuredPeople(tx, ledgerId, insuranceId, input.insuredPersonIds);
-      return insurance;
+      // 只在本次请求带了 reminders 时才重写档位：改个保额不该把提醒配置清掉。
+      if (input.reminders !== undefined) {
+        await this.replaceReminderSchedules(tx, ledgerId, "insurance", insuranceId, input.reminders);
+      }
+      return updated;
     });
+    return { ...insurance, ...(await this.reminderSchedulesField("insurance", insuranceId)) };
   }
 
   async terminateInsurance(ledgerId: string, insuranceId: string, userId: string) {
@@ -276,9 +317,13 @@ export class AssetsService {
   async deleteInsurance(ledgerId: string, insuranceId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertInsurance(ledgerId, insuranceId);
-    await this.prisma.client.insurance.update({
-      where: { id: insuranceId },
-      data: { deletedAt: new Date(), updatedBy: userId },
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.insurance.update({
+        where: { id: insuranceId },
+        data: { deletedAt: new Date(), updatedBy: userId },
+      });
+      // 同订阅：软删的保单不再参与推送，档位与接收人一并清掉。
+      await this.replaceReminderSchedules(tx, ledgerId, "insurance", insuranceId, []);
     });
     await this.files.deleteAttachmentsForOwner(ledgerId, "insurance", insuranceId);
   }
@@ -604,7 +649,7 @@ export class AssetsService {
         ),
       );
     }
-    const targets = await this.reminderTargets.load(
+    const reminders = await this.loadReminderSchedules(
       "subscription",
       subscriptions.map((s) => s.id),
     );
@@ -612,7 +657,7 @@ export class AssetsService {
       ...subscription,
       nextRenewalDate: advanced.get(subscription.id) ?? subscription.nextRenewalDate,
       totalSpendMicros: (spendBySubscription.get(subscription.id) ?? 0n).toString(),
-      remindFeishuBindings: targets.get(subscription.id) ?? [],
+      reminders: reminders.get(subscription.id) ?? [],
     }));
   }
 
@@ -633,7 +678,11 @@ export class AssetsService {
       });
       subscription.nextRenewalDate = target;
     }
-    return { ...subscription, ...links, ...(await this.reminderTargets.field("subscription", subscriptionId)) };
+    return {
+      ...subscription,
+      ...links,
+      ...(await this.reminderSchedulesField("subscription", subscriptionId)),
+    };
   }
 
   async createSubscription(ledgerId: string, userId: string, input: CreateSubscriptionDto) {
@@ -646,16 +695,19 @@ export class AssetsService {
       const created = await tx.subscription.create({
         data: this.subscriptionData(ledgerId, userId, input, sortOrder),
       });
-      await this.reminderTargets.replace(
+      await this.replaceReminderSchedules(
         tx,
         ledgerId,
         "subscription",
         created.id,
-        remindActive(created) ? (input.remindFeishuBindingIds ?? []) : [],
+        input.reminders ?? [],
       );
       return created;
     });
-    return { ...subscription, ...(await this.reminderTargets.field("subscription", subscription.id)) };
+    return {
+      ...subscription,
+      ...(await this.reminderSchedulesField("subscription", subscription.id)),
+    };
   }
 
   async updateSubscription(
@@ -677,22 +729,22 @@ export class AssetsService {
         });
       }
       const updated = await tx.subscription.update({ where: { id: subscriptionId }, data: updateData });
-      // 关掉到期提醒时连带清空推送目标——否则重新打开提醒会静默沿用上次的接收人。
-      // 只在「本次请求提到了提醒相关字段」时才动 targets，避免改个名字就把接收人清了。
-      if (!remindActive(updated)) {
-        await this.reminderTargets.replace(tx, ledgerId, "subscription", subscriptionId, []);
-      } else if (input.remindFeishuBindingIds !== undefined) {
-        await this.reminderTargets.replace(
+      // 只在本次请求带了 reminders 时才重写档位：改个名字不该把提醒配置清掉。
+      if (input.reminders !== undefined) {
+        await this.replaceReminderSchedules(
           tx,
           ledgerId,
           "subscription",
           subscriptionId,
-          input.remindFeishuBindingIds,
+          input.reminders,
         );
       }
       return updated;
     });
-    return { ...subscription, ...(await this.reminderTargets.field("subscription", subscriptionId)) };
+    return {
+      ...subscription,
+      ...(await this.reminderSchedulesField("subscription", subscriptionId)),
+    };
   }
 
   async terminateSubscription(ledgerId: string, subscriptionId: string, userId: string) {
@@ -775,8 +827,8 @@ export class AssetsService {
         where: { id: subscriptionId },
         data: { deletedAt: new Date(), updatedBy: userId },
       });
-      // 订阅是软删，但推送目标直接删干净：留着只会让调度器多查一轮，且恢复订阅不是现有能力。
-      await this.reminderTargets.replace(tx, ledgerId, "subscription", subscriptionId, []);
+      // 订阅是软删，但提醒档位与接收人直接删干净：留着只会让调度器多查一轮，且恢复订阅不是现有能力。
+      await this.replaceReminderSchedules(tx, ledgerId, "subscription", subscriptionId, []);
     });
     await this.files.deleteAttachmentsForOwner(ledgerId, "subscription", subscriptionId);
   }
@@ -827,9 +879,7 @@ export class AssetsService {
       coverageDesc: input.coverageDesc,
       startDate: input.startDate ? parseDateOnly(input.startDate) : null,
       endDate: input.endDate ? parseDateOnly(input.endDate) : null,
-      remindLeadValue: input.remindLeadValue ?? null,
-      remindLeadUnit: input.remindLeadUnit ?? null,
-      remindTime: input.remindTime ?? null,
+      ...reminderMirror(input.reminders),
       note: input.note,
       sortOrder,
       createdBy: userId,
@@ -856,9 +906,8 @@ export class AssetsService {
       coverageDesc: input.coverageDesc,
       startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
       endDate: input.endDate === undefined ? undefined : parseDateOnly(input.endDate),
-      remindLeadValue: input.remindLeadValue === undefined ? undefined : input.remindLeadValue,
-      remindLeadUnit: input.remindLeadUnit === undefined ? undefined : input.remindLeadUnit,
-      remindTime: input.remindTime === undefined ? undefined : input.remindTime,
+      // 档位没提到就不动镜像列（PATCH 语义），提到了就整体重算。
+      ...(input.reminders === undefined ? {} : reminderMirror(input.reminders)),
       note: input.note,
       updatedBy: userId,
     };
@@ -954,6 +1003,105 @@ export class AssetsService {
     };
   }
 
+  /**
+   * 覆盖式重写某个对象的提醒档位与逐档接收人。
+   *
+   * 全删重建而不是 diff：档位没有稳定的业务主键（改了提前量就是另一档），diff 反而要处理
+   * 「id 相同但语义变了」的情况；数量上限 5，重建的代价可以忽略。
+   * 接收人挂在档位 id 上，因此**必须先删旧档位的目标行**，否则删掉档位后目标行成为孤儿。
+   */
+  private async replaceReminderSchedules(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    sourceType: "subscription" | "insurance",
+    sourceId: string,
+    reminders: ReminderScheduleDto[],
+  ): Promise<void> {
+    const seen = new Set<string>();
+    for (const reminder of reminders) {
+      const key = `${reminder.leadValue}${reminder.leadUnit}`;
+      // 同提前量的两档会算出同一个推送 dedupeKey，后一档会被静默吞掉，因此这里直接拒绝。
+      if (seen.has(key)) {
+        throw new AppError("REMINDER_SCHEDULE_DUPLICATE", "同一个提前量只能设置一档提醒", 400);
+      }
+      seen.add(key);
+    }
+
+    const existing = await tx.reminderSchedule.findMany({
+      where: { sourceType, sourceId },
+      select: { id: true },
+    });
+    if (existing.length) {
+      await tx.reminderTarget.deleteMany({
+        where: {
+          sourceType: "reminder_schedule",
+          sourceId: { in: existing.map((row) => row.id) },
+        },
+      });
+      await tx.reminderSchedule.deleteMany({ where: { sourceType, sourceId } });
+    }
+
+    for (const reminder of reminders) {
+      const schedule = await tx.reminderSchedule.create({
+        data: {
+          ledgerId,
+          sourceType,
+          sourceId,
+          leadValue: reminder.leadValue,
+          leadUnit: reminder.leadUnit,
+          remindTime: reminder.remindTime,
+        },
+      });
+      await this.reminderTargets.replace(
+        tx,
+        ledgerId,
+        "reminder_schedule",
+        schedule.id,
+        reminder.feishuBindingIds ?? [],
+      );
+    }
+  }
+
+  /** 批量取提醒档位（含各档接收人），按提前量从大到小——列表与详情共用。 */
+  private async loadReminderSchedules(
+    sourceType: "subscription" | "insurance",
+    sourceIds: string[],
+  ): Promise<Map<string, ReminderScheduleView[]>> {
+    const result = new Map<string, ReminderScheduleView[]>();
+    if (!sourceIds.length) return result;
+
+    const schedules = await this.prisma.client.reminderSchedule.findMany({
+      where: { sourceType, sourceId: { in: sourceIds } },
+    });
+    if (!schedules.length) return result;
+
+    const targets = await this.reminderTargets.load(
+      "reminder_schedule",
+      schedules.map((schedule) => schedule.id),
+    );
+    for (const schedule of sortSchedules(schedules)) {
+      const bucket = result.get(schedule.sourceId) ?? [];
+      bucket.push({
+        id: schedule.id,
+        leadValue: schedule.leadValue,
+        leadUnit: schedule.leadUnit,
+        remindTime: schedule.remindTime,
+        feishuBindings: targets.get(schedule.id) ?? [],
+      });
+      result.set(schedule.sourceId, bucket);
+    }
+    return result;
+  }
+
+  /** 单个对象的提醒档位字段，展开进响应体。 */
+  private async reminderSchedulesField(
+    sourceType: "subscription" | "insurance",
+    sourceId: string,
+  ): Promise<{ reminders: ReminderScheduleView[] }> {
+    const map = await this.loadReminderSchedules(sourceType, [sourceId]);
+    return { reminders: map.get(sourceId) ?? [] };
+  }
+
   private async replaceInsuredPeople(
     tx: Prisma.TransactionClient,
     ledgerId: string,
@@ -1011,9 +1159,7 @@ export class AssetsService {
       autoRenew: input.autoRenew ?? false,
       startDate: input.startDate ? parseDateOnly(input.startDate) : null,
       nextRenewalDate: input.nextRenewalDate ? parseDateOnly(input.nextRenewalDate) : null,
-      remindLeadValue: input.remindLeadValue ?? null,
-      remindLeadUnit: input.remindLeadUnit ?? null,
-      remindTime: input.remindTime ?? null,
+      ...reminderMirror(input.reminders),
       note: input.note,
       sortOrder,
       createdBy: userId,
@@ -1037,9 +1183,8 @@ export class AssetsService {
       startDate: input.startDate === undefined ? undefined : parseDateOnly(input.startDate),
       nextRenewalDate:
         input.nextRenewalDate === undefined ? undefined : parseDateOnly(input.nextRenewalDate),
-      remindLeadValue: input.remindLeadValue === undefined ? undefined : input.remindLeadValue,
-      remindLeadUnit: input.remindLeadUnit === undefined ? undefined : input.remindLeadUnit,
-      remindTime: input.remindTime === undefined ? undefined : input.remindTime,
+      // 档位没提到就不动镜像列（PATCH 语义），提到了就整体重算。
+      ...(input.reminders === undefined ? {} : reminderMirror(input.reminders)),
       note: input.note,
       updatedBy: userId,
     };

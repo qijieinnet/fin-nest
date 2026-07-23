@@ -3,7 +3,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarCheck, ChevronRight, Edit3, RotateCcw, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
-import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPreview,
+  LoadingState,
+  reminderSummary,
+  type AttachmentItem,
+} from "@/components/business";
 import { Button } from "@/components/ui";
 import {
   apiRequest,
@@ -27,7 +32,6 @@ import {
   formatDateLabel,
   formatMoney,
   monthlyCostMicros,
-  remindLeadLabel,
   renewalReminderDue,
   subscriptionStatus,
 } from "./subscription-utils";
@@ -275,16 +279,17 @@ export function SubscriptionDetailSheet({
                 : "未设置"
             }
           />
-          <DetailRow
-            label="到期提醒"
-            value={
-              remindLeadLabel(subscription)
-                ? [remindLeadLabel(subscription), subscription.remindTime]
-                    .filter(Boolean)
-                    .join(" · ")
-                : "未设置"
-            }
-          />
+          {subscription.reminders.length === 0 ? (
+            <DetailRow label="到期提醒" value="未设置" />
+          ) : (
+            subscription.reminders.map((reminder, index) => (
+              <DetailRow
+                key={reminder.id}
+                label={subscription.reminders.length > 1 ? `第 ${index + 1} 次提醒` : "到期提醒"}
+                value={reminderSummary(reminder)}
+              />
+            ))
+          )}
           {subscription.terminatedAt ? (
             <DetailRow label="退订时间" value={formatDateLabel(subscription.terminatedAt)} />
           ) : null}

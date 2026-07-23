@@ -551,9 +551,22 @@ export function SubscriptionsScreen() {
     push({
       className: "ui-bottom-sheet--sheet-form",
       hideDefaultHeader: true,
-      content: <SubscriptionEditorSheet ledgerId={ledgerId} subscription={subscription} />,
+      content: <SubscriptionEditorSheet ledgerId={ledgerId} subscription={latest(subscription)} />,
     });
   };
+
+  /**
+   * 取缓存里最新的那份订阅。
+   *
+   * 详情弹层是以 JSX 元素的形式压进 sheet 栈的，它的 `onEdit` 闭包捕获的是**压栈那一刻**的
+   * 列表项；保存后列表刷新了，但那个闭包不会重建，直接用就会把编辑器回填成保存前的旧值
+   * （多档提醒尤其明显：少了刚加的那几档）。所以点击时按 id 重新取一次。
+   */
+  function latest(subscription?: Subscription): Subscription | undefined {
+    if (!subscription || !ledgerId) return subscription;
+    const cached = queryClient.getQueryData<Subscription[]>(queryKeys.subscriptions(ledgerId));
+    return cached?.find((item) => item.id === subscription.id) ?? subscription;
+  }
 
   const openRenewals = () => {
     if (!ledgerId) return;

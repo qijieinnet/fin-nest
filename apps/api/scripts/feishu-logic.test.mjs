@@ -13,6 +13,17 @@ import {
   stripMentionPlaceholders,
 } from "../dist/modules/feishu/feishu-events.js";
 import { formatMicros } from "../dist/modules/feishu/feishu-money.js";
+import {
+  cycleKeyOfOccurrence,
+  isEntryReminderConfigured,
+  isoWeekday,
+  matchesEntryReminderDate,
+  earliestSchedule,
+  reminderCycleKey,
+  scheduleLeadKey,
+  scheduleReminderDate,
+  sortSchedules,
+} from "@fin-nest/backend";
 
 // ---------------------------------------------------------------- 指令解析
 
@@ -607,4 +618,101 @@ test("终态草稿卡渲染出的仍是无按钮卡片（回调响应据此替�
   const confirmed = renderCard(draftCard({ status: "confirmed" }), ctx);
   assert.equal(findButtons(confirmed).length, 0);
   assert.ok(JSON.stringify(confirmed).includes("已记账"));
+});
+
+// ---------------------------------------------------------------- 多档提醒
+
+test("档位按提前量从大到小排，最早那一档进镜像列", () => {
+  const tiers = [
+    { leadValue: 1, leadUnit: "day" },
+    { leadValue: 1, leadUnit: "month" },
+    { leadValue: 2, leadUnit: "week" },
+  ];
+  assert.deepEqual(
+    sortSchedules(tiers).map((tier) => `${tier.leadValue}${tier.leadUnit}`),
+    ["1month", "2week", "1day"],
+  );
+  assert.deepEqual(earliestSchedule(tiers), { leadValue: 1, leadUnit: "month" });
+  assert.equal(earliestSchedule([]), null);
+});
+
+test("每档各自算提醒日与档位键", () => {
+  const due = new Date("2026-08-22T00:00:00Z");
+  assert.equal(
+    scheduleReminderDate(due, { leadValue: 30, leadUnit: "day" }).toISOString().slice(0, 10),
+    "2026-07-23",
+  );
+  assert.equal(
+    scheduleReminderDate(due, { leadValue: 1, leadUnit: "week" }).toISOString().slice(0, 10),
+    "2026-08-15",
+  );
+  assert.equal(scheduleReminderDate(null, { leadValue: 1, leadUnit: "day" }), null);
+  // 少了档位键，两档会算出同一个 dedupeKey，后一档被唯一约束静默吞掉。
+  assert.notEqual(
+    scheduleLeadKey({ leadValue: 7, leadUnit: "day" }),
+    scheduleLeadKey({ leadValue: 1, leadUnit: "day" }),
+  );
+});
+
+test("同一轮提醒的各档共享周期键：任一档被处理，后续档据此不再推送", () => {
+  const cycle = reminderCycleKey("subscription", "sub-1", "2026-08-22");
+  const first = `${cycle}:${scheduleLeadKey({ leadValue: 30, leadUnit: "day" })}`;
+  const second = `${cycle}:${scheduleLeadKey({ leadValue: 7, leadUnit: "day" })}`;
+  assert.notEqual(first, second);
+  assert.equal(cycleKeyOfOccurrence(first), cycle);
+  assert.equal(cycleKeyOfOccurrence(second), cycle);
+  // 基准日变了（网页端续费）就是另一轮，不会被上一轮的「已处理」抑制。
+  assert.notEqual(
+    cycleKeyOfOccurrence(first),
+    reminderCycleKey("subscription", "sub-1", "2026-09-22"),
+  );
+});
+
+// ---------------------------------------------------------------- 记账提醒周期
+
+test("记账提醒：每天恒命中，每周看星期", () => {
+  const monday = new Date("2026-07-20T00:00:00Z");
+  const sunday = new Date("2026-07-26T00:00:00Z");
+  assert.equal(isoWeekday(monday), 1);
+  assert.equal(isoWeekday(sunday), 7);
+
+  const daily = { frequency: "daily", weekdays: [], monthDays: [] };
+  assert.equal(matchesEntryReminderDate(daily, monday), true);
+
+  const weekly = { frequency: "weekly", weekdays: [1, 5], monthDays: [] };
+  assert.equal(matchesEntryReminderDate(weekly, monday), true);
+  assert.equal(matchesEntryReminderDate(weekly, sunday), false);
+});
+
+test("记账提醒：每月选中的日号当月不存在时，落到当月最后一天", () => {
+  const monthly = { frequency: "monthly", weekdays: [], monthDays: [1, 31] };
+  assert.equal(matchesEntryReminderDate(monthly, new Date("2026-02-01T00:00:00Z")), true);
+  assert.equal(matchesEntryReminderDate(monthly, new Date("2026-02-27T00:00:00Z")), false);
+  // 2 月没有 31 号 → 28 号（当月最后一天）补发。
+  assert.equal(matchesEntryReminderDate(monthly, new Date("2026-02-28T00:00:00Z")), true);
+  // 有 31 号的月份就按 31 号发，30 号不发。
+  assert.equal(matchesEntryReminderDate(monthly, new Date("2026-07-30T00:00:00Z")), false);
+  assert.equal(matchesEntryReminderDate(monthly, new Date("2026-07-31T00:00:00Z")), true);
+  // 选中的日号都在当月存在时，最后一天不该被顺带触发。
+  const early = { frequency: "monthly", weekdays: [], monthDays: [5] };
+  assert.equal(matchesEntryReminderDate(early, new Date("2026-02-28T00:00:00Z")), false);
+});
+
+test("记账提醒：每周不选星期、每月不选日号 = 永远不触发，配置校验拦住", () => {
+  assert.equal(
+    isEntryReminderConfigured({ frequency: "daily", weekdays: [], monthDays: [] }),
+    true,
+  );
+  assert.equal(
+    isEntryReminderConfigured({ frequency: "weekly", weekdays: [], monthDays: [] }),
+    false,
+  );
+  assert.equal(
+    isEntryReminderConfigured({ frequency: "monthly", weekdays: [], monthDays: [] }),
+    false,
+  );
+  assert.equal(
+    isEntryReminderConfigured({ frequency: "monthly", weekdays: [], monthDays: [1] }),
+    true,
+  );
 });

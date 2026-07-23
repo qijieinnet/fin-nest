@@ -20,13 +20,23 @@ export class WorkerRunnerService {
     // 回收 worker 崩溃遗留的 running 任务，否则它们会永远卡在 running 状态。
     await this.jobs.requeueStale(10 * 60_000);
 
-    // 订阅到期提醒不走 background_jobs：应发时刻由订阅数据算出，改配置就该立刻反映，
+    // 订阅/保单到期提醒不走 background_jobs：应发时刻由档案数据算出，改配置就该立刻反映，
     // 排队的 job 反而要在每个改动路径上回收。扫表 + dedupeKey 幂等更省心（见 ReminderSchedulerService）。
-    // 扫描抛错不能拖垮 job 循环，两者互不依赖。
+    // 扫描抛错不能拖垮 job 循环，两者互不依赖；两类扫描也各自 try，一边挂了另一边照常发。
     try {
       await this.reminderScheduler.scanSubscriptions();
     } catch (error) {
-      console.error("fin-nest-worker reminder scan failed:", error);
+      console.error("fin-nest-worker subscription reminder scan failed:", error);
+    }
+    try {
+      await this.reminderScheduler.scanInsurances();
+    } catch (error) {
+      console.error("fin-nest-worker insurance reminder scan failed:", error);
+    }
+    try {
+      await this.reminderScheduler.scanEntryReminders();
+    } catch (error) {
+      console.error("fin-nest-worker entry reminder scan failed:", error);
     }
     while (true) {
       const job = await this.jobs.claimNext(`worker-${process.pid}`);

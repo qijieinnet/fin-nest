@@ -4,8 +4,10 @@ import {
   AuditLogService,
   currentMonthKey,
   DatabaseTransactionService,
+  isEntryReminderConfigured,
   monthRange,
   PrismaService,
+  ReminderTargetsService,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { buildNetWorth } from "../accounts/net-worth";
@@ -17,7 +19,7 @@ import {
   UpdateSubcategoryDto,
 } from "./dto/category.dto";
 import { CreatePersonDto, UpdatePersonDto } from "./dto/person.dto";
-import { UpdateRecordSettingDto } from "./dto/record-setting.dto";
+import { EntryReminderDto, UpdateRecordSettingDto } from "./dto/record-setting.dto";
 import { StatisticsQueryDto } from "./dto/statistics-query.dto";
 
 type MonthBucket = { month: string; expenseMicros: bigint; incomeMicros: bigint };
@@ -29,6 +31,7 @@ export class RecordsService {
     private readonly txs: DatabaseTransactionService,
     private readonly audit: AuditLogService,
     private readonly ledgers: LedgersService,
+    private readonly reminderTargets: ReminderTargetsService,
   ) {}
 
   async listCategories(ledgerId: string, userId: string, type?: string) {
@@ -314,7 +317,75 @@ export class RecordsService {
 
   async getRecordSetting(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.recordSetting.findUniqueOrThrow({ where: { ledgerId } });
+    const [setting, entryReminder] = await Promise.all([
+      this.prisma.client.recordSetting.findUniqueOrThrow({ where: { ledgerId } }),
+      this.loadEntryReminder(ledgerId),
+    ]);
+    return { ...setting, entryReminder };
+  }
+
+  /** 记账提醒（含接收人）。没有行时返回一份默认值，前端不必区分「没配过」和「配了但关着」。 */
+  private async loadEntryReminder(ledgerId: string) {
+    const [reminder, targets] = await Promise.all([
+      this.prisma.client.entryReminder.findUnique({ where: { ledgerId } }),
+      this.reminderTargets.field("entry_reminder", ledgerId),
+    ]);
+    return {
+      enabled: reminder?.enabled ?? false,
+      frequency: reminder?.frequency ?? "daily",
+      weekdays: reminder?.weekdays ?? [],
+      monthDays: reminder?.monthDays ?? [],
+      remindTime: reminder?.remindTime ?? "20:00",
+      feishuBindings: targets.remindFeishuBindings,
+    };
+  }
+
+  /**
+   * 写入记账提醒。整份覆盖（缺省字段沿用当前值），接收人跟着一起重写。
+   *
+   * 关掉开关**不清空**接收人与周期：这是一个设置项，用户再打开时理应看到上次配好的样子
+   * ——与订阅/保单的到期提醒不同，那边的接收人藏在弹层里，留着会变成看不见的状态。
+   */
+  private async writeEntryReminder(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    userId: string,
+    input: EntryReminderDto,
+  ): Promise<void> {
+    const current = await tx.entryReminder.findUnique({ where: { ledgerId } });
+    const next = {
+      enabled: input.enabled ?? current?.enabled ?? false,
+      frequency: input.frequency ?? current?.frequency ?? "daily",
+      weekdays: input.weekdays ?? current?.weekdays ?? [],
+      monthDays: input.monthDays ?? current?.monthDays ?? [],
+      remindTime: input.remindTime ?? current?.remindTime ?? "20:00",
+    };
+    // 每周不选星期、每月不选日号 = 永远不会触发，开着开关却收不到提醒最难排查，直接拒绝。
+    if (next.enabled && !isEntryReminderConfigured(next)) {
+      throw new AppError(
+        "ENTRY_REMINDER_NOT_CONFIGURED",
+        next.frequency === "weekly" ? "每周提醒至少选一天" : "每月提醒至少选一个日期",
+        400,
+      );
+    }
+    // 同一天选两次没有意义，去重后排序，前端展示与推送判定都按稳定顺序来。
+    const weekdays = uniqueSorted(next.weekdays);
+    const monthDays = uniqueSorted(next.monthDays);
+
+    await tx.entryReminder.upsert({
+      where: { ledgerId },
+      create: { ledgerId, ...next, weekdays, monthDays, updatedBy: userId },
+      update: { ...next, weekdays, monthDays, updatedBy: userId },
+    });
+    if (input.feishuBindingIds !== undefined) {
+      await this.reminderTargets.replace(
+        tx,
+        ledgerId,
+        "entry_reminder",
+        ledgerId,
+        input.feishuBindingIds,
+      );
+    }
   }
 
   async updateRecordSetting(ledgerId: string, userId: string, input: UpdateRecordSettingDto) {
@@ -325,17 +396,23 @@ export class RecordsService {
           throw new AppError("INVALID_VISIBLE_FIELD", `${key} 必须是布尔值`, 400);
       }
     }
-    const setting = await this.prisma.client.recordSetting.update({
-      where: { ledgerId },
-      data: {
-        fieldOrder: input.fieldOrder,
-        visibleFields: input.visibleFields,
-        acctRequired: input.acctRequired,
-        personRequired: input.personRequired,
-        continuousEntry: input.continuousEntry,
-        amountDecimalPlaces: input.amountDecimalPlaces,
-        updatedBy: userId,
-      },
+    const setting = await this.prisma.client.$transaction(async (tx) => {
+      const updated = await tx.recordSetting.update({
+        where: { ledgerId },
+        data: {
+          fieldOrder: input.fieldOrder,
+          visibleFields: input.visibleFields,
+          acctRequired: input.acctRequired,
+          personRequired: input.personRequired,
+          continuousEntry: input.continuousEntry,
+          amountDecimalPlaces: input.amountDecimalPlaces,
+          updatedBy: userId,
+        },
+      });
+      if (input.entryReminder) {
+        await this.writeEntryReminder(tx, ledgerId, userId, input.entryReminder);
+      }
+      return updated;
     });
     await this.audit.write({
       source: "user",
@@ -345,7 +422,7 @@ export class RecordsService {
       entityType: "record_setting",
       entityId: ledgerId,
     });
-    return setting;
+    return { ...setting, entryReminder: await this.loadEntryReminder(ledgerId) };
   }
 
   async getStatistics(ledgerId: string, userId: string, query: StatisticsQueryDto) {
@@ -487,6 +564,11 @@ export class RecordsService {
     if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
     return person;
   }
+}
+
+/** 去重 + 升序。星期/日号的存储顺序稳定，前端回填与推送判定都不必再排。 */
+function uniqueSorted(values: number[]): number[] {
+  return Array.from(new Set(values)).sort((a, b) => a - b);
 }
 
 function lastMonths(month: string, count: number): string[] {

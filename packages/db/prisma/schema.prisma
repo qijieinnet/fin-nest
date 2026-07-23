@@ -147,6 +147,27 @@ model RecordSetting {
   @@map("record_settings")
 }
 
+/// 记账提醒：按周期提醒「今天该记账了」，一个账本一条。
+///
+/// 与到期提醒（ReminderSchedule）的区别是没有基准日与提前量，只有重复周期，
+/// 因此不复用那张表。接收人挂在 ReminderTarget 的 sourceType='entry_reminder' 上，sourceId = ledgerId。
+model EntryReminder {
+  ledgerId   String   @id @map("ledger_id") @db.Uuid
+  enabled    Boolean  @default(false)
+  /// daily | weekly | monthly
+  frequency  String   @default("daily")
+  /// 每周提醒的星期，ISO 口径 1=周一 … 7=周日。frequency='weekly' 时生效。
+  weekdays   Int[]    @db.SmallInt
+  /// 每月提醒的日号 1..31。当月没有该日（如 31 号遇到 30 天的月份）时落到当月最后一天。
+  monthDays  Int[]    @map("month_days") @db.SmallInt
+  /// 本地 HH:mm（24 小时制）。
+  remindTime String   @default("20:00") @map("remind_time")
+  updatedBy  String?  @map("updated_by") @db.Uuid
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("entry_reminders")
+}
+
 model Category {
   id         String    @id @default(uuid()) @db.Uuid
   ledgerId   String    @map("ledger_id") @db.Uuid
@@ -542,7 +563,8 @@ model Insurance {
   coverageDesc    String?   @map("coverage_desc")
   startDate       DateTime? @map("start_date") @db.Date
   endDate         DateTime? @map("end_date") @db.Date
-  // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
+  // 到期提醒「最早那一档」的镜像，事实来源是 reminder_schedules（见 ReminderSchedule）。
+  // 供前端状态标签、红点汇总与自动确认续费的匹配窗口读取；两者同时为空表示未开启提醒。
   remindLeadValue Int?      @map("remind_lead_value")
   remindLeadUnit  String?   @map("remind_lead_unit")
   // 提醒时间（本地 HH:mm，24 小时制），供后续邮件/推送在当天该时刻发送；为空表示未设置。
@@ -637,7 +659,8 @@ model Subscription {
   autoRenew       Boolean   @default(false) @map("auto_renew")
   startDate       DateTime? @map("start_date") @db.Date
   nextRenewalDate DateTime? @map("next_renewal_date") @db.Date
-  // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
+  // 到期提醒「最早那一档」的镜像，事实来源是 reminder_schedules（见 ReminderSchedule）。
+  // 供前端状态标签、红点汇总与自动确认续费的匹配窗口读取；两者同时为空表示未开启提醒。
   remindLeadValue Int?      @map("remind_lead_value")
   remindLeadUnit  String?   @map("remind_lead_unit")
   // 提醒时间（本地 HH:mm，24 小时制），供后续邮件/推送在当天该时刻发送；为空表示未设置。
@@ -722,13 +745,41 @@ model BackgroundJob {
   @@map("background_jobs")
 }
 
-/// 提醒推送目标。挂在业务对象（订阅）上而非单条提醒规则上——多档提醒共用同一批接收人。
-/// sourceType/sourceId 泛化，后续保险/预算接入推送时复用同一张表。
+/// 到期提醒的一档。订阅 / 保单可配多档（如提前 30 天、提前 7 天各提醒一次），
+/// 每档有独立的提前量、提醒时刻与飞书接收人（接收人挂在 ReminderTarget 的
+/// sourceType='reminder_schedule' 上）。
+///
+/// 档位表是提醒配置的**唯一事实来源**；Subscription/Insurance 上的 remindLeadValue/Unit/Time
+/// 是 API 维护的「最早那一档」镜像，只供前端状态标签、红点汇总与自动确认续费的匹配窗口读取。
+///
+/// (sourceType, sourceId, leadValue, leadUnit) 唯一：两档相同提前量会算出同一个
+/// Notification.dedupeKey，后一档会被静默吞掉。
+model ReminderSchedule {
+  id         String   @id @default(uuid()) @db.Uuid
+  ledgerId   String   @map("ledger_id") @db.Uuid
+  /// subscription | insurance
+  sourceType String   @map("source_type")
+  sourceId   String   @map("source_id") @db.Uuid
+  leadValue  Int      @map("lead_value")
+  /// day | week | month | year
+  leadUnit   String   @map("lead_unit")
+  /// 本地 HH:mm（24 小时制）。
+  remindTime String   @map("remind_time")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sourceType, sourceId, leadValue, leadUnit])
+  @@index([sourceType, sourceId])
+  @@index([ledgerId])
+  @@map("reminder_schedules")
+}
+
+/// 提醒推送目标。订阅/保单的接收人挂在**档位**（ReminderSchedule）上，自动记账挂在规则上。
+/// sourceType/sourceId 泛化，后续预算等接入推送时复用同一张表。
 /// 刻意不建到 feishu_bindings 的外键：解绑是软删，读取时按 revokedAt IS NULL 过滤。
 model ReminderTarget {
   id              String   @id @default(uuid()) @db.Uuid
   ledgerId        String   @map("ledger_id") @db.Uuid
-  // subscription | auto_rule（后续 insurance/plan）
+  // reminder_schedule | auto_rule | entry_reminder
   sourceType      String   @map("source_type")
   sourceId        String   @map("source_id") @db.Uuid
   // feishu

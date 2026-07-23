@@ -2717,6 +2717,77 @@ select:focus-visible {
   padding-right: 0;
 }
 
+/* 记账提醒：开关下方展开的配置区，沿用记一笔表单的行与 chip 样式。 */
+.entry-reminder__body {
+  border-top: 1px solid var(--color-border-subtle);
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+.entry-reminder__body > .transaction-form__select-row,
+.entry-reminder__body .relative > .transaction-form__select-row,
+.entry-reminder__body .transaction-form__date-card .biz-date-picker {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* 1~31 号：7 列对齐成日历的形状，比一行流式排列好定位。 */
+.entry-reminder__day-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.entry-reminder__day {
+  justify-content: center;
+  min-height: 34px;
+  padding: 0;
+}
+
+/* 多档到期提醒：每一档用一个浅色分组把「提前量 / 时刻 / 接收人」圈在一起，
+   否则连着几档的行会糊成一片，看不出哪几行属于同一次提醒。 */
+.reminder-tier {
+  background: var(--color-control-fill-muted);
+  border-radius: 14px;
+  display: grid;
+  gap: 2px;
+  padding: 4px 12px 8px;
+}
+
+.reminder-tier__head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 36px;
+}
+
+.reminder-tier__head > strong {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reminder-tier .transaction-form__select-row,
+.reminder-tier .account-form__field-row,
+/* 时间行的左右内边距来自 .transaction-form__date-card 里的 .biz-date-picker，
+   不一并清掉的话它会比同组其它行多缩进 16px。 */
+.reminder-tier .transaction-form__date-card .biz-date-picker {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.reminder-tier__add {
+  align-items: center;
+  color: var(--color-tint);
+  display: flex;
+  font-size: 15px;
+  font-weight: 600;
+  gap: 6px;
+  justify-content: center;
+  min-height: 44px;
+}
+
 .transaction-form .biz-toggle-card__header,
 .transaction-form .biz-attachment-card .biz-toggle-card__header {
   min-height: 56px;

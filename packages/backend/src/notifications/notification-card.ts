@@ -1,4 +1,10 @@
-import { NotificationActionKey, NotificationPayload } from "./notifications.types";
+import {
+  NotificationActionKey,
+  NotificationAmount,
+  NotificationAmountTone,
+  NotificationField,
+  NotificationPayload,
+} from "./notifications.types";
 
 /**
  * 推送卡片渲染。发送侧（worker）与回写侧（api 的卡片回调）共用，保证点击前后是同一张卡的形态。
@@ -26,6 +32,22 @@ export type NotificationCardResult = {
   detail?: string | null;
 };
 
+/**
+ * 语义色 → 飞书色号。
+ *
+ * lark_md 的字体色**只有 red / green / grey 三档**（`<text_tag>` 的十来种色号不适用于正文文本），
+ * 所以支出绿、收入红能与前端详情对上，转账的黄色没有对应值——退回 grey，
+ * 比借用一个语义不同的颜色更不误导。
+ */
+const AMOUNT_COLORS: Record<NotificationAmountTone, string> = {
+  expense: "green",
+  income: "red",
+  transfer: "grey",
+};
+
+/** 超过这个长度的值独占一行，避免备注这类长文本把双列网格挤变形（半列约放得下十个汉字）。 */
+const WIDE_VALUE_LENGTH = 10;
+
 export function renderNotificationCard(
   notificationId: string,
   payload: NotificationPayload,
@@ -33,11 +55,17 @@ export function renderNotificationCard(
 ): NotificationCardBody {
   const elements: NotificationCardBody[] = [];
 
-  const lines = [payload.leadDescription, ...payload.lines].filter(
-    (line): line is string => Boolean(line),
-  );
-  if (lines.length > 0) {
-    elements.push({ tag: "div", text: { tag: "lark_md", content: lines.map(escapeMd).join("\n") } });
+  if (payload.leadDescription) {
+    elements.push(divText(escapeMd(payload.leadDescription)));
+  }
+  if (payload.amount) {
+    elements.push(divText(amountMarkdown(payload.amount)));
+  }
+  if (payload.fields.length > 0) {
+    elements.push(fieldGrid(payload.fields));
+  } else if (payload.lines?.length) {
+    // 旧结构的历史行：整行文本原样渲染。
+    elements.push(divText(payload.lines.map(escapeMd).join("\n")));
   }
 
   if (result) {
@@ -65,10 +93,37 @@ export function renderNotificationCard(
   };
 }
 
-/** 纯文本回退：渠道不支持卡片、或 payload 结构异常时用。 */
-export function renderNotificationText(payload: NotificationPayload): string {
-  const lead = payload.leadDescription ? `（${payload.leadDescription}）` : "";
-  return [`${payload.title}${lead}`, ...payload.lines].join("\n");
+function divText(content: string): NotificationCardBody {
+  return { tag: "div", text: { tag: "lark_md", content } };
+}
+
+/**
+ * 双列字段网格。备注这类长值独占整行，否则它会把同排的另一个字段挤成一条窄缝。
+ *
+ * `is_short: false` 表示独占整行，所以还要跟着排版走一遍：一个落单的半宽字段
+ * （它右边没有下一个半宽字段了）也得转成整行，不然飞书会在它右侧留一块空白。
+ */
+function fieldGrid(fields: NotificationField[]): NotificationCardBody {
+  const wide = fields.map((field) => field.value.length > WIDE_VALUE_LENGTH);
+  for (let index = 0; index < fields.length; index += 1) {
+    if (wide[index]) continue;
+    const pairedWithNext = index + 1 < fields.length && !wide[index + 1];
+    if (pairedWithNext) index += 1;
+    else wide[index] = true;
+  }
+
+  return {
+    tag: "div",
+    fields: fields.map((field, index) => ({
+      is_short: !wide[index],
+      text: { tag: "lark_md", content: `**${field.label}**\n${escapeMd(field.value)}` },
+    })),
+  };
+}
+
+/** 金额加粗着色。文本由构造方格式化好，这里不做任何金额换算。 */
+function amountMarkdown(amount: NotificationAmount): string {
+  return `**<font color='${AMOUNT_COLORS[amount.tone] ?? "grey"}'>${amount.text}</font>**`;
 }
 
 function resultNote(result: NotificationCardResult): string {

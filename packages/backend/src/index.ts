@@ -17,4 +17,7 @@ export * from "./notifications/notification-card";
 export * from "./notifications/reminder-targets.service";
 export * from "./notifications/notifications.types";
 export * from "./reminders/subscription-reminder";
+export * from "./reminders/insurance-reminder";
+export * from "./reminders/reminder-schedule";
+export * from "./reminders/entry-reminder";
 export * from "./money/format-micros";

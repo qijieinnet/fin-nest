@@ -6,12 +6,24 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
-import { apiRequest, getApiErrorMessage, ledgerApiPath, type RecordSetting } from "@/lib/api";
+import {
+  apiRequest,
+  getApiErrorMessage,
+  ledgerApiPath,
+  type EntryReminderInput,
+  type RecordSetting,
+} from "@/lib/api";
 import { useRecordSetting } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useLedger, useToast } from "@/providers";
+import { EntryReminderCard } from "./_components/EntryReminderCard";
 import { FieldSortList } from "./_components/FieldSortList";
+
+/** PATCH 的入参：普通设置项按原样合并，记账提醒是部分字段的嵌套 patch。 */
+type SettingPatch = Partial<Omit<RecordSetting, "entryReminder">> & {
+  entryReminder?: EntryReminderInput;
+};
 
 // 记账页面可调整展示/顺序的字段（type/amount 固定在顶部，不参与配置）。
 const FIELD_META: Record<string, { name: string; icon: string }> = {
@@ -43,13 +55,14 @@ export function RecordSettingsScreen() {
   const setting = settingQuery.data;
 
   const update = useMutation({
-    mutationFn: (patch: Partial<RecordSetting>) => {
+    mutationFn: (patch: SettingPatch) => {
       const body = {
         fieldOrder: patch.fieldOrder,
         visibleFields: patch.visibleFields,
         acctRequired: patch.acctRequired,
         personRequired: patch.personRequired,
         continuousEntry: patch.continuousEntry,
+        entryReminder: patch.entryReminder,
       };
       return apiRequest<RecordSetting>(ledgerApiPath(ledgerId!, "/record-setting"), {
         method: "PATCH",
@@ -61,17 +74,21 @@ export function RecordSettingsScreen() {
       await queryClient.cancelQueries({ queryKey: queryKeys.recordSetting(ledgerId) });
       const previous = queryClient.getQueryData<RecordSetting>(queryKeys.recordSetting(ledgerId));
       if (previous) {
+        // 记账提醒的乐观更新交给 EntryReminderCard 自己的草稿：它的 patch 是「部分字段」，
+        // 且 feishuBindingIds ≠ feishuBindings，塞进缓存反而会写出一份形状不对的值。
+        const { entryReminder: _entryReminder, ...rest } = patch;
         queryClient.setQueryData<RecordSetting>(queryKeys.recordSetting(ledgerId), {
           ...previous,
-          ...patch,
+          ...rest,
         });
       }
       return { previous };
     },
-    onError: (_error, _patch, context) => {
+    onError: (error, _patch, context) => {
       if (ledgerId && context?.previous) {
         queryClient.setQueryData(queryKeys.recordSetting(ledgerId), context.previous);
       }
+      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败") });
     },
     onSettled: () => {
       if (ledgerId) queryClient.invalidateQueries({ queryKey: queryKeys.recordSetting(ledgerId) });
@@ -235,6 +252,15 @@ export function RecordSettingsScreen() {
                   />
                 </div>
               </section>
+
+              <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+                记账提醒
+              </span>
+              <EntryReminderCard
+                ledgerId={ledgerId!}
+                onChange={(patch) => update.mutate({ entryReminder: patch })}
+                value={setting.entryReminder}
+              />
             </>
           )}
         </div>

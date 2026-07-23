@@ -1,6 +1,9 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -9,8 +12,9 @@ import {
   Length,
   Matches,
   Min,
+  ValidateNested,
 } from "class-validator";
-import { IsArray } from "class-validator";
+import { ReminderScheduleDto } from "./reminder-schedule.dto";
 
 export class CreateSubscriptionCategoryDto {
   @ApiProperty()
@@ -87,34 +91,18 @@ export class CreateSubscriptionDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   nextRenewalDate?: string;
 
-  @ApiPropertyOptional({ description: "到期提醒：提前的数量，配合 remindLeadUnit。传 null 清除。" })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  remindLeadValue?: number | null;
-
-  @ApiPropertyOptional({ description: "到期提醒单位：day/week/month/year。传 null 清除。" })
-  @IsOptional()
-  @IsIn(["day", "week", "month", "year"])
-  remindLeadUnit?: "day" | "week" | "month" | "year" | null;
-
   @ApiPropertyOptional({
-    example: "09:00",
-    description: "到期提醒时间：本地 HH:mm（24 小时制），到点后由 worker 推送。传 null 清除。",
-  })
-  @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
-  remindTime?: string | null;
-
-  @ApiPropertyOptional({
-    type: [String],
+    type: [ReminderScheduleDto],
     description:
-      "到期提醒推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；关闭提醒时后端一并清空。",
+      "到期提醒档位（最多 5 档，提前量不可重复）。传空数组表示关闭提醒并清空所有接收人；" +
+      "不传表示保持不变。",
   })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  remindFeishuBindingIds?: string[];
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => ReminderScheduleDto)
+  reminders?: ReminderScheduleDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -2,7 +2,12 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, Ban, ChevronRight, Edit3, RotateCcw, Trash2 } from "lucide-react";
-import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPreview,
+  LoadingState,
+  reminderSummary,
+  type AttachmentItem,
+} from "@/components/business";
 import { Button } from "@/components/ui";
 import {
   apiRequest,
@@ -23,7 +28,6 @@ import {
   insuranceStatus,
   insuranceTypeMeta,
   premiumFreqLabel,
-  remindLeadLabel,
   renewalLabel,
 } from "./insurance-utils";
 
@@ -239,14 +243,17 @@ export function InsuranceDetailSheet({
           ) : null}
           <DetailRow label="生效日" value={formatDateLabel(insurance.startDate)} />
           <DetailRow label="到期日" value={formatDateLabel(insurance.endDate)} />
-          <DetailRow
-            label="到期提醒"
-            value={
-              remindLeadLabel(insurance)
-                ? [remindLeadLabel(insurance), insurance.remindTime].filter(Boolean).join(" · ")
-                : "未设置"
-            }
-          />
+          {insurance.reminders.length === 0 ? (
+            <DetailRow label="到期提醒" value="未设置" />
+          ) : (
+            insurance.reminders.map((reminder, index) => (
+              <DetailRow
+                key={reminder.id}
+                label={insurance.reminders.length > 1 ? `第 ${index + 1} 次提醒` : "到期提醒"}
+                value={reminderSummary(reminder)}
+              />
+            ))
+          )}
         </div>
       </section>
 

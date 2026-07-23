@@ -151,7 +151,11 @@ export class FeishuCardActionService {
       });
       return {
         toast: { type: "info", content: "该提醒已由他人处理" },
-        card: await this.renderNotificationResult(notification.id, payload, current ?? notification),
+        card: await this.renderNotificationResult(
+          notification.id,
+          payload,
+          current ?? notification,
+        ),
       };
     }
 
@@ -204,6 +208,11 @@ export class FeishuCardActionService {
       }
       case "auto_pending_discard":
         await this.automation.deletePending(ledgerId, sourceId, userId);
+        return null;
+      case "insurance_acknowledge":
+        // 纯签收：不改保单数据，只把这一轮提醒标成已处理，好让后续档位不再推送。
+        // 仍然要确认点击者是本账本成员，否则任何收到转发卡片的人都能替别人签收。
+        await this.assets.getInsurance(ledgerId, sourceId, userId);
         return null;
     }
   }
@@ -286,7 +295,11 @@ export class FeishuCardActionService {
     });
   }
 
-  private async discardDraft(ledgerId: string, userId: string, action: Extract<FeishuCardAction, { kind: "ai_draft" }>) {
+  private async discardDraft(
+    ledgerId: string,
+    userId: string,
+    action: Extract<FeishuCardAction, { kind: "ai_draft" }>,
+  ) {
     return this.ai.updateCardState(ledgerId, action.aiMessageId, userId, {
       cardIndex: action.cardIndex,
       status: "superseded",
@@ -352,6 +365,7 @@ const SOURCE_BY_ACTION: Record<NotificationActionKey, readonly string[]> = {
   subscription_terminate: ["subscription"],
   auto_pending_confirm: ["auto_pending"],
   auto_pending_discard: ["auto_pending"],
+  insurance_acknowledge: ["insurance"],
 };
 
 const STATE_BY_ACTION: Record<NotificationActionKey, NotificationActionState> = {
@@ -359,20 +373,23 @@ const STATE_BY_ACTION: Record<NotificationActionKey, NotificationActionState> = 
   subscription_terminate: "terminated",
   auto_pending_confirm: "confirmed",
   auto_pending_discard: "discarded",
+  insurance_acknowledge: "acknowledged",
 };
 
 const TOAST_BY_ACTION: Record<NotificationActionKey, string> = {
   subscription_renew: "已确认续订",
   subscription_terminate: "已退订",
-  auto_pending_confirm: "已记账",
-  auto_pending_discard: "已忽略",
+  auto_pending_confirm: "已入账",
+  auto_pending_discard: "已删除待确认",
+  insurance_acknowledge: "已确认，后续提醒不再推送",
 };
 
 const SUMMARY_BY_STATE: Record<string, string> = {
   renewed: "已确认续订",
   terminated: "已退订",
-  confirmed: "已记账",
-  discarded: "已忽略",
+  confirmed: "已入账",
+  discarded: "已删除待确认",
+  acknowledged: "已确认，本轮后续提醒不再推送",
 };
 
 const NOTIFICATION_ACTIONS = Object.keys(SOURCE_BY_ACTION) as NotificationActionKey[];
@@ -410,7 +427,12 @@ export function normalizeCardAction(raw: unknown): FeishuCardAction | null {
 
   if (NOTIFICATION_ACTIONS.includes(action as NotificationActionKey)) {
     if (typeof notificationId !== "string" || notificationId.length === 0) return null;
-    return { ...base, kind: "notification", action: action as NotificationActionKey, notificationId };
+    return {
+      ...base,
+      kind: "notification",
+      action: action as NotificationActionKey,
+      notificationId,
+    };
   }
 
   return null;

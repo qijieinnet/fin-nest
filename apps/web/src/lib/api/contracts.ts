@@ -192,6 +192,33 @@ export type Account = {
   subAccounts: SubAccount[];
 };
 
+export type EntryReminderFrequency = "daily" | "weekly" | "monthly";
+
+/**
+ * 记账提醒配置。关掉后配置仍保留（再打开还是上次的样子），只是不再推送。
+ * `weekdays` 是 ISO 星期（1=周一 … 7=周日），`monthDays` 是 1..31，
+ * 当月没有选中的日号（如 31 号遇到 2 月）时在当月最后一天提醒。
+ */
+export type EntryReminder = {
+  enabled: boolean;
+  frequency: EntryReminderFrequency;
+  weekdays: number[];
+  monthDays: number[];
+  /** 本地 HH:mm（24 小时制）。 */
+  remindTime: string;
+  feishuBindings: ReminderFeishuTarget[];
+};
+
+/** PATCH 记账设置时提交的记账提醒；缺省字段沿用当前值。 */
+export type EntryReminderInput = {
+  enabled?: boolean;
+  frequency?: EntryReminderFrequency;
+  weekdays?: number[];
+  monthDays?: number[];
+  remindTime?: string;
+  feishuBindingIds?: string[];
+};
+
 export type RecordSetting = {
   ledgerId: string;
   fieldOrder: string[];
@@ -200,6 +227,7 @@ export type RecordSetting = {
   personRequired: boolean;
   continuousEntry: boolean;
   amountDecimalPlaces: number;
+  entryReminder: EntryReminder;
 };
 
 export type CategorySnapshot = {
@@ -598,6 +626,20 @@ export type AutoPendingTransaction = {
   updatedAt: string;
 };
 
+/**
+ * 到期提醒的一档。订阅/保单可配多档，每档独立的提前量、提醒时刻与飞书接收人。
+ * 后端按提前量从大到小返回（最早提醒的在前）。
+ */
+export type ReminderSchedule = {
+  id: string;
+  leadValue: number;
+  leadUnit: "day" | "week" | "month" | "year";
+  /** 本地 HH:mm（24 小时制）。 */
+  remindTime: string;
+  /** 这一档推送到的飞书账号。已解绑的绑定后端已过滤。 */
+  feishuBindings: ReminderFeishuTarget[];
+};
+
 export type Insurance = {
   id: string;
   ledgerId: string;
@@ -615,11 +657,15 @@ export type Insurance = {
   coverageDesc: string | null;
   startDate: string | null;
   endDate: string | null;
-  /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
+  /**
+   * 提醒配置的镜像列：`reminders` 里最早那一档（提前量最大）。事实来源是 `reminders`，
+   * 这三列只供「即将到期」标签与红点判定使用，写入时由后端派生。
+   */
   remindLeadValue: number | null;
   remindLeadUnit: "day" | "week" | "month" | "year" | null;
-  /** 到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送；为空表示未设置。 */
   remindTime: string | null;
+  /** 到期提醒档位（可多档）。空数组表示未开启提醒。 */
+  reminders: ReminderSchedule[];
   note: string | null;
   sortOrder: number;
   typeSortOrder?: number;
@@ -701,13 +747,15 @@ export type Subscription = {
   autoRenew: boolean;
   startDate: string | null;
   nextRenewalDate: string | null;
-  /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
+  /**
+   * 提醒配置的镜像列：`reminders` 里最早那一档（提前量最大）。事实来源是 `reminders`，
+   * 这三列只供「即将到期」标签与红点判定使用，写入时由后端派生。
+   */
   remindLeadValue: number | null;
   remindLeadUnit: "day" | "week" | "month" | "year" | null;
-  /** 到期提醒时间：本地 HH:mm（24 小时制），到点由 worker 推送；为空表示未设置。 */
   remindTime: string | null;
-  /** 到期提醒推送到的飞书账号。已解绑的绑定后端已过滤，这里都是当前真的会收到推送的。 */
-  remindFeishuBindings: ReminderFeishuTarget[];
+  /** 到期提醒档位（可多档）。空数组表示未开启提醒。 */
+  reminders: ReminderSchedule[];
   note: string | null;
   sortOrder: number;
   terminatedAt: string | null;

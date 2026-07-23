@@ -76,6 +76,8 @@ export class BackupService {
       autoRules,
       autoPendingTransactions,
       quickTemplates,
+      reminderSchedules,
+      entryReminder,
     ] = await Promise.all([
       client.recordSetting.findUnique({ where: { ledgerId } }),
       client.budgetSetting.findUnique({ where: { ledgerId } }),
@@ -99,6 +101,10 @@ export class BackupService {
       client.autoRule.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.autoPendingTransaction.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.quickTemplate.findMany({ where, orderBy: { createdAt: "asc" } }),
+      // 提醒档位。接收人（reminder_targets）不备份——它指向的飞书绑定是用户级的，
+      // 换个实例恢复也对不上人，因此恢复出来的档位是「配好了时间但没有接收人」。
+      client.reminderSchedule.findMany({ where, orderBy: { createdAt: "asc" } }),
+      client.entryReminder.findUnique({ where: { ledgerId } }),
     ]);
     const insuranceIds = insurances.map((row) => row.id);
     const insuranceInsuredPeople = insuranceIds.length
@@ -147,6 +153,8 @@ export class BackupService {
         autoRules,
         autoPendingTransactions,
         quickTemplates,
+        reminderSchedules,
+        entryReminder,
       }) as Record<string, unknown>,
     };
   }
@@ -218,6 +226,21 @@ export class BackupService {
       where: { ledgerId, deletedAt: null },
       data: { deletedAt: new Date() },
     });
+    await tx.reminderTarget.deleteMany({
+      where: {
+        sourceType: "reminder_schedule",
+        sourceId: {
+          in: (await tx.reminderSchedule.findMany({ where, select: { id: true } })).map(
+            (row) => row.id,
+          ),
+        },
+      },
+    });
+    await tx.reminderSchedule.deleteMany({ where });
+    await tx.reminderTarget.deleteMany({
+      where: { sourceType: "entry_reminder", sourceId: ledgerId },
+    });
+    await tx.entryReminder.deleteMany({ where });
     await tx.autoPendingTransaction.deleteMany({ where });
     await tx.autoRule.deleteMany({ where });
     await tx.quickTemplate.deleteMany({ where });
@@ -462,6 +485,48 @@ export class BackupService {
       (row) => ({
         insuranceId: ref(maps.insurance, row.insuranceId)!,
         personId: ref(maps.person, row.personId)!,
+      }),
+    );
+
+    const entryReminder = data.entryReminder as Row | null;
+    if (entryReminder) {
+      await tx.entryReminder.upsert({
+        where: { ledgerId },
+        create: {
+          ledgerId,
+          enabled: Boolean(entryReminder.enabled),
+          frequency: String(entryReminder.frequency ?? "daily"),
+          weekdays: (entryReminder.weekdays as number[] | undefined) ?? [],
+          monthDays: (entryReminder.monthDays as number[] | undefined) ?? [],
+          remindTime: String(entryReminder.remindTime ?? "20:00"),
+          updatedBy: userId,
+        },
+        update: {
+          enabled: Boolean(entryReminder.enabled),
+          frequency: String(entryReminder.frequency ?? "daily"),
+          weekdays: (entryReminder.weekdays as number[] | undefined) ?? [],
+          monthDays: (entryReminder.monthDays as number[] | undefined) ?? [],
+          remindTime: String(entryReminder.remindTime ?? "20:00"),
+          updatedBy: userId,
+        },
+      });
+      counts.entryReminder = 1;
+    }
+
+    counts.reminderSchedules = await createManyChunked(
+      tx.reminderSchedule,
+      rows("reminderSchedules"),
+      (row) => ({
+        ledgerId,
+        sourceType: String(row.sourceType),
+        sourceId: ref(
+          row.sourceType === "insurance" ? maps.insurance : maps.subscription,
+          row.sourceId,
+        )!,
+        leadValue: Number(row.leadValue),
+        leadUnit: String(row.leadUnit),
+        remindTime: String(row.remindTime),
+        createdAt: dt(row.createdAt) ?? undefined,
       }),
     );
 

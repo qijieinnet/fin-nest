@@ -1,11 +1,20 @@
 /** 目前只有飞书一条通道；新增渠道时在这里扩，`NotificationService` 的分发处会强制补齐分支。 */
 export type NotificationChannel = "feishu";
 
-/** notifications.source_id 指向的对象：订阅本身，或一条待确认的自动记账。 */
-export type NotificationSourceType = "subscription" | "auto_pending";
+/** notifications.source_id 指向的对象：订阅 / 保单本身，或一条待确认的自动记账。 */
+export type NotificationSourceType =
+  | "subscription"
+  | "auto_pending"
+  | "insurance"
+  | "entry_reminder";
 
-/** reminder_targets.source_id 指向的对象：接收人挂在「档案 / 规则」上，不挂在单次事件上。 */
-export type ReminderTargetSourceType = "subscription" | "auto_rule";
+/**
+ * reminder_targets.source_id 指向的对象：接收人挂在「档位 / 规则」上，不挂在单次事件上。
+ *
+ * 订阅与保单的接收人挂在**提醒档位**（reminder_schedules.id）上——多档提醒里每档可以发给不同的人；
+ * 自动记账没有档位概念，直接挂在规则上。
+ */
+export type ReminderTargetSourceType = "auto_rule" | "reminder_schedule" | "entry_reminder";
 
 /**
  * 卡片按钮的动作标识。
@@ -17,10 +26,16 @@ export type NotificationActionKey =
   | "subscription_renew"
   | "subscription_terminate"
   | "auto_pending_confirm"
-  | "auto_pending_discard";
+  | "auto_pending_discard"
+  | "insurance_acknowledge";
 
 /** 动作执行后的终态，落到 `notifications.action_state`。 */
-export type NotificationActionState = "renewed" | "terminated" | "confirmed" | "discarded";
+export type NotificationActionState =
+  | "renewed"
+  | "terminated"
+  | "confirmed"
+  | "discarded"
+  | "acknowledged";
 
 export type NotificationAction = {
   key: NotificationActionKey;
@@ -52,13 +67,40 @@ export type ReminderOccurrence = {
   payload: NotificationPayload;
 };
 
+/**
+ * 金额的语义色，与前端账单详情的金额配色一一对应（支出/收入/转账）。
+ * 这里只给语义，具体色值由渠道渲染时决定——飞书的可用色号和网页的 CSS 变量并不同一套。
+ */
+export type NotificationAmountTone = "expense" | "income" | "transfer";
+
+/** 醒目展示的金额。文本已按账本币种与小数位格式化好，通用层不再碰 micros（硬规则 1）。 */
+export type NotificationAmount = {
+  /** 带符号的展示串，如 `-¥12.00`。 */
+  text: string;
+  tone: NotificationAmountTone;
+};
+
+/**
+ * 正文的一条「标签 + 值」，对应详情页的一行。
+ *
+ * **没有值的字段由构造方直接不产出**（不要塞「未指定」占位），渲染层不做省略判断。
+ */
+export type NotificationField = {
+  label: string;
+  value: string;
+};
+
 /** 消息正文的结构化来源。渲染成什么样由渠道决定，调度器只负责给事实。 */
 export type NotificationPayload = {
-  kind: "subscription_due" | "auto_pending";
+  kind: "subscription_due" | "auto_pending" | "insurance_due" | "entry_reminder";
   title: string;
   /** 「还有 3 天」这类副标题。订阅多档提醒时每档不同，是区分同一订阅多条推送的关键信息。 */
   leadDescription: string;
-  lines: string[];
+  /** 有金额的推送把它单独摆在正文首行（而不是塞进标题），与详情页的大额数字对应。 */
+  amount?: NotificationAmount;
+  fields: NotificationField[];
+  /** 旧结构：本次改版前入队的行是整行文本。仅在 `fields` 为空时作为回退渲染，新代码不要再写。 */
+  lines?: string[];
   /** 卡片底部按钮；为空则发成不可操作的信息卡。 */
   actions?: NotificationAction[];
 };

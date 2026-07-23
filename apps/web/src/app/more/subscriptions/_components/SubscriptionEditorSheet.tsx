@@ -7,9 +7,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttachmentPicker,
   DateWheelPicker,
-  TimeWheelPicker,
-  ToggleCard,
+  ReminderSchedulesEditor,
+  toReminderDrafts,
+  toReminderPayload,
   type AttachmentItem,
+  type ReminderDraft,
 } from "@/components/business";
 import { IconButton, PopoverMenu } from "@/components/ui";
 import {
@@ -32,8 +34,6 @@ import {
   BILLING_CYCLE_OPTIONS,
   categoryGlyph,
   microsToInput,
-  REMIND_UNIT_OPTIONS,
-  type RemindUnit,
   todayKey,
 } from "./subscription-utils";
 
@@ -50,8 +50,8 @@ const AUTO_RENEW_OPTIONS = [
   { value: "false", label: "手动续费" },
 ] as const;
 
-/** 未设置提醒时间时的默认时刻。 */
-const DEFAULT_REMIND_TIME = "09:00";
+/** 新增一档提醒时的默认提前量：订阅按 3 天。 */
+const DEFAULT_REMIND_LEAD_DAYS = 3;
 
 function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
   return {
@@ -95,58 +95,6 @@ function FieldRow({
         />
       </span>
     </label>
-  );
-}
-
-/**
- * 飞书推送目标多选行：点按弹出 PopoverMenu 勾选（可多选，勾选后菜单关闭，再点开继续增减）。
- * 与保险的被保人多选同款交互。
- */
-function FeishuTargetRow({
-  onToggle,
-  options,
-  values,
-}: {
-  onToggle: (value: string) => void;
-  options: ReadonlyArray<{ label: string; value: string }>;
-  values: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const selectedLabels = options
-    .filter((option) => values.includes(option.value))
-    .map((option) => option.label);
-  const isEmpty = options.length === 0;
-  const display = isEmpty
-    ? "无可用飞书账号"
-    : selectedLabels.length > 0
-      ? selectedLabels.join("、")
-      : "不推送";
-  return (
-    <div className="transaction-form__card transaction-form__picker-card">
-      <div className="relative">
-        <button
-          className="transaction-form__select-row"
-          disabled={isEmpty}
-          onClick={() => setOpen((current) => !current)}
-          type="button"
-        >
-          <span>推送飞书</span>
-          <strong>{display}</strong>
-          <ChevronRight size={18} />
-        </button>
-        <PopoverMenu
-          groups={[
-            options.map((option) => ({
-              label: option.label,
-              onSelect: () => onToggle(option.value),
-              selected: values.includes(option.value),
-            })),
-          ]}
-          onOpenChange={setOpen}
-          open={open}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -313,18 +261,11 @@ export function SubscriptionEditorSheet({
   const [nextRenewalDate, setNextRenewalDate] = useState(
     subscription?.nextRenewalDate?.slice(0, 10) ?? "",
   );
+  const [reminders, setReminders] = useState<ReminderDraft[]>(() =>
+    toReminderDrafts(subscription?.reminders),
+  );
   const [remindEnabled, setRemindEnabled] = useState(
-    Boolean(subscription?.remindLeadValue && subscription?.remindLeadUnit),
-  );
-  const [remindValue, setRemindValue] = useState(
-    subscription?.remindLeadValue ? String(subscription.remindLeadValue) : "3",
-  );
-  const [remindUnit, setRemindUnit] = useState<RemindUnit>(
-    (subscription?.remindLeadUnit as RemindUnit | null) ?? "day",
-  );
-  const [remindTime, setRemindTime] = useState(subscription?.remindTime ?? DEFAULT_REMIND_TIME);
-  const [remindFeishuBindingIds, setRemindFeishuBindingIds] = useState<string[]>(
-    () => subscription?.remindFeishuBindings?.map((binding) => binding.id) ?? [],
+    () => (subscription?.reminders?.length ?? 0) > 0,
   );
   const [note, setNote] = useState(subscription?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
@@ -392,23 +333,10 @@ export function SubscriptionEditorSheet({
     [feishuBindingsQuery.data],
   );
 
-  const toggleFeishuBinding = (bindingId: string) => {
-    setRemindFeishuBindingIds((current) =>
-      current.includes(bindingId)
-        ? current.filter((id) => id !== bindingId)
-        : [...current, bindingId],
-    );
-  };
-
   const save = useMutation({
     mutationFn: async () => {
       const priceParsed = price.trim() ? parseMoneyToMicros(price) : null;
       if (priceParsed && !priceParsed.ok) throw new Error("费用格式不正确");
-
-      // 开启提醒需正整数提前量；关闭或无效时统一清空（传 null 让后端置空）。
-      const parsedRemindValue = Number.parseInt(remindValue, 10);
-      const remindActive =
-        remindEnabled && Number.isFinite(parsedRemindValue) && parsedRemindValue > 0;
 
       const body = {
         name: trimmedName,
@@ -421,11 +349,8 @@ export function SubscriptionEditorSheet({
         autoRenew,
         startDate: startDate || undefined,
         nextRenewalDate: nextRenewalDate || undefined,
-        remindLeadValue: remindActive ? parsedRemindValue : null,
-        remindLeadUnit: remindActive ? remindUnit : null,
-        remindTime: remindActive ? remindTime || DEFAULT_REMIND_TIME : null,
-        // 关闭提醒时传空数组：后端也会兜底清空，但显式传更省得靠「后端记得清」。
-        remindFeishuBindingIds: remindActive ? remindFeishuBindingIds : [],
+        // 关掉开关就提交空数组：后端据此清空所有档位与接收人（镜像列一并置空）。
+        reminders: remindEnabled ? toReminderPayload(reminders) : [],
         note: note.trim() || undefined,
       };
       const saved = subscription
@@ -615,51 +540,24 @@ export function SubscriptionEditorSheet({
             />
           </div>
 
-          <ToggleCard
-            checked={remindEnabled}
-            hint="到续费日前提醒确认续订"
-            label="到期提醒"
-            onCheckedChange={setRemindEnabled}
-          >
-            <FieldRow
-              inputMode="numeric"
-              label="提前"
-              maxLength={3}
-              onChange={(event) =>
-                setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
-              }
-              placeholder="3"
-              value={remindValue}
-            />
-            <SelectRow
-              label="提醒单位"
-              onChange={(value) => setRemindUnit(value as RemindUnit)}
-              options={REMIND_UNIT_OPTIONS}
-              value={remindUnit}
-            />
-            <div className="transaction-form__date-card">
-              <TimeWheelPicker label="提醒时间" onValueChange={setRemindTime} value={remindTime} />
-            </div>
-            {feishuEnabled ? (
-              <>
-                <FeishuTargetRow
-                  onToggle={toggleFeishuBinding}
-                  options={feishuTargetOptions}
-                  values={remindFeishuBindingIds}
-                />
-                {feishuTargetOptions.length === 0 && !feishuBindingsQuery.isLoading ? (
-                  <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                    账本成员均未绑定飞书，可在「更多 › 飞书」中绑定。
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-            {nextRenewalDate ? null : (
-              <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                需设置「下次续费日」后提醒才会生效。
-              </p>
-            )}
-          </ToggleCard>
+          <ReminderSchedulesEditor
+            defaultLeadValue={DEFAULT_REMIND_LEAD_DAYS}
+            enabled={remindEnabled}
+            feishuEnabled={feishuEnabled}
+            feishuLoading={feishuBindingsQuery.isLoading}
+            feishuOptions={feishuTargetOptions}
+            footer={
+              nextRenewalDate ? null : (
+                <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                  需设置「下次续费日」后提醒才会生效。
+                </p>
+              )
+            }
+            hint="到续费日前提醒确认续订，可设多档"
+            onChange={setReminders}
+            onEnabledChange={setRemindEnabled}
+            value={reminders}
+          />
 
           <AttachmentPicker
             accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"

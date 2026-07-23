@@ -527,9 +527,24 @@ export function InsurancesScreen() {
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--sheet-form",
       hideDefaultHeader: true,
-      content: <InsuranceEditorSheet insurance={insurance} ledgerId={ledgerId} people={people} />,
+      content: (
+        <InsuranceEditorSheet insurance={latest(insurance)} ledgerId={ledgerId} people={people} />
+      ),
     });
   };
+
+  /**
+   * 取缓存里最新的那份保单。
+   *
+   * 详情弹层是以 JSX 元素的形式压进 sheet 栈的，它的 `onEdit` 闭包捕获的是**压栈那一刻**的
+   * 列表项；保存后列表刷新了，但那个闭包不会重建，直接用就会把编辑器回填成保存前的旧值
+   * （多档提醒尤其明显：保存前没有档位，再进来开关就是关的）。所以点击时按 id 重新取一次。
+   */
+  function latest(insurance?: Insurance): Insurance | undefined {
+    if (!insurance || !ledgerId) return insurance;
+    const cached = queryClient.getQueryData<Insurance[]>(queryKeys.insurances(ledgerId));
+    return cached?.find((item) => item.id === insurance.id) ?? insurance;
+  }
 
   const openReminders = () => {
     if (!ledgerId) return;

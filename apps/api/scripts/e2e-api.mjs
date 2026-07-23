@@ -178,6 +178,8 @@ async function main() {
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
 
   await assertSubscriptionReminderTargets({ ledgerId: ledger.id, owner, requester });
+  await assertInsuranceReminderTargets({ ledgerId: ledger.id, owner, requester });
+  await assertEntryReminder({ ledgerId: ledger.id, owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
 
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
@@ -198,6 +200,8 @@ async function main() {
           "effective_amount_queries",
           "idempotency",
           "subscription_reminder_targets",
+          "insurance_reminder_targets",
+          "entry_reminder",
           "feishu_db_constraints",
         ],
       },
@@ -352,7 +356,11 @@ async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, ca
   // 账户：两笔支出从 account 迁到 transferAccount，转账跳过；验证余额冲正
   const accBefore = BigInt(await accountBalance(ledgerId, account.id, token));
   const targetBefore = BigInt(await accountBalance(ledgerId, transferAccount.id, token));
-  const accRes = await batch({ transactionIds: ids, field: "account", accountId: transferAccount.id });
+  const accRes = await batch({
+    transactionIds: ids,
+    field: "account",
+    accountId: transferAccount.id,
+  });
   assert.equal(accRes.updated, 2);
   assert.equal(accRes.skipped, 1);
   assert.equal(
@@ -371,7 +379,11 @@ async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, ca
   assert.equal(afterAccount.note, "batched-note");
 
   // 日期：全部类型适用
-  const dateRes = await batch({ transactionIds: ids, field: "occurredOn", occurredOn: "2020-01-15" });
+  const dateRes = await batch({
+    transactionIds: ids,
+    field: "occurredOn",
+    occurredOn: "2020-01-15",
+  });
   assert.equal(dateRes.updated, 3);
   assert.equal((await get(t1.id)).occurredOn.slice(0, 10), "2020-01-15");
 
@@ -851,9 +863,10 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
 // 飞书机器人的 DB 级不变式：这些约束是绑定 / 去重链路正确性的地基，纯 Prisma 即可验证，
 // 不依赖真实飞书连接，也不依赖 FEISHU_APP_ID/SECRET 是否配置（对应 FEISHU_BOT_PLAN.md §12）。
 /**
- * 订阅到期提醒的飞书推送目标：写入范围限本账本成员的生效绑定，关掉提醒时连带清空。
+ * 到期提醒的多档配置与飞书推送目标：档位与接收人逐档独立，写入范围限本账本成员的生效绑定，
+ * 关掉提醒（传空数组）时档位与接收人一并清空。
  * 未配置 FEISHU_APP_ID/SECRET 时账本维度绑定列表返回空数组（前端据此隐藏入口），
- * 但订阅上的目标读写不依赖该开关，因此这里直接建绑定行来验证。
+ * 但档位上的目标读写不依赖该开关，因此这里直接建绑定行来验证。
  */
 async function assertSubscriptionReminderTargets({ ledgerId, owner, requester }) {
   const token = owner.token;
@@ -874,6 +887,7 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
     },
   });
 
+  // 两档：提前 7 天只提醒自己，提前 1 天不推送。
   const subscription = await api("POST", `/ledgers/${ledgerId}/subscriptions`, {
     token,
     expected: 201,
@@ -881,60 +895,267 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
       name: `E2E 订阅 ${stamp}`,
       billingCycle: "monthly",
       nextRenewalDate: todayIso(),
-      remindLeadValue: 3,
-      remindLeadUnit: "day",
-      remindTime: "09:00",
-      remindFeishuBindingIds: [memberBinding.id],
+      reminders: [
+        { leadValue: 1, leadUnit: "day", remindTime: "20:00" },
+        {
+          leadValue: 7,
+          leadUnit: "day",
+          remindTime: "09:00",
+          feishuBindingIds: [memberBinding.id],
+        },
+      ],
     },
   });
+  // 返回顺序按提前量从大到小（最早提醒的在前）。
   assert.deepEqual(
-    subscription.remindFeishuBindings.map((binding) => binding.id),
+    subscription.reminders.map((reminder) => `${reminder.leadValue}${reminder.leadUnit}`),
+    ["7day", "1day"],
+  );
+  assert.deepEqual(
+    subscription.reminders[0].feishuBindings.map((binding) => binding.id),
     [memberBinding.id],
   );
-  assert.equal(subscription.remindFeishuBindings[0].displayName, "E2E 成员飞书");
+  assert.equal(subscription.reminders[0].feishuBindings[0].displayName, "E2E 成员飞书");
+  assert.deepEqual(subscription.reminders[1].feishuBindings, []);
+  // 镜像列 = 最早那一档，前端的「即将到期」标签与红点靠它。
+  assert.equal(subscription.remindLeadValue, 7);
+  assert.equal(subscription.remindLeadUnit, "day");
+  assert.equal(subscription.remindTime, "09:00");
 
   const detail = await api("GET", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
   });
-  assert.deepEqual(
-    detail.remindFeishuBindings.map((binding) => binding.id),
-    [memberBinding.id],
-  );
+  assert.equal(detail.reminders.length, 2);
+
+  // 同一个提前量只能有一档：两档会算出同一个推送 dedupeKey，后一档会被静默吞掉。
+  await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+    expected: 400,
+    body: {
+      reminders: [
+        { leadValue: 3, leadUnit: "day", remindTime: "09:00" },
+        { leadValue: 3, leadUnit: "day", remindTime: "10:00" },
+      ],
+    },
+  });
 
   // 非本账本成员的绑定不能设为接收人，否则退出账本的人还能持续收到该账本的推送。
   await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
     expected: 403,
-    body: { remindFeishuBindingIds: [outsiderBinding.id] },
+    body: {
+      reminders: [
+        {
+          leadValue: 3,
+          leadUnit: "day",
+          remindTime: "09:00",
+          feishuBindingIds: [outsiderBinding.id],
+        },
+      ],
+    },
   });
   // 不存在 / 已解绑的绑定按 404 处理。
   await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
     expected: 404,
-    body: { remindFeishuBindingIds: ["00000000-0000-4000-8000-000000000000"] },
+    body: {
+      reminders: [
+        {
+          leadValue: 3,
+          leadUnit: "day",
+          remindTime: "09:00",
+          feishuBindingIds: ["00000000-0000-4000-8000-000000000000"],
+        },
+      ],
+    },
   });
+  // 越权/不存在都在事务里回滚，原有档位不受影响。
+  const afterFailures = await api("GET", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+  });
+  assert.equal(afterFailures.reminders.length, 2);
 
-  // 与提醒无关的编辑不应动到接收人（否则改个名字就把推送悄悄关了）。
+  // 与提醒无关的编辑不应动到档位（否则改个名字就把推送悄悄关了）。
   const renamed = await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
     body: { name: `E2E 订阅改名 ${stamp}` },
   });
+  assert.equal(renamed.reminders.length, 2);
   assert.deepEqual(
-    renamed.remindFeishuBindings.map((binding) => binding.id),
+    renamed.reminders[0].feishuBindings.map((binding) => binding.id),
     [memberBinding.id],
   );
 
-  // 关掉到期提醒 → 接收人一并清空，重新打开提醒不会静默沿用上次的接收人。
+  // 关掉到期提醒 → 档位与接收人一并清空，重新打开不会静默沿用上次的接收人。
   const disabled = await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
-    body: { remindLeadValue: null, remindLeadUnit: null, remindTime: null },
+    body: { reminders: [] },
   });
-  assert.deepEqual(disabled.remindFeishuBindings, []);
+  assert.deepEqual(disabled.reminders, []);
+  assert.equal(disabled.remindLeadValue, null);
   assert.equal(
-    await prisma.reminderTarget.count({
+    await prisma.reminderSchedule.count({
       where: { sourceType: "subscription", sourceId: subscription.id },
     }),
     0,
+  );
+  assert.equal(
+    await prisma.reminderTarget.count({ where: { feishuBindingId: memberBinding.id } }),
+    0,
+  );
+}
+
+/** 保单到期提醒：与订阅同一套档位口径，这里只覆盖保险侧的读写链路。 */
+async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
+  const token = owner.token;
+  const memberBinding = await prisma.feishuBinding.create({
+    data: {
+      openId: `e2e-ins-member-${stamp}`,
+      displayName: "E2E 保单飞书",
+      userId: owner.userId,
+      currentLedgerId: ledgerId,
+    },
+  });
+  const outsiderBinding = await prisma.feishuBinding.create({
+    data: {
+      openId: `e2e-ins-outsider-${stamp}`,
+      userId: requester.userId,
+      currentLedgerId: ledgerId,
+    },
+  });
+
+  const insurance = await api("POST", `/ledgers/${ledgerId}/insurances`, {
+    token,
+    expected: 201,
+    body: {
+      type: "medical",
+      name: `E2E 保单 ${stamp}`,
+      endDate: addDaysIso(30),
+      reminders: [
+        {
+          leadValue: 30,
+          leadUnit: "day",
+          remindTime: "09:00",
+          feishuBindingIds: [memberBinding.id],
+        },
+        { leadValue: 1, leadUnit: "week", remindTime: "10:00" },
+      ],
+    },
+  });
+  assert.deepEqual(
+    insurance.reminders.map((reminder) => `${reminder.leadValue}${reminder.leadUnit}`),
+    ["30day", "1week"],
+  );
+  assert.equal(insurance.reminders[0].feishuBindings[0].displayName, "E2E 保单飞书");
+  assert.equal(insurance.remindLeadValue, 30);
+
+  const detail = await api("GET", `/ledgers/${ledgerId}/insurances/${insurance.id}`, { token });
+  assert.equal(detail.reminders.length, 2);
+
+  await api("PATCH", `/ledgers/${ledgerId}/insurances/${insurance.id}`, {
+    token,
+    expected: 403,
+    body: {
+      reminders: [
+        {
+          leadValue: 30,
+          leadUnit: "day",
+          remindTime: "09:00",
+          feishuBindingIds: [outsiderBinding.id],
+        },
+      ],
+    },
+  });
+
+  const renamed = await api("PATCH", `/ledgers/${ledgerId}/insurances/${insurance.id}`, {
+    token,
+    body: { name: `E2E 保单改名 ${stamp}` },
+  });
+  assert.equal(renamed.reminders.length, 2);
+
+  const disabled = await api("PATCH", `/ledgers/${ledgerId}/insurances/${insurance.id}`, {
+    token,
+    body: { reminders: [] },
+  });
+  assert.deepEqual(disabled.reminders, []);
+  assert.equal(disabled.remindLeadValue, null);
+  assert.equal(
+    await prisma.reminderSchedule.count({
+      where: { sourceType: "insurance", sourceId: insurance.id },
+    }),
+    0,
+  );
+}
+
+/** 记账提醒：随记账设置一起读写，周期配置不完整时拒绝开启。 */
+async function assertEntryReminder({ ledgerId, owner }) {
+  const token = owner.token;
+  const initial = await api("GET", `/ledgers/${ledgerId}/record-setting`, { token });
+  // 没配过也要返回一份默认值，前端不必区分「没配过」和「配了但关着」。
+  assert.equal(initial.entryReminder.enabled, false);
+  assert.equal(initial.entryReminder.frequency, "daily");
+  assert.deepEqual(initial.entryReminder.feishuBindings, []);
+
+  const binding = await prisma.feishuBinding.create({
+    data: {
+      openId: `e2e-entry-${stamp}`,
+      displayName: "E2E 记账提醒飞书",
+      userId: owner.userId,
+      currentLedgerId: ledgerId,
+    },
+  });
+
+  const weekly = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: {
+      entryReminder: {
+        enabled: true,
+        frequency: "weekly",
+        weekdays: [5, 1, 1],
+        remindTime: "20:30",
+        feishuBindingIds: [binding.id],
+      },
+    },
+  });
+  // 去重 + 升序存储，前端回填与推送判定都按稳定顺序。
+  assert.deepEqual(weekly.entryReminder.weekdays, [1, 5]);
+  assert.equal(weekly.entryReminder.remindTime, "20:30");
+  assert.deepEqual(
+    weekly.entryReminder.feishuBindings.map((item) => item.id),
+    [binding.id],
+  );
+
+  // 每周不选星期 = 永远不会触发，开着开关却收不到提醒最难排查，直接拒绝。
+  await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    expected: 400,
+    body: { entryReminder: { frequency: "weekly", weekdays: [] } },
+  });
+  // 每月同理。
+  await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    expected: 400,
+    body: { entryReminder: { frequency: "monthly", monthDays: [] } },
+  });
+
+  // 只改记账设置的其它字段，不该动到提醒配置。
+  const untouched = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: { continuousEntry: true },
+  });
+  assert.equal(untouched.entryReminder.frequency, "weekly");
+  assert.deepEqual(untouched.entryReminder.weekdays, [1, 5]);
+
+  // 关掉开关保留配置与接收人：这是设置项，再打开时理应还是上次的样子。
+  const disabled = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: { entryReminder: { enabled: false } },
+  });
+  assert.equal(disabled.entryReminder.enabled, false);
+  assert.deepEqual(disabled.entryReminder.weekdays, [1, 5]);
+  assert.deepEqual(
+    disabled.entryReminder.feishuBindings.map((item) => item.id),
+    [binding.id],
   );
 }
 
@@ -1062,8 +1283,10 @@ async function cleanup() {
         )
         .map((job) => job.id);
       if (jobIds.length) await prisma.backgroundJob.deleteMany({ where: { id: { in: jobIds } } });
-      // 推送目标与推送记录都带 ledger_id 外键，必须先于 ledger 删除。
+      // 提醒档位、推送目标与推送记录都带 ledger_id 外键，必须先于 ledger 删除。
       await prisma.reminderTarget.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.reminderSchedule.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.entryReminder.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.notification.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.subscription.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.subscriptionCategory.deleteMany({ where: { ledgerId: { in: ledgerIds } } });

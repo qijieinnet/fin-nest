@@ -7,9 +7,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttachmentPicker,
   DateWheelPicker,
-  TimeWheelPicker,
-  ToggleCard,
+  ReminderSchedulesEditor,
+  toReminderDrafts,
+  toReminderPayload,
   type AttachmentItem,
+  type ReminderDraft,
 } from "@/components/business";
 import { IconButton, PopoverMenu } from "@/components/ui";
 import {
@@ -21,6 +23,7 @@ import {
   type Person,
   uploadAttachmentFile,
 } from "@/lib/api";
+import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
 import { useAttachments, useInsurance } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
@@ -30,15 +33,13 @@ import {
   INSURANCE_TYPES,
   microsToInput,
   PREMIUM_FREQ_OPTIONS,
-  REMIND_UNIT_OPTIONS,
-  type RemindUnit,
   RENEWAL_OPTIONS,
   todayKey,
   todayPlusYearsKey,
 } from "./insurance-utils";
 
-/** 未设置提醒时间时的默认时刻。 */
-const DEFAULT_REMIND_TIME = "09:00";
+/** 新增一档提醒时的默认提前量：保单按 30 天。 */
+const DEFAULT_REMIND_LEAD_DAYS = 30;
 
 type InsuranceEditorSheetProps = {
   insurance?: Insurance;
@@ -184,46 +185,6 @@ function SelectRow({
   );
 }
 
-/** 无整卡包裹的选值行：用于 ToggleCard 内嵌的提醒单位等。 */
-function PlainSelectRow({
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  options: ReadonlyArray<{ label: string; value: string }>;
-  value: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value);
-  return (
-    <div className="relative">
-      <button
-        className="transaction-form__select-row"
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <span>{label}</span>
-        <strong>{selected ? selected.label : "请选择"}</strong>
-        <ChevronRight size={18} />
-      </button>
-      <PopoverMenu
-        groups={[
-          options.map((option) => ({
-            label: option.label,
-            onSelect: () => onChange(option.value),
-            selected: option.value === value,
-          })),
-        ]}
-        onOpenChange={setOpen}
-        open={open}
-      />
-    </div>
-  );
-}
-
 /** 带标题的整卡容器，用于承载 chip 组、多行文本等非行内内容。 */
 function LabeledCard({
   children,
@@ -294,6 +255,10 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
   const detailQuery = useInsurance(ledgerId, insurance?.id ?? null);
   const existingAttachmentsQuery = useAttachments(ledgerId, "insurance", insurance?.id ?? null);
+  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
+  const feishuStatusQuery = useFeishuStatus();
+  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
+  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
 
   const [name, setName] = useState(insurance?.name ?? "");
   const [type, setType] = useState(insurance?.type ?? "medical");
@@ -315,23 +280,30 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
     insurance ? (insurance.endDate?.slice(0, 10) ?? "") : todayPlusYearsKey(1),
   );
   const [coverageDesc, setCoverageDesc] = useState(insurance?.coverageDesc ?? "");
-  const [remindEnabled, setRemindEnabled] = useState(
-    Boolean(insurance?.remindLeadValue && insurance?.remindLeadUnit),
+  const [reminders, setReminders] = useState<ReminderDraft[]>(() =>
+    toReminderDrafts(insurance?.reminders),
   );
-  const [remindValue, setRemindValue] = useState(
-    insurance?.remindLeadValue ? String(insurance.remindLeadValue) : "30",
-  );
-  const [remindUnit, setRemindUnit] = useState<RemindUnit>(
-    (insurance?.remindLeadUnit as RemindUnit | null) ?? "day",
-  );
-  const [remindTime, setRemindTime] = useState(insurance?.remindTime ?? DEFAULT_REMIND_TIME);
+  const [remindEnabled, setRemindEnabled] = useState(() => (insurance?.reminders?.length ?? 0) > 0);
   const [note, setNote] = useState(insurance?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const pendingRef = useRef<PendingAttachment[]>([]);
   const seededInsured = useRef(false);
+  const seededReminders = useRef((insurance?.reminders?.length ?? 0) > 0);
   const seededAttachments = useRef(false);
+
+  // 提醒档位：列表数据可能是打开弹层前缓存的，详情接口回来后以它为准回填一次。
+  // 只在「本地还没有档位」时回填，避免覆盖用户已经改了一半的内容。
+  useEffect(() => {
+    if (seededReminders.current) return;
+    const fromDetail = detailQuery.data?.reminders;
+    if (!fromDetail) return;
+    seededReminders.current = true;
+    if (fromDetail.length === 0) return;
+    setReminders(toReminderDrafts(fromDetail));
+    setRemindEnabled(true);
+  }, [detailQuery.data]);
 
   // 编辑模式下，被保人来自详情接口，加载后回填一次（不覆盖用户后续修改）。
   useEffect(() => {
@@ -390,10 +362,8 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       if (periodsValue !== undefined && (!Number.isFinite(periodsValue) || periodsValue < 1)) {
         throw new Error("缴费期数需为正整数");
       }
-      // 开启提醒需正整数提前量；关闭或无效时统一清空（传 null 让后端置空）。
-      const parsedRemindValue = Number.parseInt(remindValue, 10);
-      const remindActive =
-        remindEnabled && Number.isFinite(parsedRemindValue) && parsedRemindValue > 0;
+      // 关掉开关就提交空数组：后端据此清空所有档位与接收人（镜像列一并置空）。
+      const reminderPayload = remindEnabled ? toReminderPayload(reminders) : [];
       const body = {
         type,
         name: trimmedName,
@@ -409,9 +379,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         renewal: freqIsSingle ? undefined : renewal,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
-        remindLeadValue: remindActive ? parsedRemindValue : null,
-        remindLeadUnit: remindActive ? remindUnit : null,
-        remindTime: remindActive ? remindTime || DEFAULT_REMIND_TIME : null,
+        reminders: reminderPayload,
         coverageDesc: coverageDesc.trim() || undefined,
         note: note.trim() || undefined,
       };
@@ -487,6 +455,16 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
     }
   }
+
+  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
+  const feishuTargetOptions = useMemo(
+    () =>
+      (feishuBindingsQuery.data ?? []).map((binding) => ({
+        value: binding.id,
+        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
+      })),
+    [feishuBindingsQuery.data],
+  );
 
   const toggleInsured = (personId: string) => {
     setInsuredIds((current) =>
@@ -630,37 +608,24 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             <DateFieldRow label="到期日" onChange={setEndDate} value={endDate} />
           </div>
 
-          <ToggleCard
-            checked={remindEnabled}
-            hint="到期日前提醒续保或缴费"
-            label="到期提醒"
-            onCheckedChange={setRemindEnabled}
-          >
-            <FieldRow
-              inputMode="numeric"
-              label="提前"
-              maxLength={3}
-              onChange={(event) =>
-                setRemindValue(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))
-              }
-              placeholder="30"
-              value={remindValue}
-            />
-            <PlainSelectRow
-              label="提醒单位"
-              onChange={(value) => setRemindUnit(value as RemindUnit)}
-              options={REMIND_UNIT_OPTIONS}
-              value={remindUnit}
-            />
-            <div className="transaction-form__date-card">
-              <TimeWheelPicker label="提醒时间" onValueChange={setRemindTime} value={remindTime} />
-            </div>
-            {endDate ? null : (
-              <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                需设置「到期日」后提醒才会生效。
-              </p>
-            )}
-          </ToggleCard>
+          <ReminderSchedulesEditor
+            defaultLeadValue={DEFAULT_REMIND_LEAD_DAYS}
+            enabled={remindEnabled}
+            feishuEnabled={feishuEnabled}
+            feishuLoading={feishuBindingsQuery.isLoading}
+            feishuOptions={feishuTargetOptions}
+            footer={
+              endDate ? null : (
+                <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                  需设置「到期日」后提醒才会生效。
+                </p>
+              )
+            }
+            hint="到期日前提醒续保或缴费，可设多档"
+            onChange={setReminders}
+            onEnabledChange={setRemindEnabled}
+            value={reminders}
+          />
 
           <AttachmentPicker
             accept="image/*,application/pdf,video/*,.doc,.docx,.xls,.xlsx"
