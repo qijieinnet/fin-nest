@@ -2,9 +2,9 @@
 // v1 使用 Prisma + Prisma Migrate；Prisma 难以表达的 PostgreSQL 约束在 migration.sql 中补充。
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // 生成到包内固定目录，确保 pnpm deploy / Docker 打包能带上生成的 client 与查询引擎。
-  output   = "../generated/client"
+  output        = "../generated/client"
   // native：本地开发（macOS/当前架构）；
   // debian-*：容器运行时 node:*-slim —— 同时覆盖 amd64 与 arm64，便于在任意架构主机上构建镜像。
   binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
@@ -202,27 +202,27 @@ model Person {
 }
 
 model Account {
-  id                    String    @id @default(uuid()) @db.Uuid
-  ledgerId              String    @map("ledger_id") @db.Uuid
-  type                  String
-  name                  String
-  icon                  String?
-  balanceMicros         BigInt    @default(0) @map("balance_micros")
-  includeInNetWorth     Boolean   @default(true) @map("include_in_net_worth")
+  id                   String    @id @default(uuid()) @db.Uuid
+  ledgerId             String    @map("ledger_id") @db.Uuid
+  type                 String
+  name                 String
+  icon                 String?
+  balanceMicros        BigInt    @default(0) @map("balance_micros")
+  includeInNetWorth    Boolean   @default(true) @map("include_in_net_worth")
   // 同一分类内的手动排序序号，列表按其升序排列。
-  sortOrder             Int       @default(0) @map("sort_order")
-  creditLimitMicros     BigInt?   @map("credit_limit_micros")
-  investmentCostMicros  BigInt?   @map("investment_cost_micros")
-  counterparty          String?
-  dueDate               DateTime? @map("due_date") @db.Date
-  billDay               Int?      @map("bill_day") @db.SmallInt
-  repayDay              Int?      @map("repay_day") @db.SmallInt
-  settledAt             DateTime? @map("settled_at") @db.Timestamptz(6)
-  archivedAt            DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdBy             String?   @map("created_by") @db.Uuid
-  updatedBy             String?   @map("updated_by") @db.Uuid
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sortOrder            Int       @default(0) @map("sort_order")
+  creditLimitMicros    BigInt?   @map("credit_limit_micros")
+  investmentCostMicros BigInt?   @map("investment_cost_micros")
+  counterparty         String?
+  dueDate              DateTime? @map("due_date") @db.Date
+  billDay              Int?      @map("bill_day") @db.SmallInt
+  repayDay             Int?      @map("repay_day") @db.SmallInt
+  settledAt            DateTime? @map("settled_at") @db.Timestamptz(6)
+  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy            String?   @map("created_by") @db.Uuid
+  updatedBy            String?   @map("updated_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([ledgerId, type, archivedAt])
   @@map("accounts")
@@ -523,35 +523,35 @@ model CategoryBudget {
 }
 
 model Insurance {
-  id             String    @id @default(uuid()) @db.Uuid
-  ledgerId       String    @map("ledger_id") @db.Uuid
-  type           String
-  name           String
-  insurer        String?
-  method         String?
-  paymentMethod  String?   @map("payment_method")
-  policyNo       String?   @map("policy_no")
-  coverageMicros BigInt?   @map("coverage_micros")
-  premiumMicros  BigInt?   @map("premium_micros")
-  premiumFreq    String?   @map("premium_freq")
-  periods        Int?
-  renewal        String?
-  coverageDesc   String?   @map("coverage_desc")
-  startDate      DateTime? @map("start_date") @db.Date
-  endDate        DateTime? @map("end_date") @db.Date
+  id              String    @id @default(uuid()) @db.Uuid
+  ledgerId        String    @map("ledger_id") @db.Uuid
+  type            String
+  name            String
+  insurer         String?
+  method          String?
+  paymentMethod   String?   @map("payment_method")
+  policyNo        String?   @map("policy_no")
+  coverageMicros  BigInt?   @map("coverage_micros")
+  premiumMicros   BigInt?   @map("premium_micros")
+  premiumFreq     String?   @map("premium_freq")
+  periods         Int?
+  renewal         String?
+  coverageDesc    String?   @map("coverage_desc")
+  startDate       DateTime? @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
   // 到期提醒：提前 remindLeadValue 个 remindLeadUnit（day/week/month/year）提醒；两者同时为空表示未设置。
-  remindLeadValue Int?     @map("remind_lead_value")
-  remindLeadUnit  String?  @map("remind_lead_unit")
+  remindLeadValue Int?      @map("remind_lead_value")
+  remindLeadUnit  String?   @map("remind_lead_unit")
   // 提醒时间（本地 HH:mm，24 小时制），供后续邮件/推送在当天该时刻发送；为空表示未设置。
-  remindTime      String?  @map("remind_time")
-  note           String?
-  sortOrder      Int       @default(0) @map("sort_order")
-  terminatedAt   DateTime? @map("terminated_at") @db.Timestamptz(6)
-  createdBy      String    @map("created_by") @db.Uuid
-  updatedBy      String?   @map("updated_by") @db.Uuid
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  remindTime      String?   @map("remind_time")
+  note            String?
+  sortOrder       Int       @default(0) @map("sort_order")
+  terminatedAt    DateTime? @map("terminated_at") @db.Timestamptz(6)
+  createdBy       String    @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   @@map("insurances")
 }
@@ -717,6 +717,67 @@ model BackgroundJob {
   @@index([status, runAfter])
   @@index([type, status])
   @@map("background_jobs")
+}
+
+/// 提醒推送目标。挂在业务对象（订阅）上而非单条提醒规则上——多档提醒共用同一批接收人。
+/// sourceType/sourceId 泛化，后续保险/预算接入推送时复用同一张表。
+/// 刻意不建到 feishu_bindings 的外键：解绑是软删，读取时按 revokedAt IS NULL 过滤。
+model ReminderTarget {
+  id              String   @id @default(uuid()) @db.Uuid
+  ledgerId        String   @map("ledger_id") @db.Uuid
+  // subscription（后续 insurance/plan）
+  sourceType      String   @map("source_type")
+  sourceId        String   @map("source_id") @db.Uuid
+  // feishu
+  channel         String
+  feishuBindingId String   @map("feishu_binding_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sourceType, sourceId, channel, feishuBindingId])
+  @@index([ledgerId])
+  @@map("reminder_targets")
+}
+
+/// 推送记录 + 幂等闸门。调度器先插 pending 抢占 dedupeKey（唯一冲突即已排/已发，跳过），
+/// 插入成功才调飞书接口，出站调用**不放在事务里**。进程在两者之间崩溃会留下 pending 行，
+/// 由同一个扫描循环按 attempts 上限重捞。
+///
+/// dedupeKey 形如 `subscription:{id}:{续费日}:{提前量}:{openId}`。提前量段是为多档提醒预留的，
+/// 现在恒为单档（如 `3d`）——少了它，「提前 7 天」和「提前 1 天」会算成同一个 key 互相吞掉。
+model Notification {
+  id            String    @id @default(uuid()) @db.Uuid
+  ledgerId      String    @map("ledger_id") @db.Uuid
+  sourceType    String    @map("source_type")
+  sourceId      String    @map("source_id") @db.Uuid
+  channel       String
+  /// 渠道内的收件标识，飞书为 openId。
+  targetRef     String    @map("target_ref")
+  dedupeKey     String    @unique @map("dedupe_key")
+  /// dedupeKey 去掉收件人段，标识「同一次提醒事件」——多个接收人的行共享同一个值。
+  /// 卡片按钮的动作按它抢占，见 actionState。
+  occurrenceKey String    @map("occurrence_key")
+  scheduledAt   DateTime  @map("scheduled_at") @db.Timestamptz(6)
+  // pending | sent | failed
+  status        String    @default("pending")
+  payload       Json      @db.JsonB
+  attempts      Int       @default(0)
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
+  lastError     String?   @map("last_error")
+  /// null = 卡片按钮尚未被点（仍可操作）；renewed / terminated = 已是终态。
+  ///
+  /// 一次提醒事件给每个接收人各发一张卡，**每张都能点**，但动作只能执行一次
+  /// （confirmSubscriptionRenewal 不幂等，点两次推进两个计费周期）。因此按
+  /// occurrenceKey 跨行抢占：`updateMany({ where: { occurrenceKey, actionState: null } })`
+  /// 单条 UPDATE 原子，并发点击只有一方拿到 count > 0。
+  actionState   String?   @map("action_state")
+  actedBy       String?   @map("acted_by") @db.Uuid
+  actedAt       DateTime? @map("acted_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([status, scheduledAt])
+  @@index([sourceType, sourceId])
+  @@index([occurrenceKey, actionState])
+  @@map("notifications")
 }
 
 model IdempotencyKey {

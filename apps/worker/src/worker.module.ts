@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { BackendPlatformModule } from "@fin-nest/backend";
 import { AutoSchedulerService } from "./automation/auto-scheduler.service";
 import { FileDeleteService } from "./files/file-delete.service";
+import { ReminderSchedulerService } from "./notifications/reminder-scheduler.service";
 import { WorkerRunnerService } from "./worker-runner.service";
 
 /**
@@ -10,6 +11,11 @@ import { WorkerRunnerService } from "./worker-runner.service";
  */
 @Module({
   imports: [BackendPlatformModule],
-  providers: [AutoSchedulerService, FileDeleteService, WorkerRunnerService],
+  providers: [
+    AutoSchedulerService,
+    FileDeleteService,
+    ReminderSchedulerService,
+    WorkerRunnerService,
+  ],
 })
 export class WorkerModule {}

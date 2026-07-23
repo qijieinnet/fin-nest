@@ -21,6 +21,7 @@ import {
   type Subscription,
   uploadAttachmentFile,
 } from "@/lib/api";
+import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
 import { useAttachments, useSubscriptionCategories } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
@@ -94,6 +95,58 @@ function FieldRow({
         />
       </span>
     </label>
+  );
+}
+
+/**
+ * 飞书推送目标多选行：点按弹出 PopoverMenu 勾选（可多选，勾选后菜单关闭，再点开继续增减）。
+ * 与保险的被保人多选同款交互。
+ */
+function FeishuTargetRow({
+  onToggle,
+  options,
+  values,
+}: {
+  onToggle: (value: string) => void;
+  options: ReadonlyArray<{ label: string; value: string }>;
+  values: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = options
+    .filter((option) => values.includes(option.value))
+    .map((option) => option.label);
+  const isEmpty = options.length === 0;
+  const display = isEmpty
+    ? "无可用飞书账号"
+    : selectedLabels.length > 0
+      ? selectedLabels.join("、")
+      : "不推送";
+  return (
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          disabled={isEmpty}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>推送飞书</span>
+          <strong>{display}</strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              label: option.label,
+              onSelect: () => onToggle(option.value),
+              selected: values.includes(option.value),
+            })),
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -243,6 +296,10 @@ export function SubscriptionEditorSheet({
     "subscription",
     subscription?.id ?? null,
   );
+  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
+  const feishuStatusQuery = useFeishuStatus();
+  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
+  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
 
   const [name, setName] = useState(subscription?.name ?? "");
   const [categoryId, setCategoryId] = useState(subscription?.categoryId ?? "");
@@ -266,6 +323,9 @@ export function SubscriptionEditorSheet({
     (subscription?.remindLeadUnit as RemindUnit | null) ?? "day",
   );
   const [remindTime, setRemindTime] = useState(subscription?.remindTime ?? DEFAULT_REMIND_TIME);
+  const [remindFeishuBindingIds, setRemindFeishuBindingIds] = useState<string[]>(
+    () => subscription?.remindFeishuBindings?.map((binding) => binding.id) ?? [],
+  );
   const [note, setNote] = useState(subscription?.note ?? "");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<AttachmentItem[]>([]);
@@ -322,6 +382,24 @@ export function SubscriptionEditorSheet({
   const attachmentItems = [...existingAttachments, ...pendingAttachments];
   const trimmedName = name.trim();
 
+  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
+  const feishuTargetOptions = useMemo(
+    () =>
+      (feishuBindingsQuery.data ?? []).map((binding) => ({
+        value: binding.id,
+        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
+      })),
+    [feishuBindingsQuery.data],
+  );
+
+  const toggleFeishuBinding = (bindingId: string) => {
+    setRemindFeishuBindingIds((current) =>
+      current.includes(bindingId)
+        ? current.filter((id) => id !== bindingId)
+        : [...current, bindingId],
+    );
+  };
+
   const save = useMutation({
     mutationFn: async () => {
       const priceParsed = price.trim() ? parseMoneyToMicros(price) : null;
@@ -346,6 +424,8 @@ export function SubscriptionEditorSheet({
         remindLeadValue: remindActive ? parsedRemindValue : null,
         remindLeadUnit: remindActive ? remindUnit : null,
         remindTime: remindActive ? remindTime || DEFAULT_REMIND_TIME : null,
+        // 关闭提醒时传空数组：后端也会兜底清空，但显式传更省得靠「后端记得清」。
+        remindFeishuBindingIds: remindActive ? remindFeishuBindingIds : [],
         note: note.trim() || undefined,
       };
       const saved = subscription
@@ -560,6 +640,20 @@ export function SubscriptionEditorSheet({
             <div className="transaction-form__date-card">
               <TimeWheelPicker label="提醒时间" onValueChange={setRemindTime} value={remindTime} />
             </div>
+            {feishuEnabled ? (
+              <>
+                <FeishuTargetRow
+                  onToggle={toggleFeishuBinding}
+                  options={feishuTargetOptions}
+                  values={remindFeishuBindingIds}
+                />
+                {feishuTargetOptions.length === 0 && !feishuBindingsQuery.isLoading ? (
+                  <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                    账本成员均未绑定飞书，可在「更多 › 飞书」中绑定。
+                  </p>
+                ) : null}
+              </>
+            ) : null}
             {nextRenewalDate ? null : (
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
                 需设置「下次续费日」后提醒才会生效。

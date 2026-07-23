@@ -5,9 +5,11 @@ import {
   apiRequest,
   FEISHU_ENDPOINTS,
   feishuBindingPath,
+  feishuLedgerBindingsPath,
   type FeishuBindCode,
   type FeishuBinding,
   type FeishuStatus,
+  type LedgerFeishuBinding,
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 
@@ -25,6 +27,19 @@ export function useFeishuBindings(enabled: boolean) {
     queryKey: queryKeys.feishuBindings,
     queryFn: () => apiRequest<FeishuBinding[]>(FEISHU_ENDPOINTS.bindings),
     enabled,
+  });
+}
+
+/**
+ * 本账本所有成员的生效绑定，供订阅等业务选择推送接收人。
+ * 服务端在未配置飞书时返回空数组，因此这里不需要额外的「未启用」分支。
+ */
+export function useLedgerFeishuBindings(ledgerId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.feishuLedgerBindings(ledgerId ?? ""),
+    queryFn: () => apiRequest<LedgerFeishuBinding[]>(feishuLedgerBindingsPath(ledgerId!)),
+    enabled: enabled && Boolean(ledgerId),
+    staleTime: 60_000,
   });
 }
 

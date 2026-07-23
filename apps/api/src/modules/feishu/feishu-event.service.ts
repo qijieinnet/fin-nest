@@ -1,11 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AppError, PrismaService } from "@fin-nest/backend";
+import { AppError, FeishuClient, PrismaService } from "@fin-nest/backend";
 import { AI_CARDS_ONLY_PLACEHOLDER, type AiCard } from "../ai/ai-cards";
 import { AiService } from "../ai/ai.service";
 import { LedgersService } from "../ledgers/ledgers.service";
 import { FeishuBindingService } from "./feishu-binding.service";
 import { renderCard, renderMarkdownCard } from "./feishu-cards";
-import { FeishuClient } from "./feishu-client";
 import { HELP_TEXT, parseCommand } from "./feishu-commands";
 import type { FeishuIncomingMessage } from "./feishu-events";
 

@@ -30,9 +30,9 @@ async function bootstrap(): Promise<void> {
   do {
     try {
       const result = await runner.runOnce();
-      if (result.processed > 0) {
+      if (result.processed > 0 || result.notificationsSent > 0) {
         console.log(
-          `fin-nest-worker processed=${result.processed} autoPendingCreated=${result.created}`,
+          `fin-nest-worker processed=${result.processed} autoPendingCreated=${result.created} notificationsSent=${result.notificationsSent}`,
         );
       }
     } catch (error) {

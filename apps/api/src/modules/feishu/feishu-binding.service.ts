@@ -30,6 +30,20 @@ export type FeishuBindingSummary = {
   createdAt: Date;
 };
 
+/**
+ * 账本维度的绑定摘要，供「选择推送接收人」用。
+ *
+ * 比 {@link FeishuBindingSummary} 多了 userId/userAlias（要让人分清这是谁的飞书号），
+ * 少了 currentLedger*（接收人选择与对方当前停留在哪个账本无关）。
+ */
+export type LedgerFeishuBindingSummary = {
+  id: string;
+  displayName: string | null;
+  openIdSuffix: string;
+  userId: string;
+  userAlias: string;
+};
+
 export type CreatedBindCode = {
   /** 明文绑定码，仅此一次返回；库中只存 sha256。 */
   code: string;
@@ -156,6 +170,47 @@ export class FeishuBindingService {
       currentLedgerId: binding.currentLedgerId,
       currentLedgerName: ledgerNames.get(binding.currentLedgerId) ?? null,
       createdAt: binding.createdAt,
+    }));
+  }
+
+  /**
+   * 列出本账本所有成员的生效绑定，供订阅等业务选择推送接收人。
+   *
+   * 与 {@link listBindings} 的差别在范围：那个是「我的账号管理」，这个是「谁能收到本账本的推送」，
+   * 所以按账本成员展开——家庭账本里给配偶推送到期提醒是主要场景。
+   *
+   * 未配置飞书时返回空数组而非报错：调用方（订阅表单）据此静默隐藏入口，
+   * 不需要为「没开这个功能」写一条错误分支。
+   */
+  async listLedgerBindings(ledgerId: string, userId: string): Promise<LedgerFeishuBindingSummary[]> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    if (!this.enabled) return [];
+
+    const members = await this.prisma.client.ledgerMember.findMany({
+      where: { ledgerId, removedAt: null },
+      select: { userId: true },
+    });
+    if (members.length === 0) return [];
+    const memberIds = members.map((member) => member.userId);
+
+    const [bindings, users] = await Promise.all([
+      this.prisma.client.feishuBinding.findMany({
+        where: { userId: { in: memberIds }, revokedAt: null },
+        orderBy: { createdAt: "asc" },
+      }),
+      this.prisma.client.user.findMany({
+        where: { id: { in: memberIds } },
+        select: { id: true, alias: true },
+      }),
+    ]);
+    const aliasByUserId = new Map(users.map((user) => [user.id, user.alias]));
+
+    return bindings.map((binding) => ({
+      id: binding.id,
+      displayName: binding.displayName,
+      openIdSuffix: binding.openId.slice(-6),
+      userId: binding.userId,
+      userAlias: aliasByUserId.get(binding.userId) ?? "",
     }));
   }
 

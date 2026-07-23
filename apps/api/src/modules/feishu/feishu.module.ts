@@ -1,12 +1,12 @@
 import { Module } from "@nestjs/common";
 import { AiModule } from "../ai/ai.module";
+import { AssetsModule } from "../assets/assets.module";
 import { AuthModule } from "../auth/auth.module";
 import { LedgersModule } from "../ledgers/ledgers.module";
 import { TransactionsModule } from "../transactions/transactions.module";
 import { FeishuBindController } from "./feishu-bind.controller";
 import { FeishuBindingService } from "./feishu-binding.service";
 import { FeishuCardActionService } from "./feishu-card-action.service";
-import { FeishuClient } from "./feishu-client";
 import { FeishuEventService } from "./feishu-event.service";
 import { FeishuInboxService } from "./feishu-inbox.service";
 import { FeishuWsService } from "./feishu-ws.service";
@@ -21,12 +21,13 @@ import { FeishuWsService } from "./feishu-ws.service";
  * 卡片按钮链路：WS handler 同步处理（不调 LLM）→ §8 鉴权 → 建交易 → 回写卡片。
  */
 @Module({
-  imports: [AuthModule, LedgersModule, AiModule, TransactionsModule],
+  // AssetsModule 供推送卡片的「退订 / 确认续订」按钮调用同一套业务方法（含 assertMember 鉴权）。
+  imports: [AuthModule, LedgersModule, AiModule, TransactionsModule, AssetsModule],
   controllers: [FeishuBindController],
   providers: [
+    // FeishuClient 由 BackendPlatformModule（@Global）提供，worker 侧也要用，故不在此重复注册。
     FeishuBindingService,
     FeishuCardActionService,
-    FeishuClient,
     FeishuEventService,
     FeishuInboxService,
     FeishuWsService,

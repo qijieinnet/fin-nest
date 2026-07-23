@@ -700,8 +700,10 @@ export type Subscription = {
   /** 到期提醒：提前 remindLeadValue 个 remindLeadUnit 提醒；两者同时为空表示未显式配置。 */
   remindLeadValue: number | null;
   remindLeadUnit: "day" | "week" | "month" | "year" | null;
-  /** 到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送；为空表示未设置。 */
+  /** 到期提醒时间：本地 HH:mm（24 小时制），到点由 worker 推送；为空表示未设置。 */
   remindTime: string | null;
+  /** 到期提醒推送到的飞书账号。已解绑的绑定后端已过滤，这里都是当前真的会收到推送的。 */
+  remindFeishuBindings: SubscriptionFeishuTarget[];
   note: string | null;
   sortOrder: number;
   terminatedAt: string | null;
@@ -716,6 +718,13 @@ export type SubscriptionDetail = Subscription & {
   transactionLinks: TransactionLink[];
   linkedTransactions: Transaction[];
   totalExpenseMicros: string;
+};
+
+/** 订阅上已选中的飞书推送目标，够渲染选中项即可。 */
+export type SubscriptionFeishuTarget = {
+  id: string;
+  displayName: string | null;
+  openIdSuffix: string;
 };
 
 export type AttachmentRecord = {
@@ -931,6 +940,18 @@ export type FeishuBinding = {
   currentLedgerId: string;
   currentLedgerName: string | null;
   createdAt: string;
+};
+
+/**
+ * 账本维度的绑定：本账本所有成员的生效绑定，供选择推送接收人。
+ * 与 {@link FeishuBinding}（我的账号管理）的差别是范围，因此带上是谁的（userAlias）。
+ */
+export type LedgerFeishuBinding = {
+  id: string;
+  displayName: string | null;
+  openIdSuffix: string;
+  userId: string;
+  userAlias: string;
 };
 
 /** 明文绑定码仅在生成时返回一次，服务端只存 sha256。 */

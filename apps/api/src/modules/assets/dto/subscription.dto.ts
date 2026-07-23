@@ -100,11 +100,21 @@ export class CreateSubscriptionDto {
 
   @ApiPropertyOptional({
     example: "09:00",
-    description: "到期提醒时间：本地 HH:mm（24 小时制），供后续邮件/推送发送。传 null 清除。",
+    description: "到期提醒时间：本地 HH:mm（24 小时制），到点后由 worker 推送。传 null 清除。",
   })
   @IsOptional()
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   remindTime?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "到期提醒推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；关闭提醒时后端一并清空。",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  remindFeishuBindingIds?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

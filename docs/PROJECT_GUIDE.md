@@ -15,11 +15,11 @@
 ```txt
 apps/
   api/      # NestJS HTTP API（业务中枢，所有权限与财务规则在这里）
-  worker/   # NestJS Worker（轮询 background_jobs：auto.schedule 生成自动记账待确认、file.delete 附件删除重试）
+  worker/   # NestJS Worker（轮询 background_jobs：auto.schedule 生成自动记账待确认、file.delete 附件删除重试；另扫描到期提醒并推送）
   web/      # Next.js Web（纯前端交互层，经同源 /api 代理调 API）
 packages/
-  backend/  # api/worker 共享平台：Prisma 注入、事务封装、幂等、审计日志、background_jobs、异常过滤器、BigInt 序列化
-  db/       # Prisma schema + 迁移 + client（37 个模型）
+  backend/  # api/worker 共享平台：Prisma 注入、事务封装、幂等、审计日志、background_jobs、通知推送、飞书客户端、异常过滤器、BigInt 序列化
+  db/       # Prisma schema + 迁移 + client（47 个模型）
   shared/   # 前后端共享常量/类型（金额单位等）
   config/   # 环境变量读取与校验（zod，见 §9 环境变量）
   eslint-config/ tsconfig/
@@ -46,6 +46,11 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 - **保险/物品/订阅**：保险档案（险种/保司/投保方式/缴费方式/保额/保费/缴费频率/期数/续费方式/被保人/起止日期/终止与恢复/险种与同险种保单排序）；物品档案（类型/购买价/预期寿命/使用进度/报废与恢复/转卖价/排序）；订阅档案（套餐订阅如 iCloud/Claude/Apple Music：独立分类[物品类型式，含图标/归档/排序]/服务商/套餐/费用/计费周期/支付方式/自动续费/开通日/下次续费日/退订与恢复/同分类内排序）；均通过 `transaction_links` 关联交易做费用汇总，不是账户、不进净资产。
 - **统计**：月度收支、分类占比与下钻、人员排行、趋势、净资产序列、现金流序列；口径统一用有效金额。
 - **提醒红点**：`GET /ledgers/:ledgerId/reminder-summary` 聚合自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
+- **提醒推送**（通用层 `packages/backend/notifications`，首个接入方是订阅到期提醒）：订阅打开「到期提醒」后可选推送到**本账本成员**已绑定的飞书账号（多选，接口 `GET /feishu/ledgers/:ledgerId/bindings`）。接收人存 `reminder_targets`（`sourceType`/`sourceId` 泛化，保险/预算以后可复用；挂在业务对象上而非单条提醒规则上，多档提醒共用同一批接收人）；写入时校验绑定生效且其用户仍是账本成员，关掉提醒时连带清空。
+  Worker 每轮轮询**扫表**判定「提醒日 = 今天且已过 `remindTime`」——不给每条订阅排定时 job，因为订阅增删改、续费日推进都会改变应发时刻，排队反而要在每个改动路径上回收。幂等靠 `notifications.dedupe_key`（`subscription:{id}:{续费日}:{提前量}:{openId}`，提前量段为多档提醒预留）：调度器先插 `pending` 抢占，唯一冲突即跳过，插入成功才调飞书接口（出站调用不在事务内），崩溃遗留的 `pending` 下一轮重捞，`attempts` 达 3 次落 `failed` 并留 `lastError`。发送前二次校验成员身份。飞书未配置时整条链路静默跳过且不消耗 `attempts`，前端隐藏入口。
+  `remindTime` 是本地 `HH:mm` 字面量，与 `currentTimeKey()` 同时区做字符串比较；写入 `scheduled_at` 时经 `zonedDateTimeToUtc()` 换算（直接 `setUTCHours` 会让东八区晚 8 小时才派发）。
+  **可操作卡片**：带 `payload.actions` 的推送发交互卡片（订阅到期挂「退订 / 确认续订」，自定义周期推不出下次续费日时只挂退订），无 actions 的退回纯文本。按钮回调复用既有的 `card.action.trigger` 链路（`normalizeCardAction` 按 `value.action` 分派到 AI 草稿卡与推送卡两套 schema），卡片更新**必须由回调响应带回**，不能走 `PATCH /im/v1/messages`。按钮 value **只带 `notificationId`**，账本与订阅 id 全部反查；鉴权走 `AssetsService` 内既有的 `assertMember`，因此收到推送的其他账本成员点击同样生效。
+  **动作抢占**：一次提醒给每个接收人各一行 `notifications`（`dedupe_key` 含 open_id），但动作只能执行一次——`confirmSubscriptionRenewal` 不幂等，点两次推进两个计费周期。因此按 `occurrence_key`（= `dedupe_key` 去掉收件人段）**跨行**抢占：`updateMany({ where: { occurrenceKey, actionState: null } })` 单条 UPDATE 原子，并发点击只有一方 count > 0，另一方收到「已由他人处理」并被回写终态卡；业务动作失败必须 `releaseAction` 归还，否则卡片永久锁死。飞书回调只能更新**触发的那一张**卡，其他接收人的按钮仍在，点击时才会看到终态。
 - **导入导出**（模块 `data-transfer`）：Excel 全量导出 / 记账模板下载 / 增量导入（`dryRun` 同步返回预览；正式导入入队后台 job，`import_jobs` 表跟踪状态）；JSON 全量备份与覆盖式恢复（仅 owner，需输入账本名确认；恢复时重新生成全部 UUID）。
 - **AI 助手**（模块 `ai`，可选启用）：配置 `AI_BASE_URL/AI_API_KEY/AI_MODEL`（OpenAI-compatible，可指 DeepSeek/通义/本地 Ollama）后启用，未配置时接口返回未启用、前端隐藏入口。聊天页 `/ai`：自然语言记账与查询；LLM 通过工具调用工作——`draft_transaction` 只产出**记账草稿卡片**（不写库），用户直接确认或进入表单编辑后保存都复用幂等键 `ai-card-{messageId}-{cardIndex}` 入账并回写卡片状态；`apply_quick_template` 按快捷模板（当前用户的、注入系统提示供按名称匹配）预设内容生成同样的草稿卡，金额/日期/备注可覆盖，模板关联对象不带入草稿；`query_transactions` 仅处理用户明确要求的逐笔明细，支持按交易人员与记账人（创建者）分别筛选，并可按交易日期或记账时间升序/降序排列，`get_period_stats` 统一处理日/周/月/季度/年/自定义区间统计，以有效金额返回总额、分类饼图和一级分类汇总，并按必传的 `direction`（`expense`/`income`/`both`）只返回用户问的那一侧——只问支出就不带收入、只问收入就不带支出，卡片标题、饼图、趋势与返回给模型的数据一并收敛（历史卡片无 `direction`，按 `both` 渲染）；仅当用户意图涉及趋势/走势/曲线/波动/随时间变化时，才额外返回自动按跨度选择日/周/月粒度的趋势折线图；`get_account_balances`/`get_budget_progress` 返回账户余额与预算进度卡片。另有一组无卡片的只读查询工具（结果以 JSON 返给模型、由模型用文字转述）：`query_plans`（计划本期进度）、`query_insurances`/`query_items`/`query_subscriptions`（保险/物品/订阅档案）、`query_auto_rules`/`get_pending_records`（自动记账规则与待确认，只读，确认仍在应用内操作）、`get_reminder_summary`（红点提醒汇总）。金额换算（账本币种主单位→micros）在确定性代码中完成，严格遵守账本币种和小数位；分类/资金账户/人员/记账人的真实 id 注入系统提示，后端二次校验归属和类型。会话按创建者私有并持久化（`ai_conversations`/`ai_messages`，软删）。工具循环上限 6 轮；聊天走 SSE 流式（`POST /ai/chat/stream`，事件 delta/card/done/error，思维链不透出），非流式 `POST /ai/chat` 保留同构结果。 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
 
@@ -65,7 +70,7 @@ AI 工具调用策略：每轮用户请求的首轮必须选择一个结构化�
 8. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
 9. **软删/归档优先**：交易/账本/保险/物品/订阅软删（`deletedAt`），分类/人员/账户/计划/物品类型/订阅分类归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
 10. **审计**：注册/改密/管理操作/交易增删改/恢复等写 `audit_logs`。
-11. **Worker 边界**：Worker 只消费 `background_jobs`（`auto.schedule`、`file.delete`），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。
+11. **Worker 边界**：Worker 消费 `background_jobs`（`auto.schedule`、`file.delete`），并在每轮轮询里扫描到期提醒、派发推送（不走 job 队列，见「提醒推送」），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。
 
 ## 5. 鉴权与安全基线
 

@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { AppError, parseDateOnly, PrismaService, todayKey } from "@fin-nest/backend";
+import {
+  AppError,
+  parseDateOnly,
+  PrismaService,
+  subscriptionReminderDate,
+  todayKey,
+} from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { FilesService } from "../files/files.service";
 import { LedgersService } from "../ledgers/ledgers.service";
@@ -17,6 +23,21 @@ import {
   UpdateSubscriptionCategoryDto,
   UpdateSubscriptionDto,
 } from "./dto/subscription.dto";
+
+/** 订阅响应里的飞书推送目标：够前端渲染选中项即可，不含账本信息。 */
+type SubscriptionFeishuTarget = {
+  id: string;
+  displayName: string | null;
+  openIdSuffix: string;
+};
+
+/**
+ * 到期提醒是否处于开启状态。判据与前端表单一致：提前量的值与单位同时存在。
+ * 传入的是**写库之后**的行，因此 PATCH 里没提到的字段也已经落到实际值上。
+ */
+function remindActive(sub: { remindLeadValue: number | null; remindLeadUnit: string | null }): boolean {
+  return Boolean(sub.remindLeadValue && sub.remindLeadUnit);
+}
 
 /**
  * 按计费周期把续费日往后推一个周期（UTC-midnight 存储）。
@@ -40,67 +61,6 @@ function advanceRenewalDate(date: Date, billingCycle: string | null): Date | nul
     default:
       return null;
   }
-}
-
-/** 到期提醒默认提前窗口（天），按计费周期区分；与前端 dueSoonWindowDays 保持一致。 */
-function dueSoonWindowDays(billingCycle: string | null): number {
-  switch (billingCycle) {
-    case "weekly":
-      return 2;
-    case "monthly":
-      return 7;
-    case "quarterly":
-      return 14;
-    case "yearly":
-      return 14;
-    default:
-      return 2;
-  }
-}
-
-/** 把 UTC-midnight 日期按单位平移 amount（可为负）。 */
-function shiftDateByUnit(
-  date: Date,
-  amount: number,
-  unit: "day" | "week" | "month" | "year",
-): Date {
-  const next = new Date(date);
-  switch (unit) {
-    case "day":
-      next.setUTCDate(next.getUTCDate() + amount);
-      break;
-    case "week":
-      next.setUTCDate(next.getUTCDate() + amount * 7);
-      break;
-    case "month":
-      next.setUTCMonth(next.getUTCMonth() + amount);
-      break;
-    case "year":
-      next.setUTCFullYear(next.getUTCFullYear() + amount);
-      break;
-  }
-  return next;
-}
-
-/**
- * 到期提醒日期（UTC-midnight）：续费日往前推提前量；显式配置了 remindLeadValue/Unit 则用之，
- * 否则按计费周期回退默认窗口。无续费日返回 null。与前端 reminderDateKey 口径一致。
- */
-function subscriptionReminderDate(sub: {
-  nextRenewalDate: Date | null;
-  billingCycle: string | null;
-  remindLeadValue: number | null;
-  remindLeadUnit: string | null;
-}): Date | null {
-  if (!sub.nextRenewalDate) return null;
-  if (sub.remindLeadValue && sub.remindLeadUnit) {
-    return shiftDateByUnit(
-      sub.nextRenewalDate,
-      -sub.remindLeadValue,
-      sub.remindLeadUnit as "day" | "week" | "month" | "year",
-    );
-  }
-  return shiftDateByUnit(sub.nextRenewalDate, -dueSoonWindowDays(sub.billingCycle), "day");
 }
 
 /**
@@ -649,10 +609,12 @@ export class AssetsService {
         ),
       );
     }
+    const targets = await this.loadReminderTargets(subscriptions.map((s) => s.id));
     return subscriptions.map((subscription) => ({
       ...subscription,
       nextRenewalDate: advanced.get(subscription.id) ?? subscription.nextRenewalDate,
       totalSpendMicros: (spendBySubscription.get(subscription.id) ?? 0n).toString(),
+      remindFeishuBindings: targets.get(subscription.id) ?? [],
     }));
   }
 
@@ -673,18 +635,28 @@ export class AssetsService {
       });
       subscription.nextRenewalDate = target;
     }
-    return { ...subscription, ...links };
+    return { ...subscription, ...links, ...(await this.subscriptionTargetsField(subscriptionId)) };
   }
 
   async createSubscription(ledgerId: string, userId: string, input: CreateSubscriptionDto) {
     await this.ledgers.assertMember(ledgerId, userId);
     if (input.categoryId) await this.assertSubscriptionCategory(ledgerId, input.categoryId);
-    const sortOrder = await this.prisma.client.subscription.count({
-      where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
+    const subscription = await this.prisma.client.$transaction(async (tx) => {
+      const sortOrder = await tx.subscription.count({
+        where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
+      });
+      const created = await tx.subscription.create({
+        data: this.subscriptionData(ledgerId, userId, input, sortOrder),
+      });
+      await this.replaceReminderTargets(
+        tx,
+        ledgerId,
+        created.id,
+        remindActive(created) ? (input.remindFeishuBindingIds ?? []) : [],
+      );
+      return created;
     });
-    return this.prisma.client.subscription.create({
-      data: this.subscriptionData(ledgerId, userId, input, sortOrder),
-    });
+    return { ...subscription, ...(await this.subscriptionTargetsField(subscription.id)) };
   }
 
   async updateSubscription(
@@ -696,18 +668,26 @@ export class AssetsService {
     await this.ledgers.assertMember(ledgerId, userId);
     const existing = await this.assertSubscription(ledgerId, subscriptionId);
     if (input.categoryId) await this.assertSubscriptionCategory(ledgerId, input.categoryId);
-    const changingCategory =
-      input.categoryId !== undefined && input.categoryId !== existing.categoryId;
-    const updateData = this.subscriptionUpdateData(userId, input);
-    if (changingCategory) {
-      updateData.sortOrder = await this.prisma.client.subscription.count({
-        where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
-      });
-    }
-    return this.prisma.client.subscription.update({
-      where: { id: subscriptionId },
-      data: updateData,
+    const subscription = await this.prisma.client.$transaction(async (tx) => {
+      const changingCategory =
+        input.categoryId !== undefined && input.categoryId !== existing.categoryId;
+      const updateData = this.subscriptionUpdateData(userId, input);
+      if (changingCategory) {
+        updateData.sortOrder = await tx.subscription.count({
+          where: { ledgerId, deletedAt: null, categoryId: input.categoryId ?? null },
+        });
+      }
+      const updated = await tx.subscription.update({ where: { id: subscriptionId }, data: updateData });
+      // 关掉到期提醒时连带清空推送目标——否则重新打开提醒会静默沿用上次的接收人。
+      // 只在「本次请求提到了提醒相关字段」时才动 targets，避免改个名字就把接收人清了。
+      if (!remindActive(updated)) {
+        await this.replaceReminderTargets(tx, ledgerId, subscriptionId, []);
+      } else if (input.remindFeishuBindingIds !== undefined) {
+        await this.replaceReminderTargets(tx, ledgerId, subscriptionId, input.remindFeishuBindingIds);
+      }
+      return updated;
     });
+    return { ...subscription, ...(await this.subscriptionTargetsField(subscriptionId)) };
   }
 
   async terminateSubscription(ledgerId: string, subscriptionId: string, userId: string) {
@@ -785,9 +765,13 @@ export class AssetsService {
   async deleteSubscription(ledgerId: string, subscriptionId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertSubscription(ledgerId, subscriptionId);
-    await this.prisma.client.subscription.update({
-      where: { id: subscriptionId },
-      data: { deletedAt: new Date(), updatedBy: userId },
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: { deletedAt: new Date(), updatedBy: userId },
+      });
+      // 订阅是软删，但推送目标直接删干净：留着只会让调度器多查一轮，且恢复订阅不是现有能力。
+      await this.replaceReminderTargets(tx, ledgerId, subscriptionId, []);
     });
     await this.files.deleteAttachmentsForOwner(ledgerId, "subscription", subscriptionId);
   }
@@ -1054,6 +1038,91 @@ export class AssetsService {
       note: input.note,
       updatedBy: userId,
     };
+  }
+
+  /**
+   * 覆盖式重写订阅的飞书推送目标。
+   *
+   * 两道校验缺一不可：绑定必须仍生效（解绑是软删，行还在），且绑定所属用户必须仍是本账本成员
+   * ——否则退出账本的人还能继续收到这个账本的推送。发送时会再校验一次（见 worker 侧调度器），
+   * 因为这里通过之后成员关系仍可能变化。
+   */
+  private async replaceReminderTargets(
+    tx: Prisma.TransactionClient,
+    ledgerId: string,
+    subscriptionId: string,
+    bindingIds: string[],
+  ) {
+    const unique = Array.from(new Set(bindingIds));
+    if (unique.length) {
+      const bindings = await tx.feishuBinding.findMany({
+        where: { id: { in: unique }, revokedAt: null },
+        select: { id: true, userId: true },
+      });
+      if (bindings.length !== unique.length) {
+        throw new AppError("FEISHU_BINDING_NOT_FOUND", "飞书绑定不存在或已解绑", 404);
+      }
+      const members = await tx.ledgerMember.findMany({
+        where: { ledgerId, userId: { in: bindings.map((b) => b.userId) }, removedAt: null },
+        select: { userId: true },
+      });
+      const memberIds = new Set(members.map((member) => member.userId));
+      if (bindings.some((binding) => !memberIds.has(binding.userId))) {
+        throw new AppError("FEISHU_BINDING_NOT_MEMBER", "该飞书账号的用户不是本账本成员", 403);
+      }
+    }
+    await tx.reminderTarget.deleteMany({
+      where: { sourceType: "subscription", sourceId: subscriptionId, channel: "feishu" },
+    });
+    if (unique.length) {
+      await tx.reminderTarget.createMany({
+        data: unique.map((feishuBindingId) => ({
+          ledgerId,
+          sourceType: "subscription",
+          sourceId: subscriptionId,
+          channel: "feishu",
+          feishuBindingId,
+        })),
+      });
+    }
+  }
+
+  /**
+   * 批量取订阅的推送目标（供列表用）。已解绑的绑定在这里被过滤掉，
+   * 因此前端看到的永远是「当前真的会收到推送的账号」。
+   */
+  private async loadReminderTargets(
+    subscriptionIds: string[],
+  ): Promise<Map<string, SubscriptionFeishuTarget[]>> {
+    const result = new Map<string, SubscriptionFeishuTarget[]>();
+    if (!subscriptionIds.length) return result;
+    const targets = await this.prisma.client.reminderTarget.findMany({
+      where: { sourceType: "subscription", sourceId: { in: subscriptionIds }, channel: "feishu" },
+    });
+    if (!targets.length) return result;
+    const bindings = await this.prisma.client.feishuBinding.findMany({
+      where: { id: { in: targets.map((target) => target.feishuBindingId) }, revokedAt: null },
+      select: { id: true, displayName: true, openId: true },
+    });
+    const bindingById = new Map(bindings.map((binding) => [binding.id, binding]));
+    for (const target of targets) {
+      const binding = bindingById.get(target.feishuBindingId);
+      if (!binding) continue;
+      const bucket = result.get(target.sourceId) ?? [];
+      bucket.push({
+        id: binding.id,
+        displayName: binding.displayName,
+        openIdSuffix: binding.openId.slice(-6),
+      });
+      result.set(target.sourceId, bucket);
+    }
+    return result;
+  }
+
+  /** 单个订阅的推送目标字段，展开进响应体。 */
+  private async subscriptionTargetsField(subscriptionId: string) {
+    const targets = await this.loadReminderTargets([subscriptionId]);
+    return { remindFeishuBindings: targets.get(subscriptionId) ?? [] };
   }
 
   private async assertSubscription(ledgerId: string, subscriptionId: string) {

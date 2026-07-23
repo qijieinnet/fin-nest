@@ -58,6 +58,7 @@ export const queryKeys = {
   // 因此切换账本时会被一并清理。这是有意的：绑定卡片上展示当前账本名，重取一次更省心。
   feishuStatus: ["feishu", "status"] as const,
   feishuBindings: ["feishu", "bindings"] as const,
+  feishuLedgerBindings: (ledgerId: string) => ["feishu", "bindings", "ledger", ledgerId] as const,
 };
 
 /**

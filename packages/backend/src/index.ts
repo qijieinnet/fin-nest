@@ -11,3 +11,8 @@ export * from "./audit/audit-log.service";
 export * from "./background-jobs/background-jobs.service";
 export * from "./background-jobs/background-jobs.types";
 export * from "./serialization/bigint-serialize.interceptor";
+export * from "./feishu/feishu-client";
+export * from "./notifications/notification.service";
+export * from "./notifications/notification-card";
+export * from "./notifications/notifications.types";
+export * from "./reminders/subscription-reminder";

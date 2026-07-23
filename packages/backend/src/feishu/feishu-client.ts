@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AppError } from "@fin-nest/backend";
 import { loadConfig } from "@fin-nest/config";
+import { AppError } from "../errors/app-error";
 
 const FEISHU_BASE_URL = "https://open.feishu.cn/open-apis";
 /** tenant_access_token 服务端返回剩余秒数；提前 5 分钟续期，避免边界过期。 */
@@ -36,19 +36,34 @@ export class FeishuClient {
     return Boolean(this.config.FEISHU_APP_ID && this.config.FEISHU_APP_SECRET);
   }
 
-  /** 发送纯文本消息。 */
+  /** 发送纯文本消息到会话。 */
   async sendText(chatId: string, text: string): Promise<void> {
-    await this.sendMessage(chatId, "text", JSON.stringify({ text }));
+    await this.sendMessage("chat_id", chatId, "text", JSON.stringify({ text }));
   }
 
   /**
-   * 发送交互卡片。
+   * 发送交互卡片到会话。
    *
    * 卡片的**更新**不走这里，也不走 `PATCH /im/v1/messages`——按钮点击后的更新必须由
    * `card.action.trigger` 的回调响应带回去（见 `feishu-card-action.service.ts`）。
    */
   async sendCard(chatId: string, card: unknown): Promise<string | undefined> {
-    return this.sendMessage(chatId, "interactive", JSON.stringify(card));
+    return this.sendMessage("chat_id", chatId, "interactive", JSON.stringify(card));
+  }
+
+  /**
+   * 主动推送纯文本给某个飞书用户（机器人单聊）。
+   *
+   * 与 {@link sendText} 的区别只在收件标识：这里按 open_id 投递，用于「用户没先说话、
+   * 系统主动找他」的场景（订阅到期提醒等）。要求该用户在应用可用范围内，否则飞书报错。
+   */
+  async sendTextToUser(openId: string, text: string): Promise<string | undefined> {
+    return this.sendMessage("open_id", openId, "text", JSON.stringify({ text }));
+  }
+
+  /** 主动推送交互卡片给某个飞书用户，语义同 {@link sendTextToUser}。 */
+  async sendCardToUser(openId: string, card: unknown): Promise<string | undefined> {
+    return this.sendMessage("open_id", openId, "interactive", JSON.stringify(card));
   }
 
   /**
@@ -113,14 +128,15 @@ export class FeishuClient {
   }
 
   private async sendMessage(
-    chatId: string,
+    receiveIdType: "chat_id" | "open_id",
+    receiveId: string,
     msgType: string,
     content: string,
   ): Promise<string | undefined> {
     const data = await this.request<{ message_id?: string }>(
       "POST",
-      "/im/v1/messages?receive_id_type=chat_id",
-      { receive_id: chatId, msg_type: msgType, content },
+      `/im/v1/messages?receive_id_type=${receiveIdType}`,
+      { receive_id: receiveId, msg_type: msgType, content },
     );
     return data?.message_id;
   }

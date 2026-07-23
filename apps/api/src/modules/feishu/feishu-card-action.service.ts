@@ -1,7 +1,18 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AppError, PrismaService } from "@fin-nest/backend";
+import {
+  AppError,
+  dateKey,
+  normalizePayload,
+  NotificationActionKey,
+  NotificationActionState,
+  NotificationPayload,
+  NotificationService,
+  PrismaService,
+  renderNotificationCard,
+} from "@fin-nest/backend";
 import type { AiCard } from "../ai/ai-cards";
 import { AiService } from "../ai/ai.service";
+import { AssetsService } from "../assets/assets.service";
 import { TransactionsService } from "../transactions/transactions.service";
 import { FeishuBindingService } from "./feishu-binding.service";
 import { renderCard, type FeishuCardBody } from "./feishu-cards";
@@ -24,17 +35,33 @@ export type CardActionResponse = {
   card?: CardActionResponseCard;
 };
 
-export type FeishuCardAction = {
+/** 所有卡片操作共有的上下文。 */
+type CardActionBase = {
   /** 点击者的 open_id —— 鉴权的唯一依据。 */
   openId: string;
   /** 被点击卡片所在的飞书消息 id，用于原地回写。 */
   feishuMessageId: string;
   chatId: string;
-  /** 按钮 value：只有 action / messageId / cardIndex 三个字段。 */
-  action: string;
-  aiMessageId: string;
-  cardIndex: number;
 };
+
+/**
+ * 卡片操作。按 `kind` 分派——两类卡片的 value schema 与鉴权依据都不同：
+ * AI 草稿卡靠「会话归属者 = 点击者」，推送卡靠「点击者是该账本成员」。
+ */
+export type FeishuCardAction =
+  | (CardActionBase & {
+      kind: "ai_draft";
+      /** 按钮 value：只有 action / messageId / cardIndex 三个字段。 */
+      action: "confirm_draft" | "discard_draft";
+      aiMessageId: string;
+      cardIndex: number;
+    })
+  | (CardActionBase & {
+      kind: "notification";
+      action: NotificationActionKey;
+      /** 按钮 value 只带这一个 id，其余（账本、订阅）一律从库里反查。 */
+      notificationId: string;
+    });
 
 /**
  * 卡片按钮回调。
@@ -55,6 +82,8 @@ export class FeishuCardActionService {
     private readonly bindings: FeishuBindingService,
     private readonly ai: AiService,
     private readonly transactions: TransactionsService,
+    private readonly assets: AssetsService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async handleAction(action: FeishuCardAction): Promise<CardActionResponse> {
@@ -78,7 +107,88 @@ export class FeishuCardActionService {
     if (!binding) {
       return errorToast("你尚未绑定 Fin Nest 账号，无法操作此卡片。");
     }
+    if (action.kind === "notification") {
+      return this.processNotification(action, binding.userId);
+    }
+    return this.processDraft(action, binding);
+  }
 
+  /**
+   * 推送卡片的按钮（订阅退订 / 确认续订）。
+   *
+   * 鉴权与 AI 草稿卡不同：推送可能发给配偶等其他账本成员，他们点击理应生效，
+   * 因此判据是「点击者是该账本成员」——这一步由 AssetsService 的 assertMember 完成，
+   * 越权会抛 403 被 handleAction 转成错误 toast。ledgerId / subscriptionId 全部从
+   * notification 行反查，不信按钮 value 里的任何业务 id。
+   */
+  private async processNotification(
+    action: Extract<FeishuCardAction, { kind: "notification" }>,
+    userId: string,
+  ): Promise<CardActionResponse> {
+    const notification = await this.prisma.client.notification.findFirst({
+      where: { id: action.notificationId },
+    });
+    if (!notification || notification.sourceType !== "subscription") {
+      return errorToast("卡片对应的提醒不存在，可能已被清理。");
+    }
+    const payload = normalizePayload(notification.payload);
+
+    // 已是终态：不重复执行，把当前状态渲染回去，顺手修掉「按钮还挂着」的陈旧卡片。
+    if (notification.actionState) {
+      return {
+        toast: { type: "info", content: "该提醒已处理" },
+        card: await this.renderNotificationResult(notification.id, payload, notification),
+      };
+    }
+
+    const state: NotificationActionState =
+      action.action === "subscription_renew" ? "renewed" : "terminated";
+    // 先抢占再执行：一次提醒给每个接收人各发一张卡，都能点，但动作只能生效一次。
+    if (!(await this.notifications.claimAction(notification.occurrenceKey, state, userId))) {
+      const current = await this.prisma.client.notification.findFirst({
+        where: { id: notification.id },
+      });
+      return {
+        toast: { type: "info", content: "该提醒已由他人处理" },
+        card: await this.renderNotificationResult(notification.id, payload, current ?? notification),
+      };
+    }
+
+    try {
+      const subscription =
+        action.action === "subscription_renew"
+          ? await this.assets.confirmSubscriptionRenewal(
+              notification.ledgerId,
+              notification.sourceId,
+              userId,
+            )
+          : await this.assets.terminateSubscription(
+              notification.ledgerId,
+              notification.sourceId,
+              userId,
+            );
+      return {
+        toast: {
+          type: "success",
+          content: action.action === "subscription_renew" ? "已确认续订" : "已退订",
+        },
+        card: await this.renderNotificationResult(notification.id, payload, {
+          ...notification,
+          actionState: state,
+          actedBy: userId,
+        }, subscription.nextRenewalDate),
+      };
+    } catch (error) {
+      // 归还抢占，否则一次失败（无权限、周期推不出）会把这张卡永久锁死在「已处理」。
+      await this.notifications.releaseAction(notification.occurrenceKey, userId);
+      throw error;
+    }
+  }
+
+  private async processDraft(
+    action: Extract<FeishuCardAction, { kind: "ai_draft" }>,
+    binding: { userId: string },
+  ): Promise<CardActionResponse> {
     // ② 反查卡片归属。ledgerId 必须从库里取——按钮 value 是客户端可篡改的输入。
     const aiMessage = await this.prisma.client.aiMessage.findFirst({
       where: { id: action.aiMessageId, role: "assistant" },
@@ -136,7 +246,7 @@ export class FeishuCardActionService {
   private async confirmDraft(
     ledgerId: string,
     userId: string,
-    action: FeishuCardAction,
+    action: Extract<FeishuCardAction, { kind: "ai_draft" }>,
     draft: Extract<AiCard, { kind: "transaction_draft" }>["draft"],
   ) {
     // 幂等键与 Web 端完全一致：飞书点一次、Web 再点一次也不会重复入账。
@@ -153,16 +263,49 @@ export class FeishuCardActionService {
     });
   }
 
-  private async discardDraft(ledgerId: string, userId: string, action: FeishuCardAction) {
+  private async discardDraft(ledgerId: string, userId: string, action: Extract<FeishuCardAction, { kind: "ai_draft" }>) {
     return this.ai.updateCardState(ledgerId, action.aiMessageId, userId, {
       cardIndex: action.cardIndex,
       status: "superseded",
     });
   }
 
+  /** 推送卡片的终态渲染：撤掉按钮，写明谁做了什么。 */
+  private async renderNotificationResult(
+    notificationId: string,
+    payload: NotificationPayload,
+    notification: { actionState: string | null; actedBy: string | null },
+    nextRenewalDate?: Date | null,
+  ): Promise<CardActionResponseCard> {
+    const actor = notification.actedBy
+      ? await this.prisma.client.user.findFirst({
+          where: { id: notification.actedBy },
+          select: { alias: true },
+        })
+      : null;
+    const summary =
+      notification.actionState === "renewed"
+        ? "已确认续订"
+        : notification.actionState === "terminated"
+          ? "已退订"
+          : "已处理";
+    const detail =
+      notification.actionState === "renewed" && nextRenewalDate
+        ? `下次续费日：${dateKey(nextRenewalDate)}`
+        : null;
+    return {
+      type: "raw",
+      data: renderNotificationCard(notificationId, payload, {
+        summary,
+        actorName: actor?.alias ?? null,
+        detail,
+      }),
+    };
+  }
+
   /** 渲染更新后的卡片，随回调响应回传给飞书替换原卡。 */
   private async renderUpdated(
-    action: FeishuCardAction,
+    action: Extract<FeishuCardAction, { kind: "ai_draft" }>,
     ledgerId: string,
     card: AiCard,
   ): Promise<CardActionResponseCard> {
@@ -186,9 +329,17 @@ function errorToast(content: string): CardActionResponse {
   return { toast: { type: "error", content } };
 }
 
+const NOTIFICATION_ACTIONS: readonly NotificationActionKey[] = [
+  "subscription_renew",
+  "subscription_terminate",
+];
+
 /**
  * 原始 card.action.trigger → 内部结构。纯函数，可离线单测。
  * 字段位置在 v2 里挪进了 `context`，同时保留顶层兜底（不同投递面可能不一致）。
+ *
+ * 按 `value.action` 分派到两套 schema：认不出的一律返回 null，由调用方忽略——
+ * 宁可漏处理一个未知按钮，也不要把畸形 value 往下游传。
  */
 export function normalizeCardAction(raw: unknown): FeishuCardAction | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -203,13 +354,21 @@ export function normalizeCardAction(raw: unknown): FeishuCardAction | null {
   if (typeof openId !== "string" || typeof feishuMessageId !== "string") return null;
   if (typeof chatId !== "string" || typeof value !== "object" || value === null) return null;
 
-  const { action, messageId, cardIndex } = value as Record<string, unknown>;
-  if (action !== "confirm_draft" && action !== "discard_draft") return null;
-  if (typeof messageId !== "string") return null;
+  const { action, messageId, cardIndex, notificationId } = value as Record<string, unknown>;
+  const base = { openId, feishuMessageId, chatId };
 
-  // 飞书会把 value 里的数字透传回来，但经过 JSON 往返有可能变成字符串，两种都接受。
-  const index = typeof cardIndex === "number" ? cardIndex : Number(cardIndex);
-  if (!Number.isInteger(index) || index < 0) return null;
+  if (action === "confirm_draft" || action === "discard_draft") {
+    if (typeof messageId !== "string") return null;
+    // 飞书会把 value 里的数字透传回来，但经过 JSON 往返有可能变成字符串，两种都接受。
+    const index = typeof cardIndex === "number" ? cardIndex : Number(cardIndex);
+    if (!Number.isInteger(index) || index < 0) return null;
+    return { ...base, kind: "ai_draft", action, aiMessageId: messageId, cardIndex: index };
+  }
 
-  return { openId, feishuMessageId, chatId, action, aiMessageId: messageId, cardIndex: index };
+  if (NOTIFICATION_ACTIONS.includes(action as NotificationActionKey)) {
+    if (typeof notificationId !== "string" || notificationId.length === 0) return null;
+    return { ...base, kind: "notification", action: action as NotificationActionKey, notificationId };
+  }
+
+  return null;
 }

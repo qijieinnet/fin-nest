@@ -177,6 +177,7 @@ async function main() {
   });
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
 
+  await assertSubscriptionReminderTargets({ ledgerId: ledger.id, owner, requester });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
 
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
@@ -196,6 +197,7 @@ async function main() {
           "batch_update",
           "effective_amount_queries",
           "idempotency",
+          "subscription_reminder_targets",
           "feishu_db_constraints",
         ],
       },
@@ -848,6 +850,94 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
 
 // 飞书机器人的 DB 级不变式：这些约束是绑定 / 去重链路正确性的地基，纯 Prisma 即可验证，
 // 不依赖真实飞书连接，也不依赖 FEISHU_APP_ID/SECRET 是否配置（对应 FEISHU_BOT_PLAN.md §12）。
+/**
+ * 订阅到期提醒的飞书推送目标：写入范围限本账本成员的生效绑定，关掉提醒时连带清空。
+ * 未配置 FEISHU_APP_ID/SECRET 时账本维度绑定列表返回空数组（前端据此隐藏入口），
+ * 但订阅上的目标读写不依赖该开关，因此这里直接建绑定行来验证。
+ */
+async function assertSubscriptionReminderTargets({ ledgerId, owner, requester }) {
+  const token = owner.token;
+  // owner 是本账本成员，requester 只提交了加入申请（仍是外人），正好覆盖越权分支。
+  const memberBinding = await prisma.feishuBinding.create({
+    data: {
+      openId: `e2e-sub-member-${stamp}`,
+      displayName: "E2E 成员飞书",
+      userId: owner.userId,
+      currentLedgerId: ledgerId,
+    },
+  });
+  const outsiderBinding = await prisma.feishuBinding.create({
+    data: {
+      openId: `e2e-sub-outsider-${stamp}`,
+      userId: requester.userId,
+      currentLedgerId: ledgerId,
+    },
+  });
+
+  const subscription = await api("POST", `/ledgers/${ledgerId}/subscriptions`, {
+    token,
+    expected: 201,
+    body: {
+      name: `E2E 订阅 ${stamp}`,
+      billingCycle: "monthly",
+      nextRenewalDate: todayIso(),
+      remindLeadValue: 3,
+      remindLeadUnit: "day",
+      remindTime: "09:00",
+      remindFeishuBindingIds: [memberBinding.id],
+    },
+  });
+  assert.deepEqual(
+    subscription.remindFeishuBindings.map((binding) => binding.id),
+    [memberBinding.id],
+  );
+  assert.equal(subscription.remindFeishuBindings[0].displayName, "E2E 成员飞书");
+
+  const detail = await api("GET", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+  });
+  assert.deepEqual(
+    detail.remindFeishuBindings.map((binding) => binding.id),
+    [memberBinding.id],
+  );
+
+  // 非本账本成员的绑定不能设为接收人，否则退出账本的人还能持续收到该账本的推送。
+  await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+    expected: 403,
+    body: { remindFeishuBindingIds: [outsiderBinding.id] },
+  });
+  // 不存在 / 已解绑的绑定按 404 处理。
+  await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+    expected: 404,
+    body: { remindFeishuBindingIds: ["00000000-0000-4000-8000-000000000000"] },
+  });
+
+  // 与提醒无关的编辑不应动到接收人（否则改个名字就把推送悄悄关了）。
+  const renamed = await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+    body: { name: `E2E 订阅改名 ${stamp}` },
+  });
+  assert.deepEqual(
+    renamed.remindFeishuBindings.map((binding) => binding.id),
+    [memberBinding.id],
+  );
+
+  // 关掉到期提醒 → 接收人一并清空，重新打开提醒不会静默沿用上次的接收人。
+  const disabled = await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+    body: { remindLeadValue: null, remindLeadUnit: null, remindTime: null },
+  });
+  assert.deepEqual(disabled.remindFeishuBindings, []);
+  assert.equal(
+    await prisma.reminderTarget.count({
+      where: { sourceType: "subscription", sourceId: subscription.id },
+    }),
+    0,
+  );
+}
+
 async function feishuDbConstraints({ userId, ledgerId }) {
   const isUniqueViolation = (error) => error?.code === "P2002";
   const openId = `e2e-open-${stamp}`;
@@ -972,6 +1062,11 @@ async function cleanup() {
         )
         .map((job) => job.id);
       if (jobIds.length) await prisma.backgroundJob.deleteMany({ where: { id: { in: jobIds } } });
+      // 推送目标与推送记录都带 ledger_id 外键，必须先于 ledger 删除。
+      await prisma.reminderTarget.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.notification.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.subscription.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.subscriptionCategory.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.attachment.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.file.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.transactionLink.deleteMany({ where: { ledgerId: { in: ledgerIds } } });

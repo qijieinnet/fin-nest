@@ -120,3 +120,8 @@ export const FEISHU_ENDPOINTS = {
 export function feishuBindingPath(bindingId: string): string {
   return `/feishu/bindings/${encodeURIComponent(bindingId)}`;
 }
+
+/** 本账本所有成员的生效绑定，供选择推送接收人。挂在 feishu 下而非 ledgerApiPath 下，与其余绑定接口同源。 */
+export function feishuLedgerBindingsPath(ledgerId: string): string {
+  return `/feishu/ledgers/${encodeURIComponent(ledgerId)}/bindings`;
+}
