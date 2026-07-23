@@ -561,6 +561,10 @@ export type AutoRule = {
   repeatRule: AutoRepeatRule;
   startDate: string;
   nextRunOn: string | null;
+  /** 指定时间：当天几点生成待确认（本地 HH:mm）；为空表示不指定，到期即生成。 */
+  runTime: string | null;
+  /** 生成待确认后推送到的飞书账号。已解绑的绑定后端已过滤。 */
+  remindFeishuBindings: ReminderFeishuTarget[];
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -703,7 +707,7 @@ export type Subscription = {
   /** 到期提醒时间：本地 HH:mm（24 小时制），到点由 worker 推送；为空表示未设置。 */
   remindTime: string | null;
   /** 到期提醒推送到的飞书账号。已解绑的绑定后端已过滤，这里都是当前真的会收到推送的。 */
-  remindFeishuBindings: SubscriptionFeishuTarget[];
+  remindFeishuBindings: ReminderFeishuTarget[];
   note: string | null;
   sortOrder: number;
   terminatedAt: string | null;
@@ -720,8 +724,8 @@ export type SubscriptionDetail = Subscription & {
   totalExpenseMicros: string;
 };
 
-/** 订阅上已选中的飞书推送目标，够渲染选中项即可。 */
-export type SubscriptionFeishuTarget = {
+/** 已选中的飞书推送目标（订阅到期、自动记账共用），够渲染选中项即可。 */
+export type ReminderFeishuTarget = {
   id: string;
   displayName: string | null;
   openIdSuffix: string;

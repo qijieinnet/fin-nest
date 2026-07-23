@@ -381,6 +381,9 @@ model AutoRule {
   repeatRule       String    @map("repeat_rule")
   startDate        DateTime  @map("start_date") @db.Date
   nextRunOn        DateTime? @map("next_run_on") @db.Date
+  /// 指定时间：当天几点生成待确认（本地 HH:mm，24 小时制）。
+  /// 为空 = 未指定，`next_run_on` 到期后 worker 下一轮就生成，不看时刻。
+  runTime          String?   @map("run_time")
   createdBy        String    @map("created_by") @db.Uuid
   updatedBy        String?   @map("updated_by") @db.Uuid
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -725,7 +728,7 @@ model BackgroundJob {
 model ReminderTarget {
   id              String   @id @default(uuid()) @db.Uuid
   ledgerId        String   @map("ledger_id") @db.Uuid
-  // subscription（后续 insurance/plan）
+  // subscription | auto_rule（后续 insurance/plan）
   sourceType      String   @map("source_type")
   sourceId        String   @map("source_id") @db.Uuid
   // feishu

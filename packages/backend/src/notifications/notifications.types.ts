@@ -1,7 +1,11 @@
 /** 目前只有飞书一条通道；新增渠道时在这里扩，`NotificationService` 的分发处会强制补齐分支。 */
 export type NotificationChannel = "feishu";
 
-export type NotificationSourceType = "subscription";
+/** notifications.source_id 指向的对象：订阅本身，或一条待确认的自动记账。 */
+export type NotificationSourceType = "subscription" | "auto_pending";
+
+/** reminder_targets.source_id 指向的对象：接收人挂在「档案 / 规则」上，不挂在单次事件上。 */
+export type ReminderTargetSourceType = "subscription" | "auto_rule";
 
 /**
  * 卡片按钮的动作标识。
@@ -9,10 +13,14 @@ export type NotificationSourceType = "subscription";
  * 定义在通用层是因为**发送侧**（调度器决定挂哪些按钮）与**处理侧**（api 的卡片回调）
  * 必须对同一组字符串达成一致；但每个动作具体做什么只有处理侧知道，通用层不关心。
  */
-export type NotificationActionKey = "subscription_renew" | "subscription_terminate";
+export type NotificationActionKey =
+  | "subscription_renew"
+  | "subscription_terminate"
+  | "auto_pending_confirm"
+  | "auto_pending_discard";
 
 /** 动作执行后的终态，落到 `notifications.action_state`。 */
-export type NotificationActionState = "renewed" | "terminated";
+export type NotificationActionState = "renewed" | "terminated" | "confirmed" | "discarded";
 
 export type NotificationAction = {
   key: NotificationActionKey;
@@ -30,6 +38,7 @@ export type NotificationAction = {
  */
 export type ReminderOccurrence = {
   ledgerId: string;
+  /** 指向可被按钮操作的对象：订阅 id，或待确认记录 id。 */
   sourceType: NotificationSourceType;
   sourceId: string;
   channel: NotificationChannel;
@@ -45,9 +54,9 @@ export type ReminderOccurrence = {
 
 /** 消息正文的结构化来源。渲染成什么样由渠道决定，调度器只负责给事实。 */
 export type NotificationPayload = {
-  kind: "subscription_due";
+  kind: "subscription_due" | "auto_pending";
   title: string;
-  /** 「还有 3 天」这类描述。多档提醒时每档不同，是区分同一订阅多条推送的关键信息。 */
+  /** 「还有 3 天」这类副标题。订阅多档提醒时每档不同，是区分同一订阅多条推送的关键信息。 */
   leadDescription: string;
   lines: string[];
   /** 卡片底部按钮；为空则发成不可操作的信息卡。 */

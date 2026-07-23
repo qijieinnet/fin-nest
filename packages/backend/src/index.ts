@@ -14,5 +14,7 @@ export * from "./serialization/bigint-serialize.interceptor";
 export * from "./feishu/feishu-client";
 export * from "./notifications/notification.service";
 export * from "./notifications/notification-card";
+export * from "./notifications/reminder-targets.service";
 export * from "./notifications/notifications.types";
 export * from "./reminders/subscription-reminder";
+export * from "./money/format-micros";

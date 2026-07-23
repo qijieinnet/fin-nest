@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 import {
   AccountSelectRow,
   AmountInput,
@@ -13,10 +13,11 @@ import {
   OptionPicker,
   PersonSelectField,
   RecoverablePayableEditor,
+  TimeWheelPicker,
   ToggleCard,
   type RecoverablePayableItem,
 } from "@/components/business";
-import { IconButton, Input, Switch, Tabs } from "@/components/ui";
+import { IconButton, Input, PopoverMenu, Switch, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -32,6 +33,7 @@ import {
   type Subscription,
   type TransactionType,
 } from "@/lib/api";
+import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
 import { cn } from "@/lib/format/class-names";
 import {
   accountSelectionId,
@@ -121,6 +123,61 @@ function categoryType(type: TransactionType): "expense" | "income" {
   return type === "income" ? "income" : "expense";
 }
 
+/** 打开「指定时间」但未选时刻时的默认记账时间。 */
+const DEFAULT_RUN_TIME = "09:00";
+
+/**
+ * 飞书推送目标多选行：点按弹出 PopoverMenu 勾选（可多选）。
+ * 与订阅到期提醒里的同名行同款交互。
+ */
+function FeishuTargetRow({
+  onToggle,
+  options,
+  values,
+}: {
+  onToggle: (value: string) => void;
+  options: ReadonlyArray<{ label: string; value: string }>;
+  values: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = options
+    .filter((option) => values.includes(option.value))
+    .map((option) => option.label);
+  const isEmpty = options.length === 0;
+  const display = isEmpty
+    ? "无可用飞书账号"
+    : selectedLabels.length > 0
+      ? selectedLabels.join("、")
+      : "不推送";
+  return (
+    <div className="transaction-form__card transaction-form__picker-card">
+      <div className="relative">
+        <button
+          className="transaction-form__select-row"
+          disabled={isEmpty}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <span>推送飞书</span>
+          <strong>{display}</strong>
+          <ChevronRight size={18} />
+        </button>
+        <PopoverMenu
+          groups={[
+            options.map((option) => ({
+              label: option.label,
+              onSelect: () => onToggle(option.value),
+              selected: values.includes(option.value),
+            })),
+          ]}
+          onOpenChange={setOpen}
+          open={open}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function AutoRuleEditorSheet({
   accounts,
   categories,
@@ -183,6 +240,11 @@ export function AutoRuleEditorSheet({
   const [startDate, setStartDate] = useState(dateOnly(rule?.startDate) || todayKey());
   const [note, setNote] = useState(rule?.note ?? "");
   const [enabled, setEnabled] = useState(rule?.enabled ?? true);
+  const [runTimeEnabled, setRunTimeEnabled] = useState(Boolean(rule?.runTime));
+  const [runTime, setRunTime] = useState(rule?.runTime ?? DEFAULT_RUN_TIME);
+  const [remindFeishuBindingIds, setRemindFeishuBindingIds] = useState<string[]>(
+    () => rule?.remindFeishuBindings?.map((binding) => binding.id) ?? [],
+  );
 
   const isEditing = Boolean(rule);
   const catOptions = useMemo(
@@ -228,6 +290,27 @@ export function AutoRuleEditorSheet({
     [subscriptions],
   );
   const nextPreview = upcomingDates(startDate, repeatRule, 1)[0] ?? startDate;
+
+  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
+  const feishuStatusQuery = useFeishuStatus();
+  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
+  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
+  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
+  const feishuTargetOptions = useMemo(
+    () =>
+      (feishuBindingsQuery.data ?? []).map((binding) => ({
+        value: binding.id,
+        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
+      })),
+    [feishuBindingsQuery.data],
+  );
+  const toggleFeishuBinding = (bindingId: string) => {
+    setRemindFeishuBindingIds((current) =>
+      current.includes(bindingId)
+        ? current.filter((id) => id !== bindingId)
+        : [...current, bindingId],
+    );
+  };
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
 
@@ -354,6 +437,9 @@ export function AutoRuleEditorSheet({
           isTransfer || !subscriptionEnabled ? null : (selectedSubscriptionId ?? null),
         repeatRule,
         startDate,
+        // 关掉指定时间时一并清空接收人：后端也会兜底，显式传更省得靠「后端记得清」。
+        runTime: runTimeEnabled ? runTime || DEFAULT_RUN_TIME : null,
+        remindFeishuBindingIds: runTimeEnabled ? remindFeishuBindingIds : [],
         enabled,
       };
       if (rule) {
@@ -643,6 +729,31 @@ export function AutoRuleEditorSheet({
                 value={repeatRule}
               />
             </FieldCard>
+
+            <ToggleCard
+              checked={runTimeEnabled}
+              hint="到点再生成待确认，并推送提醒"
+              label="指定时间"
+              onCheckedChange={setRunTimeEnabled}
+            >
+              <div className="transaction-form__date-card">
+                <TimeWheelPicker label="记账时间" onValueChange={setRunTime} value={runTime} />
+              </div>
+              {feishuEnabled ? (
+                <>
+                  <FeishuTargetRow
+                    onToggle={toggleFeishuBinding}
+                    options={feishuTargetOptions}
+                    values={remindFeishuBindingIds}
+                  />
+                  {feishuTargetOptions.length === 0 && !feishuBindingsQuery.isLoading ? (
+                    <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                      账本成员均未绑定飞书，可在「更多 › 飞书」中绑定。
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </ToggleCard>
 
             <section className="transaction-form__card">
               <div className="transaction-form__toggle-head">

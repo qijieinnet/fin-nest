@@ -13,6 +13,7 @@ import {
 import type { AiCard } from "../ai/ai-cards";
 import { AiService } from "../ai/ai.service";
 import { AssetsService } from "../assets/assets.service";
+import { AutomationService } from "../automation/automation.service";
 import { TransactionsService } from "../transactions/transactions.service";
 import { FeishuBindingService } from "./feishu-binding.service";
 import { renderCard, type FeishuCardBody } from "./feishu-cards";
@@ -83,6 +84,7 @@ export class FeishuCardActionService {
     private readonly ai: AiService,
     private readonly transactions: TransactionsService,
     private readonly assets: AssetsService,
+    private readonly automation: AutomationService,
     private readonly notifications: NotificationService,
   ) {}
 
@@ -128,7 +130,7 @@ export class FeishuCardActionService {
     const notification = await this.prisma.client.notification.findFirst({
       where: { id: action.notificationId },
     });
-    if (!notification || notification.sourceType !== "subscription") {
+    if (!notification || !SOURCE_BY_ACTION[action.action].includes(notification.sourceType)) {
       return errorToast("卡片对应的提醒不存在，可能已被清理。");
     }
     const payload = normalizePayload(notification.payload);
@@ -141,8 +143,7 @@ export class FeishuCardActionService {
       };
     }
 
-    const state: NotificationActionState =
-      action.action === "subscription_renew" ? "renewed" : "terminated";
+    const state = STATE_BY_ACTION[action.action];
     // 先抢占再执行：一次提醒给每个接收人各发一张卡，都能点，但动作只能生效一次。
     if (!(await this.notifications.claimAction(notification.occurrenceKey, state, userId))) {
       const current = await this.prisma.client.notification.findFirst({
@@ -155,33 +156,55 @@ export class FeishuCardActionService {
     }
 
     try {
-      const subscription =
-        action.action === "subscription_renew"
-          ? await this.assets.confirmSubscriptionRenewal(
-              notification.ledgerId,
-              notification.sourceId,
-              userId,
-            )
-          : await this.assets.terminateSubscription(
-              notification.ledgerId,
-              notification.sourceId,
-              userId,
-            );
+      const detail = await this.runNotificationAction(
+        action.action,
+        notification.ledgerId,
+        notification.sourceId,
+        userId,
+      );
       return {
-        toast: {
-          type: "success",
-          content: action.action === "subscription_renew" ? "已确认续订" : "已退订",
-        },
-        card: await this.renderNotificationResult(notification.id, payload, {
-          ...notification,
-          actionState: state,
-          actedBy: userId,
-        }, subscription.nextRenewalDate),
+        toast: { type: "success", content: TOAST_BY_ACTION[action.action] },
+        card: await this.renderNotificationResult(
+          notification.id,
+          payload,
+          { ...notification, actionState: state, actedBy: userId },
+          detail,
+        ),
       };
     } catch (error) {
       // 归还抢占，否则一次失败（无权限、周期推不出）会把这张卡永久锁死在「已处理」。
       await this.notifications.releaseAction(notification.occurrenceKey, userId);
       throw error;
+    }
+  }
+
+  /**
+   * 执行按钮对应的业务动作，返回要写进终态卡的补充信息。
+   *
+   * 一律复用 Web 端同一批 service 方法：鉴权（assertMember）、幂等、审计都在里面，
+   * 在这里另写一套等于给飞书开一条绕过校验的旁路。
+   */
+  private async runNotificationAction(
+    key: NotificationActionKey,
+    ledgerId: string,
+    sourceId: string,
+    userId: string,
+  ): Promise<string | null> {
+    switch (key) {
+      case "subscription_renew": {
+        const updated = await this.assets.confirmSubscriptionRenewal(ledgerId, sourceId, userId);
+        return updated.nextRenewalDate ? `下次续费日：${dateKey(updated.nextRenewalDate)}` : null;
+      }
+      case "subscription_terminate":
+        await this.assets.terminateSubscription(ledgerId, sourceId, userId);
+        return null;
+      case "auto_pending_confirm": {
+        const transaction = await this.automation.confirmPending(ledgerId, sourceId, userId);
+        return `记账日期：${dateKey(transaction.occurredOn)}`;
+      }
+      case "auto_pending_discard":
+        await this.automation.deletePending(ledgerId, sourceId, userId);
+        return null;
     }
   }
 
@@ -275,7 +298,7 @@ export class FeishuCardActionService {
     notificationId: string,
     payload: NotificationPayload,
     notification: { actionState: string | null; actedBy: string | null },
-    nextRenewalDate?: Date | null,
+    detail: string | null = null,
   ): Promise<CardActionResponseCard> {
     const actor = notification.actedBy
       ? await this.prisma.client.user.findFirst({
@@ -283,16 +306,7 @@ export class FeishuCardActionService {
           select: { alias: true },
         })
       : null;
-    const summary =
-      notification.actionState === "renewed"
-        ? "已确认续订"
-        : notification.actionState === "terminated"
-          ? "已退订"
-          : "已处理";
-    const detail =
-      notification.actionState === "renewed" && nextRenewalDate
-        ? `下次续费日：${dateKey(nextRenewalDate)}`
-        : null;
+    const summary = SUMMARY_BY_STATE[notification.actionState ?? ""] ?? "已处理";
     return {
       type: "raw",
       data: renderNotificationCard(notificationId, payload, {
@@ -329,10 +343,39 @@ function errorToast(content: string): CardActionResponse {
   return { toast: { type: "error", content } };
 }
 
-const NOTIFICATION_ACTIONS: readonly NotificationActionKey[] = [
-  "subscription_renew",
-  "subscription_terminate",
-];
+/**
+ * 动作 → 允许的 notification.sourceType。
+ * 防的是拿订阅卡的 notificationId 去点自动记账的按钮（反之亦然）——两者都只是一个 uuid。
+ */
+const SOURCE_BY_ACTION: Record<NotificationActionKey, readonly string[]> = {
+  subscription_renew: ["subscription"],
+  subscription_terminate: ["subscription"],
+  auto_pending_confirm: ["auto_pending"],
+  auto_pending_discard: ["auto_pending"],
+};
+
+const STATE_BY_ACTION: Record<NotificationActionKey, NotificationActionState> = {
+  subscription_renew: "renewed",
+  subscription_terminate: "terminated",
+  auto_pending_confirm: "confirmed",
+  auto_pending_discard: "discarded",
+};
+
+const TOAST_BY_ACTION: Record<NotificationActionKey, string> = {
+  subscription_renew: "已确认续订",
+  subscription_terminate: "已退订",
+  auto_pending_confirm: "已记账",
+  auto_pending_discard: "已忽略",
+};
+
+const SUMMARY_BY_STATE: Record<string, string> = {
+  renewed: "已确认续订",
+  terminated: "已退订",
+  confirmed: "已记账",
+  discarded: "已忽略",
+};
+
+const NOTIFICATION_ACTIONS = Object.keys(SOURCE_BY_ACTION) as NotificationActionKey[];
 
 /**
  * 原始 card.action.trigger → 内部结构。纯函数，可离线单测。

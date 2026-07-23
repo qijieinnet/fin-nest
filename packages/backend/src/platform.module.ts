@@ -5,6 +5,7 @@ import { ApiExceptionFilter } from "./errors/api-exception.filter";
 import { FeishuClient } from "./feishu/feishu-client";
 import { IdempotencyService } from "./idempotency/idempotency.service";
 import { NotificationService } from "./notifications/notification.service";
+import { ReminderTargetsService } from "./notifications/reminder-targets.service";
 import { PrismaModule } from "./prisma/prisma.module";
 import { BigIntSerializeInterceptor } from "./serialization/bigint-serialize.interceptor";
 import { DatabaseTransactionService } from "./transactions/database-transaction.service";
@@ -21,6 +22,7 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     IdempotencyService,
     FeishuClient,
     NotificationService,
+    ReminderTargetsService,
   ],
   exports: [
     PrismaModule,
@@ -31,6 +33,7 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     IdempotencyService,
     FeishuClient,
     NotificationService,
+    ReminderTargetsService,
   ],
 })
 export class BackendPlatformModule {}

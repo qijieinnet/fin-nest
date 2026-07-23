@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import {
   currentTimeKey,
   dateKey,
+  formatMicros,
   NotificationService,
   parseDateOnly,
   PrismaService,
@@ -79,6 +80,70 @@ export class ReminderSchedulerService {
         buildOccurrence(target.ledgerId, subscription, binding.openId),
       );
       if (created) enqueued += 1;
+    }
+    return { enqueued };
+  }
+
+  /**
+   * 为刚生成的待确认记账入队推送。
+   *
+   * 与订阅提醒的区别：订阅是「扫表判定该不该发」，这里是**事件驱动**——待确认刚被创建出来，
+   * 天然只发生一次，所以直接按 id 入队即可。幂等仍由 dedupeKey 兜底（重跑同一批 id 不会重复发）。
+   */
+  async enqueueForPendings(pendingIds: string[]): Promise<{ enqueued: number }> {
+    if (!pendingIds.length) return { enqueued: 0 };
+
+    const pendings = await this.prisma.client.autoPendingTransaction.findMany({
+      where: { id: { in: pendingIds }, status: "pending" },
+    });
+    if (!pendings.length) return { enqueued: 0 };
+
+    const targets = await this.prisma.client.reminderTarget.findMany({
+      where: {
+        sourceType: "auto_rule",
+        sourceId: { in: Array.from(new Set(pendings.map((p) => p.autoRuleId))) },
+        channel: "feishu",
+      },
+    });
+    if (!targets.length) return { enqueued: 0 };
+
+    const targetsByRule = new Map<string, typeof targets>();
+    for (const target of targets) {
+      const bucket = targetsByRule.get(target.sourceId) ?? [];
+      bucket.push(target);
+      targetsByRule.set(target.sourceId, bucket);
+    }
+
+    const bindings = await this.resolveBindings(targets.map((t) => t.feishuBindingId));
+    const [ledgers, categories, accounts] = await Promise.all([
+      this.prisma.client.ledger.findMany({
+        where: { id: { in: Array.from(new Set(pendings.map((p) => p.ledgerId))) } },
+        select: { id: true, currency: true, amountDecimalPlaces: true },
+      }),
+      this.prisma.client.category.findMany({
+        where: { id: { in: compact(pendings.map((p) => p.categoryId)) } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.client.account.findMany({
+        where: { id: { in: compact(pendings.flatMap((p) => [p.accountId, p.fromAccountId, p.toAccountId])) } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const ledgerById = new Map(ledgers.map((l) => [l.id, l]));
+    const nameById = new Map([...categories, ...accounts].map((row) => [row.id, row.name]));
+
+    let enqueued = 0;
+    for (const pending of pendings) {
+      const ledger = ledgerById.get(pending.ledgerId);
+      for (const target of targetsByRule.get(pending.autoRuleId) ?? []) {
+        const binding = bindings.get(target.feishuBindingId);
+        // 目标写入时校验过成员身份，但那之后对方可能已退出账本，这里再挡一次。
+        if (!binding || !binding.ledgerIds.has(pending.ledgerId)) continue;
+        const created = await this.notifications.enqueue(
+          buildPendingOccurrence(pending, binding.openId, ledger, nameById),
+        );
+        if (created) enqueued += 1;
+      }
     }
     return { enqueued };
   }
@@ -175,6 +240,81 @@ function buildOccurrence(
 /** 与 AssetsService.advanceRenewalDate 的支持范围保持一致。 */
 function canAdvance(billingCycle: string | null): boolean {
   return ["weekly", "monthly", "quarterly", "yearly"].includes(billingCycle ?? "");
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  expense: "支出",
+  income: "收入",
+  transfer: "转账",
+};
+
+type PendingRow = {
+  id: string;
+  ledgerId: string;
+  type: string;
+  amountMicros: bigint;
+  scheduledFor: Date;
+  categoryId: string | null;
+  accountId: string | null;
+  fromAccountId: string | null;
+  toAccountId: string | null;
+  note: string | null;
+};
+
+/**
+ * 待确认记账 → 推送事件。
+ *
+ * occurrenceKey 直接用待确认 id：一条待确认天然只对应一次推送事件（`(autoRuleId, periodKey)`
+ * 已有唯一约束），不需要像订阅那样再拼续费日与提前档位。
+ */
+function buildPendingOccurrence(
+  pending: PendingRow,
+  openId: string,
+  ledger: { currency: string; amountDecimalPlaces: number } | undefined,
+  nameById: Map<string, string>,
+): ReminderOccurrence {
+  const occurrenceKey = `auto_pending:${pending.id}`;
+  const amount = formatMicros(
+    pending.amountMicros,
+    ledger?.amountDecimalPlaces ?? 2,
+    ledger?.currency,
+  );
+  const accountLine =
+    pending.type === "transfer"
+      ? `转出 → 转入：${nameById.get(pending.fromAccountId ?? "") ?? "未指定"} → ${nameById.get(pending.toAccountId ?? "") ?? "未指定"}`
+      : `账户：${nameById.get(pending.accountId ?? "") ?? "未指定"}`;
+
+  return {
+    ledgerId: pending.ledgerId,
+    sourceType: "auto_pending",
+    sourceId: pending.id,
+    channel: "feishu",
+    targetRef: openId,
+    dedupeKey: `${occurrenceKey}:${openId}`,
+    occurrenceKey,
+    // 待确认刚生成就该推，不像订阅提醒有「当天某时刻」的概念。
+    scheduledAt: new Date(),
+    payload: {
+      kind: "auto_pending",
+      title: `自动记账待确认：${amount}`,
+      leadDescription: `${TYPE_LABELS[pending.type] ?? pending.type} · ${dateKey(pending.scheduledFor)}`,
+      lines: [
+        pending.type === "transfer"
+          ? null
+          : `分类：${nameById.get(pending.categoryId ?? "") ?? "未分类"}`,
+        accountLine,
+        pending.note ? `备注：${pending.note}` : null,
+      ].filter((line): line is string => line !== null),
+      actions: [
+        { key: "auto_pending_discard", label: "忽略", style: "default" },
+        { key: "auto_pending_confirm", label: "确认记账", style: "primary" },
+      ],
+    },
+  };
+}
+
+function compact(values: (string | null)[]): string[] {
+  return values.filter((value): value is string => Boolean(value));
 }
 
 /**

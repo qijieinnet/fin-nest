@@ -8,6 +8,7 @@ import {
   parseDateOnly,
   PrismaService,
   PrismaTransactionClient,
+  ReminderTargetsService,
   todayKey,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
@@ -61,14 +62,23 @@ export class AutomationService {
     private readonly ledgers: LedgersService,
     private readonly transactions: TransactionsService,
     private readonly idempotency: IdempotencyService,
+    private readonly reminderTargets: ReminderTargetsService,
   ) {}
 
   async listRules(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return this.prisma.client.autoRule.findMany({
+    const rules = await this.prisma.client.autoRule.findMany({
       where: { ledgerId, archivedAt: null },
       orderBy: [{ enabled: "desc" }, { nextRunOn: "asc" }, { createdAt: "asc" }],
     });
+    const targets = await this.reminderTargets.load(
+      "auto_rule",
+      rules.map((rule) => rule.id),
+    );
+    return rules.map((rule) => ({
+      ...rule,
+      remindFeishuBindings: targets.get(rule.id) ?? [],
+    }));
   }
 
   async createRule(ledgerId: string, userId: string, input: CreateAutoRuleDto) {
@@ -100,15 +110,24 @@ export class AutomationService {
           repeatRule: input.repeatRule,
           startDate,
           nextRunOn: input.enabled === false ? null : startDate,
+          runTime: input.runTime ?? null,
           createdBy: userId,
           updatedBy: userId,
         },
       });
+      // 未指定时间就没有「到点推送」的语义，接收人一并清空（与订阅关掉提醒同理）。
+      await this.reminderTargets.replace(
+        tx,
+        ledgerId,
+        "auto_rule",
+        rule.id,
+        rule.runTime ? (input.remindFeishuBindingIds ?? []) : [],
+      );
       await this.jobs.enqueue(
         { type: "auto.schedule", payload: { ledgerId }, runAfter: startDate },
         tx,
       );
-      return rule;
+      return { ...rule, ...(await this.reminderTargets.field("auto_rule", rule.id)) };
     });
   }
 
@@ -211,24 +230,46 @@ export class AutomationService {
           repeatRule: input.repeatRule,
           startDate: input.startDate ? startDate : undefined,
           nextRunOn,
+          runTime: input.runTime === undefined ? undefined : input.runTime,
           updatedBy: userId,
         },
       });
+      // 只在「关掉指定时间」或「本次请求明确给了接收人」时改动 targets，
+      // 避免改个金额就把推送接收人清了。
+      if (!rule.runTime) {
+        await this.reminderTargets.replace(tx, ledgerId, "auto_rule", ruleId, []);
+      } else if (input.remindFeishuBindingIds !== undefined) {
+        await this.reminderTargets.replace(
+          tx,
+          ledgerId,
+          "auto_rule",
+          ruleId,
+          input.remindFeishuBindingIds,
+        );
+      }
       if (scheduleChanged && enabled)
         await this.jobs.enqueue(
           { type: "auto.schedule", payload: { ledgerId }, runAfter: startDate },
           tx,
         );
-      return { ...rule, repeatRule };
+      return {
+        ...rule,
+        repeatRule,
+        ...(await this.reminderTargets.field("auto_rule", ruleId)),
+      };
     });
   }
 
   async archiveRule(ledgerId: string, ruleId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertRule(ledgerId, ruleId);
-    await this.prisma.client.autoRule.update({
-      where: { id: ruleId },
-      data: { archivedAt: new Date(), enabled: false, nextRunOn: null, updatedBy: userId },
+    await this.txs.run(async (tx) => {
+      await tx.autoRule.update({
+        where: { id: ruleId },
+        data: { archivedAt: new Date(), enabled: false, nextRunOn: null, updatedBy: userId },
+      });
+      // 归档的规则不再生成待确认，留着接收人只会让调度器多查一轮。
+      await this.reminderTargets.replace(tx, ledgerId, "auto_rule", ruleId, []);
     });
   }
 

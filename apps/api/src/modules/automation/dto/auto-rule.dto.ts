@@ -110,6 +110,24 @@ export class CreateAutoRuleDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @ApiPropertyOptional({
+    example: "09:00",
+    description: "指定时间：当天几点生成待确认（本地 HH:mm，24 小时制）。传 null 表示不指定，到期即生成。",
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  runTime?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "生成待确认后推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；未指定时间时后端一并清空。",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  remindFeishuBindingIds?: string[];
 }
 
 export class UpdateAutoRuleDto {
@@ -213,4 +231,22 @@ export class UpdateAutoRuleDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate?: string;
+
+  @ApiPropertyOptional({
+    example: "09:00",
+    description: "指定时间：当天几点生成待确认（本地 HH:mm，24 小时制）。传 null 表示不指定，到期即生成。",
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  runTime?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "生成待确认后推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；未指定时间时后端一并清空。",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  remindFeishuBindingIds?: string[];
 }
