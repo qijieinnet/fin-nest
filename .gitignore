@@ -19,6 +19,10 @@ packages/db/generated/
 .env.local
 .env.*.local
 
+# 系统备份归档（BACKUP_DIR 的本地默认值 / compose 的默认宿主机目录）
+data/backups/
+fin-nest-backups/
+
 # logs
 *.log
 npm-debug.log*

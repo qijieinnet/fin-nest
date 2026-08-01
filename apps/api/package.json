@@ -9,6 +9,7 @@
     "e2e": "pnpm run build && node scripts/e2e-api.mjs",
     "test:ai": "pnpm run build && node --test scripts/ai-logic.test.mjs",
     "test:feishu": "pnpm run build && node --test scripts/feishu-logic.test.mjs",
+    "test:system-backup": "pnpm run build && node --test scripts/system-backup-logic.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },

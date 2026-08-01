@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { BackgroundJobsService, NotificationService } from "@fin-nest/backend";
+import { BackgroundJobsService, NotificationService, SystemBackupService } from "@fin-nest/backend";
 import { AutoSchedulerService } from "./automation/auto-scheduler.service";
 import { FileDeletePayload, FileDeleteService } from "./files/file-delete.service";
 import { ReminderSchedulerService } from "./notifications/reminder-scheduler.service";
@@ -12,9 +12,19 @@ export class WorkerRunnerService {
     private readonly fileDelete: FileDeleteService,
     private readonly reminderScheduler: ReminderSchedulerService,
     private readonly notifications: NotificationService,
+    private readonly systemBackup: SystemBackupService,
   ) {}
 
   async runOnce(): Promise<{ processed: number; created: number; notificationsSent: number }> {
+    const gated = await this.systemBackup.runWorkerBatch(() => this.runAllowedBatch());
+    return gated.ran ? gated.value : { processed: 0, created: 0, notificationsSent: 0 };
+  }
+
+  private async runAllowedBatch(): Promise<{
+    processed: number;
+    created: number;
+    notificationsSent: number;
+  }> {
     let processed = 0;
     let created = 0;
     // 回收 worker 崩溃遗留的 running 任务，否则它们会永远卡在 running 状态。
@@ -37,6 +47,16 @@ export class WorkerRunnerService {
       await this.reminderScheduler.scanEntryReminders();
     } catch (error) {
       console.error("fin-nest-worker entry reminder scan failed:", error);
+    }
+    // 周期备份同样是扫表判定：周期配置随时可改，排好的 job 每次改动都要回收，得不偿失。
+    // worker 会等周期备份结束，避免进程在容器停止时把半截归档一起砍掉。
+    try {
+      const backup = await this.systemBackup.runScheduled();
+      if (backup.started) {
+        console.log(`fin-nest-worker scheduled backup started (pruned=${backup.pruned})`);
+      }
+    } catch (error) {
+      console.error("fin-nest-worker scheduled backup failed:", error);
     }
     while (true) {
       const job = await this.jobs.claimNext(`worker-${process.pid}`);

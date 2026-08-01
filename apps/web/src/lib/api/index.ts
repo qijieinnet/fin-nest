@@ -2,6 +2,9 @@ export { apiRequest, buildApiUrl } from "./client";
 export type { ApiRequestOptions } from "./client";
 export { createAuthorizedObjectUrl, uploadAttachmentFile } from "./files";
 export {
+  adminBackupDownloadPath,
+  adminBackupPath,
+  adminBackupRestorePath,
   adminUserAdminPath,
   adminUserSessionPath,
   adminUserSessionsPath,
@@ -44,6 +47,14 @@ export type {
   AdminUserSession,
   AdminUserSessionList,
   AppLockStatus,
+  BackupArchive,
+  BackupCounts,
+  BackupFrequency,
+  BackupJobStatus,
+  BackupOverview,
+  BackupRecordRef,
+  BackupSetting,
+  BackupSettingInput,
   AiCard,
   AiChatResult,
   AiChatStreamEvents,
@@ -103,6 +114,7 @@ export type {
   EntryReminderFrequency,
   EntryReminderInput,
   RegistrationSetting,
+  RestoreRecord,
   RegistrationStatus,
   ReminderFeishuTarget,
   ReminderSchedule,

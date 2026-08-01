@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prismaPackage from "../../../packages/db/generated/client/index.js";
@@ -153,7 +154,7 @@ async function main() {
       note: "e2e reminder and attachment",
     },
   });
-  await assertAttachmentAuthorization(
+  const attachmentId = await assertAttachmentAuthorization(
     ledger.id,
     reminderTransaction.id,
     owner.token,
@@ -186,9 +187,16 @@ async function main() {
   await assertPlanPeriodConfirm({ ledgerId: ledger.id, owner, category });
   await assertPlanPeriodBackupRestore({ owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
-
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
+  if (process.env.E2E_SYSTEM_BACKUP === "1") {
+    await assertSystemBackupRestore({
+      owner,
+      requester,
+      ledgerId: ledger.id,
+      attachmentId,
+    });
+  }
   console.log(
     JSON.stringify(
       {
@@ -212,6 +220,7 @@ async function main() {
           "plan_period_confirm",
           "plan_period_backup_restore",
           "feishu_db_constraints",
+          ...(process.env.E2E_SYSTEM_BACKUP === "1" ? ["system_backup_restore"] : []),
         ],
       },
       null,
@@ -904,6 +913,129 @@ async function assertAttachmentAuthorization(ledgerId, transactionId, ownerToken
     token: requesterToken,
     expected: 403,
   });
+  return uploaded.attachment.id;
+}
+
+/** 系统级备份闭环：权限、密码、zip、损坏归档不清库、维护态、附件与数据库原子恢复。 */
+async function assertSystemBackupRestore({ owner, requester, ledgerId, attachmentId }) {
+  await prisma.user.update({ where: { id: owner.userId }, data: { isAdmin: true } });
+  await api("GET", "/admin/backups", { token: requester.token, expected: 403 });
+
+  // 进程若在恢复中崩溃，过期 running 台账不能让维护态永久锁死。
+  const staleRestore = await prisma.restoreRecord.create({
+    data: {
+      fileName: `fin-nest-backup-stale-${stamp}.zip`,
+      status: "running",
+      createdBy: owner.userId,
+      startedAt: new Date(Date.now() - 7 * 60 * 60 * 1000),
+    },
+  });
+  await api("GET", "/ledgers", { token: owner.token });
+  assert.equal(
+    (await prisma.restoreRecord.findUnique({ where: { id: staleRestore.id } }))?.status,
+    "failed",
+  );
+
+  const started = await api("POST", "/admin/backups", {
+    token: owner.token,
+    expected: 201,
+  });
+  const completed = await waitForBackup(owner.token, started.id);
+  assert.equal(completed.backup.status, "succeeded");
+  const archive = completed.items.find((item) => item.record?.id === started.id);
+  assert.ok(archive, "成功备份应出现在目录列表");
+  assert.ok(Number(archive.sizeBytes) > 0);
+  assert.ok((archive.record.counts?.tables ?? 0) > 40);
+  assert.ok((archive.record.counts?.files ?? 0) >= 1);
+  assert.ok((archive.record.counts?.ledgers ?? 0) >= 1);
+
+  const download = await fetch(
+    `${baseUrl}/admin/backups/${encodeURIComponent(archive.fileName)}/download`,
+    { headers: { authorization: `Bearer ${owner.token}` } },
+  );
+  assert.equal(download.status, 200);
+  const zipBytes = Buffer.from(await download.arrayBuffer());
+  assert.equal(zipBytes.subarray(0, 2).toString("ascii"), "PK");
+
+  const marker = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E Post Backup ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(marker.id);
+
+  // 一个连中央目录都不完整的 zip 必须在清库前失败，现有 marker 数据应原样保留。
+  const corruptName = `fin-nest-backup-corrupt-${stamp}.zip`;
+  const corruptPath = path.join(completed.directory.path, corruptName);
+  await writeFile(corruptPath, zipBytes.subarray(0, Math.min(64, zipBytes.length)));
+  try {
+    const corruptRestore = await api(
+      "POST",
+      `/admin/backups/${encodeURIComponent(corruptName)}/restore`,
+      {
+        token: owner.token,
+        expected: 201,
+        body: { password: owner.password },
+      },
+    );
+    const failed = await waitForRestore(owner.token, corruptRestore.id);
+    assert.equal(failed.restore.status, "failed");
+    assert.ok(await prisma.ledger.findUnique({ where: { id: marker.id } }));
+  } finally {
+    await rm(corruptPath, { force: true });
+  }
+
+  await api("POST", `/admin/backups/${encodeURIComponent(archive.fileName)}/restore`, {
+    token: owner.token,
+    expected: 401,
+    body: { password: "WrongPassword1!" },
+  });
+  const restore = await api(
+    "POST",
+    `/admin/backups/${encodeURIComponent(archive.fileName)}/restore`,
+    {
+      token: owner.token,
+      expected: 201,
+      body: { password: owner.password },
+    },
+  );
+
+  // running 台账一落库，全局维护守卫就拒绝普通请求；极快环境可能已在首次探测前完成。
+  const during = await fetch(`${baseUrl}/ledgers`, {
+    headers: { authorization: `Bearer ${owner.token}` },
+  });
+  assert.ok([200, 503].includes(during.status));
+  const restored = await waitForRestore(owner.token, restore.id);
+  assert.equal(restored.restore.status, "succeeded");
+  assert.equal(await prisma.ledger.findUnique({ where: { id: marker.id } }), null);
+  assert.ok(await prisma.ledger.findUnique({ where: { id: ledgerId } }));
+  await api("GET", `/ledgers/${ledgerId}/attachments/${attachmentId}/content`, {
+    token: owner.token,
+    expected: 200,
+  });
+
+  await api("DELETE", `/admin/backups/${encodeURIComponent(archive.fileName)}`, {
+    token: owner.token,
+    expected: 204,
+  });
+}
+
+async function waitForBackup(token, id) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const overview = await api("GET", "/admin/backups", { token });
+    if (overview.backup?.id === id && overview.backup.status !== "running") return overview;
+    await sleep(250);
+  }
+  throw new Error("system backup did not finish in time");
+}
+
+async function waitForRestore(token, id) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const overview = await api("GET", "/admin/backups", { token });
+    if (overview.restore?.id === id && overview.restore.status !== "running") return overview;
+    await sleep(250);
+  }
+  throw new Error("system restore did not finish in time");
 }
 
 async function assertPartialPatchRegressions({

@@ -85,10 +85,10 @@ export function AdminScreen() {
             />
           </section>
 
-          {/* 用户管理入口 */}
+          {/* 用户管理 / 自动备份入口 */}
           <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
             <button
-              className="flex w-full items-center gap-3 px-[18px] py-4 text-left"
+              className="flex w-full items-center gap-3 px-[18px] py-4 text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
               onClick={() => router.push(routes.users)}
               type="button"
             >
@@ -96,6 +96,19 @@ export function AdminScreen() {
                 <span className="block text-base text-[var(--color-text-primary)]">用户管理</span>
                 <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
                   查看成员、设置权限与禁用
+                </span>
+              </span>
+              <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+            </button>
+            <button
+              className="flex w-full items-center gap-3 px-[18px] py-4 text-left"
+              onClick={() => router.push(routes.backup)}
+              type="button"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-base text-[var(--color-text-primary)]">自动备份</span>
+                <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
+                  全系统数据与附件的备份、周期备份与恢复
                 </span>
               </span>
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />

@@ -1013,3 +1013,73 @@ model FeishuEvent {
   @@index([status, createdAt])
   @@map("feishu_events")
 }
+
+// ---------------------------------------------------------------------------
+// 系统级自动备份（管理员功能）。
+//
+// backup_records / restore_records 是恢复现场台账，不进归档也不清空；backup_settings 属于系统配置，
+// 会与 background_jobs 一起正常备份恢复，避免恢复后周期设置漂移或自动记账失去调度任务。
+// ---------------------------------------------------------------------------
+
+/// 周期备份配置，全系统一条（id 恒为 1，与 app_settings 同形态）。
+/// 周期口径与记账提醒完全一致（daily/weekly/monthly + 本地 HH:mm），复用同一套判定函数。
+model BackupSetting {
+  id         Int      @id @default(1) @db.SmallInt
+  enabled    Boolean  @default(false)
+  /// daily | weekly | monthly
+  frequency  String   @default("daily")
+  /// 每周备份的星期，ISO 口径 1=周一 … 7=周日。frequency='weekly' 时生效。
+  weekdays   Int[]    @db.SmallInt
+  /// 每月备份的日号 1..31。当月没有该日（如 31 号遇到 2 月）时落到当月最后一天。
+  monthDays  Int[]    @map("month_days") @db.SmallInt
+  /// 本地 HH:mm（24 小时制）。
+  runTime    String   @default("03:00") @map("run_time")
+  /// 自动备份保留份数，超出后按时间从旧到新删除；0 表示不限。
+  keepCount  Int      @default(7) @map("keep_count")
+  /// 已执行过的周期键（YYYY-MM-DD），防止同一天被 worker 多轮重复触发。
+  lastRunKey String?  @map("last_run_key")
+  updatedBy  String?  @map("updated_by") @db.Uuid
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("backup_settings")
+}
+
+/// 一份备份归档的台账。文件本身在 BACKUP_DIR，列表以「目录里真实存在的文件」为准，
+/// 本表提供触发来源、耗时与统计等目录里读不出来的信息（手工丢进目录的归档没有对应行）。
+model BackupRecord {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// 归档文件名（不含目录），恒为 BACKUP_DIR 下的直接子文件。
+  fileName      String    @unique @map("file_name")
+  /// running | succeeded | failed
+  status        String
+  /// manual | scheduled
+  trigger       String
+  sizeBytes     BigInt?   @map("size_bytes")
+  /// { tables, rows, files, fileBytes, ledgers } 统计
+  counts        Json?     @db.JsonB
+  error         String?
+  formatVersion Int?      @map("format_version")
+  createdBy     String?   @map("created_by") @db.Uuid
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([startedAt])
+  @@map("backup_records")
+}
+
+/// 一次恢复的台账。恢复会清空业务数据，因此本表必须留在「不被清空」的名单里，
+/// 否则前端轮询恢复进度时会连自己发起的那次都查不到。
+model RestoreRecord {
+  id         String    @id @default(uuid()) @db.Uuid
+  fileName   String    @map("file_name")
+  /// running | succeeded | failed
+  status     String
+  counts     Json?     @db.JsonB
+  error      String?
+  createdBy  String?   @map("created_by") @db.Uuid
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([startedAt])
+  @@map("restore_records")
+}

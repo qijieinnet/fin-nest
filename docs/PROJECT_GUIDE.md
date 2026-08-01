@@ -19,7 +19,7 @@ apps/
   web/      # Next.js Web（纯前端交互层，经同源 /api 代理调 API）
 packages/
   backend/  # api/worker 共享平台：Prisma 注入、事务封装、幂等、审计日志、background_jobs、通知推送、飞书客户端、异常过滤器、BigInt 序列化
-  db/       # Prisma schema + 迁移 + client（47 个模型）
+  db/       # Prisma schema + 迁移 + client（54 个模型）
   shared/   # 前后端共享常量/类型（金额单位等）
   config/   # 环境变量读取与校验（zod，见 §9 环境变量）
   eslint-config/ tsconfig/
@@ -30,9 +30,9 @@ infra/
 docs/       # 本文件
 ```
 
-API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品/订阅）、`files`（附件）、`data-transfer`（导入导出/备份恢复）、`reminders`（红点聚合）、`ai`（AI 助手：LLM 工具调用、会话/消息、记账草稿）。
+API 模块一览（`apps/api/src/modules/`）：`auth`（含管理员用户管理、service token 管理）、`ledgers`（成员/邀请/加入申请）、`accounts`、`transactions`、`records`（分类/人员/记账设置/统计）、`stats`（月度/净资产/现金流）、`plans`（计划+预算）、`automation`（自动规则/待确认/快捷模板）、`assets`（保险/物品/订阅）、`files`（附件）、`data-transfer`（账本级导入导出/备份恢复）、`system-backup`（系统级备份与恢复，仅管理员）、`reminders`（红点聚合）、`ai`（AI 助手：LLM 工具调用、会话/消息、记账草稿）。
 
-Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/ai`（AI 助手聊天，全屏、移动端底部导航左侧独立入口 / 桌面侧边栏底部入口）、`/more/*`（categories、people、settings、auto、quick、insurances、items、subscriptions、import-export、users、admin、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
+Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join）、`/bills`（首页账单，含 new/详情/编辑/pending 待确认）、`/accounts`（含账户/子账户详情）、`/stats`、`/budget`、`/ai`（AI 助手聊天，全屏、移动端底部导航左侧独立入口 / 桌面侧边栏底部入口）、`/more/*`（categories、people、settings、auto、quick、insurances、items、subscriptions、import-export、users、admin、backup、system）。**当前账本不在 URL 里**，由 `LedgerProvider` 全局上下文持有，切换账本时刷新所有 ledger-scoped 查询缓存。
 
 ## 3. 功能清单
 
@@ -59,6 +59,8 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
   **动作抢占**：一次提醒给每个接收人各一行 `notifications`（`dedupe_key` 含 open_id），但动作只能执行一次——`confirmSubscriptionRenewal` 不幂等，点两次推进两个计费周期。因此按 `occurrence_key`（= `dedupe_key` 去掉收件人段）**跨行**抢占：`updateMany({ where: { occurrenceKey, actionState: null } })` 单条 UPDATE 原子，并发点击只有一方 count > 0，另一方收到「已由他人处理」并被回写终态卡；业务动作失败必须 `releaseAction` 归还，否则卡片永久锁死。飞书回调只能更新**触发的那一张**卡，其他接收人的按钮仍在，点击时才会看到终态。
 - **自动记账的指定时间与推送**：规则可设 `run_time`（本地 `HH:mm`）。为空沿用原行为——`next_run_on` 到期后下一轮 `auto.schedule` job 就生成待确认；设了值则当日必须过点才生成，未到点时**必须补排一个 runTime 时刻的唤醒 job**（触发本轮的 job 已被消费，不补排则今天这期永远生成不出来），补排按 `(type, status, runAfter, payload.ledgerId)` 去重。生成后按规则的 `reminder_targets`（`sourceType='auto_rule'`）入队推送，卡片带「删除待确认 / 确认入账」。与订阅提醒的区别是**事件驱动**而非扫表：待确认刚创建天然只发生一次，`occurrence_key` 直接用待确认 id。卡片内容与网页端待确认详情对齐：金额单独一行（不进标题，支出绿/收入红，与详情同色；转账在 lark_md 里无对应色，退回 grey），其余是「记录类型 / 分类（带二级）/ 账户（带子账户，转账为转出转入）/ 计划入账日期 / 人员 / 备注」，**有值才出现**。派发在 worker 每轮的 job 循环**之后**执行，否则新生成的推送要等下一轮才发得出去。
 - **导入导出**（模块 `data-transfer`）：Excel 全量导出 / 记账模板下载 / 增量导入（`dryRun` 同步返回预览；正式导入入队后台 job，`import_jobs` 表跟踪状态）；JSON 全量备份与覆盖式恢复（仅 owner，需输入账本名确认；恢复时重新生成全部 UUID，计划周期确认历史与逐期额度一并保留，旧计划分享链接一律撤销）。
+- **系统级自动备份**（模块 `system-backup`，入口在「更多 › 管理员功能 › 自动备份」，仅管理员）：把**整套系统**打进一个 zip 落到 `BACKUP_DIR`（docker 部署映射到宿主机目录，**api 与 worker 必须挂同一个目录**——worker 到点写、api 负责列表/下载/恢复）。归档内容 = `manifest.json` + `database/<表>.jsonl`（表清单与列类型由 Prisma DMMF 现算）+ `files/<对象键>`（附件原文）+ `excel/<账本>.xlsx`（含软删账本，每个账本一份全量 Excel）+ `README.txt`。数据库 JSONL 与 Excel 在同一个 PostgreSQL `REPEATABLE READ` 快照里生成；任一附件缺失、数量/大小或表行数不一致都会让整份备份失败，不产出正式 zip。列表以**目录里真实存在的文件**为准、台账只补充来源与统计；总览另外返回最近一次备份台账，让 `.part` 尚未转正或失败无文件时也能轮询和展示状态。
+  周期备份（每天/每周某几天/每月某几号 + 本地 `HH:mm` + 保留份数）由 worker 扫表判定，周期口径与记账提醒一致；只有成功后才写 `lastRunKey` 并清理超额的旧自动备份，失败退避 5 分钟后当天继续重试，手动备份不受保留策略影响。恢复要求管理员输入**自己的登录密码**二次确认，随后进入全局维护态：先完整读取归档、核对每张表/每个附件/每份 Excel，再把附件写到本次恢复的唯一对象前缀；全部预检成功后，在一个可回滚的 PostgreSQL 事务中执行 `TRUNCATE` + 按外键拓扑恢复 + 改写附件对象键，任一表失败则旧数据库原样保留。提交后才清理旧附件。`backup_settings` 与 `background_jobs` 随系统恢复，避免旧任务作用于新数据或自动规则失去唤醒任务；仅 `backup_records`/`restore_records` 保留为恢复现场台账，`sessions`/`idempotency_keys` 清空不备份，发起恢复的管理员会话在恢复后数据仍含该用户时单独补回。API 普通请求与 worker 在 running 恢复期间暂停，只有健康检查和管理员备份进度查询放行；恢复启动与整轮 worker 通过 PostgreSQL advisory gate 互斥，崩溃遗留超过 6 小时的 running 恢复会自动转失败并退出维护态。
 - **AI 助手**（模块 `ai`，可选启用）：配置 `AI_BASE_URL/AI_API_KEY/AI_MODEL`（OpenAI-compatible，可指 DeepSeek/通义/本地 Ollama）后启用，未配置时接口返回未启用、前端隐藏入口。聊天页 `/ai`：自然语言记账与查询；LLM 通过工具调用工作——`draft_transaction` 只产出**记账草稿卡片**（不写库），用户直接确认或进入表单编辑后保存都复用幂等键 `ai-card-{messageId}-{cardIndex}` 入账并回写卡片状态；`apply_quick_template` 按快捷模板（当前用户的、注入系统提示供按名称匹配）预设内容生成同样的草稿卡，金额/日期/备注可覆盖，模板关联对象不带入草稿；`query_transactions` 仅处理用户明确要求的逐笔明细，支持按交易人员与记账人（创建者）分别筛选，并可按交易日期或记账时间升序/降序排列，`get_period_stats` 统一处理日/周/月/季度/年/自定义区间统计，以有效金额返回总额、分类饼图和一级分类汇总，并按必传的 `direction`（`expense`/`income`/`both`）只返回用户问的那一侧——只问支出就不带收入、只问收入就不带支出，卡片标题、饼图、趋势与返回给模型的数据一并收敛（历史卡片无 `direction`，按 `both` 渲染）；仅当用户意图涉及趋势/走势/曲线/波动/随时间变化时，才额外返回自动按跨度选择日/周/月粒度的趋势折线图；`get_account_balances`/`get_budget_progress` 返回账户余额与预算进度卡片。另有一组无卡片的只读查询工具（结果以 JSON 返给模型、由模型用文字转述）：`query_plans`（计划本期进度）、`query_insurances`/`query_items`/`query_subscriptions`（保险/物品/订阅档案）、`query_auto_rules`/`get_pending_records`（自动记账规则与待确认，只读，确认仍在应用内操作）、`get_reminder_summary`（红点提醒汇总）。金额换算（账本币种主单位→micros）在确定性代码中完成，严格遵守账本币种和小数位；分类/资金账户/人员/记账人的真实 id 注入系统提示，后端二次校验归属和类型。会话按创建者私有并持久化（`ai_conversations`/`ai_messages`，软删）。工具循环上限 6 轮；聊天走 SSE 流式（`POST /ai/chat/stream`，事件 delta/card/done/error，思维链不透出），非流式 `POST /ai/chat` 保留同构结果。 → API 校验（成员 + 业务对象归属 + MIME 白名单 + 20MB）→ 服务端写 MinIO；下载由 API 校验后代理流式返回，不使用预签名 URL。对象 key `ledgers/{ledgerId}/{ownerType}/{ownerId}/{yyyy}/{mm}/{uuid}{ext}`，不含原文件名。删除业务对象联动清附件，MinIO 删除失败入 `file.delete` job 重试。
 
 AI 工具调用策略：每轮用户请求的首轮必须选择一个结构化工具（闲聊/缺参数等纯文本场景显式走 `respond_text`），避免模型仅用文字声称已生成卡片。DeepSeek 端点的工具调用关闭思考模式以支持稳定的 `tool_choice=required`；兼容层仍保留 `reasoning_content`，供其它思考模式上游的工具续轮使用。卡片一旦生成即结束该轮，不再追加一次模型总结。
@@ -77,7 +79,7 @@ AI 工具调用策略：每轮用户请求的首轮必须选择一个结构化�
 8. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
 9. **软删/归档优先**：交易/账本/保险/物品/订阅软删（`deletedAt`），分类/人员/账户/计划/物品类型/订阅分类归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
 10. **审计**：注册/改密/管理操作/交易增删改/恢复等写 `audit_logs`。
-11. **Worker 边界**：Worker 消费 `background_jobs`（`auto.schedule`、`file.delete`），并在每轮轮询里扫描订阅/保单的到期提醒与记账提醒（三类各自 try，一边抛错不影响另一边）、在 job 循环后统一派发推送（订阅提醒扫表、自动记账事件驱动，均不走 job 队列，见「提醒推送」），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。
+11. **Worker 边界**：Worker 消费 `background_jobs`（`auto.schedule`、`file.delete`），并在每轮轮询里扫描订阅/保单的到期提醒、记账提醒与周期系统备份（各自 try，一边抛错不影响另一边；备份**等它跑完**再进 job 循环，甩手不管会让备份连同进程一起被停止信号砍在半路）、在 job 循环后统一派发推送（订阅提醒扫表、自动记账事件驱动，均不走 job 队列，见「提醒推送」），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。
 
 ## 5. 鉴权与安全基线
 
@@ -90,21 +92,21 @@ AI 工具调用策略：每轮用户请求的首轮必须选择一个结构化�
 - 附件 MIME 白名单（图片/PDF/Office/视频），无 SVG/HTML 等可执行类型；上限 20MB。
 - CORS 仅放行 `WEB_ORIGIN`（正常流量走同源 /api 代理，不跨域）。
 
-## 6. 数据模型速览（39 个模型）
+## 6. 数据模型速览（54 个模型）
 
-| 分组       | 模型                                                                                  |
-| ---------- | ------------------------------------------------------------------------------------- |
-| 身份与系统 | User, AppSetting, Session, ServiceToken                                               |
-| 账本协作   | Ledger, LedgerMember, LedgerInvite, LedgerJoinRequest                                 |
-| 记账配置   | RecordSetting, Category, Subcategory, Person                                          |
-| 账户       | Account, SubAccount, AccountAdjustment, AccountEntry                                  |
-| 交易       | Transaction, TransactionAccountRelation, TransactionLink                              |
-| 自动化     | AutoRule, AutoPendingTransaction, QuickTemplate                                       |
-| 计划预算   | Plan, PlanPeriod, BudgetSetting, CategoryBudget                                       |
-| 档案       | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription |
-| 文件       | File, Attachment                                                                      |
-| 平台       | AuditLog, BackgroundJob, IdempotencyKey, ImportJob                                    |
-| AI 助手    | AiConversation, AiMessage                                                             |
+| 分组       | 模型                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| 身份与系统 | User, AppSetting, Session, ServiceToken                                                        |
+| 账本协作   | Ledger, LedgerMember, LedgerInvite, LedgerJoinRequest                                          |
+| 记账配置   | RecordSetting, Category, Subcategory, Person                                                   |
+| 账户       | Account, SubAccount, AccountAdjustment, AccountEntry                                           |
+| 交易       | Transaction, TransactionAccountRelation, TransactionLink                                       |
+| 自动化     | AutoRule, AutoPendingTransaction, QuickTemplate                                                |
+| 计划预算   | Plan, PlanPeriod, BudgetSetting, CategoryBudget                                                |
+| 档案       | Insurance, InsuranceInsuredPerson, ItemType, Item, SubscriptionCategory, Subscription          |
+| 文件       | File, Attachment                                                                               |
+| 平台       | AuditLog, BackgroundJob, IdempotencyKey, ImportJob, BackupSetting, BackupRecord, RestoreRecord |
+| AI 助手    | AiConversation, AiMessage                                                                      |
 
 表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。迁移目录用**两位补零**前缀（`00_`..），保证 Prisma 字典序应用顺序 == 依赖顺序；新增迁移沿用递增两位前缀。
 
@@ -121,7 +123,7 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 ```
 
 - `pnpm dev*` 会先 `build:packages`；api/worker 引用的是 `packages/*/dist` 构建产物，新环境不 build 会报 `Cannot find module '@fin-nest/backend'`。
-- 验证手段：`pnpm typecheck`（含包构建）、`pnpm lint`、`pnpm e2e:api`（自动拉起 API、跑注册/账本/交易/幂等/附件越权/red-dot 全链路，需要本地 DB，会自建自清数据）。web 侧有少量 vitest（`pnpm --filter @fin-nest/web test`，金额解析/筛选等纯逻辑）。
+- 验证手段：`pnpm typecheck`（含包构建）、`pnpm lint`、`pnpm e2e:api`（自动拉起 API、跑注册/账本/交易/幂等/附件越权/red-dot 全链路，需要本地 DB，会自建自清数据）；系统备份与恢复的破坏性全链路使用 `pnpm e2e:system-backup`，它会创建并清理隔离的临时数据库、MinIO bucket 和备份目录。web 侧有少量 vitest（`pnpm --filter @fin-nest/web test`，金额解析/筛选等纯逻辑）。
 - **前后端契约靠手写镜像**：后端契约类型在 `apps/web/src/lib/api/contracts.ts`（约 620 行）+ `endpoints.ts` 手工维护（`lib/generated/api-types.ts` 是占位，OpenAPI 生成管线未启用）。改后端接口的完整动作：DTO + service + controller（带 OpenAPI 注解）→ **同步更新 contracts.ts / endpoints.ts** → 前端页面。漏改不会有编译错误，需要自查。
 - 前端习惯：弹出选择/表单选值统一 `PopoverMenu + Menu`（iOS 风格，支持二级菜单）；弹层容器用 `Surface`；底部弹层 `BottomSheet` + `SheetStackProvider`（浏览器返回映射多级 sheet）；不引入第三方视觉特效类库。金额输入/展示走 `lib/money`（micros 转换）；服务端数据一律 TanStack Query（`lib/query/query-keys.ts` 统一 key）。
 - 后端习惯：Controller 薄、业务在 service；新的 ledger-scoped 方法先 `assertMember`；金额入库前 `BigInt(dtoString)`；涉及余额的写操作复用 `applyEntry`，不要绕开。
@@ -135,8 +137,11 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 
 > 共四份 compose：`docker-compose.yml`（.env 版，**校验基准**）、两份 inline 版、`infra/compose/docker-compose.prod.yml`（源码构建版）。**改任意一份的服务定义/环境变量，其余几份要同步**。
 >
-> 由 `pnpm check:compose`（`scripts/check-compose-consistency.mjs`，CI 每次 PR 跑）自动校验五类问题：api/worker 环境变量键集合跨文件一致（`AI_*` / `FEISHU_*` 允许以注释形式存在，但必须出现）、同文件内 `DATABASE_URL` / `MINIO_*` / `WEB_ORIGIN` 取值一致、`minio-init` 命令行里的密钥与 `MINIO_SECRET_KEY` 一致、inline 版不得含 `${}` 插值或 `profiles`、对外只暴露 web 端口。新增环境变量时先加到基准文件，再按报错补齐其余几份。
+> 由 `pnpm check:compose`（`scripts/check-compose-consistency.mjs`，CI 每次 PR 跑）自动校验六类问题：api/worker 环境变量键集合跨文件一致（`AI_*` / `FEISHU_*` 允许以注释形式存在，但必须出现）、同文件内 `DATABASE_URL` / `MINIO_*` / `WEB_ORIGIN` 取值一致、`minio-init` 命令行里的密钥与 `MINIO_SECRET_KEY` 一致、inline 版不得含 `${}` 插值或 `profiles`、对外只暴露 web 端口、api 与 worker 的备份目录挂载一致。新增环境变量时先加到基准文件，再按报错补齐其余几份。
+
 - **从源码构建**：`pnpm docker:up`（`infra/compose/docker-compose.prod.yml`，`.env.docker`）。
+
+api 与 worker 另外把宿主机的 `BACKUP_HOST_DIR`（默认 `./fin-nest-backups`）挂到容器内 `BACKUP_DIR`，系统备份的归档落在宿主机上，容器重建/升级不会丢；`pnpm check:compose` 会校验两者挂的是同一个目录。
 
 对外只需暴露 web（4001），可选前置 nginx（`infra/nginx/fin-nest.conf.example`）统一域名/TLS。
 
@@ -144,17 +149,18 @@ pnpm dev             # API :4000（dev 有 /docs）+ Web :4001
 
 关键环境变量（`packages/config/src/index.ts` 是唯一权威定义）：
 
-| 变量                                      | 说明                                                                          |
-| ----------------------------------------- | ----------------------------------------------------------------------------- |
-| `DATABASE_URL`                            | 必填                                                                          |
-| `MINIO_*`                                 | 对象存储；**生产必须改强 `MINIO_SECRET_KEY`**，弱默认值拒绝启动               |
-| `WEB_ORIGIN`                              | CORS 放行来源（逗号分隔）                                                     |
-| `TRUST_PROXY`                             | 有可信反代设 `true`，直连保持 `false`（见 §5）                                |
-| `APP_TIMEZONE`                            | 「今天/本月」的时区（默认 Asia/Shanghai），影响统计月份与自动记账触发         |
-| `WORKER_POLL_INTERVAL_MS`                 | Worker 轮询间隔（默认 30s）                                                   |
-| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用；OpenAI-compatible `/chat/completions` 协议 |
-| `NEXT_PUBLIC_API_BASE_URL`                | 浏览器 API 前缀（默认 `/api`，同源代理）                                      |
-| `API_INTERNAL_URL`                        | web 容器内转发 /api 的目标                                                    |
+| 变量                                      | 说明                                                                                                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                            | 必填                                                                                                             |
+| `MINIO_*`                                 | 对象存储；**生产必须改强 `MINIO_SECRET_KEY`**，弱默认值拒绝启动                                                  |
+| `WEB_ORIGIN`                              | CORS 放行来源（逗号分隔）                                                                                        |
+| `TRUST_PROXY`                             | 有可信反代设 `true`，直连保持 `false`（见 §5）                                                                   |
+| `APP_TIMEZONE`                            | 「今天/本月」的时区（默认 Asia/Shanghai），影响统计月份与自动记账触发                                            |
+| `WORKER_POLL_INTERVAL_MS`                 | Worker 轮询间隔（默认 30s）                                                                                      |
+| `BACKUP_DIR`                              | 系统备份归档目录（本地默认 `./data/backups`；docker 内固定为 `/data/backups`，宿主机位置用 `BACKUP_HOST_DIR` 配置）；**api 与 worker 必须挂同一个宿主机目录** |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用；OpenAI-compatible `/chat/completions` 协议                                    |
+| `NEXT_PUBLIC_API_BASE_URL`                | 浏览器 API 前缀（默认 `/api`，同源代理）                                                                         |
+| `API_INTERNAL_URL`                        | web 容器内转发 /api 的目标                                                                                       |
 
 ## 9. 文档地图
 

@@ -104,6 +104,8 @@ services:
       # ★3 必改：对象存储密钥
       MINIO_SECRET_KEY: change-me-please
       MINIO_BUCKET: fin-nest
+      # 系统备份归档的落盘目录（容器内路径），与下面 volumes 的右侧保持一致。
+      BACKUP_DIR: /data/backups
       # AI 助手（可选）：三者都填才启用，留空则前端隐藏入口。
       # AI_BASE_URL: https://api.deepseek.com/v1
       # AI_API_KEY: sk-xxx
@@ -111,6 +113,10 @@ services:
       # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
       # FEISHU_APP_ID: cli_xxx
       # FEISHU_APP_SECRET: xxx
+    volumes:
+      # ★5 建议改：备份归档的宿主机目录（左侧）。改成绝对路径更稳妥，如
+      # /volume1/docker/fin-nest/backups:/data/backups
+      - ./fin-nest-backups:/data/backups
     # 不发布端口：web 容器通过 docker 网络访问 api，对外只暴露 web 一个端口。
     healthcheck:
       test:
@@ -148,7 +154,13 @@ services:
       # ★3 必改：对象存储密钥
       MINIO_SECRET_KEY: change-me-please
       MINIO_BUCKET: fin-nest
+      # 系统备份归档的落盘目录（容器内路径），必须与 api 挂同一个宿主机目录：
+      # 周期备份由 worker 写、页面列表由 api 读，只挂一边会出现「备份生成了但页面看不到」。
+      BACKUP_DIR: /data/backups
       WORKER_POLL_INTERVAL_MS: "30000"
+    volumes:
+      # ★5 必须与 api 写同一个宿主机目录，否则周期备份写在别处、页面里看不到。
+      - ./fin-nest-backups:/data/backups
 
   web:
     image: ghcr.io/qijieinnet/fin-nest-web:latest

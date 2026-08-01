@@ -6,6 +6,7 @@ export const queryKeys = {
   adminUserSessions: (userId: string) =>
     ["auth", "admin", "users", "sessions", userId] as const,
   registrationSetting: ["auth", "admin", "registration"] as const,
+  adminBackups: ["auth", "admin", "backups"] as const,
   ledgers: ["ledgers"] as const,
   ledger: (ledgerId: string) => ["ledger", ledgerId] as const,
   ledgerMembers: (ledgerId: string) => ["ledger", ledgerId, "members"] as const,

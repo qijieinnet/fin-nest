@@ -1,4 +1,4 @@
-import { AppError } from "@fin-nest/backend";
+import { AppError } from "../errors/app-error";
 
 /**
  * Excel 导入导出的唯一事实来源：sheet 名、列定义、枚举中英映射、金额/日期转换。
@@ -20,6 +20,7 @@ export const SHEET_NAMES = {
   subscriptionCategories: "订阅分类",
   plans: "计划",
   budgets: "预算",
+  accountEntries: "账户流水",
   lookup: "基础数据",
 } as const;
 
@@ -45,6 +46,46 @@ export const TRANSACTION_COLUMNS: ColumnDef[] = [
   { key: "relations", header: "往来关联", width: 24 },
   { key: "note", header: "备注", width: 24 },
 ];
+
+/**
+ * 流水表的「只导出、不导入」补充列。
+ *
+ * 导入按表头名匹配 `TRANSACTION_COLUMNS`、忽略认不出的列，所以这些列只出现在全量导出里，
+ * 不进模板、也不参与导入契约。存在的意义是：系统备份里的 Excel 要能独立还原「谁在什么时候记的账」。
+ */
+export const TRANSACTION_EXPORT_COLUMNS: ColumnDef[] = [
+  { key: "createdByName", header: "记账人", width: 12 },
+  { key: "createdAt", header: "记账时间", width: 18 },
+];
+
+/**
+ * 账户流水（`account_entries`）。只导出：它由记账与余额调整派生，导入侧不接受手工流水，
+ * 但脱离系统后要靠它对上每个账户的余额变化，因此必须进备份里的 Excel。
+ */
+export const ACCOUNT_ENTRY_COLUMNS: ColumnDef[] = [
+  { key: "occurredAt", header: "时间", width: 18 },
+  { key: "account", header: "账户", width: 14 },
+  { key: "subAccount", header: "子账户", width: 12 },
+  { key: "entryType", header: "类型", width: 10 },
+  { key: "amountDelta", header: "变动(元)", width: 12 },
+  { key: "balanceBefore", header: "变动前余额(元)", width: 14 },
+  { key: "balanceAfter", header: "变动后余额(元)", width: 14 },
+  { key: "transactionId", header: "关联流水ID", width: 38 },
+  { key: "note", header: "备注", width: 20 },
+];
+
+export const ACCOUNT_ENTRY_TYPE_LABELS: Record<string, string> = {
+  expense: "支出",
+  income: "收入",
+  transfer_in: "转入",
+  transfer_out: "转出",
+  receivable_increase: "可收回增加",
+  receivable_decrease: "可收回减少",
+  payable_increase: "需归还增加",
+  payable_decrease: "需归还减少",
+  adjustment: "余额调整",
+  reversal: "冲正",
+};
 
 export const CATEGORY_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },
@@ -257,6 +298,28 @@ export function cellToMicrosString(value: unknown, opts: { allowNegative?: boole
 export function dateToText(date: Date | null | undefined): string {
   if (!date) return "";
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * 时间戳 → 应用时区的 `YYYY-MM-DD HH:mm`（只导出，不参与导入）。
+ * 直接取 UTC 分量会让东八区的凌晨记账显示成前一天，脱离系统看 Excel 时无从纠正。
+ */
+export function dateTimeToText(value: Date | null | undefined): string {
+  if (!value) return "";
+  const timeZone = process.env.APP_TIMEZONE || "Asia/Shanghai";
+  const options: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  };
+  try {
+    return new Intl.DateTimeFormat("sv-SE", { ...options, timeZone }).format(value);
+  } catch {
+    return new Intl.DateTimeFormat("sv-SE", { ...options, timeZone: "UTC" }).format(value);
+  }
 }
 
 /**

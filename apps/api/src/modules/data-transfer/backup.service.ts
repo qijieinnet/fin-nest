@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import {
   AppError,
+  assertBackupEnvelope,
   AuditLogService,
   DatabaseTransactionService,
   PrismaService,
@@ -10,7 +11,6 @@ import {
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { LedgersService } from "../ledgers/ledgers.service";
-import { assertBackupEnvelope } from "./excel-schema";
 
 type Row = Record<string, any>;
 

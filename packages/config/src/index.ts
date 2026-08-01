@@ -77,6 +77,10 @@ const EnvSchema = z.object({
   // worker 常驻轮询间隔；后台任务（自动记账生成、文件删除重试）依赖 worker 持续运行。
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
 
+  // 系统级备份归档的落盘目录。docker 部署时把宿主机目录映射到这里（api 与 worker 都要挂，
+  // 前者读列表/下载/恢复，后者写周期备份），备份文件就直接躺在宿主机上，重装系统也还在。
+  BACKUP_DIR: z.string().min(1).default("./data/backups"),
+
   // AI 助手（可选）：三者都配置时启用；OpenAI-compatible /chat/completions 协议，
   // 可指向 DeepSeek / 通义 / 本地 Ollama 等。未配置时 AI 相关端点返回未启用、前端隐藏入口。
   AI_BASE_URL: z.string().url().optional(),

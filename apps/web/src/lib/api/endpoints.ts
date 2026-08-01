@@ -26,7 +26,26 @@ export const API_ENDPOINTS = {
   adminUsers: "/admin/users",
   /** 管理员：开放注册开关。 */
   adminRegistration: "/admin/app-settings/registration",
+  /** 管理员：系统备份总览（目录状态 + 周期配置 + 归档列表 + 最近一次恢复）。 */
+  adminBackups: "/admin/backups",
+  /** 管理员：周期备份配置。 */
+  adminBackupSettings: "/admin/backups/settings",
 } as const;
+
+/** 管理员：某份备份归档（DELETE 删除）。 */
+export function adminBackupPath(fileName: string): string {
+  return `/admin/backups/${encodeURIComponent(fileName)}`;
+}
+
+/** 管理员：下载某份备份归档。 */
+export function adminBackupDownloadPath(fileName: string): string {
+  return `${adminBackupPath(fileName)}/download`;
+}
+
+/** 管理员：用某份归档覆盖恢复全系统（需密码二次确认）。 */
+export function adminBackupRestorePath(fileName: string): string {
+  return `${adminBackupPath(fileName)}/restore`;
+}
 
 export function adminUserStatusPath(userId: string): string {
   return `/admin/users/${encodeURIComponent(userId)}/status`;

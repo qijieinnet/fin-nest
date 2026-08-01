@@ -19,12 +19,18 @@
     "@fin-nest/config": "workspace:*",
     "@fin-nest/db": "workspace:*",
     "@nestjs/common": "^11.1.27",
-    "rxjs": "^7.8.1"
+    "archiver": "^7.0.1",
+    "exceljs": "^4.4.0",
+    "minio": "^8.0.7",
+    "rxjs": "^7.8.1",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@fin-nest/eslint-config": "workspace:*",
     "@fin-nest/tsconfig": "workspace:*",
+    "@types/archiver": "^6.0.3",
     "@types/node": "^22.8.7",
+    "@types/yauzl": "^3.4.0",
     "eslint": "^9.8.0",
     "typescript": "^5.8.3"
   }

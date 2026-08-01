@@ -17,6 +17,7 @@
     "db:migrate": "pnpm --filter @fin-nest/db run migrate:dev",
     "db:deploy": "pnpm --filter @fin-nest/db run migrate:deploy",
     "e2e:api": "pnpm --filter @fin-nest/api run e2e",
+    "e2e:system-backup": "pnpm build:packages && node scripts/e2e-system-backup-isolated.mjs",
     "dev": "pnpm build:packages && pnpm --parallel --filter @fin-nest/api --filter @fin-nest/web run dev",
     "dev:api": "pnpm build:packages && pnpm --filter @fin-nest/api run dev",
     "dev:web": "pnpm build:packages && pnpm --filter @fin-nest/web run dev",

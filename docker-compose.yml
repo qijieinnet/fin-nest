@@ -49,6 +49,9 @@ x-app-env: &app-env
   # 附件存储的唯一门禁，production 下 API 会拒绝弱密钥启动，故这里强制必填。
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?请在 .env 中设置强 MINIO_SECRET_KEY}
   MINIO_BUCKET: ${MINIO_BUCKET:-fin-nest}
+  # 系统备份归档的落盘目录（容器内路径）。api 与 worker 都要挂同一个宿主机目录：
+  # worker 到点写入、api 负责列表/下载/恢复，只挂一边会出现「备份生成了但页面看不到」。
+  BACKUP_DIR: /data/backups
   # AI 助手（可选）：三者都配置时启用，未配置则相关端点返回未启用、前端隐藏入口。
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
@@ -134,6 +137,9 @@ services:
     environment:
       <<: *app-env
       API_PORT: "4000"
+    volumes:
+      # 备份归档落在宿主机上，容器重建/升级都不会丢；改左侧路径即可换位置。
+      - ${BACKUP_HOST_DIR:-./fin-nest-backups}:/data/backups
     # 默认只绑本机回环：web 容器走 docker 网络访问 api，不依赖这个发布端口。
     # 发布到 127.0.0.1 便于宿主机上 curl 调试，也正好满足前置 nginx 反代 /api 的用法。
     # 确需从其他机器直连 API（如 NEXT_PUBLIC_API_BASE_URL=auto）才把 API_EXPOSE_BIND 设为 0.0.0.0，
@@ -166,6 +172,9 @@ services:
     environment:
       <<: *app-env
       WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-30000}
+    volumes:
+      # 必须与 api 挂同一个宿主机目录：周期备份由 worker 写，页面列表由 api 读。
+      - ${BACKUP_HOST_DIR:-./fin-nest-backups}:/data/backups
 
   web:
     image: ghcr.io/qijieinnet/fin-nest-web:${FIN_NEST_VERSION:-latest}

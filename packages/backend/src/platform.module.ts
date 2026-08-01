@@ -2,11 +2,13 @@ import { Global, Module } from "@nestjs/common";
 import { AuditLogService } from "./audit/audit-log.service";
 import { BackgroundJobsService } from "./background-jobs/background-jobs.service";
 import { ApiExceptionFilter } from "./errors/api-exception.filter";
+import { ExcelWorkbookService } from "./excel/excel-workbook.service";
 import { FeishuClient } from "./feishu/feishu-client";
 import { IdempotencyService } from "./idempotency/idempotency.service";
 import { NotificationService } from "./notifications/notification.service";
 import { ReminderTargetsService } from "./notifications/reminder-targets.service";
 import { PrismaModule } from "./prisma/prisma.module";
+import { SystemBackupService } from "./system-backup/system-backup.service";
 import { BigIntSerializeInterceptor } from "./serialization/bigint-serialize.interceptor";
 import { DatabaseTransactionService } from "./transactions/database-transaction.service";
 
@@ -19,10 +21,12 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     AuditLogService,
     BackgroundJobsService,
     BigIntSerializeInterceptor,
+    ExcelWorkbookService,
     IdempotencyService,
     FeishuClient,
     NotificationService,
     ReminderTargetsService,
+    SystemBackupService,
   ],
   exports: [
     PrismaModule,
@@ -30,10 +34,12 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     AuditLogService,
     BackgroundJobsService,
     BigIntSerializeInterceptor,
+    ExcelWorkbookService,
     IdempotencyService,
     FeishuClient,
     NotificationService,
     ReminderTargetsService,
+    SystemBackupService,
   ],
 })
 export class BackendPlatformModule {}

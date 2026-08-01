@@ -17,6 +17,7 @@ export const routes = {
   importExport: "/more/import-export",
   admin: "/more/admin",
   users: "/more/users",
+  backup: "/more/backup",
   bills: "/bills",
   billNew: "/bills/new",
   billsPending: "/bills/pending",

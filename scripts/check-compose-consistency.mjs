@@ -190,6 +190,39 @@ for (const file of FILES) {
   }
 }
 
+// --- 6. api 与 worker 必须把同一个宿主机目录挂到 BACKUP_DIR --------------------
+// 周期备份由 worker 写、备份列表与恢复由 api 读，只挂一边的表现是
+// 「日志说备份成功，但管理页里一个文件都没有」，从任何一侧的日志都看不出原因。
+for (const file of FILES) {
+  const { doc } = loaded.get(file);
+  const mounts = {};
+  for (const service of APP_SERVICES) {
+    const env = envOf(doc, service);
+    const target = env?.BACKUP_DIR;
+    if (target === undefined) {
+      fail(file, `服务 ${service} 缺少 BACKUP_DIR（系统备份的落盘目录）`);
+      continue;
+    }
+    const containerPath = String(target).replace(/^\$\{BACKUP_DIR:-(.*)\}$/, "$1");
+    const volumes = (doc.services?.[service]?.volumes ?? []).map(String);
+    const mount = volumes.find((entry) => entry.endsWith(`:${containerPath}`));
+    if (!mount) {
+      fail(file, `服务 ${service} 没有把宿主机目录挂到 ${containerPath}，备份文件会随容器一起丢`);
+      continue;
+    }
+    mounts[service] = mount.slice(0, mount.length - containerPath.length - 1);
+  }
+  const hostPaths = [...new Set(Object.values(mounts))];
+  if (hostPaths.length > 1) {
+    fail(
+      file,
+      `api 与 worker 的备份目录挂载不一致 -> ${Object.entries(mounts)
+        .map(([s, p]) => `${s}=${p}`)
+        .join("  |  ")}`,
+    );
+  }
+}
+
 if (errors.length) {
   console.error(`compose 一致性校验失败（${errors.length} 项）：`);
   console.error(errors.map((e) => `  ✗ ${e}`).join("\n"));

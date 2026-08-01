@@ -140,6 +140,93 @@ export type AdminUserSessionList = {
   items: AdminUserSession[];
 };
 
+// ---- 系统级自动备份（管理员功能）契约 ----
+
+export type BackupFrequency = "daily" | "weekly" | "monthly";
+
+/** 周期备份配置，全系统一份。周期口径与记账提醒一致（含「月末兜底」）。 */
+export type BackupSetting = {
+  enabled: boolean;
+  frequency: BackupFrequency;
+  /** ISO 星期：1=周一 … 7=周日，frequency='weekly' 时生效。 */
+  weekdays: number[];
+  /** 日号 1..31，frequency='monthly' 时生效；当月没有该日时落到当月最后一天。 */
+  monthDays: number[];
+  /** 本地 HH:mm。 */
+  runTime: string;
+  /** 自动备份保留份数，0 表示不限。手动备份不受影响。 */
+  keepCount: number;
+  lastRunKey: string | null;
+  updatedAt: string;
+};
+
+export type BackupSettingInput = Partial<
+  Pick<BackupSetting, "enabled" | "frequency" | "weekdays" | "monthDays" | "runTime" | "keepCount">
+>;
+
+export type BackupJobStatus = "running" | "succeeded" | "failed";
+
+/** 备份归档里的统计，字段随格式版本演进，前端只挑认识的展示。 */
+export type BackupCounts = {
+  tables?: number;
+  rows?: number;
+  files?: number;
+  fileBytes?: string;
+  ledgers?: number;
+  missingFiles?: number;
+};
+
+/** 备份目录里的一份归档。`record` 为 null 表示人工拷进目录、没有本系统台账的归档。 */
+export type BackupArchive = {
+  fileName: string;
+  sizeBytes: string;
+  modifiedAt: string;
+  record: {
+    id: string;
+    status: BackupJobStatus;
+    trigger: "manual" | "scheduled";
+    counts: BackupCounts | null;
+    error: string | null;
+    startedAt: string;
+    finishedAt: string | null;
+  } | null;
+};
+
+export type RestoreRecord = {
+  id: string;
+  fileName: string;
+  status: BackupJobStatus;
+  counts: { tables?: number; rows?: number; files?: number } | null;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type SystemBackupRecord = {
+  id: string;
+  fileName: string;
+  status: BackupJobStatus;
+  trigger: "manual" | "scheduled";
+  counts: BackupCounts | null;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type BackupOverview = {
+  /** 备份目录的绝对路径与可写性；不可写时前端提示先配置 docker 目录映射。 */
+  directory: { path: string; writable: boolean; error: string | null };
+  setting: BackupSetting;
+  items: BackupArchive[];
+  /** 最近一次备份台账；running/failed 时正式 zip 不存在，只能从这里展示状态。 */
+  backup: SystemBackupRecord | null;
+  /** 最近一次恢复，用于展示进行中/失败状态。 */
+  restore: RestoreRecord | null;
+};
+
+/** 触发备份/恢复后返回的台账行，状态恒为 running，靠轮询总览拿最终结果。 */
+export type BackupRecordRef = { id: string; status: BackupJobStatus };
+
 // ---- 记账（F4）相关契约 ----
 // 注：所有 *Micros 金额字段经后端 BigInt 序列化拦截器转成字符串；日期字段为 ISO 字符串。
 
