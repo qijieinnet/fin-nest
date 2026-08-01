@@ -72,6 +72,7 @@ export class BackupService {
       transactionAccountRelations,
       transactionLinks,
       plans,
+      planPeriods,
       categoryBudgets,
       autoRules,
       autoPendingTransactions,
@@ -97,6 +98,7 @@ export class BackupService {
       client.transactionAccountRelation.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.transactionLink.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.plan.findMany({ where, orderBy: { createdAt: "asc" } }),
+      client.planPeriod.findMany({ where, orderBy: { periodStart: "asc" } }),
       client.categoryBudget.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.autoRule.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.autoPendingTransaction.findMany({ where, orderBy: { createdAt: "asc" } }),
@@ -149,6 +151,7 @@ export class BackupService {
         transactionAccountRelations,
         transactionLinks,
         plans,
+        planPeriods,
         categoryBudgets,
         autoRules,
         autoPendingTransactions,
@@ -262,6 +265,12 @@ export class BackupService {
     await tx.subscription.deleteMany({ where });
     await tx.subscriptionCategory.deleteMany({ where });
     await tx.categoryBudget.deleteMany({ where });
+    await tx.planPeriod.deleteMany({ where });
+    const planIds = (await tx.plan.findMany({ where, select: { id: true } })).map((row) => row.id);
+    if (planIds.length > 0) {
+      // 分享 token 不进备份；覆盖恢复时直接撤销旧计划的所有分享链接。
+      await tx.planShareToken.deleteMany({ where: { planId: { in: planIds } } });
+    }
     await tx.plan.deleteMany({ where });
     await tx.subAccount.deleteMany({ where });
     await tx.subcategory.deleteMany({ where });
@@ -292,6 +301,7 @@ export class BackupService {
       subscriptionCategory: newIdMap(rows("subscriptionCategories")),
       subscription: newIdMap(rows("subscriptions")),
       transaction: newIdMap(rows("transactions")),
+      plan: newIdMap(rows("plans")),
       autoRule: newIdMap(rows("autoRules")),
       quickTemplate: newIdMap(rows("quickTemplates")),
       pending: newIdMap(rows("autoPendingTransactions")),
@@ -676,7 +686,7 @@ export class BackupService {
     );
 
     counts.plans = await createManyChunked(tx.plan, rows("plans"), (row) => ({
-      id: randomUUID(),
+      id: maps.plan.get(row.id)!,
       ledgerId,
       kind: row.kind,
       metric: row.metric,
@@ -687,9 +697,25 @@ export class BackupService {
       repeatRule: row.repeatRule,
       matchRule: remapMatchRule(row.matchRule, maps),
       foresightEnabled: Boolean(row.foresightEnabled),
+      periodConfirmEnabled: Boolean(row.periodConfirmEnabled),
+      periodConfirmAnchor: dt(row.periodConfirmAnchor),
       createdBy: userId,
       updatedBy: userId,
+      stoppedAt: dt(row.stoppedAt),
       archivedAt: dt(row.archivedAt),
+      createdAt: dt(row.createdAt) ?? undefined,
+    }));
+
+    counts.planPeriods = await createManyChunked(tx.planPeriod, rows("planPeriods"), (row) => ({
+      id: randomUUID(),
+      planId: ref(maps.plan, row.planId)!,
+      ledgerId,
+      periodStart: dt(row.periodStart)!,
+      confirmedAt: dt(row.confirmedAt),
+      // 用户级 id 不跨实例恢复；有确认人时归到执行恢复的账本 owner。
+      confirmedBy: row.confirmedBy ? userId : null,
+      limitAmountMicros: bi(row.limitAmountMicros),
+      limitCount: row.limitCount == null ? null : Number(row.limitCount),
       createdAt: dt(row.createdAt) ?? undefined,
     }));
 

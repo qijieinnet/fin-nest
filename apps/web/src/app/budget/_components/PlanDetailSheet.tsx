@@ -11,6 +11,7 @@ import { useSheetStack } from "@/providers";
 import { PlanEditorSheet } from "./PlanEditorSheet";
 import { PlanMatchedListSheet } from "./PlanMatchedListSheet";
 import { PlanPeriodCard } from "./PlanPeriodCard";
+import { PlanPeriodConfirmSheet } from "./PlanPeriodConfirmSheet";
 import { PlanShareSheet } from "./PlanShareSheet";
 import { periodShortLabel } from "./plan-utils";
 
@@ -56,6 +57,23 @@ export function PlanDetailSheet({
       className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
       hideDefaultHeader: true,
       content: <PlanEditorSheet ledgerId={ledgerId} plan={plan} />,
+    });
+  };
+
+  const openConfirm = () => {
+    if (!result) return;
+    push({
+      className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
+      hideDefaultHeader: true,
+      content: (
+        <PlanPeriodConfirmSheet
+          ledgerId={ledgerId}
+          nextPeriod={result.nextPeriod}
+          pendingConfirmCount={result.pendingConfirmCount}
+          plan={result.plan}
+          progress={result.period}
+        />
+      ),
     });
   };
 
@@ -153,7 +171,10 @@ export function PlanDetailSheet({
                   本期
                 </h3>
                 <PlanPeriodCard
+                  nextPeriod={result.nextPeriod}
+                  onConfirm={openConfirm}
                   onTap={() => openMatchedList(period, plan)}
+                  pendingConfirmCount={result.pendingConfirmCount}
                   plan={plan}
                   progress={period}
                   showMatchedFooter

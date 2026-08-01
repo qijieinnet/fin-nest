@@ -21,6 +21,7 @@ import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
 import { PlanPeriodCard, PlanPeriodCardSkeleton } from "./_components/PlanPeriodCard";
+import { PlanPeriodConfirmSheet } from "./_components/PlanPeriodConfirmSheet";
 import { useBudgetModel } from "./_model/useBudgetModel";
 
 export function PlanCardWithProgress({
@@ -32,8 +33,26 @@ export function PlanCardWithProgress({
   onTap: () => void;
   plan: Plan;
 }) {
+  const { push } = useSheetStack();
   const progressQuery = usePlanProgress(ledgerId, plan.id);
-  const progress = progressQuery.data?.period;
+  const result = progressQuery.data;
+  const progress = result?.period;
+  const openConfirm = () => {
+    if (!result?.period) return;
+    push({
+      className: "ui-bottom-sheet--sheet-form ui-bottom-sheet--auto-sheet-form",
+      hideDefaultHeader: true,
+      content: (
+        <PlanPeriodConfirmSheet
+          ledgerId={ledgerId}
+          nextPeriod={result.nextPeriod}
+          pendingConfirmCount={result.pendingConfirmCount}
+          plan={result.plan}
+          progress={result.period}
+        />
+      ),
+    });
+  };
   if (progressQuery.isPending) {
     return <PlanPeriodCardSkeleton title={`加载${plan.name}`} />;
   }
@@ -41,13 +60,21 @@ export function PlanCardWithProgress({
     return (
       <div className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] p-5">
         <p className="text-[20px] font-bold text-[var(--color-text-primary)]">{plan.name}</p>
-        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-          进度加载失败
-        </p>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">进度加载失败</p>
       </div>
     );
   }
-  return <PlanPeriodCard onTap={onTap} plan={plan} progress={progress} title={plan.name} />;
+  return (
+    <PlanPeriodCard
+      nextPeriod={result?.nextPeriod ?? null}
+      onConfirm={openConfirm}
+      onTap={onTap}
+      pendingConfirmCount={result?.pendingConfirmCount ?? 0}
+      plan={plan}
+      progress={progress}
+      title={plan.name}
+    />
+  );
 }
 
 function stoppedDateLabel(value: string | null): string {
@@ -97,7 +124,8 @@ export function StoppedPlansSheet({
               {plan.name}
             </span>
             <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-              {plan.kind === "income" ? "收入目标" : "支出限额"} · {stoppedDateLabel(plan.stoppedAt)}
+              {plan.kind === "income" ? "收入目标" : "支出限额"} ·{" "}
+              {stoppedDateLabel(plan.stoppedAt)}
             </span>
           </span>
           <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
@@ -240,7 +268,9 @@ export function PlansScreenMobile() {
           预测
         </h2>
         <div className="flex items-center gap-2 rounded-[18px] bg-[var(--color-bg-surface)] px-3 py-3">
-          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
+          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">
+            未到期的自动记账
+          </span>
           <Switch
             checked={foresightOn}
             disabled={plans.length === 0 || model.toggleForesight.isPending}

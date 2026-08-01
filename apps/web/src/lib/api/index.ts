@@ -89,6 +89,7 @@ export type {
   PlanKind,
   PlanMatchRule,
   PlanMetric,
+  PlanPeriodConfirmResult,
   PlanPeriodProgress,
   PlanProgressResult,
   PlanRepeatRule,

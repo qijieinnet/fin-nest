@@ -183,6 +183,8 @@ async function main() {
   await assertSubscriptionReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertInsuranceReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertEntryReminder({ ledgerId: ledger.id, owner });
+  await assertPlanPeriodConfirm({ ledgerId: ledger.id, owner, category });
+  await assertPlanPeriodBackupRestore({ owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
 
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
@@ -207,6 +209,8 @@ async function main() {
           "subscription_reminder_targets",
           "insurance_reminder_targets",
           "entry_reminder",
+          "plan_period_confirm",
+          "plan_period_backup_restore",
           "feishu_db_constraints",
         ],
       },
@@ -669,10 +673,10 @@ async function assertAppLockFlow(token, otherToken) {
     credentialCount: 0,
   });
 
-  assert.deepEqual(
-    await api("PATCH", "/auth/app-lock", { token, body: { enabled: true } }),
-    { enabled: true, credentialCount: 0 },
-  );
+  assert.deepEqual(await api("PATCH", "/auth/app-lock", { token, body: { enabled: true } }), {
+    enabled: true,
+    credentialCount: 0,
+  });
   const me = await api("GET", "/auth/me", { token });
   assert.equal(me.appLockEnabled, true, "开关必须随 /auth/me 下发，前端靠它做首帧上锁判断");
 
@@ -697,10 +701,18 @@ async function assertAppLockFlow(token, otherToken) {
     "allowCredentials 要带上账号下全部凭证，换浏览器才不用重新注册",
   );
   const assertion = authenticator.authenticate(unlockOptions.challenge);
-  await api("POST", "/auth/app-lock/unlock", { token, expected: 204, body: { response: assertion } });
+  await api("POST", "/auth/app-lock/unlock", {
+    token,
+    expected: 204,
+    body: { response: assertion },
+  });
 
   // challenge 一次性：同一份断言重放必须被拒。
-  await api("POST", "/auth/app-lock/unlock", { token, expected: 400, body: { response: assertion } });
+  await api("POST", "/auth/app-lock/unlock", {
+    token,
+    expected: 400,
+    body: { response: assertion },
+  });
 
   // 签名对不上（改了 challenge 之外的内容）也必须被拒，证明确实在验签而不是只查 ID。
   const tamperOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
@@ -708,12 +720,20 @@ async function assertAppLockFlow(token, otherToken) {
   tampered.response.signature = authenticator.authenticate(tamperOptions.challenge, {
     signCount: 99,
   }).response.signature;
-  await api("POST", "/auth/app-lock/unlock", { token, expected: 401, body: { response: tampered } });
+  await api("POST", "/auth/app-lock/unlock", {
+    token,
+    expected: 401,
+    body: { response: tampered },
+  });
 
   // 未注册的凭证 ID 直接 404，不进验签。
   const strangerOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
   const stranger = createVirtualAuthenticator().authenticate(strangerOptions.challenge);
-  await api("POST", "/auth/app-lock/unlock", { token, expected: 404, body: { response: stranger } });
+  await api("POST", "/auth/app-lock/unlock", {
+    token,
+    expected: 404,
+    body: { response: stranger },
+  });
 
   // 别的账号不能拿这把已注册的 credentialId 去注册，把凭证改绑到自己名下
   // （credentialId 由客户端提供，不做归属校验的话会导致原主人的 Face ID 直接失效）。
@@ -744,10 +764,10 @@ async function assertAppLockFlow(token, otherToken) {
   });
 
   // 关闭开关同时清空凭证，避免系统钥匙串里留下解不开任何东西的孤儿 passkey。
-  assert.deepEqual(
-    await api("PATCH", "/auth/app-lock", { token, body: { enabled: false } }),
-    { enabled: false, credentialCount: 0 },
-  );
+  assert.deepEqual(await api("PATCH", "/auth/app-lock", { token, body: { enabled: false } }), {
+    enabled: false,
+    credentialCount: 0,
+  });
   const afterDisable = await api("POST", "/auth/app-lock/unlock/options", { token });
   assert.equal(afterDisable.allowCredentials.length, 0);
 }
@@ -1387,6 +1407,234 @@ async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
   );
 }
 
+/**
+ * 计划周期确认：开启后周期不随日历自动翻页，本期结束仍停在本期，确认才前进；
+ * 确认时可覆盖下一期额度。为了不等到下个月，直接把 anchor 挪到上一期来制造「待确认」状态。
+ */
+async function assertPlanPeriodConfirm({ ledgerId, owner, category }) {
+  const token = owner.token;
+  const thisMonthStart = monthStartDate(0);
+  const lastMonthStart = monthStartDate(-1);
+  const twoMonthsAgoStart = monthStartDate(-2);
+  const isoOf = (value) => value.toISOString().slice(0, 10);
+
+  const plan = await api("POST", `/ledgers/${ledgerId}/plans`, {
+    token,
+    expected: 201,
+    body: {
+      kind: "expense",
+      metric: "amount",
+      name: `E2E Confirm Plan ${stamp}`,
+      limitAmountMicros: "5000000",
+      startDate: isoOf(lastMonthStart),
+      repeatRule: "monthly",
+      matchRule: { categoryIds: [category.id] },
+      periodConfirmEnabled: true,
+    },
+  });
+  assert.equal(plan.periodConfirmEnabled, true);
+  // 新建时 anchor 落在当前周期，挪到两个月前制造两期待确认状态。
+  await prisma.plan.update({
+    where: { id: plan.id },
+    data: { periodConfirmAnchor: twoMonthsAgoStart },
+  });
+
+  const stuck = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(stuck.period.start, isoOf(twoMonthsAgoStart));
+  assert.equal(stuck.period.awaitingConfirm, true);
+  assert.equal(stuck.pendingConfirmCount, 2);
+  assert.equal(stuck.nextPeriod.start, isoOf(lastMonthStart));
+
+  // 只能确认当前待确认的那一期，拿别的周期来确认要被挡住。
+  await api(
+    "POST",
+    `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(thisMonthStart)}/confirm`,
+    {
+      token,
+      expected: 409,
+      body: {},
+    },
+  );
+
+  // 两个并发确认只能有一个成功，另一个必须被原子抢占挡住。
+  const concurrentPath = `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(twoMonthsAgoStart)}/confirm`;
+  const concurrentResponses = await Promise.all(
+    Array.from({ length: 2 }, () =>
+      fetch(`${baseUrl}${concurrentPath}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ nextLimitAmountMicros: "7000000" }),
+      }),
+    ),
+  );
+  assert.deepEqual(
+    concurrentResponses.map((response) => response.status).sort((a, b) => a - b),
+    [200, 409],
+  );
+  const firstConfirmed = await concurrentResponses.find((response) => response.ok).json();
+  assert.equal(firstConfirmed.nextPeriodStart, isoOf(lastMonthStart));
+  assert.equal(firstConfirmed.remainingPendingCount, 1);
+
+  const stillStuck = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(stillStuck.period.start, isoOf(lastMonthStart));
+  assert.equal(stillStuck.period.targetAmountMicros, "7000000");
+  assert.equal(stillStuck.pendingConfirmCount, 1);
+
+  // 传与 metric 不匹配的额度字段必须整单拒绝，不能悄悄确认掉这一期。
+  await api(
+    "POST",
+    `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(lastMonthStart)}/confirm`,
+    { token, expected: 400, body: { nextLimitCount: 3 } },
+  );
+  const stillPending = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, {
+    token,
+  });
+  assert.equal(stillPending.period.start, isoOf(lastMonthStart));
+  assert.equal(stillPending.period.awaitingConfirm, true);
+
+  const confirmed = await api(
+    "POST",
+    `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(lastMonthStart)}/confirm`,
+    { token, body: { nextLimitAmountMicros: "9000000" } },
+  );
+  assert.equal(confirmed.nextPeriodStart, isoOf(thisMonthStart));
+  assert.equal(confirmed.remainingPendingCount, 0);
+
+  const advanced = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(advanced.period.start, isoOf(thisMonthStart));
+  assert.equal(advanced.period.awaitingConfirm, false);
+  assert.equal(advanced.pendingConfirmCount, 0);
+  assert.equal(advanced.nextPeriod, null);
+  // 逐期额度覆盖只作用于被覆盖的那一期，计划本身的额度不变。
+  assert.equal(advanced.period.targetAmountMicros, "9000000");
+  const lastPeriod = advanced.history.find((item) => item.start === isoOf(lastMonthStart));
+  assert.equal(lastPeriod.targetAmountMicros, "7000000");
+  assert.ok(lastPeriod.confirmedAt);
+  const twoMonthsAgo = advanced.history.find((item) => item.start === isoOf(twoMonthsAgoStart));
+  assert.equal(twoMonthsAgo.targetAmountMicros, "5000000");
+  assert.ok(twoMonthsAgo.confirmedAt);
+  const stored = await prisma.plan.findUniqueOrThrow({ where: { id: plan.id } });
+  assert.equal(stored.limitAmountMicros.toString(), "5000000");
+
+  // 当前这一期还没结束，再确认一次要被拒。
+  await api(
+    "POST",
+    `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(thisMonthStart)}/confirm`,
+    {
+      token,
+      expected: 400,
+      body: {},
+    },
+  );
+
+  // 已停止的计划没有「下一期」可开始：卡片不再进结算态、红点不计、接口也拒绝确认。
+  await prisma.planPeriod.deleteMany({ where: { planId: plan.id } });
+  await prisma.plan.update({
+    where: { id: plan.id },
+    data: { periodConfirmAnchor: lastMonthStart },
+  });
+  const beforeStop = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(beforeStop.period.start, isoOf(lastMonthStart));
+  assert.equal(beforeStop.period.awaitingConfirm, true);
+  const pendingBefore = await api("GET", `/ledgers/${ledgerId}/reminder-summary`, { token });
+  assert.equal(pendingBefore.items.planPendingConfirm, 1);
+
+  await api("POST", `/ledgers/${ledgerId}/plans/${plan.id}/stop`, { token });
+  const stopped = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(stopped.period.start, isoOf(thisMonthStart));
+  assert.equal(stopped.period.awaitingConfirm, false);
+  assert.equal(stopped.pendingConfirmCount, 0);
+  assert.equal(stopped.nextPeriod, null);
+  const pendingAfter = await api("GET", `/ledgers/${ledgerId}/reminder-summary`, { token });
+  assert.equal(pendingAfter.items.planPendingConfirm, undefined);
+  await api(
+    "POST",
+    `/ledgers/${ledgerId}/plans/${plan.id}/periods/${isoOf(lastMonthStart)}/confirm`,
+    { token, expected: 400, body: {} },
+  );
+
+  // 恢复后游标接着原处继续——确认行没有被停止动作清掉。
+  await api("POST", `/ledgers/${ledgerId}/plans/${plan.id}/restore`, { token });
+  const restored = await api("GET", `/ledgers/${ledgerId}/plans/${plan.id}/progress`, { token });
+  assert.equal(restored.period.start, isoOf(lastMonthStart));
+  assert.equal(restored.period.awaitingConfirm, true);
+
+  await api("DELETE", `/ledgers/${ledgerId}/plans/${plan.id}`, { token, expected: 204 });
+}
+
+/** JSON 覆盖恢复必须保留周期确认开关、游标、确认历史和逐期额度，并能先清掉现有周期外键。 */
+async function assertPlanPeriodBackupRestore({ owner }) {
+  const ledger = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E Period Backup ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(ledger.id);
+
+  const twoMonthsAgoStart = monthStartDate(-2);
+  const lastMonthStart = monthStartDate(-1);
+  const isoOf = (value) => value.toISOString().slice(0, 10);
+  const planName = `E2E Backup Plan ${stamp}`;
+  const plan = await api("POST", `/ledgers/${ledger.id}/plans`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      kind: "income",
+      metric: "amount",
+      name: planName,
+      limitAmountMicros: "6000000",
+      startDate: isoOf(twoMonthsAgoStart),
+      repeatRule: "monthly",
+      periodConfirmEnabled: true,
+    },
+  });
+  await prisma.plan.update({
+    where: { id: plan.id },
+    data: { periodConfirmAnchor: twoMonthsAgoStart },
+  });
+  await api(
+    "POST",
+    `/ledgers/${ledger.id}/plans/${plan.id}/periods/${isoOf(twoMonthsAgoStart)}/confirm`,
+    { token: owner.token, body: { nextLimitAmountMicros: "8000000" } },
+  );
+
+  const exported = await fetch(`${baseUrl}/ledgers/${ledger.id}/export/json`, {
+    headers: { authorization: `Bearer ${owner.token}` },
+  });
+  assert.equal(exported.status, 200);
+  const backup = await exported.text();
+  const form = new FormData();
+  form.append("confirmLedgerName", ledger.name);
+  form.append("file", new Blob([backup], { type: "application/json" }), "backup.json");
+  const restored = await fetch(`${baseUrl}/ledgers/${ledger.id}/import/json`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${owner.token}` },
+    body: form,
+  });
+  assert.equal(restored.status, 201, await restored.text());
+
+  const restoredPlans = await api("GET", `/ledgers/${ledger.id}/plans`, { token: owner.token });
+  const restoredPlan = restoredPlans.find((item) => item.name === planName);
+  assert.ok(restoredPlan);
+  assert.equal(restoredPlan.periodConfirmEnabled, true);
+  assert.equal(restoredPlan.periodConfirmAnchor.slice(0, 10), isoOf(twoMonthsAgoStart));
+  const restoredRows = await prisma.planPeriod.findMany({
+    where: { ledgerId: ledger.id, planId: restoredPlan.id },
+    orderBy: { periodStart: "asc" },
+  });
+  assert.equal(restoredRows.length, 2);
+  assert.ok(restoredRows[0].confirmedAt);
+  assert.equal(restoredRows[1].periodStart.toISOString().slice(0, 10), isoOf(lastMonthStart));
+  assert.equal(restoredRows[1].limitAmountMicros.toString(), "8000000");
+
+  const progress = await api("GET", `/ledgers/${ledger.id}/plans/${restoredPlan.id}/progress`, {
+    token: owner.token,
+  });
+  assert.equal(progress.period.start, isoOf(lastMonthStart));
+  assert.equal(progress.period.awaitingConfirm, true);
+  assert.equal(progress.period.targetAmountMicros, "8000000");
+}
+
 /** 记账提醒：随记账设置一起读写，周期配置不完整时拒绝开启。 */
 async function assertEntryReminder({ ledgerId, owner }) {
   const token = owner.token;
@@ -1600,6 +1848,7 @@ async function cleanup() {
       await prisma.autoPendingTransaction.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.autoRule.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.quickTemplate.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.planPeriod.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.plan.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.categoryBudget.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.budgetSetting.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
@@ -1651,9 +1900,33 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// API 的「今天/本月」按 APP_TIMEZONE（默认 Asia/Shanghai）算，e2e 必须用同一套基准。
+// 用 UTC 算的话，东八区 0-8 点跨月时两边差整整一个月，月初跑必挂。
+function appTodayParts() {
+  const timeZone = process.env.APP_TIMEZONE || "Asia/Shanghai";
+  let formatted;
+  try {
+    formatted = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    formatted = new Date().toISOString().slice(0, 10);
+  }
+  const [year, month, day] = formatted.split("-").map(Number);
+  return { year, month, day };
+}
+
+/** 相对本月偏移 offset 个月的月初，返回 UTC-midnight Date（与后端 date-only 存储一致）。 */
+function monthStartDate(offset = 0) {
+  const { year, month } = appTodayParts();
+  return new Date(Date.UTC(year, month - 1 + offset, 1));
+}
+
 function monthStartIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  return monthStartDate().toISOString().slice(0, 10);
 }
 
 function addDaysIso(days) {

@@ -5,7 +5,7 @@ import { Check, ChevronRight, X } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useMemo, useState } from "react";
 import { DateWheelPicker, FieldCard, FilterSheet } from "@/components/business";
-import { IconButton, Input, PopoverMenu, Tabs } from "@/components/ui";
+import { IconButton, Input, PopoverMenu, Switch, Tabs } from "@/components/ui";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -21,8 +21,8 @@ import { categoryOptions, personOptions } from "@/lib/data/options";
 import type { BusinessFilterValue } from "@/components/business";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
-import { microsToInput, REPEAT_OPTIONS, todayKey } from "./plan-utils";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { microsToInput, parseLimitCount, REPEAT_OPTIONS, todayKey } from "./plan-utils";
 
 type PlanEditorSheetProps = {
   defaultKind?: PlanKind;
@@ -147,6 +147,7 @@ function activeFilterCount({
 
 export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: PlanEditorSheetProps) {
   const queryClient = useQueryClient();
+  const decimalPlaces = useDecimalPlaces();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
   const isEditing = Boolean(plan);
@@ -158,10 +159,15 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
   const [kind, setKind] = useState<PlanKind>(plan?.kind ?? defaultKind);
   const [metric, setMetric] = useState<PlanMetric>(plan?.metric ?? "amount");
   const [name, setName] = useState(plan?.name ?? "");
-  const [limitAmount, setLimitAmount] = useState(() => microsToInput(plan?.limitAmountMicros));
+  const [limitAmount, setLimitAmount] = useState(() =>
+    microsToInput(plan?.limitAmountMicros, decimalPlaces),
+  );
   const [limitCount, setLimitCount] = useState(plan?.limitCount ? String(plan.limitCount) : "");
   const [startDate, setStartDate] = useState(plan?.startDate.slice(0, 10) ?? todayKey());
   const [repeatRule, setRepeatRule] = useState<PlanRepeatRule>(plan?.repeatRule ?? "monthly");
+  const [periodConfirmEnabled, setPeriodConfirmEnabled] = useState(
+    plan?.periodConfirmEnabled ?? false,
+  );
   const [categoryIds, setCategoryIds] = useState<string[]>(plan?.matchRule?.categoryIds ?? []);
   const [subcategoryIds, setSubcategoryIds] = useState<string[]>(
     plan?.matchRule?.subcategoryIds ?? [],
@@ -179,7 +185,11 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
     () =>
       (accountsQuery.data ?? [])
         .filter((account) => ["savings", "credit", "invest"].includes(account.type))
-        .map((account) => ({ id: account.id, label: account.name, icon: account.icon ?? undefined })),
+        .map((account) => ({
+          id: account.id,
+          label: account.name,
+          icon: account.icon ?? undefined,
+        })),
     [accountsQuery.data],
   );
   const filterPersonOptions = useMemo(
@@ -228,12 +238,13 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
       let limitAmountMicros: string | undefined;
       let limitCountValue: number | undefined;
       if (metric === "amount") {
-        const parsed = parseMoneyToMicros(limitAmount);
+        const parsed = parseMoneyToMicros(limitAmount, { decimalPlaces });
         if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("请填写大于 0 的金额");
         limitAmountMicros = parsed.amountMicros;
       } else {
-        limitCountValue = Number.parseInt(limitCount, 10);
-        if (!Number.isInteger(limitCountValue) || limitCountValue < 1) throw new Error("请填写大于 0 的次数");
+        const parsedCount = parseLimitCount(limitCount);
+        if (parsedCount === null) throw new Error("请填写大于 0 的整数次数");
+        limitCountValue = parsedCount;
       }
 
       const matchRule: PlanMatchRule = {};
@@ -252,6 +263,8 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
         startDate,
         repeatRule,
         matchRule,
+        // 不重复的计划没有下一期，开关无意义，一律按关提交。
+        periodConfirmEnabled: repeatRule === "once" ? false : periodConfirmEnabled,
       };
       return plan
         ? apiRequest<Plan>(ledgerApiPath(ledgerId, `/plans/${plan.id}`), { method: "PATCH", body })
@@ -295,7 +308,9 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
           <div className="transaction-form__cards">
             <Tabs
               className="transaction-form__type-tabs"
-              items={isEditing ? KIND_OPTIONS.filter((option) => option.value === kind) : KIND_OPTIONS}
+              items={
+                isEditing ? KIND_OPTIONS.filter((option) => option.value === kind) : KIND_OPTIONS
+              }
               onValueChange={(value) => setKind(value as PlanKind)}
               value={kind}
             />
@@ -344,6 +359,22 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
               options={REPEAT_OPTIONS}
               value={repeatRule}
             />
+
+            {repeatRule === "once" ? null : (
+              <section className="transaction-form__card">
+                <div className="transaction-form__toggle-head">
+                  <span>
+                    <strong>周期结束需确认</strong>
+                    <small>本期结束后卡片停在本期显示结算，确认后才进入下一期</small>
+                  </span>
+                  <Switch
+                    checked={periodConfirmEnabled}
+                    label="周期结束需确认"
+                    onCheckedChange={setPeriodConfirmEnabled}
+                  />
+                </div>
+              </section>
+            )}
 
             <button
               className="transaction-form__row-card"

@@ -42,16 +42,15 @@ export function periodRangeText(start: string, endExclusive: string): string {
 }
 
 /** 历史周期的短标签：月度显示「2026年5月」，年度显示「2025年」，其余显示范围。 */
-export function periodShortLabel(plan: Pick<Plan, "repeatRule">, start: string, endExclusive: string): string {
+export function periodShortLabel(
+  plan: Pick<Plan, "repeatRule">,
+  start: string,
+  endExclusive: string,
+): string {
   const [year, month] = start.slice(0, 10).split("-").map(Number);
   if (plan.repeatRule === "monthly") return `${year}年${month}月`;
   if (plan.repeatRule === "yearly") return `${year}年`;
   return periodRangeText(start, endExclusive);
-}
-
-export function planLimitText(plan: Pick<Plan, "metric" | "limitAmountMicros" | "limitCount">): string {
-  if (plan.metric === "count") return `${plan.limitCount ?? 0} 次`;
-  return formatMoney(plan.limitAmountMicros ?? "0");
 }
 
 export function formatMoney(micros: bigint | string | null | undefined): string {
@@ -61,13 +60,26 @@ export function formatMoney(micros: bigint | string | null | undefined): string 
   });
 }
 
+/**
+ * 计划「次数」输入的解析：只接受纯正整数，非法返回 null。
+ * 直接 parseInt 会把「3.7」截成 3、「12次」截成 12，用户看不出被改过。
+ */
+export function parseLimitCount(value: string): number | null {
+  const raw = value.trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const count = Number.parseInt(raw, 10);
+  return count >= 1 ? count : null;
+}
+
 /** 把微单位金额转成输入框用的普通字符串（无货币符号、无千分位）。 */
-export function microsToInput(micros: string | null | undefined): string {
+export function microsToInput(micros: string | null | undefined, decimalPlaces = 2): string {
   if (!micros) return "";
-  const value = BigInt(micros);
-  const units = value / 1_000_000n;
-  const fraction = (value % 1_000_000n) / 10_000n;
-  return fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
+  const negative = micros.startsWith("-");
+  const digits = (negative ? micros.slice(1) : micros).padStart(7, "0");
+  const units = digits.slice(0, -6).replace(/^0+(?=\d)/, "");
+  const fraction = digits.slice(-6).slice(0, decimalPlaces).replace(/0+$/, "");
+  const body = fraction ? `${units}.${fraction}` : units;
+  return negative ? `-${body}` : body;
 }
 
 function includesOrEmpty(values: string[] | undefined, target: string | null): boolean {

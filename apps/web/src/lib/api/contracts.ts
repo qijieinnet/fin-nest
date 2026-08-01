@@ -460,6 +460,8 @@ export type Plan = {
   repeatRule: PlanRepeatRule;
   matchRule: PlanMatchRule | null;
   foresightEnabled: boolean;
+  /** 开启后周期结束需确认才前进到下一期；不重复的计划无效。 */
+  periodConfirmEnabled: boolean;
   createdAt: string;
   updatedAt: string;
   stoppedAt: string | null;
@@ -475,15 +477,30 @@ export type PlanPeriodProgress = {
   actualCount: number;
   foresightCount: number;
   projectedCount: number;
+  /** 该周期生效的额度：确认上一期时可以单独覆盖，未覆盖则等于计划上的额度。 */
   targetAmountMicros: string | null;
   targetCount: number | null;
   percent: number;
+  confirmedAt: string | null;
+  /** 该周期已结束但还没确认——卡片停在这里，不前进到下一期。只可能出现在 `period` 上。 */
+  awaitingConfirm: boolean;
 };
 
 export type PlanProgressResult = {
   plan: Plan;
   period: PlanPeriodProgress;
   history: PlanPeriodProgress[];
+  /** 已结束但未确认的周期数（含 period 自身）；0 表示不在待确认状态。 */
+  pendingConfirmCount: number;
+  /** 待确认时紧邻下一期的概览；`recordedCount` 只统计该期内已经记的笔数。 */
+  nextPeriod: { start: string; endExclusive: string; recordedCount: number } | null;
+};
+
+/** POST /ledgers/:id/plans/:planId/periods/:periodStart/confirm 的响应。 */
+export type PlanPeriodConfirmResult = {
+  confirmedPeriodStart: string;
+  nextPeriodStart: string;
+  remainingPendingCount: number;
 };
 
 export type PlanShareToken = {

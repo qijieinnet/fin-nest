@@ -518,6 +518,11 @@ model Plan {
   repeatRule        String    @map("repeat_rule")
   matchRule         Json?     @map("match_rule") @db.JsonB
   foresightEnabled  Boolean   @default(false) @map("foresight_enabled")
+  // 开启后周期不再自动翻页：本期结束仍停在本期，用户确认后才前进（见 PlanPeriod）。
+  periodConfirmEnabled Boolean   @default(false) @map("period_confirm_enabled")
+  // 开启确认时记下的游标起点（当时所在周期的起始日）；为空表示还没开启过。
+  // 没有它，存量计划的游标会从 startDate 那一期开始，用户要补确认几十次。
+  periodConfirmAnchor  DateTime? @map("period_confirm_anchor") @db.Date
   createdBy         String    @map("created_by") @db.Uuid
   updatedBy         String?   @map("updated_by") @db.Uuid
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -527,6 +532,26 @@ model Plan {
 
   @@index([ledgerId, stoppedAt, archivedAt])
   @@map("plans")
+}
+
+/// 计划的单个周期。行只在「被确认过」或「被单独改过额度」时才存在，不预生成。
+/// 周期区间本身仍由 planPeriod() 从日期派生，这张表只承载游标与逐期额度覆盖。
+model PlanPeriod {
+  id                String    @id @default(uuid()) @db.Uuid
+  planId            String    @map("plan_id") @db.Uuid
+  ledgerId          String    @map("ledger_id") @db.Uuid
+  periodStart       DateTime  @map("period_start") @db.Date
+  confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  confirmedBy       String?   @map("confirmed_by") @db.Uuid
+  // 为空表示沿用计划上的额度；有值则该周期用这个额度。
+  limitAmountMicros BigInt?   @map("limit_amount_micros")
+  limitCount        Int?      @map("limit_count")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([planId, periodStart])
+  @@index([ledgerId])
+  @@map("plan_periods")
 }
 
 model PlanShareToken {

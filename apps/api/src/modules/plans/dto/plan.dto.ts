@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, Length, Matches, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Min,
+} from "class-validator";
 
 export class CreatePlanDto {
   @ApiProperty({ enum: ["expense", "income"] })
@@ -45,6 +55,14 @@ export class CreatePlanDto {
   @IsOptional()
   @IsBoolean()
   foresightEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: "开启后周期结束需确认才前进到下一期（不重复的计划无效）",
+  })
+  @IsOptional()
+  @IsBoolean()
+  periodConfirmEnabled?: boolean;
 }
 
 export class UpdatePlanDto {
@@ -96,4 +114,26 @@ export class UpdatePlanDto {
   @IsOptional()
   @IsBoolean()
   foresightEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "开启后周期结束需确认才前进到下一期；关→开会把游标锚定到当前周期",
+  })
+  @IsOptional()
+  @IsBoolean()
+  periodConfirmEnabled?: boolean;
+}
+
+/** 确认某一期。额度字段按计划的 metric 二选一，不传表示下一期沿用计划上的额度。 */
+export class ConfirmPlanPeriodDto {
+  @ApiPropertyOptional({ example: "200000000", description: "下一期金额额度，仅金额类计划有效" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(0|[1-9]\d*)$/)
+  nextLimitAmountMicros?: string;
+
+  @ApiPropertyOptional({ description: "下一期次数额度，仅次数类计划有效" })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  nextLimitCount?: number;
 }

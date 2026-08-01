@@ -1,5 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
@@ -53,7 +69,11 @@ export class BudgetsController {
     @Param("ledgerId") ledgerId: string,
     @Param("categoryBudgetId") categoryBudgetId: string,
   ): Promise<void> {
-    await this.plans.deleteCategoryBudget(ledgerId, categoryBudgetId, (auth as SessionAuthContext).userId);
+    await this.plans.deleteCategoryBudget(
+      ledgerId,
+      categoryBudgetId,
+      (auth as SessionAuthContext).userId,
+    );
   }
 
   @Get("progress")

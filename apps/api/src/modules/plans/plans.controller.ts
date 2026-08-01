@@ -1,9 +1,26 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
-import { CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
+import { ConfirmPlanPeriodDto, CreatePlanDto, UpdatePlanDto } from "./dto/plan.dto";
 import { PlanProgressQueryDto } from "./dto/progress-query.dto";
 import { PlanShareTokenService } from "./plan-share-token.service";
 import { PlansService } from "./plans.service";
@@ -32,7 +49,11 @@ export class PlansController {
 
   @Post()
   @ApiCreatedResponse()
-  create(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string, @Body() body: CreatePlanDto) {
+  create(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: CreatePlanDto,
+  ) {
     return this.plans.createPlan(ledgerId, (auth as SessionAuthContext).userId, body);
   }
 
@@ -48,6 +69,7 @@ export class PlansController {
   }
 
   @Delete(":planId")
+  @HttpCode(204)
   @ApiNoContentResponse()
   async archive(
     @CurrentAuth() auth: AuthContext,
@@ -88,6 +110,26 @@ export class PlansController {
     return this.plans.getPlanProgress(ledgerId, planId, (auth as SessionAuthContext).userId, query);
   }
 
+  @Post(":planId/periods/:periodStart/confirm")
+  // 确认是对既有周期的动作，不创建资源；不写死 200 的话 Nest 会按 POST 默认回 201。
+  @HttpCode(200)
+  @ApiOkResponse({ description: "确认已结束的周期，游标前进到下一期；可顺带覆盖下一期额度" })
+  confirmPeriod(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("planId") planId: string,
+    @Param("periodStart") periodStart: string,
+    @Body() body: ConfirmPlanPeriodDto,
+  ) {
+    return this.plans.confirmPlanPeriod(
+      ledgerId,
+      planId,
+      (auth as SessionAuthContext).userId,
+      periodStart,
+      body,
+    );
+  }
+
   @Get(":planId/share-token")
   @ApiOkResponse({ description: "该计划当前有效的分享 token 元数据（不含明文），无则为 null" })
   getShareToken(
@@ -109,6 +151,7 @@ export class PlansController {
   }
 
   @Delete(":planId/share-token")
+  @HttpCode(204)
   @ApiNoContentResponse()
   async revokeShareToken(
     @CurrentAuth() auth: AuthContext,

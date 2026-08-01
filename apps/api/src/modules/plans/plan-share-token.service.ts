@@ -64,7 +64,11 @@ export class PlanShareTokenService {
   }
 
   /** 返回该计划当前有效的分享 token 元数据（不含明文），无则返回 null。 */
-  async getActive(ledgerId: string, planId: string, userId: string): Promise<PlanShareTokenSummary | null> {
+  async getActive(
+    ledgerId: string,
+    planId: string,
+    userId: string,
+  ): Promise<PlanShareTokenSummary | null> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertPlan(ledgerId, planId);
     return this.prisma.client.planShareToken.findFirst({
@@ -95,7 +99,8 @@ export class PlanShareTokenService {
 
   /** 免登录读取：凭明文 token 定位计划并返回「本期」卡片数据。 */
   async readCard(token: string) {
-    if (!token.startsWith("fn_plan_")) throw new AppError("PLAN_SHARE_TOKEN_INVALID", "分享链接无效", 404);
+    if (!token.startsWith("fn_plan_"))
+      throw new AppError("PLAN_SHARE_TOKEN_INVALID", "分享链接无效", 404);
     const record = await this.prisma.client.planShareToken.findFirst({
       where: { tokenHash: hashOpaqueToken(token), revokedAt: null },
       select: { id: true, planId: true },

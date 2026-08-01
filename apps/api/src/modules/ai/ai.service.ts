@@ -1445,16 +1445,21 @@ export class AiService {
           repeatRule: plan.repeatRule,
           periodStart: period.start,
           periodEndExclusive: period.endExclusive,
+          // 开了周期确认且还没确认时，这里返回的是停留中的上一期——与 app 内卡片口径一致。
+          ...(period.awaitingConfirm ? { awaitingPeriodConfirm: true } : {}),
+          // 额度取该周期生效值（确认时可覆盖单期额度），不能直接读 plan 上的额度。
           ...(plan.metric === "amount"
             ? {
-                targetYuan: plan.limitAmountMicros ? microsToYuan(plan.limitAmountMicros) : null,
+                targetYuan: period.targetAmountMicros
+                  ? microsToYuan(period.targetAmountMicros)
+                  : null,
                 actualYuan: microsToYuan(period.actualAmountMicros),
                 ...(plan.foresightEnabled
                   ? { projectedWithForesightYuan: microsToYuan(period.projectedAmountMicros) }
                   : {}),
               }
             : {
-                targetCount: plan.limitCount,
+                targetCount: period.targetCount,
                 actualCount: period.actualCount,
                 ...(plan.foresightEnabled
                   ? { projectedWithForesightCount: period.projectedCount }
@@ -1601,6 +1606,7 @@ export class AiService {
       insuranceDue: "保险 30 天内到期",
       subscriptionDue: "订阅 30 天内续费",
       planOverLimit: "计划超限",
+      planPendingConfirm: "计划周期待确认",
       budgetOverLimit: "预算超支",
     };
     return {
