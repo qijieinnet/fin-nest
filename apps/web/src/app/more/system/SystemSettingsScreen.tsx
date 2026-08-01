@@ -1,72 +1,117 @@
 "use client";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
+import { Button, IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
+import { getApiErrorMessage } from "@/lib/api";
 import {
-  clearAppLockCredential,
+  fetchAppLockStatus,
   isAppleTouchDevice,
   isWebAuthnAvailable,
   registerAppLockCredential,
+  setAppLockEnabled,
 } from "@/lib/app-lock/app-lock";
+import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
-import { useAuth, usePreferences, useToast } from "@/providers";
+import { usePreferences, useToast } from "@/providers";
 import { NavMenuSettings } from "./_components/NavMenuSettings";
 
 export function SystemSettingsScreen() {
   const router = useRouter();
   const { preferences, setPreference } = usePreferences();
-  const { user } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [lockToggleBusy, setLockToggleBusy] = useState(false);
+
+  // 应用锁开关是账号级设置（服务端持久化），换设备/浏览器登录后自动生效。
+  const appLockQuery = useQuery({ queryKey: queryKeys.appLock, queryFn: fetchAppLockStatus });
+  const appLockEnabled = appLockQuery.data?.enabled ?? false;
+  // 凭证是按设备注册的：在别处开了开关的 iPhone/iPad 需要在本机补注册一次才能刷脸解锁。
+  // 已注册过的凭证由 excludeCredentials 兜底，重复点只会被系统提示「已注册」。
+  const [deviceSupportsBiometrics] = useState(() => isAppleTouchDevice() && isWebAuthnAvailable());
+  const canRegisterBiometrics = appLockEnabled && deviceSupportsBiometrics;
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
     else router.push(routes.more);
   };
 
-  const handleLaunchLockChange = async (checked: boolean) => {
-    if (lockToggleBusy) return;
-    if (!checked) {
-      setPreference("launchLockEnabled", false);
-      // 关闭后清掉本地凭证 ID，下次开启重新注册（iCloud 里的 passkey 由系统管理）。
-      clearAppLockCredential();
-      return;
+  /** 在本设备注册一把 Face ID / Touch ID 凭证；失败不影响开关，只是退回密码解锁。 */
+  const registerBiometrics = async () => {
+    const registered = await registerAppLockCredential();
+    if (registered) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.appLock });
     }
-    setPreference("launchLockEnabled", true);
-    // 仅 iPhone/iPad 尝试注册 Face ID / Touch ID passkey，其他设备直接用密码解锁。
-    if (!isAppleTouchDevice() || !user) return;
-    if (!isWebAuthnAvailable()) {
-      showToast({
-        message: "当前环境不支持 Face ID（需 HTTPS 访问），打开应用时将改用密码解锁",
-        tone: "info",
-        title: "已开启启动验证",
-      });
-      return;
-    }
-    setLockToggleBusy(true);
-    const registered = await registerAppLockCredential(user);
-    setLockToggleBusy(false);
     showToast(
       registered
         ? {
-            message: "打开应用时将使用 Face ID / Touch ID 解锁",
+            message: "本设备打开应用时将使用 Face ID / Touch ID 解锁",
             tone: "success",
-            title: "已开启启动验证",
+            title: "已启用 Face ID",
           }
         : {
-            message: "未能启用 Face ID，打开应用时将改用密码解锁",
+            message: "未能启用 Face ID，本设备打开应用时将改用密码解锁",
             tone: "info",
-            title: "已开启启动验证",
+            title: "仍需密码解锁",
           },
     );
+  };
+
+  const handleRegisterBiometrics = async () => {
+    if (lockToggleBusy) return;
+    setLockToggleBusy(true);
+    try {
+      await registerBiometrics();
+    } finally {
+      setLockToggleBusy(false);
+    }
+  };
+
+  const handleAppLockChange = async (checked: boolean) => {
+    if (lockToggleBusy) return;
+    setLockToggleBusy(true);
+    try {
+      const status = await setAppLockEnabled(checked);
+      queryClient.setQueryData(queryKeys.appLock, status);
+      if (!checked) return;
+
+      // 仅 iPhone/iPad 注册 Face ID / Touch ID 凭证，其他设备直接用密码解锁。
+      if (!isAppleTouchDevice()) {
+        showToast({
+          message: "当前设备将使用登录密码解锁",
+          tone: "success",
+          title: "已开启启动验证",
+        });
+        return;
+      }
+      if (!isWebAuthnAvailable()) {
+        showToast({
+          message: "当前环境不支持 Face ID（需 HTTPS 访问），打开应用时将改用密码解锁",
+          tone: "info",
+          title: "已开启启动验证",
+        });
+        return;
+      }
+      await registerBiometrics();
+    } catch (error) {
+      // 开关没能写到服务端，回到服务端的真实状态，避免 UI 与实际不一致。
+      queryClient.invalidateQueries({ queryKey: queryKeys.appLock });
+      showToast({
+        message: getApiErrorMessage(error, "设置失败，请稍后重试"),
+        tone: "error",
+        title: "启动验证设置失败",
+      });
+    } finally {
+      setLockToggleBusy(false);
+    }
   };
 
   return (
     <MobileAppShell>
       <MobilePage
-        description="仅影响本设备的偏好与安全设置"
+        description="界面偏好仅影响本设备，安全设置对账号所有设备生效"
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
@@ -105,16 +150,37 @@ export function SystemSettingsScreen() {
                   打开应用时验证身份
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                  每次打开需先验证：iPhone/iPad 使用 Face ID / Touch ID，其他设备输入登录密码
+                  账号级设置，对你的所有设备生效。每次打开需先验证：iPhone/iPad 使用 Face ID /
+                  Touch ID，其他设备输入登录密码
                 </span>
               </span>
               <Switch
-                checked={preferences.launchLockEnabled}
-                disabled={lockToggleBusy}
+                checked={appLockEnabled}
+                disabled={lockToggleBusy || appLockQuery.isPending}
                 label="打开应用时验证身份"
-                onCheckedChange={(checked) => void handleLaunchLockChange(checked)}
+                onCheckedChange={(checked) => void handleAppLockChange(checked)}
               />
             </div>
+            {canRegisterBiometrics ? (
+              <div className="flex items-center gap-3 border-t border-[var(--color-border-subtle)] px-4 py-[15px]">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15.5px] text-[var(--color-text-primary)]">
+                    在本设备启用 Face ID / Touch ID
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                    开关在别的设备上打开的，或本设备解锁只弹密码时，在这里补注册一次
+                  </span>
+                </span>
+                <Button
+                  disabled={lockToggleBusy}
+                  loading={lockToggleBusy}
+                  onClick={() => void handleRegisterBiometrics()}
+                  variant="secondary"
+                >
+                  注册
+                </Button>
+              </div>
+            ) : null}
           </section>
 
           <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">

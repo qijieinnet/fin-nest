@@ -1,21 +1,26 @@
 /**
- * 应用锁（启动验证）工具：
- * - iPhone/iPad 上用 WebAuthn 平台认证器（Face ID / Touch ID）做本地设备在场校验；
+ * 应用锁（打开应用时验证身份）工具：
+ * - iPhone/iPad 上用 WebAuthn 平台认证器（Face ID / Touch ID）解锁；
  * - 其他设备回退为输入账号密码（走后端 /auth/password/verify 校验）。
  *
- * 定位是设备级隐私锁（防止拿到手机的人直接看到账目），不是服务端鉴权：
- * 会话 token 本身仍然有效，因此 WebAuthn 只在本地发起注册/断言，凭证 ID 存
- * localStorage，不需要服务端保存公钥或校验签名。
+ * 开关与凭证公钥都存在服务端（users.app_lock_enabled + app_lock_credentials），
+ * 解锁断言由后端验签，所以换浏览器/新设备登录后设置自动恢复、无需重新设置。
+ * 代价是解锁必须能连上 API：离线时 Face ID 与密码两条路都走不通。
+ *
+ * 本地 localStorage 只留一份开关缓存，用途单一——整页加载首帧前同步判断要不要上锁，
+ * 避免先闪现账目内容再弹锁屏；真值以服务端返回的 PublicUser.appLockEnabled 为准。
  */
 
-const CREDENTIAL_STORAGE_KEY = "fin-nest:app-lock-credential";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
+import { API_ENDPOINTS, apiRequest, type AppLockStatus } from "@/lib/api";
 
-type StoredCredential = {
-  /** 注册该 passkey 时的登录用户，仅用于展示/排查，解锁校验的是设备而非账号。 */
-  userId: string;
-  /** PublicKeyCredential.id（base64url）。 */
-  credentialId: string;
-};
+const ENABLED_CACHE_KEY = "fin-nest:app-lock-enabled";
+/** 旧版（纯客户端应用锁）遗留的本地键，登录后顺手清掉。 */
+const LEGACY_CREDENTIAL_KEY = "fin-nest:app-lock-credential";
 
 /** iPhone / iPad（含 iPadOS 13+ 伪装成 Mac 的情况：MacIntel 且支持多点触控）。 */
 export function isAppleTouchDevice(): boolean {
@@ -33,119 +38,104 @@ export function isWebAuthnAvailable(): boolean {
   );
 }
 
-export function getStoredAppLockCredential(): StoredCredential | null {
-  if (typeof window === "undefined") return null;
+/** 首帧同步读取的开关缓存；没有缓存（如全新浏览器）时按不上锁处理。 */
+export function readAppLockEnabledCache(): boolean {
+  if (typeof window === "undefined") return false;
   try {
-    const raw = window.localStorage.getItem(CREDENTIAL_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredCredential>;
-    if (typeof parsed.credentialId !== "string" || parsed.credentialId.length === 0) return null;
-    return { userId: typeof parsed.userId === "string" ? parsed.userId : "", credentialId: parsed.credentialId };
+    return window.localStorage.getItem(ENABLED_CACHE_KEY) === "1";
   } catch {
-    return null;
+    return false;
   }
 }
 
-export function clearAppLockCredential(): void {
+export function writeAppLockEnabledCache(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
+    window.localStorage.setItem(ENABLED_CACHE_KEY, enabled ? "1" : "0");
+    window.localStorage.removeItem(LEGACY_CREDENTIAL_KEY);
   } catch {
-    // localStorage 不可用时静默降级。
+    // localStorage 不可用时静默降级：只影响首帧上锁时机，服务端仍会要求验证。
   }
 }
 
-function randomChallenge(): ArrayBuffer {
-  const challenge = new Uint8Array(new ArrayBuffer(32));
-  crypto.getRandomValues(challenge);
-  return challenge.buffer;
+export function clearAppLockEnabledCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(ENABLED_CACHE_KEY);
+  } catch {
+    // 同上，静默降级。
+  }
 }
 
-function utf8ToBuffer(value: string): ArrayBuffer {
-  const bytes = new TextEncoder().encode(value);
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return buffer;
+export async function fetchAppLockStatus(): Promise<AppLockStatus> {
+  return apiRequest<AppLockStatus>(API_ENDPOINTS.appLock);
 }
 
-function base64UrlToBuffer(value: string): ArrayBuffer {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+/** 开关应用锁；关闭时后端会一并删除已注册凭证。 */
+export async function setAppLockEnabled(enabled: boolean): Promise<AppLockStatus> {
+  const status = await apiRequest<AppLockStatus>(API_ENDPOINTS.appLock, {
+    method: "PATCH",
+    body: { enabled },
+  });
+  writeAppLockEnabledCache(status.enabled);
+  return status;
 }
 
 /**
- * 注册平台 passkey（Face ID / Touch ID）用于解锁，成功后把凭证 ID 存本地。
- * 用户取消或设备不支持时返回 false，调用方回退为密码解锁。
+ * 注册平台 passkey（Face ID / Touch ID）：向后端要 options → 调系统弹窗 → 回传断言验签落库。
+ * 用户取消、设备不支持或验签失败都返回 false，调用方回退为密码解锁。
  */
-export async function registerAppLockCredential(user: {
-  id: string;
-  account: string;
-  alias: string;
-}): Promise<boolean> {
+export async function registerAppLockCredential(): Promise<boolean> {
   if (!isWebAuthnAvailable()) return false;
   try {
     const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
     if (!available) return false;
-    const credential = (await navigator.credentials.create({
-      publicKey: {
-        challenge: randomChallenge(),
-        rp: { name: "Fin Nest" },
-        user: {
-          id: utf8ToBuffer(user.id),
-          name: user.account,
-          displayName: user.alias,
-        },
-        // ES256 / RS256，覆盖 Apple 平台认证器支持的算法。
-        pubKeyCredParams: [
-          { type: "public-key", alg: -7 },
-          { type: "public-key", alg: -257 },
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          userVerification: "required",
-          residentKey: "preferred",
-        },
-        attestation: "none",
-        timeout: 60_000,
-      },
-    })) as PublicKeyCredential | null;
-    if (!credential) return false;
-    window.localStorage.setItem(
-      CREDENTIAL_STORAGE_KEY,
-      JSON.stringify({ userId: user.id, credentialId: credential.id } satisfies StoredCredential),
+    const optionsJSON = await apiRequest<PublicKeyCredentialCreationOptionsJSON>(
+      API_ENDPOINTS.appLockRegistrationOptions,
+      { method: "POST" },
     );
-    return true;
+    const response = await startRegistration({ optionsJSON });
+    const status = await apiRequest<AppLockStatus>(API_ENDPOINTS.appLockRegistration, {
+      method: "POST",
+      body: { response },
+    });
+    writeAppLockEnabledCache(status.enabled);
+    return status.credentialCount > 0;
   } catch {
-    // NotAllowedError（用户取消）等一律视为未注册成功。
+    // NotAllowedError（用户取消）、网络错误、验签失败等一律视为未注册成功。
     return false;
   }
 }
 
-/** 用已注册的 passkey 发起 Face ID / Touch ID 校验，通过返回 true。 */
-export async function verifyAppLockCredential(): Promise<boolean> {
-  const stored = getStoredAppLockCredential();
-  if (!stored || !isWebAuthnAvailable()) return false;
+/**
+ * 解锁结果：
+ * - `unlocked` 验证通过；
+ * - `unavailable` 该账号/该环境没有可用生物识别凭证，应直接走密码；
+ * - `failed` 用户取消或验证失败，停在锁屏上让用户重试或切密码。
+ */
+export type BiometricUnlockResult = "unlocked" | "unavailable" | "failed";
+
+export async function unlockWithBiometrics(): Promise<BiometricUnlockResult> {
+  if (!isAppleTouchDevice() || !isWebAuthnAvailable()) return "unavailable";
+  let optionsJSON: PublicKeyCredentialRequestOptionsJSON;
   try {
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge: randomChallenge(),
-        allowCredentials: [
-          {
-            type: "public-key",
-            id: base64UrlToBuffer(stored.credentialId),
-            transports: ["internal"],
-          },
-        ],
-        userVerification: "required",
-        timeout: 60_000,
-      },
-    });
-    return assertion !== null;
+    optionsJSON = await apiRequest<PublicKeyCredentialRequestOptionsJSON>(
+      API_ENDPOINTS.appLockUnlockOptions,
+      { method: "POST" },
+    );
   } catch {
-    return false;
+    // 拿不到 options（离线、会话失效等）时没有可弹的窗，直接让用户走密码。
+    return "unavailable";
+  }
+  // 后端没有该账号的凭证时 allowCredentials 为空，此时弹窗只会让用户困惑。
+  if (!optionsJSON.allowCredentials || optionsJSON.allowCredentials.length === 0) {
+    return "unavailable";
+  }
+  try {
+    const response = await startAuthentication({ optionsJSON });
+    await apiRequest<void>(API_ENDPOINTS.appLockUnlock, { method: "POST", body: { response } });
+    return "unlocked";
+  } catch {
+    return "failed";
   }
 }

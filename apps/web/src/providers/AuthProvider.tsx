@@ -11,6 +11,7 @@ import {
   isApiClientError,
   type PublicUser,
 } from "@/lib/api";
+import { clearAppLockEnabledCache, writeAppLockEnabledCache } from "@/lib/app-lock/app-lock";
 import { queryKeys } from "@/lib/query/query-keys";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -30,10 +31,14 @@ async function fetchCurrentUser(): Promise<PublicUser | null> {
   if (!getSessionToken()) return null;
 
   try {
-    return await apiRequest<PublicUser>(API_ENDPOINTS.me);
+    const user = await apiRequest<PublicUser>(API_ENDPOINTS.me);
+    // 应用锁开关的真值在服务端，这里同步一份本地缓存供下次整页加载首帧同步判断。
+    writeAppLockEnabledCache(user.appLockEnabled);
+    return user;
   } catch (error) {
     if (isApiClientError(error) && error.status === 401) {
       clearSessionToken();
+      clearAppLockEnabledCache();
       return null;
     }
     throw error;
@@ -51,12 +56,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUser = useCallback(
     (user: PublicUser) => {
+      writeAppLockEnabledCache(user.appLockEnabled);
       queryClient.setQueryData(queryKeys.currentUser, user);
     },
     [queryClient],
   );
 
   const clearUser = useCallback(() => {
+    // 退出登录后清掉缓存，避免下一个在本机登录的账号被上一个账号的开关误锁。
+    clearAppLockEnabledCache();
     queryClient.setQueryData(queryKeys.currentUser, null);
   }, [queryClient]);
 

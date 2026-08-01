@@ -241,7 +241,8 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 |---|---|
 | `DATABASE_URL` | PostgreSQL 连接串（必填） |
 | `MINIO_*` | 对象存储配置；**生产必须改强 `MINIO_SECRET_KEY`**，弱默认值会拒绝启动 |
-| `WEB_ORIGIN` | CORS 放行来源（逗号分隔） |
+| `WEB_ORIGIN` | CORS 放行来源（逗号分隔）；同时用作应用锁 WebAuthn 的 expectedOrigin |
+| `APP_LOCK_RP_ID` | 应用锁 Face ID 的 WebAuthn RP ID，默认取 `WEB_ORIGIN` 第一项的 hostname；多域名部署才需显式指定 |
 | `TRUST_PROXY` | 有可信反代（nginx）时设 `true`，直连保持 `false`（详见「安全基线」） |
 | `APP_TIMEZONE` | 「今天 / 本月」的时区（默认 `Asia/Shanghai`），影响统计月份与自动记账触发时点 |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用，OpenAI-compatible `/chat/completions` 协议 |

@@ -16,12 +16,20 @@ export type PublicUser = {
   account: string;
   alias: string;
   isAdmin: boolean;
+  /** 应用锁开关，账号级；前端另存一份本地缓存用于整页加载首帧前的上锁判断。 */
+  appLockEnabled: boolean;
 };
 
 export type AuthResult = {
   user: PublicUser;
   token: string;
   expiresAt: string;
+};
+
+/** GET/PATCH /auth/app-lock 的返回。 */
+export type AppLockStatus = {
+  enabled: boolean;
+  credentialCount: number;
 };
 
 export type Ledger = {

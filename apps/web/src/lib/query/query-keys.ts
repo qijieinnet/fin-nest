@@ -1,5 +1,6 @@
 export const queryKeys = {
   currentUser: ["auth", "me"] as const,
+  appLock: ["auth", "app-lock"] as const,
   adminUsersRoot: ["auth", "admin", "users"] as const,
   adminUsers: (search: string) => ["auth", "admin", "users", search] as const,
   registrationSetting: ["auth", "admin", "registration"] as const,

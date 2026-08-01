@@ -7,10 +7,9 @@ import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
 import {
-  getStoredAppLockCredential,
   isAppleTouchDevice,
   isWebAuthnAvailable,
-  verifyAppLockCredential,
+  unlockWithBiometrics,
 } from "@/lib/app-lock/app-lock";
 
 type AppLockScreenProps = {
@@ -22,16 +21,16 @@ type AppLockScreenProps = {
 const MIN_PASSWORD_LENGTH = 8;
 
 /**
- * 应用锁定屏：iPhone/iPad 上已注册 passkey 时自动拉起 Face ID / Touch ID，
- * 失败或其他设备回退为输入登录密码（走后端校验）。
+ * 应用锁定屏：iPhone/iPad 上先尝试 Face ID / Touch ID（凭证与验签都在服务端），
+ * 该账号没有可用凭证、环境不支持或用户主动切换时，回退为输入登录密码。
  */
 export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
-  // 该组件只在客户端挂载后渲染，可以在初始 state 里直接读 localStorage。
-  const [biometricReady] = useState(
-    () => isAppleTouchDevice() && isWebAuthnAvailable() && getStoredAppLockCredential() !== null,
-  );
+  // 该组件只在客户端挂载后渲染，可以在初始 state 里直接读设备能力。
+  // 是否真有可用凭证要问服务端，先按设备能力乐观进入生物识别模式，拿到结果再回退。
+  const [deviceCanBiometric] = useState(() => isAppleTouchDevice() && isWebAuthnAvailable());
+  const [biometricAvailable, setBiometricAvailable] = useState(deviceCanBiometric);
   const [mode, setMode] = useState<"biometric" | "password">(
-    biometricReady ? "biometric" : "password",
+    deviceCanBiometric ? "biometric" : "password",
   );
   const [password, setPassword] = useState("");
   const [biometricPending, setBiometricPending] = useState(false);
@@ -40,10 +39,19 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
   const runBiometric = useCallback(async () => {
     setBiometricPending(true);
     setBiometricFailed(false);
-    const passed = await verifyAppLockCredential();
+    const result = await unlockWithBiometrics();
     setBiometricPending(false);
-    if (passed) onUnlock();
-    else setBiometricFailed(true);
+    if (result === "unlocked") {
+      onUnlock();
+      return;
+    }
+    if (result === "unavailable") {
+      // 该账号没注册过凭证 / 拿不到 options，留在生物识别模式只会让用户干等。
+      setBiometricAvailable(false);
+      setMode("password");
+      return;
+    }
+    setBiometricFailed(true);
   }, [onUnlock]);
 
   // 进入锁定屏即自动拉起一次生物识别，无需先点按钮。
@@ -109,7 +117,7 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
           <Button className="auth-submit" disabled={!canSubmit} type="submit">
             {passwordMutation.isPending ? "验证中…" : "解锁"}
           </Button>
-          {biometricReady ? (
+          {biometricAvailable ? (
             <Button block onClick={() => setMode("biometric")} variant="plain">
               使用 Face ID / Touch ID 解锁
             </Button>

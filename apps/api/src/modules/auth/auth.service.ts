@@ -16,6 +16,8 @@ export type PublicUser = {
   account: string;
   alias: string;
   isAdmin: boolean;
+  /** 应用锁开关，随登录态一起下发，供前端在整页加载首帧前决定是否上锁。 */
+  appLockEnabled: boolean;
 };
 
 export type AuthResult = {
@@ -426,6 +428,7 @@ export class AuthService {
       account: user.account,
       alias: user.alias,
       isAdmin: user.isAdmin,
+      appLockEnabled: user.appLockEnabled,
     };
   }
 }

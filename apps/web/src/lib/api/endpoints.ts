@@ -7,6 +7,16 @@ export const API_ENDPOINTS = {
   password: "/auth/password",
   /** 校验当前登录用户密码（应用锁解锁用），成功 204、失败 401。 */
   passwordVerify: "/auth/password/verify",
+  /** 应用锁开关（GET 读状态 / PATCH 开关）。 */
+  appLock: "/auth/app-lock",
+  /** 应用锁：下发 Face ID / Touch ID 注册 options。 */
+  appLockRegistrationOptions: "/auth/app-lock/registration/options",
+  /** 应用锁：提交注册断言并保存凭证。 */
+  appLockRegistration: "/auth/app-lock/registration",
+  /** 应用锁：下发解锁 options（allowCredentials 为空表示只能用密码）。 */
+  appLockUnlockOptions: "/auth/app-lock/unlock/options",
+  /** 应用锁：提交解锁断言，成功 204、失败 401。 */
+  appLockUnlock: "/auth/app-lock/unlock",
   /** 公开：是否允许注册，供登录/注册页控制入口显示。 */
   registrationStatus: "/auth/registration",
   ledgers: "/ledgers",

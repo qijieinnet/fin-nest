@@ -22,6 +22,8 @@ model User {
   alias        String
   isAdmin      Boolean   @default(false) @map("is_admin")
   passwordHash String    @map("password_hash")
+  // 应用锁（打开应用时验证身份）总开关，账号级：开启后该用户在任何设备/浏览器上都要先验证。
+  appLockEnabled Boolean @default(false) @map("app_lock_enabled")
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -53,6 +55,26 @@ model Session {
   @@index([userId, revokedAt])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+// 应用锁的 WebAuthn 平台凭证（Face ID / Touch ID）。一个用户可注册多把（多设备/多浏览器），
+// 解锁时由后端下发 allowCredentials 让系统挑一把能用的，因此换浏览器登录后无需重新注册。
+model AppLockCredential {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  // PublicKeyCredential.id（base64url），全局唯一。
+  credentialId String    @unique @map("credential_id")
+  // COSE 格式公钥原文，验签用。
+  publicKey    Bytes     @map("public_key")
+  // 认证器自增计数器，用于防重放；Apple 平台认证器恒为 0，仅在非 0 时才有意义。
+  counter      BigInt    @default(0)
+  transports   String[]  @default([])
+  deviceName   String?   @map("device_name")
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("app_lock_credentials")
 }
 
 model ServiceToken {

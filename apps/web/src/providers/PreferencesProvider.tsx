@@ -16,8 +16,6 @@ const PREFERENCES_STORAGE_KEY = "fin-nest:preferences";
 export type Preferences = {
   /** 账单页是否显示账本切换入口，默认关闭。 */
   showLedgerSwitcherOnBills: boolean;
-  /** 每次打开应用（整页加载）时是否需要验证身份（iPhone/iPad 走 Face ID，其他设备输入密码），默认关闭。 */
-  launchLockEnabled: boolean;
   /** 一级导航菜单的完整排序（含隐藏项，保证隐藏也能记住位置）。 */
   navMenuOrder: NavMenuKey[];
   /** 从一级导航隐藏的菜单键（仍可从「更多」进入）。 */
@@ -28,7 +26,6 @@ export type Preferences = {
 
 const DEFAULT_PREFERENCES: Preferences = {
   showLedgerSwitcherOnBills: false,
-  launchLockEnabled: false,
   navMenuOrder: [...DEFAULT_NAV_MENU_ORDER],
   navMenuHidden: [...DEFAULT_NAV_MENU_HIDDEN],
   showNavMenuLabels: true,

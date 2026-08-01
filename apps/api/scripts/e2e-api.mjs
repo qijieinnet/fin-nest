@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prismaPackage from "../../../packages/db/generated/client/index.js";
@@ -31,6 +32,7 @@ async function main() {
   const owner = await register("owner");
   const requester = await register("requester");
   await assertPasswordVerify(owner.token);
+  await assertAppLockFlow(owner.token, requester.token);
   const ledger = await api("POST", "/ledgers", {
     token: owner.token,
     expected: 201,
@@ -190,6 +192,7 @@ async function main() {
         ok: true,
         checks: [
           "auth",
+          "app_lock",
           "ledger",
           "partial_patch",
           "transaction_crud",
@@ -558,6 +561,206 @@ async function assertPasswordVerify(token) {
     expected: 401,
     body: { password: "Password123!" },
   });
+}
+
+// 应用锁（打开应用时验证身份）：开关与 WebAuthn 凭证都在服务端，解锁走真验签。
+// 这里用下面的虚拟认证器（P-256 + fmt:"none"）跑完整的注册/解锁往返，
+// 光测接口形状测不出验签是否真的生效。
+async function assertAppLockFlow(token, otherToken) {
+  assert.deepEqual(await api("GET", "/auth/app-lock", { token }), {
+    enabled: false,
+    credentialCount: 0,
+  });
+
+  assert.deepEqual(
+    await api("PATCH", "/auth/app-lock", { token, body: { enabled: true } }),
+    { enabled: true, credentialCount: 0 },
+  );
+  const me = await api("GET", "/auth/me", { token });
+  assert.equal(me.appLockEnabled, true, "开关必须随 /auth/me 下发，前端靠它做首帧上锁判断");
+
+  const registrationOptions = await api("POST", "/auth/app-lock/registration/options", { token });
+  assert.equal(registrationOptions.rp.id, appLockRpId);
+  assert.equal(registrationOptions.authenticatorSelection.userVerification, "required");
+  assert.ok(registrationOptions.challenge, "注册 options 必须带 challenge");
+
+  const authenticator = createVirtualAuthenticator();
+  assert.deepEqual(
+    await api("POST", "/auth/app-lock/registration", {
+      token,
+      body: { response: authenticator.register(registrationOptions.challenge) },
+    }),
+    { enabled: true, credentialCount: 1 },
+  );
+
+  const unlockOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
+  assert.deepEqual(
+    unlockOptions.allowCredentials.map((credential) => credential.id),
+    [authenticator.credentialId],
+    "allowCredentials 要带上账号下全部凭证，换浏览器才不用重新注册",
+  );
+  const assertion = authenticator.authenticate(unlockOptions.challenge);
+  await api("POST", "/auth/app-lock/unlock", { token, expected: 204, body: { response: assertion } });
+
+  // challenge 一次性：同一份断言重放必须被拒。
+  await api("POST", "/auth/app-lock/unlock", { token, expected: 400, body: { response: assertion } });
+
+  // 签名对不上（改了 challenge 之外的内容）也必须被拒，证明确实在验签而不是只查 ID。
+  const tamperOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
+  const tampered = authenticator.authenticate(tamperOptions.challenge);
+  tampered.response.signature = authenticator.authenticate(tamperOptions.challenge, {
+    signCount: 99,
+  }).response.signature;
+  await api("POST", "/auth/app-lock/unlock", { token, expected: 401, body: { response: tampered } });
+
+  // 未注册的凭证 ID 直接 404，不进验签。
+  const strangerOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
+  const stranger = createVirtualAuthenticator().authenticate(strangerOptions.challenge);
+  await api("POST", "/auth/app-lock/unlock", { token, expected: 404, body: { response: stranger } });
+
+  // 别的账号不能拿这把已注册的 credentialId 去注册，把凭证改绑到自己名下
+  // （credentialId 由客户端提供，不做归属校验的话会导致原主人的 Face ID 直接失效）。
+  await api("PATCH", "/auth/app-lock", { token: otherToken, body: { enabled: true } });
+  const stolenOptions = await api("POST", "/auth/app-lock/registration/options", {
+    token: otherToken,
+  });
+  await api("POST", "/auth/app-lock/registration", {
+    token: otherToken,
+    expected: 409,
+    body: {
+      response: createVirtualAuthenticator({
+        credentialId: authenticator.credentialId,
+      }).register(stolenOptions.challenge),
+    },
+  });
+  await api("PATCH", "/auth/app-lock", { token: otherToken, body: { enabled: false } });
+  // 原主人的凭证必须原封不动。
+  const afterAttack = await api("POST", "/auth/app-lock/unlock/options", { token });
+  assert.deepEqual(
+    afterAttack.allowCredentials.map((credential) => credential.id),
+    [authenticator.credentialId],
+  );
+  await api("POST", "/auth/app-lock/unlock", {
+    token,
+    expected: 204,
+    body: { response: authenticator.authenticate(afterAttack.challenge) },
+  });
+
+  // 关闭开关同时清空凭证，避免系统钥匙串里留下解不开任何东西的孤儿 passkey。
+  assert.deepEqual(
+    await api("PATCH", "/auth/app-lock", { token, body: { enabled: false } }),
+    { enabled: false, credentialCount: 0 },
+  );
+  const afterDisable = await api("POST", "/auth/app-lock/unlock/options", { token });
+  assert.equal(afterDisable.allowCredentials.length, 0);
+}
+
+// 服务端按 WEB_ORIGIN 第一项推导 RP ID（可用 APP_LOCK_RP_ID 覆盖），测试侧保持一致。
+const appLockOrigin = (process.env.WEB_ORIGIN ?? "http://localhost:4001").split(",")[0].trim();
+const appLockRpId = process.env.APP_LOCK_RP_ID ?? new URL(appLockOrigin).hostname;
+
+// 极简 CBOR 编码器，只覆盖构造 attestationObject / COSE 公钥所需的几种类型。
+function cborHead(major, value) {
+  if (value < 24) return Buffer.from([(major << 5) | value]);
+  if (value < 0x100) return Buffer.from([(major << 5) | 24, value]);
+  const head = Buffer.alloc(3);
+  head[0] = (major << 5) | 25;
+  head.writeUInt16BE(value, 1);
+  return head;
+}
+const cborUint = (value) => cborHead(0, value);
+const cborNint = (value) => cborHead(1, -1 - value);
+const cborBytes = (buf) => Buffer.concat([cborHead(2, buf.length), buf]);
+const cborText = (text) => {
+  const buf = Buffer.from(text, "utf8");
+  return Buffer.concat([cborHead(3, buf.length), buf]);
+};
+const cborMap = (pairs) => Buffer.concat([cborHead(5, pairs.length), ...pairs.flat()]);
+
+/**
+ * 虚拟平台认证器：用 P-256 密钥模拟 Face ID / Touch ID 的注册与断言输出，
+ * attestation 用 fmt:"none"（与前端 attestationType:"none" 一致）。
+ */
+function createVirtualAuthenticator({ credentialId: fixedCredentialId } = {}) {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const jwk = publicKey.export({ format: "jwk" });
+  // credentialId 由客户端完全掌控（attestation "none" 下没有任何签名背书），
+  // 允许指定是为了复现「拿别人的 ID 来注册」这种改绑攻击。
+  const credentialIdBytes = fixedCredentialId
+    ? Buffer.from(fixedCredentialId, "base64url")
+    : crypto.randomBytes(32);
+  const credentialId = credentialIdBytes.toString("base64url");
+  const rpIdHash = crypto.createHash("sha256").update(appLockRpId).digest();
+
+  const clientData = (type, challenge) =>
+    Buffer.from(JSON.stringify({ type, challenge, origin: appLockOrigin, crossOrigin: false }));
+
+  const authData = (flags, signCount, tail = Buffer.alloc(0)) => {
+    const counter = Buffer.alloc(4);
+    counter.writeUInt32BE(signCount);
+    return Buffer.concat([rpIdHash, Buffer.from([flags]), counter, tail]);
+  };
+
+  return {
+    credentialId,
+    register(challenge) {
+      const coseKey = cborMap([
+        [cborUint(1), cborUint(2)], // kty: EC2
+        [cborUint(3), cborNint(-7)], // alg: ES256
+        [cborNint(-1), cborUint(1)], // crv: P-256
+        [cborNint(-2), cborBytes(Buffer.from(jwk.x, "base64url"))],
+        [cborNint(-3), cborBytes(Buffer.from(jwk.y, "base64url"))],
+      ]);
+      const credentialIdLength = Buffer.alloc(2);
+      credentialIdLength.writeUInt16BE(credentialIdBytes.length);
+      const attestedCredentialData = Buffer.concat([
+        Buffer.alloc(16), // aaguid，fmt:"none" 下全 0
+        credentialIdLength,
+        credentialIdBytes,
+        coseKey,
+      ]);
+      // flags: UP | UV | AT
+      const attestationObject = cborMap([
+        [cborText("fmt"), cborText("none")],
+        [cborText("attStmt"), cborMap([])],
+        [cborText("authData"), cborBytes(authData(0x45, 0, attestedCredentialData))],
+      ]);
+      return {
+        id: credentialId,
+        rawId: credentialId,
+        type: "public-key",
+        authenticatorAttachment: "platform",
+        clientExtensionResults: {},
+        response: {
+          clientDataJSON: clientData("webauthn.create", challenge).toString("base64url"),
+          attestationObject: attestationObject.toString("base64url"),
+          transports: ["internal"],
+        },
+      };
+    },
+    authenticate(challenge, { signCount = 0 } = {}) {
+      // flags: UP | UV
+      const data = authData(0x05, signCount);
+      const json = clientData("webauthn.get", challenge);
+      const signature = crypto.sign(
+        "sha256",
+        Buffer.concat([data, crypto.createHash("sha256").update(json).digest()]),
+        privateKey,
+      );
+      return {
+        id: credentialId,
+        rawId: credentialId,
+        type: "public-key",
+        authenticatorAttachment: "platform",
+        clientExtensionResults: {},
+        response: {
+          clientDataJSON: json.toString("base64url"),
+          authenticatorData: data.toString("base64url"),
+          signature: signature.toString("base64url"),
+        },
+      };
+    },
+  };
 }
 
 async function assertAttachmentAuthorization(ledgerId, transactionId, ownerToken, requesterToken) {

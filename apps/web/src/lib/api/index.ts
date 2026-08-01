@@ -38,6 +38,7 @@ export type {
   AccountEntry,
   AccountType,
   AdminUser,
+  AppLockStatus,
   AdminUserPage,
   AiCard,
   AiChatResult,
