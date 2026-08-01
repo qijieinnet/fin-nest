@@ -69,6 +69,11 @@ const EnvSchema = z.object({
   // “今天/本月”按此时区计算（IANA 时区名），影响统计默认月份与自动记账生成时点。
   APP_TIMEZONE: z.string().default("Asia/Shanghai"),
 
+  // 应用锁 WebAuthn 的 Relying Party ID：必须等于（或是）浏览器访问域名的可注册后缀，
+  // 且注册与解锁两次必须一致，改了会让已注册的 Face ID / Touch ID 凭证全部失效。
+  // 不配时取 WEB_ORIGIN 第一项的 hostname；WEB_ORIGIN 配了多个不同域名时才需要显式指定。
+  APP_LOCK_RP_ID: z.string().min(1).optional(),
+
   // worker 常驻轮询间隔；后台任务（自动记账生成、文件删除重试）依赖 worker 持续运行。
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
 
@@ -108,8 +113,23 @@ const EnvSchema = z.object({
 
 export type AppConfig = z.infer<typeof EnvSchema>;
 
+/**
+ * 空字符串一律当作「没配」。
+ *
+ * docker compose 的 `KEY: ${KEY:-}` 写法（可选变量的标准传法）会把变量以空串注入容器，
+ * 而 zod 的 `.optional()` 只接受 undefined —— 不归一化的话，「没启用 AI」这种正常情况
+ * 会变成 `AI_BASE_URL: Invalid URL` 直接拒绝启动。`.env` 里写了 `KEY=` 同理。
+ */
+function dropEmptyValues(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const cleaned: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== "") cleaned[key] = value;
+  }
+  return cleaned;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
-  const parsed = EnvSchema.safeParse(env);
+  const parsed = EnvSchema.safeParse(dropEmptyValues(env));
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)
