@@ -20,11 +20,6 @@ type SwipeActionRowProps = {
   actions?: SwipeAction[];
   children: ReactNode;
   className?: string;
-  /**
-   * 桌面端把整行当作可点击项：鼠标 hover 不再露出编辑/删除，点击直接打开详情。
-   * 触屏（pointerType==="touch"）仍保留左滑露出动作。
-   */
-  desktopClickable?: boolean;
   /** 右滑（向右拖）在左侧露出的动作，如确认。 */
   leadingActions?: SwipeAction[];
 };
@@ -51,7 +46,6 @@ export function SwipeActionRow({
   actions = [],
   children,
   className,
-  desktopClickable = false,
   leadingActions = [],
 }: SwipeActionRowProps) {
   const rowId = useId();
@@ -230,12 +224,7 @@ export function SwipeActionRow({
       // 删除等移除时高度收拢 + 淡出，下方行顺势上移（需父级 AnimatePresence 才生效）。
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
       transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "biz-swipe-row",
-        open && "biz-swipe-row--open",
-        desktopClickable && "biz-swipe-row--desktop-clickable",
-        className,
-      )}
+      className={cn("biz-swipe-row", open && "biz-swipe-row--open", className)}
     >
       {leadingActions.length > 0 ? renderActions(leadingActions, "leading", leadingWidth) : null}
       {actions.length > 0 ? renderActions(actions, "trailing", trailingWidth) : null}
@@ -243,8 +232,6 @@ export function SwipeActionRow({
         className="biz-swipe-row__content"
         ref={contentRef}
         onPointerDown={(event) => {
-          // 桌面端（鼠标/触控笔）不进入滑动手势：不劫持指针，click 直接作用于内部按钮打开详情。
-          if (desktopClickable && event.pointerType !== "touch") return;
           beginDrag(event.clientX, event.clientY);
           // Capture so move/up keep firing even if the finger leaves the row.
           if (event.currentTarget.hasPointerCapture?.(event.pointerId) === false) {

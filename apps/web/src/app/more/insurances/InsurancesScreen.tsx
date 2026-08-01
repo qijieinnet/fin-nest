@@ -627,7 +627,7 @@ export function InsurancesScreen() {
     ];
 
     return (
-      <SwipeActionRow actions={actions} desktopClickable key={insurance.id}>
+      <SwipeActionRow actions={actions} key={insurance.id}>
         <button
           className="flex w-full items-center gap-3 px-4 py-3 text-left"
           onClick={() => openDetail(insurance)}

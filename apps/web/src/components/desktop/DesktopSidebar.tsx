@@ -6,6 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
+import { useFeishuStatus } from "@/lib/data/feishu";
 import { useAutoPending } from "@/lib/data/records";
 import { resolveNavMenuLayout, SECONDARY_PREFETCH_ROUTES } from "@/lib/nav/navMenus";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
@@ -34,6 +35,9 @@ export function DesktopSidebar() {
   const pendingCount = autoPendingQuery.data?.length ?? 0;
   const aiStatusQuery = useAiStatus(currentLedger?.id ?? null);
   const aiEnabled = aiStatusQuery.data?.enabled === true;
+  // 未配置飞书时隐藏入口，与移动端「更多」同一处理。
+  const feishuStatusQuery = useFeishuStatus();
+  const feishuEnabled = feishuStatusQuery.data?.enabled === true;
 
   // 一级导航：按用户在「系统设置 → 导航菜单」配置的顺序/可见性渲染，统计固定常驻。
   // 侧边栏可纵向展开，不限制一级容量；被隐藏的菜单落入 overflow，按配置顺序收进「更多」。
@@ -61,6 +65,7 @@ export function DesktopSidebar() {
     { label: "快速记账", route: routes.quickTemplates },
     { label: "记账设置", route: routes.recordSettings },
     { label: "系统设置", route: routes.systemSettings },
+    ...(feishuEnabled ? [{ label: "飞书机器人", route: routes.feishu }] : []),
     { label: "导入导出", route: routes.importExport },
   ];
 

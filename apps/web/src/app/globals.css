@@ -6043,32 +6043,8 @@ select:focus-visible {
   max-width: 400px;
 }
 
-/* --- C2：桌面 hover 显示滑动操作（触屏保留滑动，hover:none 不触发） --- */
-@media (hover: hover) {
-  .biz-swipe-row__actions--trailing {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease;
-  }
-
-  .biz-swipe-row:hover .biz-swipe-row__actions--trailing,
-  .biz-swipe-row--open .biz-swipe-row__actions--trailing {
-    opacity: 1;
-    pointer-events: auto;
-    z-index: 3;
-  }
-
-  /* 管理类列表：桌面 hover 不露出编辑/删除，整行点击进入详情。 */
-  .biz-swipe-row--desktop-clickable:hover .biz-swipe-row__actions--trailing {
-    opacity: 0;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .biz-swipe-row--desktop-clickable .biz-swipe-row__content {
-    cursor: pointer;
-  }
-}
+/* C2 的「桌面 hover 露出滑动操作」已移除：滑动行在桌面与移动端行为一致，
+   一律靠横向拖拽（鼠标同样可拖）露出编辑/删除，不做断点特殊处理。 */
 
 /* --- C1：桌面 Modal 内导入预览等宽内容横向滚动，避免撑破弹层 --- */
 .desktop-dialog-panel .import-preview-sheet__scroll {

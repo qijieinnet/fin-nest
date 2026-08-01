@@ -598,7 +598,7 @@ export function ItemsScreen() {
     ];
 
     return (
-      <SwipeActionRow actions={actions} desktopClickable key={item.id}>
+      <SwipeActionRow actions={actions} key={item.id}>
         <button
           className="flex w-full items-center gap-3 px-4 py-3 text-left"
           onClick={() => openDetail(item)}

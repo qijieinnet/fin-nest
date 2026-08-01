@@ -153,7 +153,7 @@ A4 文档与规则更新（随 A3 一起）                                    C
 
 ### WP-C2：桌面交互打磨（键盘与悬停）
 
-- **任务**：`SwipeActionRow` 在 `(hover: hover)` 设备 hover 显示操作按钮（滑动保留给触屏）；全局快捷键（`N` 记一笔、`/` 聚焦筛选、Esc 逐级关弹层——与 `SheetStackProvider` 栈联动）；`DateWheelPicker`/`MonthWheelPicker` 桌面替换收口（确认无残留调用点）。
+- **任务**：~~`SwipeActionRow` 在 `(hover: hover)` 设备 hover 显示操作按钮（滑动保留给触屏）~~ **已回退**：hover 露出编辑/删除与移动端口径不一致，现统一为「横向拖拽才露出」，桌面不做特殊处理；全局快捷键（`N` 记一笔、`/` 聚焦筛选、Esc 逐级关弹层——与 `SheetStackProvider` 栈联动）；`DateWheelPicker`/`MonthWheelPicker` 桌面替换收口（确认无残留调用点）。
 - **依赖**：B1-B5。
 
 ### WP-C3：移动端回归与双端验证
@@ -191,7 +191,7 @@ A4 文档与规则更新（随 A3 一起）                                    C
 
 > B 阶段落地说明：各页 `page.tsx` 保持不变，改为 `XxxScreen.tsx` 断点分发（`useIsDesktop`）→ `XxxScreen.mobile.tsx`（原实现）/ `XxxScreen.desktop.tsx`（新增），共享 A2 视图模型。桌面页面均只做了 `pnpm typecheck` + `pnpm lint` + `pnpm build`（`/bills`/`/accounts`/`/stats`/`/budget` 成功静态预渲染）+ 路由编译验证；**真实数据下的页面级视觉/交互回归待本机后端可用后补**（Docker 当前不可用）。桌面表格因 pnpm store 不匹配未用 `@tanstack/react-table`，改自建 `<table>`（见 D3 备注）。
 | C1 | 长尾页自适应走查 | A3 | 部分完成 | pc-ui | 登录/注册桌面居中卡片（去 app 侧栏）已实测；long-tail 单列限宽由 A3 覆盖；导入预览 overflow 待后端走查 |
-| C2 | 键盘/悬停打磨 | B1-B5 | 部分完成 | pc-ui | SwipeActionRow hover 显操作、N/`/` 快捷键、Esc 栈联动就绪；wheel picker 残留已审计（见清单） |
+| C2 | 键盘/悬停打磨 | B1-B5 | 部分完成 | pc-ui | SwipeActionRow hover 显操作已回退（改为与移动端一致的拖拽露出，`desktopClickable` 一并移除）；N/`/` 快捷键、Esc 栈联动就绪；wheel picker 残留已审计（见清单） |
 | C3 | 双端回归验证 | 全部 | 部分完成 | pc-ui | typecheck/lint/test/build 全绿；走查清单见 [`DESKTOP_UI_CHECKLIST.md`](DESKTOP_UI_CHECKLIST.md)；e2e:api + 真实数据走查待后端 |
 
 ## 7. 风险与应对

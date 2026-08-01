@@ -36,14 +36,14 @@
 | 登录 / 注册 | ✅ 浏览器实测 | 桌面全屏渐变 + 居中卡片、**无 app 侧边栏**；移动版不变 |
 | more/* 各页 | 🟡 | 单列限宽（DesktopShell 内容区 720）+ 弹层 Modal 化（A3 自动覆盖）；需登录走查错位/溢出 |
 | ledgers / ledgers/join | 🟡 | 同上 |
-| 账单子页（详情/编辑/待确认） | 🟡 | 详情/编辑在桌面直接路由访问时走单列 + Modal；SwipeActionRow 桌面 hover 显操作 |
+| 账单子页（详情/编辑/待确认） | 🟡 | 详情/编辑在桌面直接路由访问时走单列 + Modal；SwipeActionRow 桌面与移动端一致（拖拽露出，不 hover 显操作） |
 | 导入预览等宽内容 overflow-x 容器 | ✅ 代码 | 桌面 Modal 内 `.import-preview-sheet__scroll` 已加 `overflow-x: auto`；真实数据下再核对 |
 
 ## 交互打磨（WP-C2）
 
 | 项 | 状态 | 备注 |
 |---|---|---|
-| SwipeActionRow `(hover:hover)` hover 显操作 | 🟡 | 纯 CSS 追加、`(hover:none)` 不触发；主桌面面（bills 表/accounts 面板）已改可见按钮 |
+| ~~SwipeActionRow `(hover:hover)` hover 显操作~~ | ⛔ 已回退 | 与移动端口径不一致，改为「横向拖拽才露出」（鼠标可拖），`desktopClickable` 特例一并移除；主桌面面（bills 表/accounts 面板）本就是可见按钮，不受影响 |
 | 全局 N 记一笔 / `/` 开筛选（输入态与弹层时忽略） | 🟡 | 逻辑就绪，待登录走查 |
 | Esc 逐级关弹层（与栈联动） | ✅ 逻辑 | DesktopDialog dialogStack 仅栈顶响应；FormSelect Esc stopPropagation 只关下拉 |
 | DateWheelPicker/MonthWheelPicker 桌面替换 | ✅ 代码 | `DateWheelPicker` 已在桌面断点自动分支为 `DesktopDatePicker`（label 保留）→ 7 个共享编辑弹层一处收口全覆盖；`MonthWheelPicker` 本就是原生 `<input type=month>`，鼠标可用无需改 |
