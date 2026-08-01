@@ -8,6 +8,7 @@ import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { useTransaction } from "@/lib/data/records";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../_components/TransactionForm";
+import { TransactionFormFab } from "../../_components/TransactionFormFab";
 
 export function EditBillScreen({
   transactionId,
@@ -98,6 +99,13 @@ export function EditBillScreen({
       <MobilePage action={saveAction} leading={closeButton} title="编辑交易">
         {body}
       </MobilePage>
+      <TransactionFormFab
+        canSubmit={canSubmit}
+        disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
+        formId={formId}
+        loading={saving}
+        onSubmitBlocked={() => submitBlocked?.()}
+      />
     </MobileAppShell>
   );
 }

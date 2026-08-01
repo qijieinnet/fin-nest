@@ -8,6 +8,7 @@ import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { useAutoPending } from "@/lib/data/records";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../../_components/TransactionForm";
+import { TransactionFormFab } from "../../../_components/TransactionFormFab";
 
 export function EditPendingScreen({ pendingId }: { pendingId: string }) {
   const router = useRouter();
@@ -77,6 +78,14 @@ export function EditPendingScreen({ pendingId }: { pendingId: string }) {
           </p>
         )}
       </MobilePage>
+      <TransactionFormFab
+        canSubmit={canSubmit}
+        disabled={!ledgerId || waiting || saving || !pending}
+        formId={formId}
+        loading={saving}
+        onSubmitBlocked={() => submitBlocked?.()}
+        submitLabel="确认入账"
+      />
     </MobileAppShell>
   );
 }

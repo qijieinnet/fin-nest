@@ -10,6 +10,7 @@ import { apiRequest, ledgerApiPath, type QuickTemplate, type TransactionDetail }
 import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
+import { TransactionFormFab } from "./TransactionFormFab";
 
 type PrefillResponse = {
   type?: TransactionSeed["type"];
@@ -242,18 +243,13 @@ export function NewBillFormScreen({
       <MobilePage action={saveAction} leading={closeButton} title="记一笔">
         {body}
       </MobilePage>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
-        <div className="relative w-[min(100vw,430px)]">
-          <button
-            aria-label="快捷记账"
-            className="pointer-events-auto absolute bottom-[calc(34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] border border-white/50 bg-[rgba(255,255,255,0.62)] text-[var(--color-text-primary)] shadow-[var(--shadow-app)] backdrop-blur-xl"
-            onClick={openQuickTemplates}
-            type="button"
-          >
-            <Zap size={20} />
-          </button>
-        </div>
-      </div>
+      <TransactionFormFab
+        canSubmit={canSubmit}
+        disabled={!ledgerId || waitingForPrefill || saving}
+        formId={formId}
+        loading={saving}
+        onQuickClick={openQuickTemplates}
+      />
     </MobileAppShell>
   );
 }
