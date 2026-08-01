@@ -36,6 +36,16 @@ export function adminUserAdminPath(userId: string): string {
   return `/admin/users/${encodeURIComponent(userId)}/admin`;
 }
 
+/** 管理员：该用户当前在线的登录设备。 */
+export function adminUserSessionsPath(userId: string): string {
+  return `/admin/users/${encodeURIComponent(userId)}/sessions`;
+}
+
+/** 管理员：下线该用户的某台设备。 */
+export function adminUserSessionPath(userId: string, sessionId: string): string {
+  return `${adminUserSessionsPath(userId)}/${encodeURIComponent(sessionId)}`;
+}
+
 export function ledgerPath(ledgerId: string): string {
   return `/ledgers/${encodeURIComponent(ledgerId)}`;
 }

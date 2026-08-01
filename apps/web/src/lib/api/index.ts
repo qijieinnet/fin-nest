@@ -3,6 +3,8 @@ export type { ApiRequestOptions } from "./client";
 export { createAuthorizedObjectUrl, uploadAttachmentFile } from "./files";
 export {
   adminUserAdminPath,
+  adminUserSessionPath,
+  adminUserSessionsPath,
   adminUserStatusPath,
   aiChatPath,
   aiChatStreamPath,
@@ -38,8 +40,10 @@ export type {
   AccountEntry,
   AccountType,
   AdminUser,
-  AppLockStatus,
   AdminUserPage,
+  AdminUserSession,
+  AdminUserSessionList,
+  AppLockStatus,
   AiCard,
   AiChatResult,
   AiChatStreamEvents,

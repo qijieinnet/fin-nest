@@ -3,6 +3,8 @@ export const queryKeys = {
   appLock: ["auth", "app-lock"] as const,
   adminUsersRoot: ["auth", "admin", "users"] as const,
   adminUsers: (search: string) => ["auth", "admin", "users", search] as const,
+  adminUserSessions: (userId: string) =>
+    ["auth", "admin", "users", "sessions", userId] as const,
   registrationSetting: ["auth", "admin", "registration"] as const,
   ledgers: ["ledgers"] as const,
   ledger: (ledgerId: string) => ["ledger", ledgerId] as const,

@@ -8,6 +8,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { loadConfig } from "@fin-nest/config";
 import { addDays, createOpaqueToken, hashOpaqueToken, hashPassword, verifyPassword } from "./token-utils";
 import { clientIpFromRequest } from "./ip-utils";
+import { deviceLabelFromUserAgent } from "./device-label";
 import { initializeLedgerDefaults } from "../ledgers/ledger-defaults";
 
 export type PublicUser = {
@@ -34,6 +35,22 @@ export type AdminUser = {
   isAdmin: boolean;
   disabledAt: Date | null;
   createdAt: Date;
+};
+
+/** 管理员视角的用户登录设备（一条有效 session 即一台在线设备）。 */
+export type AdminUserSession = {
+  id: string;
+  /** 登录时客户端自报的设备名，目前 Web 端不上报，多为 null。 */
+  deviceName: string | null;
+  /** 由 User-Agent 推断的展示名，供 UI 直接渲染。 */
+  deviceLabel: string;
+  userAgent: string | null;
+  ip: string | null;
+  lastSeenAt: Date | null;
+  createdAt: Date;
+  expiresAt: Date;
+  /** 是否为发起请求的管理员本人正在使用的这台设备（不允许下线，否则自己被踢出）。 */
+  current: boolean;
 };
 
 // 登录失败限速：同一 登录名+IP 在窗口期内最多失败 N 次；
@@ -365,6 +382,69 @@ export class AuthService {
         tx,
       );
       return this.toAdminUser(updated);
+    });
+  }
+
+  /** 列出目标用户当前在线的设备：未吊销且未过期的 session。 */
+  async listUserSessions(
+    targetUserId: string,
+    admin: SessionAuthContext,
+  ): Promise<{ items: AdminUserSession[] }> {
+    const target = await this.prisma.client.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new AppError("USER_NOT_FOUND", "用户不存在", 404);
+    }
+    const sessions = await this.prisma.client.session.findMany({
+      where: { userId: targetUserId, revokedAt: null, expiresAt: { gt: new Date() } },
+      // 最近活跃的排前面；从未活跃过（lastSeenAt 为空）的排最后，再按登录时间兜底。
+      orderBy: [{ lastSeenAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+    });
+    return {
+      items: sessions.map((session) => ({
+        id: session.id,
+        deviceName: session.deviceName,
+        deviceLabel: session.deviceName ?? deviceLabelFromUserAgent(session.userAgent),
+        userAgent: session.userAgent,
+        ip: session.ip,
+        lastSeenAt: session.lastSeenAt,
+        createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+        current: session.id === admin.sessionId,
+      })),
+    };
+  }
+
+  /** 下线目标用户的某台设备：吊销该 session，其下次请求即失效。 */
+  async revokeUserSession(
+    targetUserId: string,
+    sessionId: string,
+    admin: SessionAuthContext,
+  ): Promise<void> {
+    if (sessionId === admin.sessionId) {
+      throw new AppError("CANNOT_REVOKE_CURRENT_SESSION", "不能下线自己当前使用的设备", 400);
+    }
+    await this.txs.run(async (tx) => {
+      const session = await tx.session.findUnique({ where: { id: sessionId } });
+      // 会话不属于该用户时同样按“不存在”处理，避免泄露其他用户的 session id 是否有效。
+      if (!session || session.userId !== targetUserId) {
+        throw new AppError("SESSION_NOT_FOUND", "设备不存在或已下线", 404);
+      }
+      if (session.revokedAt) return;
+      await tx.session.update({ where: { id: sessionId }, data: { revokedAt: new Date() } });
+      await this.audit.write(
+        {
+          source: "user",
+          actorUserId: admin.userId,
+          action: "admin.user.revoke_session",
+          entityType: "session",
+          entityId: sessionId,
+          metadata: { targetUserId },
+        },
+        tx,
+      );
     });
   }
 

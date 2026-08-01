@@ -33,6 +33,7 @@ async function main() {
   const requester = await register("requester");
   await assertPasswordVerify(owner.token);
   await assertAppLockFlow(owner.token, requester.token);
+  await assertAdminUserSessions(owner, requester);
   const ledger = await api("POST", "/ledgers", {
     token: owner.token,
     expected: 201,
@@ -193,6 +194,7 @@ async function main() {
         checks: [
           "auth",
           "app_lock",
+          "admin_user_sessions",
           "ledger",
           "partial_patch",
           "transaction_crud",
@@ -542,7 +544,102 @@ async function register(label) {
     },
   });
   touched.userIds.add(result.user.id);
-  return { token: result.token, userId: result.user.id };
+  return { token: result.token, userId: result.user.id, account, password: "Password123!" };
+}
+
+// 管理员查看/下线用户登录设备：非管理员看不到，下线后对应 token 立即失效，自己当前这台不能下线。
+async function assertAdminUserSessions(owner, requester) {
+  // e2e 库里通常已有用户，注册的 owner 不会自动成为管理员，这里直接提权，用完还原。
+  const before = await prisma.user.findUnique({
+    where: { id: owner.userId },
+    select: { isAdmin: true },
+  });
+  await prisma.user.update({ where: { id: owner.userId }, data: { isAdmin: true } });
+
+  const sessionsPath = `/admin/users/${requester.userId}/sessions`;
+  await api("GET", sessionsPath, { token: requester.token, expected: 403 });
+  await api("GET", sessionsPath, { expected: 401 });
+
+  // 让 requester 再登录一次，制造第二台设备。
+  const second = await api("POST", "/auth/login", {
+    expected: 201,
+    body: { login: requester.account, password: requester.password, deviceName: "e2e-second" },
+  });
+  const secondSession = await prisma.session.findFirst({
+    where: { userId: requester.userId, revokedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+  assert.equal(secondSession?.deviceName, "e2e-second");
+
+  const listed = await api("GET", sessionsPath, { token: owner.token, expected: 200 });
+  assert.equal(listed.items.length, 2);
+  const target = listed.items.find((item) => item.id === secondSession.id);
+  assert.ok(target, "新登录的设备应出现在列表中");
+  // deviceName 存在时优先用它当展示名；current 只对管理员自己的那条为 true。
+  assert.equal(target.deviceLabel, "e2e-second");
+  assert.equal(target.current, false);
+  assert.ok(listed.items.every((item) => item.current === false));
+
+  // 管理员不能下线自己正在用的这台设备。
+  const ownSessions = await api("GET", `/admin/users/${owner.userId}/sessions`, {
+    token: owner.token,
+    expected: 200,
+  });
+  const ownCurrent = ownSessions.items.find((item) => item.current);
+  assert.ok(ownCurrent, "管理员自己的列表里应标出当前设备");
+  await api("DELETE", `/admin/users/${owner.userId}/sessions/${ownCurrent.id}`, {
+    token: owner.token,
+    expected: 400,
+  });
+
+  // 会话不属于该用户时按不存在处理。
+  await api("DELETE", `/admin/users/${owner.userId}/sessions/${secondSession.id}`, {
+    token: owner.token,
+    expected: 404,
+  });
+
+  await api("DELETE", `${sessionsPath}/${secondSession.id}`, { token: owner.token, expected: 204 });
+  // 下线后该 token 立即失效，另一台设备（原 token）不受影响。
+  await api("GET", "/auth/me", { token: second.token, expected: 401 });
+  await api("GET", "/auth/me", { token: requester.token, expected: 200 });
+  // 重复下线幂等。
+  await api("DELETE", `${sessionsPath}/${secondSession.id}`, { token: owner.token, expected: 204 });
+
+  const afterRevoke = await api("GET", sessionsPath, { token: owner.token, expected: 200 });
+  assert.equal(afterRevoke.items.length, 1);
+  assert.notEqual(afterRevoke.items[0].id, secondSession.id);
+
+  // 禁用用户会吊销其全部会话，设备列表随之清空。
+  await api("PATCH", `/admin/users/${requester.userId}/status`, {
+    token: owner.token,
+    expected: 200,
+    body: { disabled: true },
+  });
+  assert.deepEqual(await api("GET", sessionsPath, { token: owner.token, expected: 200 }), {
+    items: [],
+  });
+  await api("PATCH", `/admin/users/${requester.userId}/status`, {
+    token: owner.token,
+    expected: 200,
+    body: { disabled: false },
+  });
+
+  // 后续用例仍需 requester 的登录态，禁用已吊销原 token，这里重新登录换一个。
+  const relogin = await api("POST", "/auth/login", {
+    expected: 201,
+    body: { login: requester.account, password: requester.password },
+  });
+  requester.token = relogin.token;
+
+  await api("GET", "/admin/users/00000000-0000-0000-0000-000000000000/sessions", {
+    token: owner.token,
+    expected: 404,
+  });
+
+  await prisma.user.update({
+    where: { id: owner.userId },
+    data: { isAdmin: before?.isAdmin ?? false },
+  });
 }
 
 // 应用锁解锁用的密码校验：正确密码 204，错误密码 401，未登录 401。

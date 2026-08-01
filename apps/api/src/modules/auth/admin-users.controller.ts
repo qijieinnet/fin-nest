@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiNoContentResponse, ApiOkResponse, ApiTags } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { CurrentAuth } from "./current-auth.decorator";
 import { AuthContext, SessionAuthContext } from "./auth.types";
@@ -43,5 +43,22 @@ export class AdminUsersController {
     @Body() body: UpdateUserAdminDto,
   ) {
     return this.authService.setUserAdmin(id, body.isAdmin, auth as SessionAuthContext);
+  }
+
+  @Get(":id/sessions")
+  @ApiOkResponse({ description: "该用户当前在线的登录设备列表" })
+  listSessions(@CurrentAuth() auth: AuthContext, @Param("id") id: string) {
+    return this.authService.listUserSessions(id, auth as SessionAuthContext);
+  }
+
+  @Delete(":id/sessions/:sessionId")
+  @HttpCode(204)
+  @ApiNoContentResponse({ description: "下线该用户的某台设备（吊销对应 session）" })
+  async revokeSession(
+    @CurrentAuth() auth: AuthContext,
+    @Param("id") id: string,
+    @Param("sessionId") sessionId: string,
+  ): Promise<void> {
+    await this.authService.revokeUserSession(id, sessionId, auth as SessionAuthContext);
   }
 }

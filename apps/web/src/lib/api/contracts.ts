@@ -121,6 +121,25 @@ export type AdminUserPage = {
   nextOffset: number | null;
 };
 
+/** 管理员视角的用户登录设备（一条有效 session 即一台在线设备）。 */
+export type AdminUserSession = {
+  id: string;
+  deviceName: string | null;
+  /** 后端由 User-Agent 推断的展示名，直接渲染即可。 */
+  deviceLabel: string;
+  userAgent: string | null;
+  ip: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  expiresAt: string;
+  /** 当前管理员自己正在使用的这台设备，不允许下线。 */
+  current: boolean;
+};
+
+export type AdminUserSessionList = {
+  items: AdminUserSession[];
+};
+
 // ---- 记账（F4）相关契约 ----
 // 注：所有 *Micros 金额字段经后端 BigInt 序列化拦截器转成字符串；日期字段为 ISO 字符串。
 
