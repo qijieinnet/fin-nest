@@ -186,7 +186,10 @@ export function AmountKeypad({
               <Zap size={20} />
             </button>
           ) : null}
-          {onToday && allTabs.some((tab) => tab.id === "date") ? (
+          {/* 只在日期页签下出现：它作用于日期，挂在别的页签上既看不出会改什么，
+              按下去的效果也在屏幕外。快捷记账与保存的位置不受影响——
+              前者左对齐、后者右对齐，中间增删不会让它们移动。 */}
+          {onToday && active?.id === "date" ? (
             <button
               className="amount-keypad__action amount-keypad__action--text"
               onClick={onToday}
