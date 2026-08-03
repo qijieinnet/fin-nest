@@ -72,16 +72,6 @@ export function parseLimitCount(value: string): number | null {
 }
 
 /** 把微单位金额转成输入框用的普通字符串（无货币符号、无千分位）。 */
-export function microsToInput(micros: string | null | undefined, decimalPlaces = 2): string {
-  if (!micros) return "";
-  const negative = micros.startsWith("-");
-  const digits = (negative ? micros.slice(1) : micros).padStart(7, "0");
-  const units = digits.slice(0, -6).replace(/^0+(?=\d)/, "");
-  const fraction = digits.slice(-6).slice(0, decimalPlaces).replace(/0+$/, "");
-  const body = fraction ? `${units}.${fraction}` : units;
-  return negative ? `-${body}` : body;
-}
-
 function includesOrEmpty(values: string[] | undefined, target: string | null): boolean {
   return !values || values.length === 0 || (target ? values.includes(target) : false);
 }

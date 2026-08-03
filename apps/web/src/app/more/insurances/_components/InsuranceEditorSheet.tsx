@@ -26,12 +26,11 @@ import {
 import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
 import { useAttachments, useInsurance } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import {
   INSURANCE_TYPES,
-  microsToInput,
   PREMIUM_FREQ_OPTIONS,
   RENEWAL_OPTIONS,
   todayKey,
@@ -251,6 +250,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const isEditing = Boolean(insurance);
 
   const detailQuery = useInsurance(ledgerId, insurance?.id ?? null);
@@ -267,8 +267,8 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const [method, setMethod] = useState(insurance?.method ?? "");
   const [paymentMethod, setPaymentMethod] = useState(insurance?.paymentMethod ?? "");
   const [insuredIds, setInsuredIds] = useState<string[]>([]);
-  const [coverage, setCoverage] = useState(() => microsToInput(insurance?.coverageMicros));
-  const [premium, setPremium] = useState(() => microsToInput(insurance?.premiumMicros));
+  const [coverage, setCoverage] = useState(() => microsToInput(insurance?.coverageMicros, { decimalPlaces }));
+  const [premium, setPremium] = useState(() => microsToInput(insurance?.premiumMicros, { decimalPlaces }));
   const [premiumFreq, setPremiumFreq] = useState(insurance?.premiumFreq ?? "year");
   const [periods, setPeriods] = useState(insurance?.periods ? String(insurance.periods) : "");
   const [renewal, setRenewal] = useState(insurance?.renewal ?? "auto");
@@ -354,9 +354,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
   const save = useMutation({
     mutationFn: async () => {
-      const coverageParsed = coverage.trim() ? parseMoneyToMicros(coverage) : null;
+      const coverageParsed = coverage.trim() ? parseMoneyToMicros(coverage, { decimalPlaces }) : null;
       if (coverageParsed && !coverageParsed.ok) throw new Error("保额格式不正确");
-      const premiumParsed = premium.trim() ? parseMoneyToMicros(premium) : null;
+      const premiumParsed = premium.trim() ? parseMoneyToMicros(premium, { decimalPlaces }) : null;
       if (premiumParsed && !premiumParsed.ok) throw new Error("保费格式不正确");
       const periodsValue = periods.trim() ? Number.parseInt(periods, 10) : undefined;
       if (periodsValue !== undefined && (!Number.isFinite(periodsValue) || periodsValue < 1)) {

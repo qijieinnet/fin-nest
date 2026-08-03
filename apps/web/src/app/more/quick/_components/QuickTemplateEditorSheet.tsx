@@ -43,9 +43,9 @@ import {
 import { effectiveFieldOrder, orderedFieldsForType } from "@/lib/data/field-order";
 import { useRecordSetting } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
 
 type QuickTemplateEditorSheetProps = {
@@ -98,14 +98,6 @@ function splitRelationBuckets(
   return buckets;
 }
 
-function microsToInput(micros: string | null | undefined): string {
-  if (!micros) return "";
-  const value = BigInt(micros);
-  const units = value / 1_000_000n;
-  const fraction = (value % 1_000_000n) / 10_000n;
-  return fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
-}
-
 function resolveCategory(
   categories: Category[],
   selectedId: string | null,
@@ -140,11 +132,12 @@ export function QuickTemplateEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const isEditing = Boolean(template);
 
   const [type, setType] = useState<TransactionType>(template?.type ?? "expense");
   const [name, setName] = useState(template?.name ?? "");
-  const [amount, setAmount] = useState(() => microsToInput(template?.amountMicros));
+  const [amount, setAmount] = useState(() => microsToInput(template?.amountMicros, { decimalPlaces }));
   const [categoryId, setCategoryId] = useState<string | null>(
     template?.type === "transfer"
       ? null
@@ -166,8 +159,8 @@ export function QuickTemplateEditorSheet({
   const [personId, setPersonId] = useState<string | null>(template?.personId ?? null);
   const [note, setNote] = useState(template?.note ?? "");
   const initialBuckets = useMemo(
-    () => splitRelationBuckets(template?.relationPayload, microsToInput),
-    [template?.relationPayload],
+    () => splitRelationBuckets(template?.relationPayload, (micros) => microsToInput(micros, { decimalPlaces })),
+    [decimalPlaces, template?.relationPayload],
   );
   const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(
     initialBuckets.primary.length > 0,
@@ -287,7 +280,7 @@ export function QuickTemplateEditorSheet({
     const relations: AutoRelation[] = [];
     for (const item of relationItems) {
       if (!item.accountId) continue;
-      const parsed = parseMoneyToMicros(item.amount);
+      const parsed = parseMoneyToMicros(item.amount, { decimalPlaces });
       if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("关联项目金额无效");
       const relationAccount = accounts.find((account) => account.id === item.accountId);
       const expectedKind = relationAccountKind(type, bucket);
@@ -304,7 +297,7 @@ export function QuickTemplateEditorSheet({
     return relations;
   }
 
-  const parsedAmount = parseMoneyToMicros(amount);
+  const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   const hasAmount = amount.trim().length > 0;
   const amountMicros = hasAmount && parsedAmount.ok ? parsedAmount.amountMicros : null;
   const category = resolveCategory(categories, categoryId);
@@ -526,6 +519,7 @@ export function QuickTemplateEditorSheet({
               "transaction-form__amount",
               type === "income" && "transaction-form__amount--income",
             )}
+            decimalPlaces={decimalPlaces}
             label="预设金额"
             onValueChange={setAmount}
             placeholder="留空则记账时再输入"

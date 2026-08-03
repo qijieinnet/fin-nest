@@ -405,6 +405,7 @@ export class RecordsService {
           acctRequired: input.acctRequired,
           personRequired: input.personRequired,
           continuousEntry: input.continuousEntry,
+          keypadAutoOpen: input.keypadAutoOpen,
           amountDecimalPlaces: input.amountDecimalPlaces,
           updatedBy: userId,
         },

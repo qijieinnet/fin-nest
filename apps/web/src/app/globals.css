@@ -3202,6 +3202,7 @@ select:focus-visible {
 }
 
 .biz-category-chip--sub {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
   font-size: 13px;
   font-weight: 600;
   gap: 6px;
@@ -3211,6 +3212,7 @@ select:focus-visible {
 
 .biz-category-chip--selected {
   background: var(--color-tint);
+  box-shadow: none;
   color: #ffffff;
 }
 
@@ -6074,4 +6076,431 @@ select:focus-visible {
   border-radius: 999px;
   background: var(--color-tint);
   transition: width var(--motion-duration-slow) var(--ease-out);
+}
+
+/* —— 金额键盘（移动壳记账表单）——————————————————————————————
+   视觉语言对齐全站弹层：单一半透明平面 + 30px 顶部圆角 + --shadow-app。
+   刻意**不做**「白底座里再嵌一块灰盒子」——iOS 键盘永远是一个平面，
+   浅色面叠浅色面会同时损失层次与可读性。键帽因此不画底色，
+   靠 --color-tint-soft 的按压态和 scale(0.97) 给反馈，与全站按钮同一套手感。 */
+.amount-keypad {
+  --space-keypad-tabs-height: 46px;
+  --space-keypad-panel-height: 284px;
+  --space-keypad-actions-height: 60px;
+
+  background: var(--color-bg-elevated);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: 30px 30px 0 0;
+  bottom: 0;
+  box-shadow: var(--shadow-app);
+  left: 50%;
+  padding-bottom: env(safe-area-inset-bottom);
+  position: fixed;
+  transform: translate(-50%, 100%);
+  transition: transform var(--motion-duration-normal) var(--ease-drawer);
+  visibility: hidden;
+  width: min(100vw, var(--space-app-width));
+  z-index: 40;
+}
+
+.amount-keypad--open {
+  transform: translate(-50%, 0);
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .amount-keypad {
+    transition: opacity var(--motion-duration-fast) var(--ease-out);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .amount-keypad {
+    backdrop-filter: none;
+    background: #ffffff;
+  }
+}
+
+/* —— 页签行 —— */
+.amount-keypad__tabs {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  height: var(--space-keypad-tabs-height);
+  padding: 0 10px;
+}
+
+.amount-keypad__tab-scroll {
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.amount-keypad__tab-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.amount-keypad__tab {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 590;
+  gap: 5px;
+  height: 32px;
+  letter-spacing: 0;
+  padding: 0 12px;
+  transition:
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
+}
+
+.amount-keypad__tab:active {
+  transform: scale(0.97);
+}
+
+/* 选中态复用全站的 --color-tint-soft（与 Surface--selected 同一枚 token）。 */
+.amount-keypad__tab--active {
+  background: var(--color-tint-soft);
+  color: var(--color-tint-strong);
+}
+
+.amount-keypad__tab--icon {
+  color: var(--color-text-muted);
+  padding: 0 6px;
+}
+
+.amount-keypad__tab-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— 操作区 —— 高度锁死：各面板内容量差很多，任其自撑会让切页签时底部跳动。 */
+.amount-keypad__body {
+  height: var(--space-keypad-panel-height);
+  padding: 0 10px;
+}
+
+.amount-keypad__panel {
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.amount-keypad__numeric {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 表达式行常驻占位，避免出现/消失时键区上下跳动。 */
+.amount-keypad__expression {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 590;
+  height: 22px;
+  line-height: 22px;
+  overflow: hidden;
+  padding-right: 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.amount-keypad__keys {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  min-height: 0;
+  padding-bottom: 2px;
+}
+
+/* 键帽不画底色：iOS 的数字输入是「大字 + 按下才出现的圆形高亮」，
+   画满白色方块会让整块键区变成一堵墙。 */
+.amount-keypad__key {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 16px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  justify-content: center;
+  letter-spacing: -0.01em;
+  transition:
+    background var(--motion-duration-press) var(--ease-out),
+    transform var(--motion-duration-press) var(--ease-out);
+}
+
+.amount-keypad__key:active {
+  background: var(--color-tint-soft);
+  transform: scale(0.97);
+}
+
+.amount-keypad__key:disabled {
+  color: var(--color-disabled-text);
+  cursor: default;
+}
+
+.amount-keypad__key:disabled:active {
+  background: transparent;
+  transform: none;
+}
+
+/* 功能键（退格/加减/等号）用次要色，与数字拉开层次但不额外加面。 */
+.amount-keypad__key--function {
+  color: var(--color-text-secondary);
+  font-size: 22px;
+}
+
+/* —— 底部动作条 —— 在操作区之外，切到任何页签都在。 */
+.amount-keypad__actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  height: var(--space-keypad-actions-height);
+  justify-content: space-between;
+  padding: 0 16px;
+}
+
+.amount-keypad__actions-lead {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 纯图标动作键：正方形点击区，尺寸对齐 --space-control-height 的触控下限。 */
+.amount-keypad__action {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-tint-strong);
+  cursor: pointer;
+  display: inline-flex;
+  height: var(--space-control-height);
+  justify-content: center;
+  transition:
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
+  width: var(--space-control-height);
+}
+
+.amount-keypad__action:active {
+  background: var(--color-tint-soft);
+}
+
+/* 文字型动作键（今天）：宽度随内容，高度与图标键一致，保持同一条基线。 */
+.amount-keypad__action--text {
+  font-size: 16px;
+  font-weight: 590;
+  padding: 0 12px;
+  width: auto;
+}
+
+.amount-keypad__action:active {
+  transform: scale(0.97);
+}
+
+/* 与 .ui-button--primary 同一规格：999px / 17px / 590，按下 scale(0.97)。 */
+.amount-keypad__submit {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: var(--color-tint);
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-tint-contrast);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 17px;
+  font-weight: 590;
+  gap: 7px;
+  height: var(--space-control-height);
+  justify-content: center;
+  min-width: 116px;
+  padding: 0 22px;
+  transition:
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
+}
+
+.amount-keypad__submit:active {
+  transform: scale(0.97);
+}
+
+/* 提交条件未满足：置灰但仍可点，点击复用与右上角保存一致的提示。 */
+.amount-keypad__submit--idle {
+  background: var(--color-disabled-fill);
+  color: var(--color-disabled-text);
+}
+
+/* —— 面板内复用的选择列表 —— */
+.amount-keypad__panel .biz-category-picker-sheet,
+.amount-keypad__panel .transaction-form__people-row {
+  /* 底部渐隐：内容被动作条硬切会显得是「断了」，渐隐才读作「下面还有」。 */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent 100%);
+}
+
+.amount-keypad__panel .biz-category-picker-sheet {
+  height: 100%;
+  max-height: 100%;
+  /* 挡住滚动链：滚到底不该把身后的表单页一起带动。 */
+  overscroll-behavior: contain;
+  padding: 0 2px 4px;
+}
+
+.amount-keypad__panel .transaction-form__people-row {
+  align-content: flex-start;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* —— 月历面板 —— 6 行网格定高，切月不改变面板高度。 */
+.keypad-date {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+}
+
+.keypad-date__head {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  height: 32px;
+}
+
+.keypad-date__nav {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-tint-strong);
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  transition: transform var(--motion-duration-press) var(--ease-out);
+  width: 30px;
+}
+
+.keypad-date__nav:active {
+  transform: scale(0.94);
+}
+
+.keypad-date__title {
+  color: var(--color-text-primary);
+  flex: 1;
+  font-size: 16px;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.keypad-date__weekdays {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 12px;
+  font-weight: 590;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+}
+
+.keypad-date__grid {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  min-height: 0;
+}
+
+/* 圆的直径由**行高**决定：aspect-ratio 配 width:100% 会用单元格宽度反推高度，
+   6 行合计 304px 塞进 222px 的容器，月底那几天会被直接裁掉。 */
+.keypad-date__day {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  align-self: center;
+  aspect-ratio: 1;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  height: 100%;
+  justify-self: center;
+  justify-content: center;
+  max-height: 38px;
+  transition:
+    background var(--motion-duration-press) var(--ease-out),
+    transform var(--motion-duration-press) var(--ease-out);
+  width: auto;
+}
+
+.keypad-date__day:active {
+  transform: scale(0.94);
+}
+
+.keypad-date__day--today {
+  color: var(--color-tint-strong);
+  font-weight: 640;
+}
+
+/* 选中日是实心圆，与 iOS 日历一致。 */
+.keypad-date__day--selected {
+  background: var(--color-tint);
+  color: var(--color-tint-contrast);
+  font-weight: 590;
+}
+
+/* —— 金额只读展示态（键盘接管后） —— */
+.biz-amount__input--placeholder {
+  color: rgba(60, 60, 67, 0.25);
+}
+
+button.biz-amount__shell {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+/* 键盘展开时补出它的高度，否则表单靠后的字段被永久遮住、滚不到。 */
+[data-keypad-open="true"] .mobile-page {
+  padding-bottom: calc(var(--space-keypad-total-height) + env(safe-area-inset-bottom));
+}
+
+:root {
+  /* 页签 46 + 操作区 284 + 动作条 60 */
+  --space-keypad-total-height: 390px;
 }

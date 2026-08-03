@@ -9,7 +9,7 @@ import { IconButton } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type ItemAsset } from "@/lib/api";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { todayKey } from "./item-utils";
 
 type ItemScrapSheetProps = {
@@ -70,12 +70,13 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const [scrapDate, setScrapDate] = useState(todayKey());
   const [sellPrice, setSellPrice] = useState("");
 
   const scrap = useMutation({
     mutationFn: async () => {
-      const priceParsed = sellPrice.trim() ? parseMoneyToMicros(sellPrice) : null;
+      const priceParsed = sellPrice.trim() ? parseMoneyToMicros(sellPrice, { decimalPlaces }) : null;
       if (priceParsed && !priceParsed.ok) throw new Error("出售价格格式不正确");
       return apiRequest(ledgerApiPath(ledgerId, `/items/${item.id}/scrap`), {
         method: "POST",

@@ -14,10 +14,10 @@ import {
   type SubAccount,
 } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
-import { ACCOUNT_GROUPS, microsToInput } from "./account-utils";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { ACCOUNT_GROUPS } from "./account-utils";
 
 type AccountEditorSheetProps = {
   account?: Account;
@@ -174,6 +174,7 @@ export function AccountEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const isSubAccountMode = Boolean(parentAccount);
   const isEditing = Boolean(account || subAccount);
 
@@ -181,8 +182,8 @@ export function AccountEditorSheet({
   const [name, setName] = useState(subAccount?.name ?? account?.name ?? "");
   const [icon, setIcon] = useState(subAccount?.icon ?? account?.icon ?? "💵");
   const [balance, setBalance] = useState("");
-  const [creditLimit, setCreditLimit] = useState(() => microsToInput(account?.creditLimitMicros));
-  const [investCost, setInvestCost] = useState(() => microsToInput(account?.investmentCostMicros));
+  const [creditLimit, setCreditLimit] = useState(() => microsToInput(account?.creditLimitMicros, { decimalPlaces }));
+  const [investCost, setInvestCost] = useState(() => microsToInput(account?.investmentCostMicros, { decimalPlaces }));
   const [counterparty, setCounterparty] = useState(account?.counterparty ?? "");
   const [dueDate, setDueDate] = useState(account?.dueDate?.slice(0, 10) ?? "");
   const [billDay, setBillDay] = useState(account?.billDay ? String(account.billDay) : "");
@@ -211,7 +212,7 @@ export function AccountEditorSheet({
           );
         }
         const balanceParsed = balance.trim()
-          ? parseMoneyToMicros(balance, { allowNegative: true })
+          ? parseMoneyToMicros(balance, { allowNegative: true, decimalPlaces })
           : null;
         if (balanceParsed && !balanceParsed.ok) throw new Error("余额格式不正确");
         return apiRequest<SubAccount>(
@@ -224,9 +225,9 @@ export function AccountEditorSheet({
         );
       }
 
-      const limitParsed = creditLimit.trim() ? parseMoneyToMicros(creditLimit) : null;
+      const limitParsed = creditLimit.trim() ? parseMoneyToMicros(creditLimit, { decimalPlaces }) : null;
       if (limitParsed && !limitParsed.ok) throw new Error("信用额度格式不正确");
-      const costParsed = investCost.trim() ? parseMoneyToMicros(investCost) : null;
+      const costParsed = investCost.trim() ? parseMoneyToMicros(investCost, { decimalPlaces }) : null;
       if (costParsed && !costParsed.ok) throw new Error("投入本金格式不正确");
       const billDayValue = parseOptionalDay(billDay, "账单日");
       const repayDayValue = parseOptionalDay(repayDay, "还款日");

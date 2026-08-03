@@ -30,10 +30,10 @@ import {
   resolveAccountSelection,
 } from "@/lib/data/options";
 import { cn } from "@/lib/format/class-names";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
-import { dateOnly, microsToInput, resolveCategorySelection } from "./auto-utils";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { dateOnly, resolveCategorySelection } from "./auto-utils";
 
 type AutoPendingEditorSheetProps = {
   accounts: Account[];
@@ -53,7 +53,8 @@ export function AutoPendingEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
-  const [amount, setAmount] = useState(() => microsToInput(pending.amountMicros));
+  const decimalPlaces = useDecimalPlaces();
+  const [amount, setAmount] = useState(() => microsToInput(pending.amountMicros, { decimalPlaces }));
   const [scheduledFor, setScheduledFor] = useState(dateOnly(pending.scheduledFor));
   const [categoryId, setCategoryId] = useState<string | null>(
     pending.subcategoryId ?? pending.categoryId,
@@ -80,7 +81,7 @@ export function AutoPendingEditorSheet({
 
   const save = useMutation({
     mutationFn: () => {
-      const parsed = parseMoneyToMicros(amount);
+      const parsed = parseMoneyToMicros(amount, { decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
       if (BigInt(parsed.amountMicros) <= 0n) throw new Error("请输入有效金额");
       const isTransfer = pending.type === "transfer";
@@ -127,7 +128,7 @@ export function AutoPendingEditorSheet({
     },
   });
 
-  const parsedAmount = parseMoneyToMicros(amount);
+  const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   const fromAccount = resolveAccountSelection(accounts, fromAccountId);
   const toAccount = resolveAccountSelection(accounts, toAccountId);
   const transferReady =
@@ -176,6 +177,7 @@ export function AutoPendingEditorSheet({
               "transaction-form__amount",
               pending.type === "income" && "transaction-form__amount--income",
             )}
+            decimalPlaces={decimalPlaces}
             label="金额"
             onValueChange={setAmount}
             value={amount}

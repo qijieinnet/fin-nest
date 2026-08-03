@@ -340,6 +340,7 @@ export type RecordSetting = {
   acctRequired: boolean;
   personRequired: boolean;
   continuousEntry: boolean;
+  keypadAutoOpen: boolean;
   amountDecimalPlaces: number;
   entryReminder: EntryReminder;
 };

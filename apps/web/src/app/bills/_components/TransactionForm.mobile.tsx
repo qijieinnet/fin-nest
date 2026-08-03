@@ -15,7 +15,9 @@ import {
 import { Input, Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import { orderedFieldsForType } from "@/lib/data/field-order";
-import { formatDateLabel } from "./_model/transaction-form-utils";
+import { AmountKeypad } from "./AmountKeypad";
+import { useKeypadTabs } from "./AmountKeypad/useKeypadTabs";
+import { formatDateLabel, todayKey } from "./_model/transaction-form-utils";
 import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
 
 const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
@@ -27,10 +29,19 @@ const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
 /** 交易表单移动渲染层（原 TransactionForm 主体，行为不变）。数据来自共享视图模型。 */
 export function TransactionFormMobile({
   formId,
+  keypadOpen,
   model,
+  onKeypadOpenChange,
+  onQuickTemplates,
   openCreateItemSheet,
-}: TransactionFormRenderProps & { formId?: string }) {
+}: TransactionFormRenderProps & {
+  formId?: string;
+  keypadOpen?: boolean;
+  onKeypadOpenChange?: (open: boolean) => void;
+  onQuickTemplates?: () => void;
+}) {
   const { type, isPendingMode } = model;
+  const keypadTabs = useKeypadTabs(model);
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
   const primaryRelationHint =
@@ -135,6 +146,8 @@ export function TransactionFormMobile({
                 label="备注"
                 maxLength={240}
                 onChange={(event) => model.setNote(event.target.value)}
+                // 备注要系统键盘，两套键盘叠在一起没法用——聚焦时先收起自绘键盘。
+                onFocus={() => onKeypadOpenChange?.(false)}
                 placeholder=""
                 value={model.note}
               />
@@ -162,7 +175,10 @@ export function TransactionFormMobile({
           className="transaction-form__amount"
           decimalPlaces={model.decimalPlaces}
           label="金额"
+          onDisplayActivate={() => onKeypadOpenChange?.(true)}
           onValueChange={model.setAmount}
+          // 键盘接管时金额区变只读展示层：readOnly 的 input 在部分 iOS Safari 上仍会弹系统键盘。
+          readOnlyDisplay={Boolean(onKeypadOpenChange)}
           value={model.amount}
         />
       </div>
@@ -268,6 +284,22 @@ export function TransactionFormMobile({
           </>
         ) : null}
       </div>
+
+      {onKeypadOpenChange ? (
+        <AmountKeypad
+          amount={model.amount}
+          canSubmit={!model.validationMessage && !model.mutationState.isPending}
+          decimalPlaces={model.decimalPlaces}
+          onAmountChange={model.setAmount}
+          onClose={() => onKeypadOpenChange(false)}
+          onQuickTemplates={onQuickTemplates}
+          onSubmit={() => model.handleSubmit()}
+          onToday={() => model.setOccurredOn(todayKey())}
+          open={Boolean(keypadOpen)}
+          submitting={model.mutationState.isPending}
+          tabs={keypadTabs}
+        />
+      ) : null}
     </form>
   );
 }

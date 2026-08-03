@@ -17,11 +17,11 @@ import {
 } from "@/lib/api";
 import { useAttachments, useItemTypes } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { ItemTypeManagerSheet } from "./ItemTypeManagerSheet";
-import { microsToInput, todayKey, typeGlyph } from "./item-utils";
+import { todayKey, typeGlyph } from "./item-utils";
 
 type ItemEditorSheetProps = {
   item?: ItemAsset;
@@ -163,6 +163,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
   const queryClient = useQueryClient();
   const { pop, push } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const isEditing = Boolean(item);
 
   const itemTypesQuery = useItemTypes(ledgerId);
@@ -172,7 +173,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
   const [name, setName] = useState(item?.name ?? "");
   const [typeId, setTypeId] = useState(item?.typeId ?? "");
   const [purchasePrice, setPurchasePrice] = useState(() =>
-    microsToInput(item?.purchasePriceMicros),
+    microsToInput(item?.purchasePriceMicros, { decimalPlaces }),
   );
   const [purchaseDate, setPurchaseDate] = useState(item?.purchaseDate?.slice(0, 10) ?? todayKey());
   const [expectedYears, setExpectedYears] = useState(
@@ -230,7 +231,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
 
   const save = useMutation({
     mutationFn: async () => {
-      const priceParsed = purchasePrice.trim() ? parseMoneyToMicros(purchasePrice) : null;
+      const priceParsed = purchasePrice.trim() ? parseMoneyToMicros(purchasePrice, { decimalPlaces }) : null;
       if (priceParsed && !priceParsed.ok) throw new Error("购买价格格式不正确");
       const expectedTrimmed = expectedYears.trim();
       if (expectedTrimmed && !/^\d+(\.\d{1,2})?$/.test(expectedTrimmed)) {

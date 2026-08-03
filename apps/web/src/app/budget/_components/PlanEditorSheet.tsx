@@ -19,10 +19,10 @@ import {
 import { useAccounts, useCategories, usePeople } from "@/lib/data/records";
 import { categoryOptions, personOptions } from "@/lib/data/options";
 import type { BusinessFilterValue } from "@/components/business";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
-import { microsToInput, parseLimitCount, REPEAT_OPTIONS, todayKey } from "./plan-utils";
+import { parseLimitCount, REPEAT_OPTIONS, todayKey } from "./plan-utils";
 
 type PlanEditorSheetProps = {
   defaultKind?: PlanKind;
@@ -160,7 +160,7 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
   const [metric, setMetric] = useState<PlanMetric>(plan?.metric ?? "amount");
   const [name, setName] = useState(plan?.name ?? "");
   const [limitAmount, setLimitAmount] = useState(() =>
-    microsToInput(plan?.limitAmountMicros, decimalPlaces),
+    microsToInput(plan?.limitAmountMicros, { decimalPlaces }),
   );
   const [limitCount, setLimitCount] = useState(plan?.limitCount ? String(plan.limitCount) : "");
   const [startDate, setStartDate] = useState(plan?.startDate.slice(0, 10) ?? todayKey());

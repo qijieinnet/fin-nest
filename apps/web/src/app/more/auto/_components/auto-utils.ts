@@ -82,14 +82,6 @@ export function amountToneClass(type: TransactionType): string {
   return type === "income" ? "text-[var(--color-tint)]" : "text-[var(--color-text-primary)]";
 }
 
-export function microsToInput(amountMicros: string | null | undefined): string {
-  if (!amountMicros) return "";
-  const micros = BigInt(amountMicros);
-  const units = micros / 1_000_000n;
-  const fraction = (micros % 1_000_000n) / 10_000n;
-  return fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
-}
-
 export function categorySummary(
   categories: Category[],
   categoryId: string | null | undefined,

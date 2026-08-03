@@ -162,6 +162,8 @@ model RecordSetting {
   acctRequired        Boolean  @default(false) @map("acct_required")
   personRequired      Boolean  @default(false) @map("person_required")
   continuousEntry     Boolean  @default(false) @map("continuous_entry")
+  /// 移动端记账表单进入时是否自动展开金额键盘。默认关闭：展开会占掉下半屏，日期/备注需滚动才可见。
+  keypadAutoOpen      Boolean  @default(false) @map("keypad_auto_open")
   amountDecimalPlaces Int      @default(2) @map("amount_decimal_places") @db.SmallInt
   updatedBy           String?  @map("updated_by") @db.Uuid
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

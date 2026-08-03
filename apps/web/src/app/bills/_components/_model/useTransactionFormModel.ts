@@ -36,6 +36,7 @@ import {
   useSubscriptions,
 } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
+import { microsToInput } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../../more/insurances/_components/insurance-utils";
@@ -45,7 +46,6 @@ import {
   buildPayload,
   buildPendingPatch,
   computeValidationMessage,
-  microsToInput,
   recordToAttachmentItem,
   relationAccountKind,
   splitInitialRelations,
@@ -147,7 +147,7 @@ export function useTransactionFormModel({
     initial?.type ?? pending?.type ?? seed?.type ?? "expense",
   );
   const [amount, setAmount] = useState(() =>
-    seedAmountMicros ? microsToInput(seedAmountMicros, decimalPlaces) : "",
+    seedAmountMicros ? microsToInput(seedAmountMicros, { decimalPlaces, omitZeroFraction: false }) : "",
   );
   const [occurredOn, setOccurredOn] = useState(
     initial?.occurredOn?.slice(0, 10) ??
@@ -306,6 +306,7 @@ export function useTransactionFormModel({
   const acctRequired = setting?.acctRequired ?? false;
   const personRequired = setting?.personRequired ?? false;
   const continuousEntry = setting?.continuousEntry ?? false;
+  const keypadAutoOpen = setting?.keypadAutoOpen ?? false;
   const showAccountCard = type !== "transfer" && visibleFields.account !== false;
   const showPersonCard = visibleFields.person !== false;
   const showNoteCard = visibleFields.note !== false;
@@ -673,6 +674,7 @@ export function useTransactionFormModel({
     // 字段展示控制
     acctRequired,
     personRequired,
+    keypadAutoOpen,
     showAccountCard,
     showPersonCard,
     showNoteCard,

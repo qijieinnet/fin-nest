@@ -18,7 +18,7 @@ export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
 export { OptionPicker } from "./OptionPicker";
-export { PersonSelectField } from "./PersonSelectField";
+export { PersonChipRow, PersonSelectField } from "./PersonSelectField";
 export {
   createReminderDraft,
   MAX_REMINDERS,

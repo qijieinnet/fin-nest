@@ -159,17 +159,6 @@ export function formatMoney(micros: bigint | string | null | undefined): string 
 }
 
 /** 把微单位金额转成输入框用的普通字符串（无货币符号、无千分位）。 */
-export function microsToInput(micros: string | null | undefined): string {
-  if (!micros) return "";
-  const negative = micros.startsWith("-");
-  const value = negative ? BigInt(micros.slice(1)) : BigInt(micros);
-  const units = value / 1_000_000n;
-  const fraction = (value % 1_000_000n) / 10_000n;
-  const text =
-    fraction === 0n ? units.toString() : `${units}.${fraction.toString().padStart(2, "0")}`;
-  return negative ? `-${text}` : text;
-}
-
 export function formatDateLabel(value: string | null | undefined): string {
   if (!value) return "—";
   return value.slice(0, 10).replaceAll("-", ".");

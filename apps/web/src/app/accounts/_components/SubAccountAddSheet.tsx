@@ -8,7 +8,7 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 
 type SubAccountAddSheetProps = {
   accountId: string;
@@ -19,6 +19,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
 
@@ -27,7 +28,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
 
   const save = useMutation({
     mutationFn: async () => {
-      const parsed = balance.trim() ? parseMoneyToMicros(balance, { allowNegative: true }) : null;
+      const parsed = balance.trim() ? parseMoneyToMicros(balance, { allowNegative: true, decimalPlaces }) : null;
       if (parsed && !parsed.ok) throw new Error("余额格式不正确");
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/sub-accounts`), {
         method: "POST",

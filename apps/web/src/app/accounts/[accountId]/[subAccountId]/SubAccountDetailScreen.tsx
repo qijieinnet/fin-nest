@@ -7,10 +7,11 @@ import { EmptyState, LoadingState } from "@/components/business";
 import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
 import type { MenuItem } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
-import { useSheetStack } from "@/providers";
+import { microsToInput } from "@/lib/money";
+import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { useSubAccountDetailModel } from "./_model/useSubAccountDetailModel";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
-import { accountGroupMeta, microsToInput } from "../../_components/account-utils";
+import { accountGroupMeta } from "../../_components/account-utils";
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
@@ -75,6 +76,7 @@ function NetWorthSwitchRow({
 export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDetailScreenProps) {
   const router = useRouter();
   const { push } = useSheetStack();
+  const decimalPlaces = useDecimalPlaces();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const model = useSubAccountDetailModel(accountId, subAccountId);
@@ -125,7 +127,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         <BalanceEditSheet
           accountId={account.id}
           allowNegative={account.type !== "credit"}
-          initialBalance={microsToInput(subAccountBalance.toString())}
+          initialBalance={microsToInput(subAccountBalance.toString(), { decimalPlaces })}
           ledgerId={ledgerId}
           offsetMicros="0"
           subAccountId={subAccount.id}

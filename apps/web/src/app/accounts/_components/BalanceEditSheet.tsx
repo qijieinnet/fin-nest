@@ -8,7 +8,7 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 
 type BalanceEditSheetProps = {
   accountId: string;
@@ -38,11 +38,12 @@ export function BalanceEditSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const [balance, setBalance] = useState(initialBalance);
 
   const save = useMutation({
     mutationFn: async () => {
-      const parsed = parseMoneyToMicros(balance, { allowNegative });
+      const parsed = parseMoneyToMicros(balance, { allowNegative, decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
       const balanceAfterMicros = (BigInt(parsed.amountMicros) + BigInt(offsetMicros)).toString();
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/adjustments`), {

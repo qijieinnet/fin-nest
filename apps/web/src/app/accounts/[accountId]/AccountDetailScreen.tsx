@@ -17,7 +17,8 @@ import {
 import type { MenuItem } from "@/components/ui";
 import type { SubAccount } from "@/lib/api";
 import { routes } from "@/lib/route/routes";
-import { useLedger, useSheetStack } from "@/providers";
+import { microsToInput } from "@/lib/money";
+import { useDecimalPlaces, useLedger, useSheetStack } from "@/providers";
 import { useAccountDetailModel } from "./_model/useAccountDetailModel";
 import { AccountBalanceCard } from "../_components/AccountBalanceCard";
 import { AccountEntryListSheet } from "../_components/AccountEntryListSheet";
@@ -35,7 +36,6 @@ import {
   formatMoney,
   isLiability,
   isMoneyAccount,
-  microsToInput,
   orderedSubAccountRows,
 } from "../_components/account-utils";
 
@@ -112,6 +112,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const router = useRouter();
   const { ledgerId } = useLedger();
   const { push } = useSheetStack();
+  const decimalPlaces = useDecimalPlaces();
   const scrolled = usePageScrolled();
   const [menuOpen, setMenuOpen] = useState(false);
   const [sortMode, setSortMode] = useState(false);
@@ -191,6 +192,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           allowNegative={!["credit", "receivable", "payable"].includes(account.type)}
           initialBalance={microsToInput(
             subAccount ? subAccount.balanceMicros : account.balanceMicros,
+            { decimalPlaces },
           )}
           ledgerId={ledgerId}
           subAccountId={subAccount?.id}

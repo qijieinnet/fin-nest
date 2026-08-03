@@ -3,7 +3,6 @@ import type { Account, Category } from "@/lib/api";
 import {
   buildPayload,
   buildRelations,
-  microsToInput,
   splitInitialRelations,
   type PayloadParams,
 } from "./transaction-form-utils";
@@ -76,14 +75,6 @@ const basePayload: PayloadParams = {
   subscriptionEnabled: false,
   selectedSubscriptionId: null,
 };
-
-describe("microsToInput", () => {
-  it("converts micros to a decimal string with the given places", () => {
-    expect(microsToInput("128500000", 2)).toBe("128.50");
-    expect(microsToInput("1000000", 0)).toBe("1");
-    expect(microsToInput("-5000000", 2)).toBe("-5.00");
-  });
-});
 
 describe("splitInitialRelations", () => {
   it("buckets primary vs linked kinds and converts amounts", () => {

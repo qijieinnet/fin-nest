@@ -62,6 +62,7 @@ export function RecordSettingsScreen() {
         acctRequired: patch.acctRequired,
         personRequired: patch.personRequired,
         continuousEntry: patch.continuousEntry,
+        keypadAutoOpen: patch.keypadAutoOpen,
         entryReminder: patch.entryReminder,
       };
       return apiRequest<RecordSetting>(ledgerApiPath(ledgerId!, "/record-setting"), {
@@ -249,6 +250,20 @@ export function RecordSettingsScreen() {
                     checked={setting.continuousEntry}
                     label="连续记账"
                     onCheckedChange={(checked) => update.mutate({ continuousEntry: checked })}
+                  />
+                </div>
+                <span className="mx-4 block h-px bg-[var(--color-border-subtle)]" />
+                <div className="flex items-center gap-3 px-4 py-[15px]">
+                  <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
+                    自动展开金额键盘
+                    <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                      进入记账页即弹出金额键盘。关闭时点金额区域再展开。
+                    </p>
+                  </span>
+                  <Switch
+                    checked={setting.keypadAutoOpen}
+                    label="自动展开金额键盘"
+                    onCheckedChange={(checked) => update.mutate({ keypadAutoOpen: checked })}
                   />
                 </div>
               </section>

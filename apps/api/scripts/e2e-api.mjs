@@ -1776,6 +1776,24 @@ async function assertEntryReminder({ ledgerId, owner }) {
   assert.equal(initial.entryReminder.frequency, "daily");
   assert.deepEqual(initial.entryReminder.feishuBindings, []);
 
+  // 金额键盘自动展开：默认关闭，可开可关，且不传时保持不变（与其它布尔设置同口径）。
+  assert.equal(initial.keypadAutoOpen, false);
+  const keypadOn = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: { keypadAutoOpen: true },
+  });
+  assert.equal(keypadOn.keypadAutoOpen, true);
+  const keypadKept = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: { acctRequired: false },
+  });
+  assert.equal(keypadKept.keypadAutoOpen, true);
+  const keypadOff = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
+    token,
+    body: { keypadAutoOpen: false },
+  });
+  assert.equal(keypadOff.keypadAutoOpen, false);
+
   const binding = await prisma.feishuBinding.create({
     data: {
       openId: `e2e-entry-${stamp}`,

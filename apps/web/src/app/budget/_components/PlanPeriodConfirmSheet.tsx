@@ -14,10 +14,10 @@ import {
   type PlanPeriodProgress,
   type PlanProgressResult,
 } from "@/lib/api";
-import { formatMicros, parseMoneyToMicros } from "@/lib/money";
+import { formatMicros, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
-import { microsToInput, parseLimitCount, periodShortLabel } from "./plan-utils";
+import { parseLimitCount, periodShortLabel } from "./plan-utils";
 
 type PlanPeriodConfirmSheetProps = {
   ledgerId: string;
@@ -70,7 +70,7 @@ export function PlanPeriodConfirmSheet({
   // 默认取计划本身的额度，不是本期生效额度：逐期覆盖是「只改这一期」的意思，
   // 若拿本期的覆盖值当下期默认值，用户改一次就会被无声地一路延续下去。
   const [nextLimit, setNextLimit] = useState(() =>
-    isCount ? String(plan.limitCount ?? "") : microsToInput(plan.limitAmountMicros, decimalPlaces),
+    isCount ? String(plan.limitCount ?? "") : microsToInput(plan.limitAmountMicros, { decimalPlaces }),
   );
 
   const target = isCount

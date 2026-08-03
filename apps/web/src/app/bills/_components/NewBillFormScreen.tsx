@@ -86,6 +86,15 @@ export function NewBillFormScreen({
   const [canSubmit, setCanSubmit] = useState(false);
   const [submitBlocked, setSubmitBlocked] = useState<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
+  // 金额键盘展开态：FAB 要据此让位，页面底部也要补出键盘高度。
+  const [keypadOpen, setKeypadOpen] = useState(false);
+  const keypadAutoApplied = useRef(false);
+  const handleKeypadAutoOpen = useCallback((enabled: boolean) => {
+    // 只在记账设置首次到位时自动展开一次；之后用户自己收起就不再弹回来。
+    if (keypadAutoApplied.current) return;
+    keypadAutoApplied.current = true;
+    if (enabled) setKeypadOpen(true);
+  }, []);
   // 记录表单当前日期，选择模板导致表单重挂载时用它保留用户已选日期。
   const occurredOnRef = useRef<string | null>(null);
   const handleSubmitBlockedChange = useCallback((handler: () => void) => {
@@ -198,6 +207,10 @@ export function NewBillFormScreen({
       <TransactionForm
         completeAfterSave={completeAfterSave}
         formId={formId}
+        keypadOpen={embedded ? undefined : keypadOpen}
+        onKeypadAutoOpen={embedded ? undefined : handleKeypadAutoOpen}
+        onKeypadOpenChange={embedded ? undefined : setKeypadOpen}
+        onQuickTemplates={embedded ? undefined : openQuickTemplates}
         idempotencyKeyOverride={idempotencyKeyOverride}
         key={seedKey}
         ledgerId={ledgerId}
@@ -240,16 +253,22 @@ export function NewBillFormScreen({
 
   return (
     <MobileAppShell>
-      <MobilePage action={saveAction} leading={closeButton} title="记一笔">
-        {body}
-      </MobilePage>
-      <TransactionFormFab
-        canSubmit={canSubmit}
-        disabled={!ledgerId || waitingForPrefill || saving}
-        formId={formId}
-        loading={saving}
-        onQuickClick={openQuickTemplates}
-      />
+      {/* 键盘展开时把它的高度补进页面底部内边距，否则靠后的字段被永久遮住。 */}
+      <div data-keypad-open={keypadOpen ? "true" : undefined}>
+        <MobilePage action={saveAction} leading={closeButton} title="记一笔">
+          {body}
+        </MobilePage>
+      </div>
+      {/* 键盘展开时 FAB 让位：保存与快捷记账两个入口都已搬进键盘，留着就是重复入口。 */}
+      {keypadOpen ? null : (
+        <TransactionFormFab
+          canSubmit={canSubmit}
+          disabled={!ledgerId || waitingForPrefill || saving}
+          formId={formId}
+          loading={saving}
+          onQuickClick={openQuickTemplates}
+        />
+      )}
     </MobileAppShell>
   );
 }

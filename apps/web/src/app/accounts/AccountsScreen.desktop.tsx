@@ -26,12 +26,12 @@ import {
   formatMoney,
   isLiability,
   isMoneyAccount,
-  microsToInput,
   orderedSubAccountRows,
 } from "./_components/account-utils";
 import { useAccountDetailModel } from "./[accountId]/_model/useAccountDetailModel";
 import { useSubAccountDetailModel } from "./[accountId]/[subAccountId]/_model/useSubAccountDetailModel";
 import { useAccountsModel } from "./_model/useAccountsModel";
+import { microsToInput } from "@/lib/money";
 import { useDecimalPlaces } from "@/providers";
 
 /** 桌面账户页：单列账户列表（含净资产卡）；点击账户以弹层打开详情（内容同移动端）。 */
@@ -215,6 +215,7 @@ function AccountRow({
 
 /** 账户详情弹层：复用 useAccountDetailModel；余额调整/关联记录等再叠一层 Modal（桌面 SheetShell 分支）。 */
 function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose: () => void }) {
+  const decimalPlaces = useDecimalPlaces();
   const { push, pop } = useSheetStack();
   const [menuOpen, setMenuOpen] = useState(false);
   const [sortMode, setSortMode] = useState(false);
@@ -259,7 +260,10 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
         <BalanceEditSheet
           accountId={account.id}
           allowNegative={!["credit", "receivable", "payable"].includes(account.type)}
-          initialBalance={microsToInput(subAccount ? subAccount.balanceMicros : account.balanceMicros)}
+          initialBalance={microsToInput(
+            subAccount ? subAccount.balanceMicros : account.balanceMicros,
+            { decimalPlaces },
+          )}
           ledgerId={ledgerId}
           subAccountId={subAccount?.id}
           title={subAccount ? `修改余额 · ${subAccount.name}` : "修改余额"}
@@ -530,6 +534,7 @@ function SubAccountDetailPanel({
   subAccountId: string;
 }) {
   const { push } = useSheetStack();
+  const decimalPlaces = useDecimalPlaces();
   const [menuOpen, setMenuOpen] = useState(false);
   const model = useSubAccountDetailModel(accountId, subAccountId);
   const accountModel = useAccountDetailModel(accountId);
@@ -557,7 +562,7 @@ function SubAccountDetailPanel({
         <BalanceEditSheet
           accountId={account.id}
           allowNegative={account.type !== "credit"}
-          initialBalance={microsToInput(subAccountBalance.toString())}
+          initialBalance={microsToInput(subAccountBalance.toString(), { decimalPlaces })}
           ledgerId={ledgerId}
           offsetMicros="0"
           subAccountId={subAccount.id}

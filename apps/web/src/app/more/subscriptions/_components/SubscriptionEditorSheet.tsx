@@ -26,14 +26,13 @@ import {
 import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
 import { useAttachments, useSubscriptionCategories } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { SubscriptionCategoryManagerSheet } from "./SubscriptionCategoryManagerSheet";
 import {
   BILLING_CYCLE_OPTIONS,
   categoryGlyph,
-  microsToInput,
   todayKey,
 } from "./subscription-utils";
 
@@ -235,6 +234,7 @@ export function SubscriptionEditorSheet({
   const queryClient = useQueryClient();
   const { pop, push } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const isEditing = Boolean(subscription);
 
   const categoriesQuery = useSubscriptionCategories(ledgerId);
@@ -253,7 +253,7 @@ export function SubscriptionEditorSheet({
   const [categoryId, setCategoryId] = useState(subscription?.categoryId ?? "");
   const [provider, setProvider] = useState(subscription?.provider ?? "");
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
-  const [price, setPrice] = useState(() => microsToInput(subscription?.priceMicros));
+  const [price, setPrice] = useState(() => microsToInput(subscription?.priceMicros, { decimalPlaces }));
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle ?? "monthly");
   const [paymentMethod, setPaymentMethod] = useState(subscription?.paymentMethod ?? "");
   const [autoRenew, setAutoRenew] = useState(subscription?.autoRenew ?? false);
@@ -335,7 +335,7 @@ export function SubscriptionEditorSheet({
 
   const save = useMutation({
     mutationFn: async () => {
-      const priceParsed = price.trim() ? parseMoneyToMicros(price) : null;
+      const priceParsed = price.trim() ? parseMoneyToMicros(price, { decimalPlaces }) : null;
       if (priceParsed && !priceParsed.ok) throw new Error("费用格式不正确");
 
       const body = {

@@ -48,14 +48,13 @@ import {
 import { effectiveFieldOrder, orderedFieldsForType } from "@/lib/data/field-order";
 import { useRecordSetting } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useSheetStack, useToast } from "@/providers";
+import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
 import {
   dateOnly,
   formatDateLabel,
-  microsToInput,
   REPEAT_LABELS,
   REPEAT_OPTIONS,
   resolveCategorySelection,
@@ -95,6 +94,7 @@ function relationAccountKind(
 /** 把规则里已存的关联拆回「主项目 / 联动项目」两个编辑桶。 */
 function splitRelationBuckets(
   relations: AutoRelation[] | null | undefined,
+  decimalPlaces: number,
 ): Record<RelationBucket, RecoverablePayableItem[]> {
   const buckets: Record<RelationBucket, RecoverablePayableItem[]> = { primary: [], linked: [] };
   for (const relation of relations ?? []) {
@@ -106,7 +106,7 @@ function splitRelationBuckets(
     buckets[bucket].push({
       id: createClientId("relation"),
       accountId: relation.accountId,
-      amount: microsToInput(relation.amountMicros),
+      amount: microsToInput(relation.amountMicros, { decimalPlaces }),
     });
   }
   return buckets;
@@ -191,8 +191,9 @@ export function AutoRuleEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
+  const decimalPlaces = useDecimalPlaces();
   const [type, setType] = useState<TransactionType>(rule?.type ?? "expense");
-  const [amount, setAmount] = useState(() => microsToInput(rule?.amountMicros));
+  const [amount, setAmount] = useState(() => microsToInput(rule?.amountMicros, { decimalPlaces }));
   const [categoryId, setCategoryId] = useState<string | null>(
     rule && rule.type !== "transfer"
       ? ruleCategorySelection(rule)
@@ -211,7 +212,7 @@ export function AutoRuleEditorSheet({
   const [personEnabled, setPersonEnabled] = useState(Boolean(rule?.personId));
   const [personId, setPersonId] = useState<string | null>(rule?.personId ?? null);
   const initialBuckets = useMemo(
-    () => splitRelationBuckets(rule?.relationPayload),
+    () => splitRelationBuckets(rule?.relationPayload, decimalPlaces),
     [rule?.relationPayload],
   );
   const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(
@@ -370,7 +371,7 @@ export function AutoRuleEditorSheet({
     const relations: AutoRelation[] = [];
     for (const item of relationItems) {
       if (!item.accountId) continue;
-      const parsed = parseMoneyToMicros(item.amount);
+      const parsed = parseMoneyToMicros(item.amount, { decimalPlaces });
       if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("关联项目金额无效");
       const relationAccount = accounts.find((account) => account.id === item.accountId);
       const expectedKind = relationAccountKind(type, bucket);
@@ -389,7 +390,7 @@ export function AutoRuleEditorSheet({
 
   const save = useMutation({
     mutationFn: () => {
-      const parsed = parseMoneyToMicros(amount);
+      const parsed = parseMoneyToMicros(amount, { decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
       if (BigInt(parsed.amountMicros) <= 0n) throw new Error("请输入有效金额");
       const isTransfer = type === "transfer";
@@ -460,7 +461,7 @@ export function AutoRuleEditorSheet({
     },
   });
 
-  const parsedAmount = parseMoneyToMicros(amount);
+  const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   const fromAccount = resolveAccountSelection(accounts, fromAccountId);
   const toAccount = resolveAccountSelection(accounts, toAccountId);
   const transferReady =
@@ -616,6 +617,7 @@ export function AutoRuleEditorSheet({
               "transaction-form__amount",
               type === "income" && "transaction-form__amount--income",
             )}
+            decimalPlaces={decimalPlaces}
             label="每期金额"
             onValueChange={setAmount}
             value={amount}

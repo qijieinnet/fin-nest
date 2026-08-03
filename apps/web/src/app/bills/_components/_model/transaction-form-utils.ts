@@ -12,7 +12,7 @@ import {
   resolveAccountSelection,
 } from "@/lib/data/options";
 import { createClientId } from "@/lib/id/client-id";
-import { parseMoneyToMicros } from "@/lib/money";
+import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 
 export type RelationBucket = "primary" | "linked";
 
@@ -45,15 +45,6 @@ export function todayKey(): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-export function microsToInput(micros: string, decimalPlaces: number): string {
-  const negative = micros.startsWith("-");
-  const digits = (negative ? micros.slice(1) : micros).padStart(7, "0");
-  const intPart = digits.slice(0, -6).replace(/^0+(?=\d)/, "");
-  const frac = digits.slice(-6).slice(0, decimalPlaces);
-  const body = decimalPlaces > 0 ? `${intPart}.${frac}` : intPart;
-  return (negative ? "-" : "") + body;
 }
 
 export function resolveCategory(
@@ -91,7 +82,7 @@ export function splitInitialRelations(
     buckets[bucket].push({
       id: relation.id ?? createClientId("relation"),
       accountId: relation.accountId,
-      amount: microsToInput(relation.amountMicros, decimalPlaces),
+      amount: microsToInput(relation.amountMicros, { decimalPlaces, omitZeroFraction: false }),
     });
   }
   return buckets;

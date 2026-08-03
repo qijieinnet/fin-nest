@@ -95,6 +95,13 @@ export class UpdateRecordSettingDto {
   @IsBoolean()
   continuousEntry?: boolean;
 
+  @ApiPropertyOptional({
+    description: "移动端记账表单进入时是否自动展开金额键盘（仅移动壳生效）。",
+  })
+  @IsOptional()
+  @IsBoolean()
+  keypadAutoOpen?: boolean;
+
   @ApiPropertyOptional({ minimum: 0, maximum: 6 })
   @IsOptional()
   @IsInt()
