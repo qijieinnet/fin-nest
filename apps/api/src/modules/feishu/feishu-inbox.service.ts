@@ -70,7 +70,13 @@ export class FeishuInboxService implements OnModuleDestroy {
   /** 由 WS 服务在连接建立后启动。 */
   start(): void {
     if (this.timer) return;
-    void this.requeueOrphaned();
+    // 孤儿回收失败不能拖垮进程：它跑在长连接建立的回调里，DB 短暂不可达时抛出的
+    // 拒绝没人接，会变成 unhandled rejection 直接终止整个 API。下一轮 tick 会重试。
+    void this.requeueOrphaned().catch((error: unknown) => {
+      this.logger.error(
+        `回收中断的飞书事件失败：${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
     this.timer = setInterval(() => void this.tick(), POLL_INTERVAL_MS);
     this.logger.log("飞书事件收件箱已启动");
   }
