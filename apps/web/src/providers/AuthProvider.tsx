@@ -2,13 +2,13 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react";
 import {
   API_ENDPOINTS,
   apiRequest,
-  clearSessionToken,
   getSessionToken,
-  isApiClientError,
+  isSessionExpiredError,
+  onSessionExpired,
   type PublicUser,
 } from "@/lib/api";
 import { clearAppLockEnabledCache, writeAppLockEnabledCache } from "@/lib/app-lock/app-lock";
@@ -36,8 +36,8 @@ async function fetchCurrentUser(): Promise<PublicUser | null> {
     writeAppLockEnabledCache(user.appLockEnabled);
     return user;
   } catch (error) {
-    if (isApiClientError(error) && error.status === 401) {
-      clearSessionToken();
+    // token 已由 apiRequest 里的统一处理清掉了，这里只需把「未登录」这个结果交出去。
+    if (isSessionExpiredError(error)) {
       clearAppLockEnabledCache();
       return null;
     }
@@ -71,6 +71,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     await query.refetch();
   }, [query]);
+
+  /**
+   * 任意请求撞上会话失效时收口到这里。
+   *
+   * 只把当前用户置空——`AuthGate` 盯着 `status`，受保护路由会自己跳 /login，
+   * 所以这里不需要认识 router。顺带清掉整个查询缓存：上一个会话残留的账本、流水
+   * 不能让下一个登录进来的人看到，哪怕只是跳转前的一帧。
+   */
+  useEffect(
+    () =>
+      onSessionExpired(() => {
+        clearAppLockEnabledCache();
+        queryClient.clear();
+        // clear() 之后再写，避免 currentUser 退回 pending 让 AuthGate 闪一下加载态。
+        queryClient.setQueryData(queryKeys.currentUser, null);
+      }),
+    [queryClient],
+  );
 
   const user = query.data ?? null;
   const status: AuthStatus = query.isPending

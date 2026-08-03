@@ -10,9 +10,10 @@ import {
   Loader2,
   RotateCcw,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import {
   adminBackupDownloadPath,
@@ -25,11 +26,12 @@ import {
   type BackupRecordRef,
   type BackupSettingInput,
 } from "@/lib/api";
-import { downloadFile } from "@/lib/api/download";
+import { downloadFile, uploadFileWithProgress } from "@/lib/api/download";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useSheetStack, useToast } from "@/providers";
 import { BackupScheduleCard } from "./_components/BackupScheduleCard";
+import { PruneBackupsConfirmDialog } from "./_components/PruneBackupsConfirmDialog";
 import { RestoreBackupSheet } from "./_components/RestoreBackupSheet";
 
 /** 有任务在跑时缩短轮询间隔，把「备份中…」变成「已完成」的等待压到几秒内。 */
@@ -56,6 +58,9 @@ export function BackupScreen() {
 
   const overview = overviewQuery.data;
   const busy = hasRunningJob(overview);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importProgress, setImportProgress] = useState<number | null>(null);
+  const [pendingKeep, setPendingKeep] = useState<number | null>(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.adminBackups });
 
@@ -80,6 +85,24 @@ export function BackupScreen() {
       void invalidate(); // 后端拒绝时把本地草稿拉回真实值
       showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败") });
     },
+  });
+
+  const importArchive = useMutation({
+    mutationFn: (file: File) => {
+      setImportProgress(0);
+      return uploadFileWithProgress<BackupArchive>(
+        API_ENDPOINTS.adminBackupImport,
+        file,
+        setImportProgress,
+      );
+    },
+    onSuccess: async (archive) => {
+      await invalidate();
+      showToast({ tone: "success", message: `已导入「${archive.fileName}」` });
+    },
+    onError: (error) =>
+      showToast({ tone: "error", message: getApiErrorMessage(error, "导入失败") }),
+    onSettled: () => setImportProgress(null),
   });
 
   const removeArchive = useMutation({
@@ -167,6 +190,57 @@ export function BackupScreen() {
             </button>
           </section>
 
+          {/* 导入外部备份：换机器、从别处拿到归档时，不必登录宿主机往目录里拷文件。 */}
+          <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+            <input
+              accept=".zip,application/zip"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // 清空 value，这样连续选同一个文件也还会触发 change。
+                event.target.value = "";
+                if (file) importArchive.mutate(file);
+              }}
+              ref={fileInputRef}
+              type="file"
+            />
+            <button
+              className="flex w-full items-center gap-3 p-4 text-left disabled:opacity-60"
+              disabled={busy || importArchive.isPending || !overview?.directory.writable}
+              onClick={() => fileInputRef.current?.click()}
+              type="button"
+            >
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-[var(--color-tint-soft)] text-[var(--color-tint)]"
+              >
+                {importArchive.isPending ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : (
+                  <Upload size={20} />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base text-[var(--color-text-primary)]">
+                  {importArchive.isPending
+                    ? `上传中… ${Math.round((importProgress ?? 0) * 100)}%`
+                    : "导入备份文件"}
+                </span>
+                <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                  选择一份 .zip 归档放进备份目录，之后即可从列表里恢复
+                </span>
+              </span>
+            </button>
+            {importArchive.isPending ? (
+              <div className="h-1 w-full bg-[var(--color-tint-soft)]">
+                <div
+                  className="h-full bg-[var(--color-tint)] transition-[width] duration-150"
+                  style={{ width: `${Math.round((importProgress ?? 0) * 100)}%` }}
+                />
+              </div>
+            ) : null}
+          </section>
+
           {overview?.backup && overview.backup.status !== "succeeded" ? (
             <BackupStatusCard backup={overview.backup} />
           ) : null}
@@ -181,7 +255,14 @@ export function BackupScreen() {
           </p>
           {overview ? (
             <BackupScheduleCard
-              onChange={(patch) => updateSetting.mutate(patch)}
+              onChange={(patch) => {
+                // 调小保留份数会让后端当场删归档，先确认再保存；其余字段照旧即改即存。
+                if (patch.keepCount !== undefined && prunedBy(overview, patch.keepCount) > 0) {
+                  setPendingKeep(patch.keepCount);
+                  return;
+                }
+                updateSetting.mutate(patch);
+              }}
               value={overview.setting}
             />
           ) : null}
@@ -225,8 +306,32 @@ export function BackupScreen() {
           </p>
         </div>
       </MobilePage>
+
+      <PruneBackupsConfirmDialog
+        keepCount={pendingKeep}
+        onCancel={() => setPendingKeep(null)}
+        onConfirm={() => {
+          if (pendingKeep !== null) updateSetting.mutate({ keepCount: pendingKeep });
+          setPendingKeep(null);
+        }}
+        prunedCount={overview && pendingKeep !== null ? prunedBy(overview, pendingKeep) : 0}
+      />
     </MobileAppShell>
   );
+}
+
+/**
+ * 按新的保留份数会被立即删掉几份。
+ *
+ * 口径必须跟后端 `pruneScheduled` 一致：只数自动备份、只数成功的，手动备份和外部导入的归档
+ * 不受保留策略影响；`keepCount === 0` 是「不限」而不是「一份不留」。
+ */
+function prunedBy(overview: BackupOverview, keepCount: number): number {
+  if (keepCount <= 0) return 0;
+  const scheduled = overview.items.filter(
+    (item) => item.record?.trigger === "scheduled" && item.record.status === "succeeded",
+  );
+  return Math.max(0, scheduled.length - keepCount);
 }
 
 function ArchiveRow({
@@ -247,6 +352,7 @@ function ArchiveRow({
   const status = archive.record?.status ?? null;
   const running = status === "running";
   const failed = status === "failed";
+  const missingFiles = archive.record?.counts?.missingFiles ?? 0;
   return (
     <div
       className={`flex items-center gap-3 p-4 ${last ? "" : "shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"}`}
@@ -267,6 +373,12 @@ function ArchiveRow({
           <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
             {archive.record.counts.ledgers ?? 0} 个账本 · {archive.record.counts.rows ?? 0} 条数据 ·{" "}
             {archive.record.counts.files ?? 0} 个附件
+          </span>
+        ) : null}
+        {/* 缺附件的备份仍然可用，但不能让它看起来和完整备份一样。 */}
+        {missingFiles > 0 ? (
+          <span className="mt-0.5 block text-xs text-[var(--color-accent-expense)]">
+            {missingFiles} 个附件在存储里已丢失，未包含在这份备份中
           </span>
         ) : null}
         {failed && archive.record?.error ? (

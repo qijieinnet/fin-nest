@@ -11,7 +11,13 @@
  * ```
  */
 
-export const SYSTEM_BACKUP_FORMAT_VERSION = 1;
+/**
+ * 归档格式版本。
+ *
+ * v2 起 `manifest.files.missing` 列出「数据库有记录、但对象存储里取不到」的附件：备份不再因此
+ * 整份失败，恢复据此知道缺条目是已知降级而不是归档损坏。v1 归档按 `missing: []` 读，语义不变。
+ */
+export const SYSTEM_BACKUP_FORMAT_VERSION = 2;
 
 export const SYSTEM_BACKUP_APP = "fin-nest";
 export const SYSTEM_BACKUP_KIND = "system-backup";
@@ -68,17 +74,30 @@ export type BackupManifest = {
   /** 生成归档时的应用时区，供人工判读归档里的本地时间。 */
   timeZone: string;
   tables: ManifestTable[];
-  files: { count: number; bytes: string };
+  files: {
+    /** `files` 表的行数（含缺失对象的行——归档如实反映数据库）。 */
+    count: number;
+    /** 成功写进 `files/` 的附件字节数合计，**不含** `missing` 里的那些。 */
+    bytes: string;
+    /**
+     * 数据库有记录、但对象存储里取不到的附件 object key。
+     *
+     * 这些附件在归档里没有 `files/` 条目。恢复时对应的 `files` 行与引用它的 `attachments`
+     * 行会被丢弃——一次恢复即把这些悬空记录清理干净，不再拖着走。
+     */
+    missing: string[];
+  };
   ledgers: Array<{ id: string; name: string }>;
 };
 
 export type BackupCounts = {
   tables: number;
   rows: number;
+  /** 成功写进归档的附件数。 */
   files: number;
   fileBytes: string;
   ledgers: number;
-  /** 数据库里有记录、但对象存储里已经取不到的附件数（不影响备份成功）。 */
+  /** 数据库里有记录、但对象存储里已经取不到的附件数（不影响备份成功，前端会告警）。 */
   missingFiles: number;
 };
 
@@ -88,6 +107,10 @@ export type RestoreCounts = {
   files: number;
   /** 归档里存在、但当前 schema 已经没有的表（跨版本恢复时跳过）。 */
   skippedTables: string[];
+  /** 当前 schema 有、但归档里没有的表（跨版本恢复时留空表）。 */
+  emptyTables: string[];
+  /** 因附件对象缺失而被丢弃的 `files` 行数（连带丢弃引用它们的 attachments）。 */
+  droppedFiles: number;
 };
 
 export type BackupArchiveInfo = {

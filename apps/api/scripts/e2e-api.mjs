@@ -936,12 +936,55 @@ async function assertSystemBackupRestore({ owner, requester, ledgerId, attachmen
     "failed",
   );
 
+  // 进程若在备份中途崩溃，过期 running 台账不能把备份功能锁死——前端看到 running 就会
+  // 禁用「立即备份」，而那是唯一能触发回收的入口，所以总览查询自己就得回收。
+  const staleBackup = await prisma.backupRecord.create({
+    data: {
+      fileName: `fin-nest-backup-stale-${stamp}.zip`,
+      status: "running",
+      trigger: "manual",
+      createdBy: owner.userId,
+      startedAt: new Date(Date.now() - 7 * 60 * 60 * 1000),
+    },
+  });
+  await api("GET", "/admin/backups", { token: owner.token });
+  assert.equal(
+    (await prisma.backupRecord.findUnique({ where: { id: staleBackup.id } }))?.status,
+    "failed",
+  );
+
+  // 对象存储里已经取不到的附件行（purgeObject 删完对象就崩溃会留下它，且没有 API 能清掉）
+  // 必须降级而不是让整份备份失败，否则一条垃圾记录就把备份功能永久锁死。
+  const orphanFile = await prisma.file.create({
+    data: {
+      ledgerId,
+      ownerUserId: owner.userId,
+      bucket: "fin-nest-e2e-missing-bucket",
+      objectKey: `ledgers/${ledgerId}/orphan/${stamp}.bin`,
+      originalName: "orphan.bin",
+      mime: "application/octet-stream",
+      sizeBytes: 1234n,
+      status: "attached",
+    },
+  });
+  touched.fileIds.add(orphanFile.id);
+  const orphanAttachment = await prisma.attachment.create({
+    data: {
+      ledgerId,
+      fileId: orphanFile.id,
+      ownerType: "transaction",
+      ownerId: orphanFile.id,
+      createdBy: owner.userId,
+    },
+  });
+
   const started = await api("POST", "/admin/backups", {
     token: owner.token,
     expected: 201,
   });
   const completed = await waitForBackup(owner.token, started.id);
   assert.equal(completed.backup.status, "succeeded");
+  assert.equal(completed.backup.counts.missingFiles, 1, "缺失对象的附件应被记账而不是中止备份");
   const archive = completed.items.find((item) => item.record?.id === started.id);
   assert.ok(archive, "成功备份应出现在目录列表");
   assert.ok(Number(archive.sizeBytes) > 0);
@@ -1014,7 +1057,62 @@ async function assertSystemBackupRestore({ owner, requester, ledgerId, attachmen
     expected: 200,
   });
 
+  // 恢复顺手把悬空记录清干净：备份时就取不到对象的 file 行连同引用它的 attachment 一并丢弃，
+  // 否则这条垃圾会一直被备份→恢复循环带着走。完好的附件不受影响（上面刚验证过还能下载）。
+  assert.equal(restored.restore.counts.droppedFiles, 1);
+  assert.equal(await prisma.file.findUnique({ where: { id: orphanFile.id } }), null);
+  assert.equal(await prisma.attachment.findUnique({ where: { id: orphanAttachment.id } }), null);
+
+  await assertBackupImport({ owner, zipBytes, existingName: archive.fileName });
+
   await api("DELETE", `/admin/backups/${encodeURIComponent(archive.fileName)}`, {
+    token: owner.token,
+    expected: 204,
+  });
+}
+
+/** 上传导入：垃圾文件挡在门外、同名不覆盖、导入进来的归档能直接出现在列表里并可恢复。 */
+async function assertBackupImport({ owner, zipBytes, existingName }) {
+  const upload = async (bytes, filename, expected) => {
+    const form = new FormData();
+    form.set("file", new Blob([bytes], { type: "application/zip" }), filename);
+    const response = await fetch(`${baseUrl}/admin/backups/import`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${owner.token}` },
+      body: form,
+    });
+    assert.equal(response.status, expected, `import ${filename} → ${response.status}`);
+    return response.status === 201 ? response.json() : null;
+  };
+
+  // 不是 zip / 不是本系统的备份：必须当场拒绝，不能把垃圾留在备份目录里。
+  await upload(Buffer.from("definitely not a zip"), "fin-nest-backup-junk.zip", 400);
+  // 同名不覆盖：目录里那份是刚刚备出来的真档案，覆盖掉就没了。
+  await upload(zipBytes, existingName, 409);
+
+  // 文件名不合规时按归档自己的生成时间造一个规范名，不信任浏览器传来的字符串。
+  const imported = await upload(zipBytes, "../../evil name.zip", 201);
+  assert.ok(
+    imported.fileName.startsWith("fin-nest-backup-imported-") && imported.fileName.endsWith(".zip"),
+    `导入归档应被规范化命名，实际 ${imported.fileName}`,
+  );
+  assert.ok(Number(imported.sizeBytes) === zipBytes.length);
+
+  const overview = await api("GET", "/admin/backups", { token: owner.token });
+  const listed = overview.items.find((item) => item.fileName === imported.fileName);
+  assert.ok(listed, "导入的归档应出现在备份列表里");
+  assert.equal(listed.record, null, "导入的归档没有本机台账，来源显示为外部文件");
+
+  // 导入进来的归档必须是能真正恢复的——否则「导入」只是把文件搬了个地方。
+  const restore = await api(
+    "POST",
+    `/admin/backups/${encodeURIComponent(imported.fileName)}/restore`,
+    { token: owner.token, expected: 201, body: { password: owner.password } },
+  );
+  const restored = await waitForRestore(owner.token, restore.id);
+  assert.equal(restored.restore.status, "succeeded");
+
+  await api("DELETE", `/admin/backups/${encodeURIComponent(imported.fileName)}`, {
     token: owner.token,
     expected: 204,
   });

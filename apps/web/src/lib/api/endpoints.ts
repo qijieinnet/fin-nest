@@ -30,6 +30,8 @@ export const API_ENDPOINTS = {
   adminBackups: "/admin/backups",
   /** 管理员：周期备份配置。 */
   adminBackupSettings: "/admin/backups/settings",
+  /** 管理员：导入外部备份归档（multipart，字段名 file）。 */
+  adminBackupImport: "/admin/backups/import",
 } as const;
 
 /** 管理员：某份备份归档（DELETE 删除）。 */

@@ -28,16 +28,50 @@ test("周期备份到点后触发，未到点和当天已成功时不重复", ()
 });
 
 test("每周按 ISO 星期触发", () => {
-  const weekly = { ...base, frequency: "weekly", weekdays: [6] };
-  assert.deepEqual(decideScheduledBackup(weekly, "03:00", "2026-08-01"), {
+  const weekly = { ...base, frequency: "weekly", weekdays: [6], lastRunKey: "2026-08-01" };
+  // 2026-08-08 是下一个周六。
+  assert.deepEqual(decideScheduledBackup(weekly, "03:00", "2026-08-08"), {
     due: true,
-    runKey: "2026-08-01",
+    runKey: "2026-08-08",
   });
-  assert.deepEqual(decideScheduledBackup(weekly, "03:00", "2026-08-02"), { due: false });
+  // 周日：上一个周六（08-08）已经跑过，不该重复。
+  assert.deepEqual(
+    decideScheduledBackup({ ...weekly, lastRunKey: "2026-08-08" }, "03:00", "2026-08-09"),
+    { due: false },
+  );
+});
+
+test("停机跨过预定日后补跑一次，且只补一次", () => {
+  const weekly = { ...base, frequency: "weekly", weekdays: [6], lastRunKey: "2026-08-01" };
+  // 周六（08-08）停机，周一（08-10）才起来：欠的那次要补，runKey 记成今天。
+  assert.deepEqual(decideScheduledBackup(weekly, "10:00", "2026-08-10"), {
+    due: true,
+    runKey: "2026-08-10",
+  });
+  // 补完之后不该在同一周里反复触发。
+  assert.deepEqual(
+    decideScheduledBackup({ ...weekly, lastRunKey: "2026-08-10" }, "10:00", "2026-08-11"),
+    { due: false },
+  );
+});
+
+test("当天未到点时不把今天算作欠账", () => {
+  const daily = { ...base, lastRunKey: "2026-08-09" };
+  // 昨天跑过、今天还没到 03:00：没有欠账。
+  assert.deepEqual(decideScheduledBackup(daily, "02:00", "2026-08-10"), { due: false });
+  assert.deepEqual(decideScheduledBackup(daily, "03:00", "2026-08-10"), {
+    due: true,
+    runKey: "2026-08-10",
+  });
+});
+
+test("lastRunKey 落在未来时不触发（恢复旧归档或时钟回拨）", () => {
+  const daily = { ...base, lastRunKey: "2026-09-01" };
+  assert.deepEqual(decideScheduledBackup(daily, "23:00", "2026-08-10"), { due: false });
 });
 
 test("每月不存在的日号落到月末", () => {
-  const monthly = { ...base, frequency: "monthly", monthDays: [31] };
+  const monthly = { ...base, frequency: "monthly", monthDays: [31], lastRunKey: "2026-02-26" };
   assert.deepEqual(decideScheduledBackup(monthly, "03:00", "2026-02-28"), {
     due: true,
     runKey: "2026-02-28",

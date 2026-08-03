@@ -1,6 +1,7 @@
 import { buildApiUrl } from "./client";
 import { ledgerApiPath } from "./endpoints";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
+import { handleApiAuthFailure } from "./session-expiry";
 import { getSessionToken } from "./token-storage";
 
 async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | undefined> {
@@ -23,7 +24,9 @@ export async function createAuthorizedObjectUrl(path: string): Promise<string> {
     headers,
   });
   if (!response.ok) {
-    throw new ApiClientError(response.status, await parseErrorPayload(response));
+    const error = new ApiClientError(response.status, await parseErrorPayload(response));
+    handleApiAuthFailure(error);
+    throw error;
   }
 
   return URL.createObjectURL(await response.blob());
@@ -51,6 +54,8 @@ export async function uploadAttachmentFile(
     method: "POST",
   });
   if (!response.ok) {
-    throw new ApiClientError(response.status, await parseErrorPayload(response));
+    const error = new ApiClientError(response.status, await parseErrorPayload(response));
+    handleApiAuthFailure(error);
+    throw error;
   }
 }

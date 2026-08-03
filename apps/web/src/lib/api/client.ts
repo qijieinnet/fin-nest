@@ -1,5 +1,6 @@
 import { resolveApiBaseUrl } from "@/lib/config/public-env";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
+import { handleApiAuthFailure } from "./session-expiry";
 import { getSessionToken } from "./token-storage";
 
 type PrimitiveQueryValue = string | number | boolean | null | undefined;
@@ -83,7 +84,10 @@ export async function apiRequest<TResponse>(
   const parsed = await parseResponse(response);
 
   if (!response.ok) {
-    throw new ApiClientError(response.status, parsed as ApiErrorPayload | undefined);
+    const error = new ApiClientError(response.status, parsed as ApiErrorPayload | undefined);
+    // 会话失效在这里统一收口，调用方不必各自判断（按错误码而非 401，见 session-expiry）。
+    handleApiAuthFailure(error);
+    throw error;
   }
 
   return parsed as TResponse;

@@ -53,6 +53,8 @@ const RESTORE_GATE_LOCK_KEY = 931733011;
 const STALE_RUNNING_MS = 6 * 60 * 60 * 1000;
 /** 周期备份失败后不要每 30 秒刷一条失败台账；短暂退避后当天仍会自动重试。 */
 const SCHEDULE_RETRY_DELAY_MS = 5 * 60 * 1000;
+/** 失败的自动备份台账保留条数：够排查即可，持续性故障不该把表撑爆。 */
+const KEEP_FAILED_SCHEDULED_RECORDS = 20;
 
 const README_TEXT = `Fin Nest 系统备份
 ==================
@@ -76,6 +78,8 @@ const README_TEXT = `Fin Nest 系统备份
 type BackupRunStats = { rows: number; files: number; fileBytes: bigint; missingFiles: number };
 type BackupDbClient = Prisma.TransactionClient;
 type StagedObject = { originalKey: string; stagedKey: string };
+/** 对象存储里取不到（或大小对不上）的附件：object key 集合与它们在数据库里记的字节数。 */
+type MissingObjects = { keys: Set<string>; bytes: bigint };
 
 /**
  * 系统级备份与恢复。
@@ -111,8 +115,7 @@ export class SystemBackupService {
 
   /** 归档落盘目录的绝对路径（相对路径按进程工作目录解析）。 */
   get directory(): string {
-    const configured = this.config.BACKUP_DIR;
-    return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+    return resolveBackupDir();
   }
 
   /** 目录是否已就绪。docker 里没映射卷时这里会报错，前端据此提示「先配置目录映射」。 */
@@ -178,6 +181,9 @@ export class SystemBackupService {
 
   /** 最近一次备份台账独立返回：running/failed 时通常还没有正式 zip，不能只靠目录列表展示。 */
   async latestBackup() {
+    // 必须在这里回收，不能只靠 claim()：前端看到 running 就会禁用「立即备份」，
+    // 而那正是唯一能走到 claim() 的入口——API 在备份中途重启就会把功能锁死到过期为止。
+    await this.reconcileStaleBackupRuns();
     return this.prisma.client.backupRecord.findFirst({ orderBy: { startedAt: "desc" } });
   }
 
@@ -195,7 +201,9 @@ export class SystemBackupService {
    * - 已经开始的 Worker 尚未跑完时，恢复请求会以 busy 返回、不会与它交叠；
    * - running 台账提交后，新 Worker 即使拿到共享锁也会立即退出。
    */
-  async runWorkerBatch<T>(work: () => Promise<T>): Promise<{ ran: false } | { ran: true; value: T }> {
+  async runWorkerBatch<T>(
+    work: () => Promise<T>,
+  ): Promise<{ ran: false } | { ran: true; value: T }> {
     await this.reconcileStaleRestoreRuns();
     return this.prisma.client.$transaction(
       async (tx) => {
@@ -224,6 +232,73 @@ export class SystemBackupService {
       !fileName.includes("..");
     if (!valid) throw new AppError("BACKUP_FILE_INVALID", "备份文件名不合法", 400);
     return join(this.directory, fileName);
+  }
+
+  /**
+   * 把上传上来的归档收编进备份目录。
+   *
+   * `tempPath` 是 multer 直接写在备份目录里的 `.part`（同盘，转正只是一次 rename；
+   * 而且 `.part` 不进备份列表，中途放弃的残留会被 `pruneStaleTempArchives` 收走）。
+   *
+   * 这里只校验到 manifest 为止——「这是不是一份本系统能认的备份」当场就要有答案，
+   * 而逐表逐附件的深度核对要整份读一遍归档，那是恢复前 `preflightRestore` 的活，
+   * 在上传时再做一遍纯属重复，还会让一次上传卡住好几分钟。
+   */
+  async importArchive(
+    input: { tempPath: string; originalName: string },
+    actorUserId: string,
+  ): Promise<BackupArchiveInfo> {
+    let fileName: string;
+    try {
+      const reader = await openZipReader(input.tempPath).catch(() => {
+        throw new AppError("BACKUP_FILE_INVALID", "文件不是有效的 zip 归档", 400);
+      });
+      let manifest: BackupManifest;
+      try {
+        const text = await readEntryText(reader, ARCHIVE_PATHS.manifest).catch(() => {
+          throw new AppError(
+            "BACKUP_MANIFEST_INVALID",
+            "归档里没有 manifest.json，这不是 Fin Nest 的系统备份文件",
+            400,
+          );
+        });
+        // 版本过新、应用标识不符等都会在这里给出确切原因，不必等到恢复时才发现。
+        manifest = parseManifest(text);
+      } finally {
+        reader.close();
+      }
+
+      fileName = importedArchiveName(input.originalName, manifest.createdAt);
+      const target = this.archivePath(fileName);
+      // 不覆盖同名归档：那可能是本机自己产出的备份，覆盖掉就没了。
+      if (await stat(target).catch(() => null)) {
+        throw new AppError(
+          "BACKUP_FILE_EXISTS",
+          `备份目录里已经有同名文件「${fileName}」，请先删除它再导入`,
+          409,
+        );
+      }
+      await rename(input.tempPath, target);
+    } catch (error) {
+      await rm(input.tempPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+
+    await this.audit.write({
+      source: "user",
+      actorUserId,
+      action: "system_backup.import",
+      entityType: "system_backup",
+      metadata: { fileName, originalName: input.originalName },
+    });
+
+    const info = await stat(this.archivePath(fileName));
+    return {
+      fileName,
+      sizeBytes: info.size.toString(),
+      modifiedAt: info.mtime.toISOString(),
+      record: null,
+    };
   }
 
   async deleteArchive(fileName: string, actorUserId: string): Promise<void> {
@@ -290,6 +365,11 @@ export class SystemBackupService {
       create: { id: 1, ...next, updatedBy: actorUserId },
       update: { ...next, updatedBy: actorUserId },
     });
+    // 立即执行新的保留份数。否则「把 7 份改成 2 份」要等到下一次周期备份成功才生效，
+    // 而用户改小它的动机通常正是盘快满了。
+    if (next.keepCount < current.keepCount) {
+      await this.pruneScheduled(next.keepCount).catch(() => undefined);
+    }
     await this.audit.write({
       source: "user",
       actorUserId,
@@ -312,6 +392,8 @@ export class SystemBackupService {
   }
 
   private async claimBackup(input: { trigger: "manual" | "scheduled"; userId: string | null }) {
+    // worker 独自跑周期备份、没人打开备份页时，这里是清理崩溃残留的唯一入口。
+    await this.reconcileStaleBackupRuns();
     const ready = await this.ensureDirectory();
     if (!ready.writable) {
       throw new AppError(
@@ -343,7 +425,9 @@ export class SystemBackupService {
       const tables = await this.orderedTables();
       const manifest = await this.prisma.client.$transaction(
         async (tx) => {
-          const snapshotManifest = await this.buildManifest(tables, tx);
+          const missing = await this.collectMissingObjects(tx);
+          stats.missingFiles = missing.keys.size;
+          const snapshotManifest = await this.buildManifest(tables, tx, missing);
           // 数据库与 Excel 全部从同一个 repeatable-read 快照读取，避免备份期间记账导致父子表错位。
           await writer.append(
             Buffer.from(JSON.stringify(snapshotManifest, null, 2), "utf-8"),
@@ -356,7 +440,7 @@ export class SystemBackupService {
               `${ARCHIVE_PATHS.database}${table.name}.jsonl`,
             );
           }
-          await this.appendFileObjects(writer, stats, tx);
+          await this.appendFileObjects(writer, stats, tx, missing.keys);
           for (const ledger of snapshotManifest.ledgers) {
             await writer.append(
               lazyStream(this.streamLedgerWorkbook(ledger.id, tx)),
@@ -371,10 +455,11 @@ export class SystemBackupService {
           timeout: STALE_RUNNING_MS,
         },
       );
-      if (stats.files !== manifest.files.count) {
+      const expectedFiles = manifest.files.count - manifest.files.missing.length;
+      if (stats.files !== expectedFiles) {
         throw new AppError(
           "BACKUP_FILES_INCOMPLETE",
-          `附件备份不完整：应有 ${manifest.files.count} 个，实际写入 ${stats.files} 个`,
+          `附件备份不完整：应有 ${expectedFiles} 个，实际写入 ${stats.files} 个`,
           500,
         );
       }
@@ -396,7 +481,7 @@ export class SystemBackupService {
         ledgers: manifest.ledgers.length,
         missingFiles: stats.missingFiles,
       };
-      await this.prisma.client.backupRecord.updateMany({
+      const claimed = await this.prisma.client.backupRecord.updateMany({
         where: { id: recordId, status: "running" },
         data: {
           status: "succeeded",
@@ -405,6 +490,12 @@ export class SystemBackupService {
           counts: counts as unknown as Prisma.InputJsonValue,
         },
       });
+      if (claimed.count === 0) {
+        // 跑满 STALE_RUNNING_MS 后台账已被判失败、名额也已让给别人。归档虽然完好，
+        // 留在目录里就成了一份「台账说失败、文件却能恢复」的矛盾条目，直接撤掉。
+        await rm(finalPath, { force: true }).catch(() => undefined);
+        return false;
+      }
       return true;
     } catch (error) {
       writer.abort();
@@ -427,6 +518,7 @@ export class SystemBackupService {
   private async buildManifest(
     tables: BackupTable[],
     client: BackupDbClient,
+    missing: MissingObjects,
   ): Promise<BackupManifest> {
     // 逐张数，不 Promise.all：表有五十来张，一次性并发会瞬间占满连接池，
     // 后面真正干活的查询只能排队等 10s 超时。count 很快，串行也就百来毫秒。
@@ -454,7 +546,9 @@ export class SystemBackupService {
       })),
       files: {
         count: fileAgg._count._all,
-        bytes: (fileAgg._sum.sizeBytes ?? 0n).toString(),
+        // bytes 只统计真正写进归档的部分，缺失的那些从合计里扣掉。
+        bytes: ((fileAgg._sum.sizeBytes ?? 0n) - missing.bytes).toString(),
+        missing: Array.from(missing.keys).sort(),
       },
       ledgers,
     };
@@ -504,13 +598,25 @@ export class SystemBackupService {
   /**
    * 附件原文。
    *
-   * 先 `statObject` 再挂流：对象存储里已经不存在的行（删除任务失败/外部清理过）必须让整份
-   * 备份失败；zip 条目一旦追加就无法撤回，直接挂流会写出一个 0 字节的假附件。
+   * 先 `statObject` 再挂流：zip 条目一旦追加就无法撤回，直接挂流会写出一个 0 字节的假附件。
+   *
+   * 取不到的对象**不让整份备份失败**。`files` 行与对象存储不同步是会真实发生的
+   * （`purgeObject` 先删对象后删行，中间崩溃就留下悬空行；删除任务也可能耗尽重试），
+   * 而这种行没有任何 API 能清掉。中止备份等于让一条垃圾记录把整个备份功能永久锁死——
+   * 一份缺了个别附件的备份远比没有备份好。缺失清单写进 manifest，前端据此告警，
+   * 恢复时把这些行连同引用它们的 attachments 一起丢掉，一次恢复即自愈。
+   *
+   * 大小对不上按同样的口径处理：以实际写进归档的字节为准，原行记入缺失。
+   *
+   * 缺失判定单独一趟（`collectMissingObjects`）跑在写 manifest 之前——manifest 要带上缺失清单，
+   * 而它必须是归档的第一个条目。两趟之间的极窄窗口里对象若被删掉，本次备份会失败，
+   * 但下一次的第一趟就会把它判成缺失，不会重演「永久失败」。
    */
   private async appendFileObjects(
     writer: ZipWriter,
     stats: BackupRunStats,
     client: BackupDbClient,
+    missing: ReadonlySet<string>,
   ): Promise<void> {
     let cursor: string | undefined;
     for (;;) {
@@ -518,26 +624,49 @@ export class SystemBackupService {
         take: ROW_CHUNK,
         orderBy: { id: "asc" },
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        select: { id: true, bucket: true, objectKey: true },
+        select: { id: true, bucket: true, objectKey: true, sizeBytes: true },
       });
       if (!files.length) return;
       for (const file of files) {
-        const info = await this.minio.statObject(file.bucket, file.objectKey).catch(() => null);
-        if (!info) {
-          throw new AppError(
-            "BACKUP_FILE_MISSING",
-            `附件对象不存在，备份已中止：${file.objectKey}`,
-            500,
-          );
-        }
+        if (missing.has(file.objectKey)) continue;
         await writer.append(
           lazyStream(this.streamObject(file.bucket, file.objectKey)),
           `${ARCHIVE_PATHS.files}${file.objectKey}`,
         );
         stats.files += 1;
-        stats.fileBytes += BigInt(Math.max(0, Math.trunc(info.size)));
+        // 第一趟已核对过 statObject 与本行一致，这里直接记账，省掉一轮 HEAD。
+        stats.fileBytes += file.sizeBytes;
       }
       if (files.length < ROW_CHUNK) return;
+      cursor = files[files.length - 1]!.id;
+    }
+  }
+
+  /**
+   * 第一趟：找出对象存储里取不到、或大小与 `files` 行对不上的附件。
+   *
+   * 只留下异常的那些 key（正常情况是空集），不缓存全量元数据。
+   */
+  private async collectMissingObjects(client: BackupDbClient): Promise<MissingObjects> {
+    const result: MissingObjects = { keys: new Set<string>(), bytes: 0n };
+    let cursor: string | undefined;
+    for (;;) {
+      const files = await client.file.findMany({
+        take: ROW_CHUNK,
+        orderBy: { id: "asc" },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true, bucket: true, objectKey: true, sizeBytes: true },
+      });
+      if (!files.length) return result;
+      for (const file of files) {
+        const info = await this.minio.statObject(file.bucket, file.objectKey).catch(() => null);
+        const size = info ? BigInt(Math.max(0, Math.trunc(info.size))) : null;
+        if (size === null || size !== file.sizeBytes) {
+          result.keys.add(file.objectKey);
+          result.bytes += file.sizeBytes;
+        }
+      }
+      if (files.length < ROW_CHUNK) return result;
       cursor = files[files.length - 1]!.id;
     }
   }
@@ -623,13 +752,15 @@ export class SystemBackupService {
               rows: 0,
               files: staged.length,
               skippedTables: [...preflight.skippedTables],
+              emptyTables: [],
+              droppedFiles: preflight.droppedFileIds.size,
             };
             // PostgreSQL 的 TRUNCATE 可在事务中回滚；后续任一 createMany 失败时旧系统会完整保留。
             await this.wipeAllTables(tx);
             for (const table of tables) {
               const entryName = `${ARCHIVE_PATHS.database}${table.name}.jsonl`;
               if (!entryNames.has(entryName)) {
-                restored.skippedTables.push(table.name);
+                restored.emptyTables.push(table.name);
                 continue;
               }
               restored.rows += await this.restoreTable(
@@ -638,6 +769,7 @@ export class SystemBackupService {
                 table,
                 tx,
                 stagedByOriginal,
+                preflight.droppedFileIds,
               );
               restored.tables += 1;
             }
@@ -724,6 +856,7 @@ export class SystemBackupService {
     table: BackupTable,
     client: BackupDbClient,
     stagedByOriginal: Map<string, string>,
+    droppedFileIds: ReadonlySet<string>,
   ): Promise<number> {
     const stream = await reader.openStream(entryName);
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
@@ -734,12 +867,22 @@ export class SystemBackupService {
       if (!line.trim()) continue;
       const row = decodeRow(line, table.valueKinds);
       if (table.name === "files") {
+        // 备份时对象就已经不存在的行：连同它的附件引用一起丢掉，恢复一次即清干净。
+        if (typeof row.id === "string" && droppedFileIds.has(row.id)) continue;
         const originalKey = row.objectKey;
         const stagedKey =
           typeof originalKey === "string" ? stagedByOriginal.get(originalKey) : null;
         if (!stagedKey) throw new Error(`附件缺少预存对象：${String(originalKey)}`);
         row.bucket = this.bucket;
         row.objectKey = stagedKey;
+      }
+      // attachments.file_id 有指向 files 的外键，被丢弃的 file 行必须连引用一起去掉。
+      if (
+        table.name === "attachments" &&
+        typeof row.fileId === "string" &&
+        droppedFileIds.has(row.fileId)
+      ) {
+        continue;
       }
       buffer.push(row);
       if (buffer.length >= ROW_CHUNK) {
@@ -764,10 +907,14 @@ export class SystemBackupService {
   ): Promise<{
     files: Array<{ id: string; objectKey: string; sizeBytes: number }>;
     skippedTables: string[];
+    /** 归档已声明缺失对象的 `files` 行 id，恢复时连同引用它们的 attachments 一起丢弃。 */
+    droppedFileIds: Set<string>;
   }> {
     const currentByName = new Map(tables.map((table) => [table.name, table]));
     const entryByName = new Map(reader.entries.map((entry) => [entry.name, entry]));
+    const knownMissing = new Set(manifest.files.missing);
     const skippedTables: string[] = [];
+    const droppedFileIds = new Set<string>();
     const files: Array<{ id: string; objectKey: string; sizeBytes: number }> = [];
     for (const manifestTable of manifest.tables) {
       const entryName = `${ARCHIVE_PATHS.database}${manifestTable.name}.jsonl`;
@@ -795,6 +942,11 @@ export class SystemBackupService {
           ) {
             throw new AppError("BACKUP_ARCHIVE_INCOMPLETE", "附件数据库条目格式无效", 400);
           }
+          // 备份时就取不到对象的附件：归档里本来就没有条目，丢弃该行而不是判归档损坏。
+          if (knownMissing.has(row.objectKey)) {
+            droppedFileIds.add(row.id);
+            continue;
+          }
           const fileEntry = `${ARCHIVE_PATHS.files}${row.objectKey}`;
           const archiveEntry = entryByName.get(fileEntry);
           if (!archiveEntry) {
@@ -819,7 +971,7 @@ export class SystemBackupService {
       }
     }
 
-    if (files.length !== manifest.files.count) {
+    if (files.length !== manifest.files.count - manifest.files.missing.length) {
       throw new AppError("BACKUP_ARCHIVE_INCOMPLETE", "附件数量与备份清单不一致", 400);
     }
     let manifestFileBytes: bigint;
@@ -847,7 +999,7 @@ export class SystemBackupService {
         throw new AppError("BACKUP_ARCHIVE_INCOMPLETE", `备份缺少账本 Excel：${ledger.name}`, 400);
       }
     }
-    return { files, skippedTables };
+    return { files, skippedTables, droppedFileIds };
   }
 
   /** 附件先写入唯一前缀，全部成功后数据库事务才会切换过去。 */
@@ -918,6 +1070,44 @@ export class SystemBackupService {
     for (const id of ids) await this.cleanupUnreferencedRestoreObjects(id);
   }
 
+  /**
+   * 回收崩溃遗留的备份任务，并清掉它写了一半的临时归档。
+   *
+   * 与恢复那边对称。`.part` 不在备份列表里（按 `.zip` 过滤），没人清理就会在备份卷上
+   * 静默堆积到写满盘——而写满盘的直接后果又是备份失败。
+   */
+  private async reconcileStaleBackupRuns(): Promise<void> {
+    const staleBefore = new Date(Date.now() - STALE_RUNNING_MS);
+    await this.prisma.client.backupRecord.updateMany({
+      where: { status: "running", startedAt: { lt: staleBefore } },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        error: "任务中断（进程重启或超时）",
+      },
+    });
+    // 无条件清理，不能只在「本次刚判失败」时做：崩溃瞬间 .part 的 mtime 往往比台账
+    // startedAt 更晚，台账过期那一刻文件还不算旧，只跑一次就永远漏掉它。
+    await this.pruneStaleTempArchives();
+  }
+
+  /** 删除超过判定时长仍未转正的 `.part`：正在写的那份不会这么老。 */
+  private async pruneStaleTempArchives(): Promise<void> {
+    try {
+      const names = await readdir(this.directory);
+      const staleBefore = Date.now() - STALE_RUNNING_MS;
+      for (const name of names) {
+        if (!name.startsWith(BACKUP_FILE_PREFIX) || !name.endsWith(BACKUP_TEMP_SUFFIX)) continue;
+        const path = join(this.directory, name);
+        const info = await stat(path).catch(() => null);
+        if (!info || info.mtimeMs >= staleBefore) continue;
+        await rm(path, { force: true }).catch(() => undefined);
+      }
+    } catch {
+      // 清理是尽力而为：目录不可读时备份本身也会以明确的错误失败，不必在这里报。
+    }
+  }
+
   private async cleanupUnreferencedRestoreObjects(restoreId: string): Promise<void> {
     const prefix = `system-restores/${restoreId}/`;
     try {
@@ -960,6 +1150,9 @@ export class SystemBackupService {
       select: { id: true },
     });
     if (recentFailure) return { started: false, pruned: 0 };
+    // 放在这里而不是 pruneScheduled 里：持续性故障永远走不到成功路径，
+    // 而正是那种情况会每 5 分钟堆一条失败台账。
+    await this.pruneFailedScheduledRecords();
 
     // running 台账本身就是跨 worker 的占位；只有真正成功后才写 lastRunKey。失败时保留未执行状态，
     // 下一轮会重试，而不是把一次目录/MinIO 瞬时故障误记成「今天已经备份」。
@@ -968,7 +1161,10 @@ export class SystemBackupService {
     if (!succeeded) return { started: true, pruned: 0 };
     await this.prisma.client.backupSetting.updateMany({
       where: { id: 1 },
-      data: { lastRunKey: decision.runKey },
+      data: {
+        // 备份可能跨过午夜：写「开始那天」会让刚备完的今天再排一次。取两者较大的一个。
+        lastRunKey: maxKey(decision.runKey, todayKey()),
+      },
     });
     const pruned = await this.pruneScheduled(setting.keepCount);
     return { started: true, pruned };
@@ -993,6 +1189,25 @@ export class SystemBackupService {
     return pruned;
   }
 
+  /**
+   * 失败的自动备份台账只留最近若干条。
+   *
+   * 它们没有对应文件，保留策略也不看它们，而持续性故障会让 worker 每 5 分钟写一条，
+   * 一天近三百行。留最近几条足够排查，再多只是噪音。
+   */
+  private async pruneFailedScheduledRecords(): Promise<void> {
+    const stale = await this.prisma.client.backupRecord.findMany({
+      where: { trigger: "scheduled", status: "failed" },
+      orderBy: { startedAt: "desc" },
+      skip: KEEP_FAILED_SCHEDULED_RECORDS,
+      select: { id: true },
+    });
+    if (!stale.length) return;
+    await this.prisma.client.backupRecord
+      .deleteMany({ where: { id: { in: stale.map((row) => row.id) } } })
+      .catch(() => undefined);
+  }
+
   // ---------------------------------------------------------------------------
   // 内部工具
   // ---------------------------------------------------------------------------
@@ -1013,7 +1228,12 @@ export class SystemBackupService {
           SELECT pg_try_advisory_xact_lock(${RESTORE_GATE_LOCK_KEY}) AS acquired
         `;
         if (!gate?.acquired) {
-          throw new AppError("BACKUP_BUSY", "后台任务正在收尾，请稍后再恢复", 409);
+          // 门闩被 worker 整轮持有，而那一轮可能正在跑周期备份——那是几十分钟量级，不是「一会儿」。
+          throw new AppError(
+            "BACKUP_BUSY",
+            "后台任务正在执行（可能正在生成周期备份），需等它结束才能恢复，请稍后重试",
+            409,
+          );
         }
       }
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BACKUP_CLAIM_LOCK_KEY})`;
@@ -1053,12 +1273,52 @@ export class SystemBackupService {
   }
 }
 
+/**
+ * 归档落盘目录的绝对路径。
+ *
+ * 独立成函数是因为上传导入的 multer storage 要在**服务实例之外**决定落盘位置：
+ * 上传必须直接写进备份目录，之后转正只是同盘 rename——先落临时目录再拷贝，
+ * 一份上 GB 的归档要整份搬一遍，还可能跨设备失败。
+ */
+export function resolveBackupDir(): string {
+  const configured = loadConfig().BACKUP_DIR;
+  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+}
+
 /** 归档文件名里的时间戳，用应用时区的本地时间——文件名是给人看的。 */
 function archiveStamp(): string {
   const now = new Date();
   return `${todayKey().replace(/-/g, "")}-${currentTimeKey().replace(":", "")}${String(
     now.getSeconds(),
   ).padStart(2, "0")}-${String(now.getMilliseconds()).padStart(3, "0")}`;
+}
+
+/**
+ * 导入进来的归档在目录里叫什么。
+ *
+ * 上传的文件名本来就合规（多半就是从另一台机器下载下来的那份）时原样保留——管理员认得它。
+ * 否则按归档自己的生成时间造一个规范名，而不是信任浏览器传来的字符串：它会被直接拼进
+ * 备份目录的路径，`..`、分隔符、控制字符都得挡掉（`archivePath` 是最后一道，这里先规范化）。
+ */
+function importedArchiveName(originalName: string, createdAt: string): string {
+  const base = originalName.split(/[\\/]/).pop() ?? "";
+  const safe =
+    base.startsWith(BACKUP_FILE_PREFIX) &&
+    base.endsWith(BACKUP_FILE_SUFFIX) &&
+    base.length <= 120 &&
+    !base.includes("..") &&
+    // eslint-disable-next-line no-control-regex
+    !/[\x00-\x1f\x7f]/.test(base);
+  if (safe) return base;
+
+  const created = new Date(createdAt);
+  const stamp = Number.isNaN(created.getTime())
+    ? `imported-${Date.now()}`
+    : `imported-${created
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\.(\d{3})Z$/, "-$1")}`;
+  return `${BACKUP_FILE_PREFIX}${stamp}${BACKUP_FILE_SUFFIX}`;
 }
 
 /** 账本名可能重名或含非法字符，统一「名字-id 前 8 位」，既可读又唯一。 */
@@ -1104,6 +1364,17 @@ function parseManifest(text: string): BackupManifest {
   ) {
     throw new AppError("BACKUP_MANIFEST_INVALID", "备份清单字段不完整", 400);
   }
+  // v1 归档没有 missing 字段：那时缺失附件会让备份整份失败，所以「缺条目」一律是损坏。
+  if (manifest.files.missing === undefined) manifest.files.missing = [];
+  if (
+    !Array.isArray(manifest.files.missing) ||
+    manifest.files.missing.some((key) => typeof key !== "string")
+  ) {
+    throw new AppError("BACKUP_MANIFEST_INVALID", "备份清单的缺失附件列表无效", 400);
+  }
+  if (manifest.files.missing.length > manifest.files.count) {
+    throw new AppError("BACKUP_MANIFEST_INVALID", "备份清单的缺失附件数超过附件总数", 400);
+  }
   const tableNames = new Set<string>();
   for (const table of manifest.tables) {
     if (
@@ -1125,6 +1396,11 @@ function parseManifest(text: string): BackupManifest {
     }
   }
   return manifest as BackupManifest;
+}
+
+/** 两个 `YYYY-MM-DD` 取较晚的一个；同宽度定长字符串，字典序即时间序。 */
+function maxKey(left: string, right: string): string {
+  return left >= right ? left : right;
 }
 
 function messageOf(error: unknown): string {

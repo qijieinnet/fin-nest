@@ -170,9 +170,14 @@ export type BackupJobStatus = "running" | "succeeded" | "failed";
 export type BackupCounts = {
   tables?: number;
   rows?: number;
+  /** 成功写进归档的附件数。 */
   files?: number;
   fileBytes?: string;
   ledgers?: number;
+  /**
+   * 数据库里有记录、但对象存储里取不到的附件数。备份仍算成功，但这份归档缺了这些附件，
+   * 前端必须显式告警——否则用户会以为拿到的是完整备份。
+   */
   missingFiles?: number;
 };
 
@@ -196,7 +201,17 @@ export type RestoreRecord = {
   id: string;
   fileName: string;
   status: BackupJobStatus;
-  counts: { tables?: number; rows?: number; files?: number } | null;
+  counts: {
+    tables?: number;
+    rows?: number;
+    files?: number;
+    /** 归档里有、当前 schema 已没有的表。 */
+    skippedTables?: string[];
+    /** 当前 schema 有、归档里没有的表，恢复后为空表。 */
+    emptyTables?: string[];
+    /** 备份时对象就已丢失、因而被一并丢弃的附件记录数。 */
+    droppedFiles?: number;
+  } | null;
   error: string | null;
   startedAt: string;
   finishedAt: string | null;
