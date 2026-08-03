@@ -15,7 +15,6 @@ import {
   Trash2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { LoadingState } from "@/components/business";
 import {
   BottomSheet,
@@ -55,6 +54,7 @@ import { usePeople } from "@/lib/data/records";
 import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import {
   AccountBalancesCard,
@@ -96,7 +96,7 @@ function draftToTransactionInput(
 }
 
 export function AiScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { currentLedger } = useLedger();

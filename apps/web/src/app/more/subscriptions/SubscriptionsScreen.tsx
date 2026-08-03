@@ -16,7 +16,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
@@ -44,6 +43,7 @@ import { cn } from "@/lib/format/class-names";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
 import {
   AssetFilterSheet,
@@ -352,7 +352,7 @@ function TerminatedSubscriptionsSheet({
 }
 
 export function SubscriptionsScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { clear, push } = useSheetStack();

@@ -1,7 +1,6 @@
 "use client";
 
 import { Ban, ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   EdgeFade,
   IconButton,
@@ -17,6 +16,7 @@ import { usePlanProgress, useStoppedPlans } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useSheetStack } from "@/providers";
 import { PlanDetailSheet } from "./_components/PlanDetailSheet";
 import { PlanEditorSheet } from "./_components/PlanEditorSheet";
@@ -136,7 +136,7 @@ export function StoppedPlansSheet({
 }
 
 export function PlansScreenMobile() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { push } = useSheetStack();
   const scrolled = usePageScrolled();
   const isDesktop = useIsDesktop();

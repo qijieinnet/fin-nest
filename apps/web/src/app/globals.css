@@ -6504,3 +6504,67 @@ button.biz-amount__shell {
   /* 页签 46 + 操作区 284 + 动作条 60 */
   --space-keypad-total-height: 390px;
 }
+
+/* 全局导航进度条。贴 viewport 顶部；standalone PWA 下 safe-area 把它压到状态栏正下方，
+   Safari 里则贴地址栏下沿。z-index 高于现有最高层（260 的 sheet/弹层），切页时始终可见。 */
+.nav-progress {
+  /* backwards 而非 both：both 会在动画结束后钉住 opacity/transform，
+     压过完成态的淡出 transition（动画优先级高于过渡），条就再也收不掉了。 */
+  animation: nav-progress-in 220ms var(--ease-out) backwards;
+  height: 3px;
+  left: 0;
+  /* 填充条是整条宽度、靠 translateX 把右端推到进度位置——只动 transform 才全程留在
+     合成层（改 width 每帧触发布局）。代价是左侧要裁掉，正好也挡住溢出到视口外的部分。 */
+  overflow: hidden;
+  pointer-events: none;
+  position: fixed;
+  right: 0;
+  top: env(safe-area-inset-top);
+  transform-origin: top;
+  z-index: 300;
+}
+
+.nav-progress__fill {
+  /* 系统 tint（与按钮/链接等交互色同源）。不能用 accent-expense：那是「支出」的语义色，
+     导航进度借它只会让人以为出了错。
+     由浅到深、头部最实：本应用是浅色底，若反过来把头部提亮成白（深色底上常见的「光点」做法），
+     头会直接融进背景，看着像条断了。 */
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-tint) 82%, #ffffff) 0%,
+    var(--color-tint) 62%,
+    var(--color-tint-strong) 100%
+  );
+  /* 3px 高上等于给头部一个半圆帽，比切平的直角像是「设计过」。 */
+  border-radius: 0 3px 3px 0;
+  height: 100%;
+  transform: translateX(calc((var(--nav-progress, 0) - 1) * 100%));
+  /* 爬升是匀速的信息展示，用 linear；时长与 TICK_MS(180ms) 对齐，把离散步进抹成连续运动。 */
+  transition: transform 180ms linear;
+  width: 100%;
+}
+
+@keyframes nav-progress-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+}
+
+/* 完成态：先冲满，再整体淡出（时长之和需 ≤ FADE_OUT_MS）。
+   退场（180ms）比入场（220ms）快——这一段是系统在响应，不该让人等。 */
+.nav-progress--done {
+  opacity: 0;
+  transition: opacity 180ms var(--ease-out) 120ms;
+}
+
+.nav-progress--done .nav-progress__fill {
+  transition: transform 160ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 只去掉入场的缩放，保留横向爬升：那不是装饰，是进度本身，抽掉就只剩几级跳变。 */
+  .nav-progress {
+    animation: none;
+  }
+}

@@ -4,6 +4,7 @@ export { AuthProvider, useAuth } from "./AuthProvider";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
 export { DecimalPlacesProvider, useDecimalPlaces } from "./DecimalPlacesProvider";
 export { LedgerProvider, useLedger } from "./LedgerProvider";
+export { NavigationProgressProvider, useNavigationProgress } from "./NavigationProgressProvider";
 export { PreferencesProvider, usePreferences } from "./PreferencesProvider";
 export type { Preferences } from "./PreferencesProvider";
 export { QueryProvider } from "./QueryProvider";

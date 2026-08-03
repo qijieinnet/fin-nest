@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
@@ -16,12 +15,13 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
 
 const ACCOUNT_PATTERN = /^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/;
 
 export function RegisterScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { setUser } = useAuth();
   const [email, setEmail] = useState("");

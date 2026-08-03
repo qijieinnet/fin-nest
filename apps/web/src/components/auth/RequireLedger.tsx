@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/business";
 import { MobileAppShell } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
 
 function Fallback() {
@@ -24,7 +24,7 @@ function Fallback() {
  */
 export function RequireLedger({ children }: { children: ReactNode }) {
   const { ledgerId, isLoading, ledgers } = useLedger();
-  const router = useRouter();
+  const router = useAppRouter();
 
   useEffect(() => {
     if (isLoading) return;

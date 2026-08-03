@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,11 +17,12 @@ import {
   type AiDraftHandoff,
 } from "@/lib/data/ai-draft-handoff";
 import { queryKeys } from "@/lib/query/query-keys";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { NewBillFormScreen } from "../_components/NewBillFormScreen";
 
 export function NewBillScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { showToast } = useToast();

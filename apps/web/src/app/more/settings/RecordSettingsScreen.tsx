@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
@@ -16,6 +15,7 @@ import {
 import { useRecordSetting } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { EntryReminderCard } from "./_components/EntryReminderCard";
 import { FieldSortList } from "./_components/FieldSortList";
@@ -45,7 +45,7 @@ function orderableFrom(fieldOrder: string[] | undefined): string[] {
 }
 
 export function RecordSettingsScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { showToast } = useToast();

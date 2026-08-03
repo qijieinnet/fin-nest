@@ -2,7 +2,6 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { IconButton, Input, MobileAppShell, MobilePage } from "@/components/ui";
@@ -15,13 +14,14 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useSheetStack } from "@/providers";
 import { UserActionsSheet } from "./_components/UserActionsSheet";
 
 const PAGE_SIZE = 20;
 
 export function UsersScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { user } = useAuth();
   const { push } = useSheetStack();
   const [search, setSearch] = useState("");

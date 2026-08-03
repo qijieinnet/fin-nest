@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpDown, ChevronLeft, MoreHorizontal, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
 import {
   Button,
@@ -17,12 +16,13 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath, type Person } from "@/li
 import { queryKeys } from "@/lib/query/query-keys";
 import { usePeople } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { PersonEditorSheet } from "./_components/PersonEditorSheet";
 import { PeopleSortList } from "./_components/PeopleSortList";
 
 export function PeopleScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { ledgerId } = useLedger();
   const peopleQuery = usePeople(ledgerId);
   const queryClient = useQueryClient();

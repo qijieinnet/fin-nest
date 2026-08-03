@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, Trash2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
@@ -42,6 +41,7 @@ import {
 import { formatMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
 import { DeleteBillConfirmDialog } from "../_components/DeleteBillConfirmDialog";
 import { EditBillScreen } from "./edit/EditBillScreen";
@@ -234,7 +234,7 @@ export function BillDetailScreen({
   embedded?: boolean;
   onClose?: () => void;
 }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { push: pushSheet, pop: popSheet } = useSheetStack();

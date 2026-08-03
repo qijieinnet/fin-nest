@@ -2,7 +2,6 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
 import { getApiErrorMessage } from "@/lib/api";
@@ -15,11 +14,12 @@ import {
 } from "@/lib/app-lock/app-lock";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { usePreferences, useToast } from "@/providers";
 import { NavMenuSettings } from "./_components/NavMenuSettings";
 
 export function SystemSettingsScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { preferences, setPreference } = usePreferences();
   const { showToast } = useToast();
   const queryClient = useQueryClient();

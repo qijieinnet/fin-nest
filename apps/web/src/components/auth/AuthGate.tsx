@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/business";
 import { MobileAppShell } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
 
 type AuthGateMode = "protected" | "guest";
@@ -26,7 +26,7 @@ function GateFallback() {
  */
 export function AuthGate({ children, mode }: { children: ReactNode; mode: AuthGateMode }) {
   const { status } = useAuth();
-  const router = useRouter();
+  const router = useAppRouter();
 
   useEffect(() => {
     if (status === "loading") return;

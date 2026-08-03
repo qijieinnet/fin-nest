@@ -1,17 +1,17 @@
 "use client";
 
 import { Check, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useId, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { useAutoPending } from "@/lib/data/records";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../../_components/TransactionForm";
 import { TransactionFormFab } from "../../../_components/TransactionFormFab";
 
 export function EditPendingScreen({ pendingId }: { pendingId: string }) {
-  const router = useRouter();
+  const router = useAppRouter();
   const { ledgerId } = useLedger();
   const formId = useId();
   const [canSubmit, setCanSubmit] = useState(false);

@@ -6,6 +6,7 @@ import { AuthProvider } from "./AuthProvider";
 import { ConfirmProvider } from "./ConfirmProvider";
 import { DecimalPlacesProvider } from "./DecimalPlacesProvider";
 import { LedgerProvider } from "./LedgerProvider";
+import { NavigationProgressProvider } from "./NavigationProgressProvider";
 import { PreferencesProvider } from "./PreferencesProvider";
 import { QueryProvider } from "./QueryProvider";
 import { SheetStackProvider } from "./SheetStackProvider";
@@ -21,7 +22,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
               <ToastProvider>
                 <ConfirmProvider>
                   <SheetStackProvider>
-                    <AppLockGate>{children}</AppLockGate>
+                    <NavigationProgressProvider>
+                      <AppLockGate>{children}</AppLockGate>
+                    </NavigationProgressProvider>
                   </SheetStackProvider>
                 </ConfirmProvider>
               </ToastProvider>

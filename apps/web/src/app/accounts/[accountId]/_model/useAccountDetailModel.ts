@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import {
   apiRequest,
   getApiErrorMessage,
@@ -12,12 +11,13 @@ import {
 import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { isLendAccount } from "../../_components/account-utils";
 
 /** 账户详情视图模型：账户/流水/关联记录查询，删除、净资产开关、子账户删除与排序 mutation。 */
 export function useAccountDetailModel(accountId: string) {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { clear } = useSheetStack();

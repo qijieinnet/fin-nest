@@ -1,7 +1,6 @@
 "use client";
 
 import { Check, ChevronLeft, Copy } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -12,6 +11,7 @@ import {
 } from "@/lib/data/feishu";
 import { routes } from "@/lib/route/routes";
 import { Button, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useToast } from "@/providers";
 
 /** 绑定码有效期 10 分钟，本地按秒回读剩余时间；到点自动清空，逼用户重新生成。 */
@@ -45,7 +45,7 @@ function formatRemaining(seconds: number): string {
 }
 
 export function FeishuBindingScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const confirm = useConfirm();
   const { showToast } = useToast();
   const { currentLedger } = useLedger();

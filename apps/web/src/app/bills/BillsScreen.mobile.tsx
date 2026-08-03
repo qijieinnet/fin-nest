@@ -12,7 +12,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   defaultFilterValue,
@@ -48,6 +47,7 @@ import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger, usePreferences, useSheetStack } from "@/providers";
 import {
   dueRenewalSubscriptions,
@@ -83,7 +83,7 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
 }
 
 export function BillsScreenMobile() {
-  const router = useRouter();
+  const router = useAppRouter();
   const isDesktop = useIsDesktop();
   // 用户把「账单」收进「更多」时按全屏页处理（无底部导航、显示返回）；在导航栏里则内嵌底部导航。
   const isPrimary = useIsPrimaryNavMenu("bills");

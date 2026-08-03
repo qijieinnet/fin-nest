@@ -1,8 +1,6 @@
 "use client";
 
 import { ChartPie, type LucideIcon, MoreHorizontal, Sparkles } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
@@ -10,6 +8,7 @@ import { useFeishuStatus } from "@/lib/data/feishu";
 import { useAutoPending } from "@/lib/data/records";
 import { resolveNavMenuLayout, SECONDARY_PREFETCH_ROUTES } from "@/lib/nav/navMenus";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
+import { useRouteNavigation } from "@/lib/nav/useRouteNavigation";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
 
@@ -26,8 +25,8 @@ function isActive(pathname: string, route: string): boolean {
 
 /** 桌面左侧固定侧边栏：一级导航 + 「更多」二级项（含红点）。见 DESKTOP_UI_PLAN.md A3。 */
 export function DesktopSidebar() {
-  const router = useRouter();
-  const pathname = usePathname();
+  // 乐观高亮 + 顶部进度条 + 按需预取，统一由 useRouteNavigation 承担。
+  const { displayPath, navigate, prefetch } = useRouteNavigation();
   const { currentLedger } = useLedger();
   const { user } = useAuth();
   const { preferences } = usePreferences();
@@ -76,25 +75,15 @@ export function DesktopSidebar() {
     ...SECONDARY_PREFETCH_ROUTES,
   ]);
 
-  // 点击后立即把高亮切到目标项（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
-  // 避免目标页 chunk 加载期间侧边栏毫无响应、被误认为卡住。
-  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-  useEffect(() => {
-    setPendingRoute(null);
-  }, [pathname]);
-  const displayPath = pendingRoute ?? pathname;
-
   const moreActive = isActive(displayPath, routes.more);
 
   const go = (route: string) => {
     if (displayPath === route) return;
-    setPendingRoute(route);
-    startTransition(() => router.push(route));
+    navigate(route);
   };
 
   // hover 即预取目标路由（幂等，已预取过则为 no-op），覆盖未在空闲预取名单里的「更多」子项。
-  const preload = (route: string) => router.prefetch(route);
+  const preload = (route: string) => prefetch(route);
 
   return (
     <aside className="desktop-sidebar">

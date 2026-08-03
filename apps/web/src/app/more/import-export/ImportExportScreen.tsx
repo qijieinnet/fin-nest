@@ -11,7 +11,6 @@ import {
   Table,
 } from "lucide-react";
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import {
@@ -24,6 +23,7 @@ import {
 } from "@/lib/api";
 import { downloadFile } from "@/lib/api/download";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { ImportPreviewSheet } from "./_components/ImportPreviewSheet";
 import { RestoreConfirmSheet } from "./_components/RestoreConfirmSheet";
@@ -32,7 +32,7 @@ import type { ImportResult } from "./types";
 type ExportKind = "json" | "excel" | "template";
 
 export function ImportExportScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { currentLedger, ledgerId } = useLedger();
   const { push } = useSheetStack();
   const { showToast } = useToast();

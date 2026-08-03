@@ -1,8 +1,6 @@
 "use client";
 
 import { MoreHorizontal, Sparkles } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
 import { useAiStatus } from "@/lib/data/ai";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import {
@@ -11,6 +9,7 @@ import {
   SECONDARY_PREFETCH_ROUTES,
 } from "@/lib/nav/navMenus";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
+import { useRouteNavigation } from "@/lib/nav/useRouteNavigation";
 import { routes } from "@/lib/route/routes";
 import { useLedger, usePreferences } from "@/providers";
 import { TabBar } from "./TabBar";
@@ -32,8 +31,8 @@ const AI_TAB = {
  * AI 启用时布局为「左贴边 AI 按钮 + 右贴边主导航、中间留空」；未启用时主导航居中撑满（原样式）。
  */
 export function MobileTabBar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  // 乐观高亮 + 顶部进度条，统一由 useRouteNavigation 承担。
+  const { navigate, pathname, pendingRoute } = useRouteNavigation();
   const isDesktop = useIsDesktop();
   const { preferences } = usePreferences();
   const { currentLedger } = useLedger();
@@ -56,14 +55,6 @@ export function MobileTabBar() {
   // 空闲预取全部可点导航路由 + AI + 记一笔/保险/物品/订阅，点击时目标页 chunk 已就绪（详见 hook 注释）。
   useIdleRoutePrefetch([...tabs.map((tab) => tab.value), routes.ai, ...SECONDARY_PREFETCH_ROUTES]);
 
-  // 点击后立即高亮目标 tab（乐观反馈），导航提交（pathname 变化）后回归真实高亮，
-  // 避免目标页 chunk 加载期间界面毫无响应、被误认为卡住。
-  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-  useEffect(() => {
-    setPendingRoute(null);
-  }, [pathname]);
-
   // 命中一级菜单则高亮之，其余路由（统计、账本详情、更多等）统一归到「更多」。
   const match = primary.find(
     (tab) => pathname === tab.value || pathname.startsWith(`${tab.value}/`),
@@ -75,8 +66,7 @@ export function MobileTabBar() {
 
   const go = (next: string) => {
     if (next === value) return;
-    setPendingRoute(next);
-    startTransition(() => router.push(next));
+    navigate(next);
   };
 
   const mainTabBar = (

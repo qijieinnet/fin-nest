@@ -1,13 +1,13 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Ellipsis, Pencil, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
 import type { MenuItem } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { microsToInput } from "@/lib/money";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { useSubAccountDetailModel } from "./_model/useSubAccountDetailModel";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
@@ -74,7 +74,7 @@ function NetWorthSwitchRow({
 }
 
 export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDetailScreenProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const { push } = useSheetStack();
   const decimalPlaces = useDecimalPlaces();
   const [menuOpen, setMenuOpen] = useState(false);

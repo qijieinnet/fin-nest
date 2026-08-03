@@ -2,11 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, X, Zap } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useId, useRef, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { BottomSheet, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, ledgerApiPath, type QuickTemplate, type TransactionDetail } from "@/lib/api";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
@@ -73,7 +73,7 @@ export function NewBillFormScreen({
   onSaved,
   templateId,
 }: NewBillFormScreenProps) {
-  const router = useRouter();
+  const router = useAppRouter();
   const { ledgerId } = useLedger();
   const { push } = useSheetStack();
   const formId = useId();

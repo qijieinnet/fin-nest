@@ -12,7 +12,6 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import {
@@ -29,6 +28,7 @@ import {
 import { downloadFile, uploadFileWithProgress } from "@/lib/api/download";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useSheetStack, useToast } from "@/providers";
 import { BackupScheduleCard } from "./_components/BackupScheduleCard";
 import { PruneBackupsConfirmDialog } from "./_components/PruneBackupsConfirmDialog";
@@ -38,7 +38,7 @@ import { RestoreBackupSheet } from "./_components/RestoreBackupSheet";
 const BUSY_POLL_MS = 3_000;
 
 export function BackupScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { push } = useSheetStack();

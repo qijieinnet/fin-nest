@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { AttachmentItem, RecoverablePayableItem } from "@/components/business";
 import {
@@ -38,6 +37,7 @@ import {
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../../more/insurances/_components/insurance-utils";
 import { formatDateLabel, typeGlyph } from "../../../more/items/_components/item-utils";
@@ -109,7 +109,7 @@ export function useTransactionFormModel({
   pending,
   seed,
 }: UseTransactionFormModelParams) {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const isEdit = Boolean(initial);

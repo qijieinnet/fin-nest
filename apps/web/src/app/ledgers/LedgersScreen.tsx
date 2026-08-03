@@ -1,12 +1,12 @@
 "use client";
 
 import { ChevronLeft, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
 import { IconButton, Button, MobileAppShell, MobilePage, MobileTabBar } from "@/components/ui";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useLedger, useSheetStack } from "@/providers";
 import { CreateLedgerSheet } from "./_components/CreateLedgerSheet";
 import { JoinLedgerSheet } from "./_components/JoinLedgerSheet";
@@ -14,7 +14,7 @@ import { LedgerCard } from "./_components/LedgerCard";
 import { LedgerDetailSheet } from "./_components/LedgerDetailSheet";
 
 export function LedgersScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { user } = useAuth();
   const { isLoading, ledgerId, ledgers } = useLedger();
   const { push } = useSheetStack();

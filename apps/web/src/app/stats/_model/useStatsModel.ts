@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { StatsCategoryEntry, TransactionListQuery } from "@/lib/api";
 import { type BusinessFilterValue, defaultFilterValue } from "@/lib/data/filter-types";
@@ -13,6 +12,7 @@ import {
   usePeople,
 } from "@/lib/data/records";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger } from "@/providers";
 import type { TrendRange } from "../../accounts/_components/TrendRangeSelect";
 import { filterToQuery, timeRangeFromFilter } from "../../bills/_components/bill-utils";
@@ -75,7 +75,7 @@ export type EntryBills = { filters: TransactionListQuery; title: string };
 
 /** 统计页视图模型：筛选、类型/下钻/趋势区间状态、排行与环形/趋势派生。UI 弹层开关留在组件。 */
 export function useStatsModel() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { ledgerId } = useLedger();
   const [filterValue, setFilterValue] = useState<BusinessFilterValue>(
     () => (ledgerId ? statsFilterCache.get(ledgerId) : undefined) ?? defaultFilterValue,

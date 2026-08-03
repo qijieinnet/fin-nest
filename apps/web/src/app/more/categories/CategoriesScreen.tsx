@@ -12,7 +12,6 @@ import {
   Plus,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/business";
 import {
   Button,
@@ -34,6 +33,7 @@ import { cn } from "@/lib/format/class-names";
 import { routes } from "@/lib/route/routes";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useCategories } from "@/lib/data/records";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { CategoryEditorSheet } from "./_components/CategoryEditorSheet";
 import { CategorySortList } from "./_components/CategorySortList";
@@ -143,7 +143,7 @@ function CategoryCard({
 }
 
 export function CategoriesScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const { ledgerId } = useLedger();
   const categoriesQuery = useCategories(ledgerId);
   const queryClient = useQueryClient();

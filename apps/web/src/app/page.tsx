@@ -1,15 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/business";
 import { MobileAppShell } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
 
 export default function HomePage() {
   const { status } = useAuth();
-  const router = useRouter();
+  const router = useAppRouter();
 
   useEffect(() => {
     if (status === "loading") return;

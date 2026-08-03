@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Edit3, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   CategoryIcon,
   EmptyState,
@@ -32,6 +31,7 @@ import {
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { QuickTemplateEditorSheet } from "./_components/QuickTemplateEditorSheet";
 
@@ -77,7 +77,7 @@ function personDisplay(people: Person[], personId: string | null) {
 }
 
 export function QuickTemplatesScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const { ledgerId } = useLedger();

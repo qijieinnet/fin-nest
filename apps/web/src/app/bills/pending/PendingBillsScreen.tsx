@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import { Button, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
@@ -15,12 +14,13 @@ import {
 import { useAccounts, useAutoPending, useCategories } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { DeletePendingConfirmDialog } from "./DeletePendingConfirmDialog";
 import { PendingTransactionList } from "./PendingTransactionList";
 
 export function PendingBillsScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { showToast } = useToast();

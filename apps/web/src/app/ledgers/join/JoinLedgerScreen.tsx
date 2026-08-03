@@ -1,13 +1,13 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { MobileAppShell, MobilePage } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { JoinLedgerForm } from "../_components/JoinLedgerSheet";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 
 export function JoinLedgerScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
 
   return (
     <MobileAppShell>

@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowUpDown, ChevronLeft, ChevronRight, Ellipsis, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/business";
 import {
@@ -18,6 +17,7 @@ import type { Account } from "@/lib/api";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { AccountEditorSheet } from "./_components/AccountEditorSheet";
 import { AccountsSortList } from "./_components/AccountsSortList";
@@ -31,7 +31,7 @@ import {
 import { useAccountsModel } from "./_model/useAccountsModel";
 
 export function AccountsScreenMobile() {
-  const router = useRouter();
+  const router = useAppRouter();
   const isDesktop = useIsDesktop();
   // 用户把「账户」收进「更多」时按全屏页处理（无底部导航、显示返回）；在导航栏里则内嵌底部导航。
   const isPrimary = useIsPrimaryNavMenu("accounts");

@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Edit3, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState, SwipeActionRow } from "@/components/business";
 import type { SwipeAction } from "@/components/business";
 import { IconButton, Button, MobileAppShell, MobilePage, Switch } from "@/components/ui";
@@ -25,6 +24,7 @@ import {
 } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { PendingTransactionList } from "@/app/bills/pending/PendingTransactionList";
 import { AutoPendingEditorSheet } from "./_components/AutoPendingEditorSheet";
@@ -46,7 +46,7 @@ function sectionTitle(count: number): string {
 }
 
 export function AutoScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
   const { push, pop, stack } = useSheetStack();

@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, KeyRound, LogOut, Shield } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EdgeFade, MobileAppShell, MobileTabBar, PopoverMenu } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, clearSessionToken } from "@/lib/api";
@@ -20,10 +19,11 @@ import {
 import { useFeishuStatus } from "@/lib/data/feishu";
 import { type NavMenuKey, resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useLedger, usePreferences } from "@/providers";
 
 export function MoreScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { clearUser, user } = useAuth();
   const { clearLedger, currentLedger, ledgers } = useLedger();

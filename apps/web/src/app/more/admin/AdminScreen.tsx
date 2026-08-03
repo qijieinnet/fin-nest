@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { IconButton, MobileAppShell, MobilePage, Switch } from "@/components/ui";
 import {
@@ -13,10 +12,11 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useToast } from "@/providers";
 
 export function AdminScreen() {
-  const router = useRouter();
+  const router = useAppRouter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { showToast } = useToast();
