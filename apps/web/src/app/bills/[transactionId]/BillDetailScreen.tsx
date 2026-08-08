@@ -14,12 +14,15 @@ import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui"
 import {
   apiRequest,
   type AttachmentRecord,
+  type AutoPendingTransaction,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
   type LedgerMember,
   ledgerApiPath,
   ledgerMembersPath,
   type TransactionDetail,
+  type TransactionLink,
+  type TransactionRelationKind,
 } from "@/lib/api";
 import {
   useAccounts,
@@ -128,6 +131,49 @@ function relationLabels(type: TransactionDetail["type"]) {
     linked: type === "income" ? "冲减可收回项目" : "冲减需归还项目",
     primary: type === "income" ? "需归还" : "可收回",
   };
+}
+
+/**
+ * 待确认记录上的资产关联 → 详情渲染要的 `TransactionLink` 形状。
+ *
+ * `linkKind` 与确认入账时 `AutomationService.linkAssets` 实际写入的一致，
+ * 免得同一条记录确认前后显示不同。
+ */
+function pendingAssetLinks(pending: AutoPendingTransaction): TransactionLink[] {
+  const base = {
+    ledgerId: pending.ledgerId,
+    transactionId: pending.id,
+    createdAt: pending.createdAt,
+  };
+  const links: TransactionLink[] = [];
+  if (pending.insuranceId) {
+    links.push({
+      ...base,
+      id: `${pending.id}:insurance`,
+      linkedType: "insurance",
+      linkedId: pending.insuranceId,
+      linkKind: "related",
+    });
+  }
+  if (pending.itemId) {
+    links.push({
+      ...base,
+      id: `${pending.id}:item`,
+      linkedType: "item",
+      linkedId: pending.itemId,
+      linkKind: "consumable",
+    });
+  }
+  if (pending.subscriptionId) {
+    links.push({
+      ...base,
+      id: `${pending.id}:subscription`,
+      linkedType: "subscription",
+      linkedId: pending.subscriptionId,
+      linkKind: "related",
+    });
+  }
+  return links;
 }
 
 function fileName(attachment: AttachmentRecord): string {
@@ -318,7 +364,17 @@ export function BillDetailScreen({
       source: "auto",
       createdBy: "",
       createdAt: pendingItem.createdAt,
-      relations: [],
+      // 关联项与资产关联在确认时会原样带进交易，确认前就得能看见——
+      // 待确认没有自己的关联表，这里按详情渲染需要的形状现搭（id 仅用作列表 key）。
+      relations: (pendingItem.relationPayload ?? []).map((relation, index) => ({
+        id: `${pendingItem.id}:relation:${index}`,
+        ledgerId: pendingItem.ledgerId,
+        transactionId: pendingItem.id,
+        accountId: relation.accountId,
+        relationKind: relation.relationKind as TransactionRelationKind,
+        amountMicros: relation.amountMicros,
+      })),
+      links: pendingAssetLinks(pendingItem),
     };
   }, [pendingItem, categories, people]);
   const transaction = isPendingMode ? pendingDetail : transactionQuery.data;
@@ -554,7 +610,7 @@ export function BillDetailScreen({
 
           {order.filter((field) => field !== "type" && field !== "amount").map(renderOrderedField)}
 
-          {!isPendingMode && !isTransfer ? (
+          {!isTransfer ? (
             <>
               <RelationBlock
                 accounts={accounts}

@@ -5,6 +5,7 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prismaPackage from "../../../packages/db/generated/client/index.js";
+import { autoPendingDataFromRule } from "@fin-nest/backend";
 
 const { PrismaClient } = prismaPackage;
 
@@ -181,6 +182,12 @@ async function main() {
   });
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
 
+  await assertAutoPendingSubscriptionLink({
+    ledgerId: ledger.id,
+    owner,
+    account,
+    category,
+  });
   await assertSubscriptionReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertInsuranceReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertEntryReminder({ ledgerId: ledger.id, owner });
@@ -214,6 +221,7 @@ async function main() {
           "batch_update",
           "effective_amount_queries",
           "idempotency",
+          "auto_pending_subscription_link",
           "subscription_reminder_targets",
           "insurance_reminder_targets",
           "entry_reminder",
@@ -1278,6 +1286,87 @@ async function assertPartialPatchRegressions({
   assert.equal(updatedTemplate.directEnabled, true);
   assert.equal(updatedTemplate.sortOrder, 2);
 
+  // 模板关联物品时的记法：耗材要进「耗材合计」，购入不能——物品自己已有购买价格，
+  // 再计一次就重复了。账单表单没有这个选择（手选=耗材、当场新建物品=购入），
+  // 模板是提前配好反复复用的，因此单独存一列。
+  const consumablesBefore = async () => {
+    const items = await api("GET", `/ledgers/${ledgerId}/items`, { token: owner.token });
+    return BigInt(items.find((entry) => entry.id === item.id).consumablesMicros);
+  };
+  const beforePurchaseRun = await consumablesBefore();
+  const purchaseTemplate = await api("POST", `/ledgers/${ledgerId}/quick-templates`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "expense",
+      name: `E2E Purchase Template ${stamp}`,
+      amountMicros: "2000000",
+      categoryId: category.id,
+      accountId: account.id,
+      itemId: item.id,
+      itemLinkKind: "purchase",
+      directEnabled: true,
+    },
+  });
+  assert.equal(purchaseTemplate.itemLinkKind, "purchase");
+  const purchaseRun = await api(
+    "POST",
+    `/ledgers/${ledgerId}/quick-templates/${purchaseTemplate.id}/run`,
+    { token: owner.token, expected: 201, idempotencyKey: `${prefix}-quick-purchase-run` },
+  );
+  const purchaseDetail = await api("GET", `/ledgers/${ledgerId}/transactions/${purchaseRun.id}`, {
+    token: owner.token,
+  });
+  assert.equal(
+    purchaseDetail.links.find((link) => link.linkedType === "item").linkKind,
+    "purchase",
+    "模板选了「购入」时必须写 purchase 关联",
+  );
+  assert.equal(
+    await consumablesBefore(),
+    beforePurchaseRun,
+    "购入不该计进物品的耗材合计（物品已有购买价格，再计一次就重复了）",
+  );
+
+  // 不指定记法的模板保持老行为：按耗材入账并计入耗材合计。
+  const consumableTemplate = await api("POST", `/ledgers/${ledgerId}/quick-templates`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "expense",
+      name: `E2E Consumable Template ${stamp}`,
+      amountMicros: "1500000",
+      categoryId: category.id,
+      accountId: account.id,
+      itemId: item.id,
+      directEnabled: true,
+    },
+  });
+  assert.equal(consumableTemplate.itemLinkKind, null);
+  const consumableRun = await api(
+    "POST",
+    `/ledgers/${ledgerId}/quick-templates/${consumableTemplate.id}/run`,
+    { token: owner.token, expected: 201, idempotencyKey: `${prefix}-quick-consumable-run` },
+  );
+  const consumableDetail = await api(
+    "GET",
+    `/ledgers/${ledgerId}/transactions/${consumableRun.id}`,
+    { token: owner.token },
+  );
+  assert.equal(
+    consumableDetail.links.find((link) => link.linkedType === "item").linkKind,
+    "consumable",
+  );
+  assert.equal(await consumablesBefore(), beforePurchaseRun + 1_500_000n);
+
+  // 换掉物品但没重新指定记法时回到默认，避免「购入」残留到下一件物品上。
+  const clearedKind = await api(
+    "PATCH",
+    `/ledgers/${ledgerId}/quick-templates/${purchaseTemplate.id}`,
+    { token: owner.token, body: { itemId: item.id } },
+  );
+  assert.equal(clearedKind.itemLinkKind, null);
+
   const transferTemplate = await api("POST", `/ledgers/${ledgerId}/quick-templates`, {
     token: owner.token,
     expected: 201,
@@ -1418,6 +1507,90 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
  * 未配置 FEISHU_APP_ID/SECRET 时账本维度绑定列表返回空数组（前端据此隐藏入口），
  * 但档位上的目标读写不依赖该开关，因此这里直接建绑定行来验证。
  */
+/**
+ * 关联订阅的自动记账：规则 → 待确认 → 确认入账 → 交易带上订阅关联 → 续订自动确认。
+ *
+ * 这条链路曾经断在第二步（生成待确认时漏搬 `subscriptionId`），症状很隐蔽：待确认能生成、
+ * 也能确认，只是入账后的交易没有订阅关联，订阅的续费日也就不会自动顺延。
+ *
+ * 生成待确认那一步归 worker 管（API 里没有对应接口），这里直接复用 worker 用的同一个搬运
+ * 函数 `autoPendingDataFromRule` 写库——测的是真代码，不是在测试里重抄一遍字段。
+ */
+async function assertAutoPendingSubscriptionLink({ ledgerId, owner, account, category }) {
+  const token = owner.token;
+  const priceMicros = "9900000";
+  // 续费日 = 今天、提前 7 天提醒 → 自动确认续费的窗口 [今天-7, 下个续费日) 已经打开。
+  const subscription = await api("POST", `/ledgers/${ledgerId}/subscriptions`, {
+    token,
+    expected: 201,
+    body: {
+      name: `E2E 自动记账订阅 ${stamp}`,
+      billingCycle: "monthly",
+      priceMicros,
+      nextRenewalDate: todayIso(),
+      reminders: [{ leadValue: 7, leadUnit: "day", remindTime: "09:00" }],
+    },
+  });
+
+  const rule = await api("POST", `/ledgers/${ledgerId}/auto-rules`, {
+    token,
+    expected: 201,
+    body: {
+      type: "expense",
+      amountMicros: priceMicros,
+      categoryId: category.id,
+      accountId: account.id,
+      subscriptionId: subscription.id,
+      repeatRule: "monthly",
+      startDate: todayIso(),
+      note: `E2E 订阅续费 ${stamp}`,
+    },
+  });
+  assert.equal(rule.subscriptionId, subscription.id);
+
+  const ruleRow = await prisma.autoRule.findUniqueOrThrow({ where: { id: rule.id } });
+  const pendingRow = await prisma.autoPendingTransaction.create({
+    data: {
+      ledgerId,
+      autoRuleId: ruleRow.id,
+      ...autoPendingDataFromRule(ruleRow, {
+        periodKey: todayIso(),
+        scheduledFor: dateOnly(todayIso()),
+      }),
+    },
+  });
+  assert.equal(pendingRow.subscriptionId, subscription.id);
+
+  // 列表接口要把关联带出来，前端待确认详情才能在确认前显示「关联订阅」。
+  const pendings = await api("GET", `/ledgers/${ledgerId}/auto-pending-transactions`, { token });
+  const listed = pendings.find((item) => item.id === pendingRow.id);
+  assert.equal(listed.subscriptionId, subscription.id);
+
+  const confirmed = await api(
+    "POST",
+    `/ledgers/${ledgerId}/auto-pending-transactions/${pendingRow.id}/confirm`,
+    { token, expected: 201 },
+  );
+  const detail = await api("GET", `/ledgers/${ledgerId}/transactions/${confirmed.id}`, { token });
+  assert.deepEqual(
+    detail.links.filter((link) => link.linkedType === "subscription").map((link) => link.linkedId),
+    [subscription.id],
+    "确认入账后的交易必须带上规则设定的订阅关联",
+  );
+
+  // 关联建对了，订阅这一期就算已付：续费日顺延一个周期（等价于「续订已自动确认」）。
+  const afterConfirm = await api("GET", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
+    token,
+  });
+  const expectedRenewal = new Date(dateOnly(todayIso()));
+  expectedRenewal.setUTCMonth(expectedRenewal.getUTCMonth() + 1);
+  assert.equal(
+    afterConfirm.nextRenewalDate.slice(0, 10),
+    expectedRenewal.toISOString().slice(0, 10),
+    "关联支出已覆盖单期费用时，续费日应当自动顺延一个周期",
+  );
+}
+
 async function assertSubscriptionReminderTargets({ ledgerId, owner, requester }) {
   const token = owner.token;
   // owner 是本账本成员，requester 只提交了加入申请（仍是外人），正好覆盖越权分支。
@@ -2084,6 +2257,10 @@ async function cleanup() {
       await prisma.reminderSchedule.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.entryReminder.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.notification.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      // 自动记账规则/待确认/快捷模板都可能外键引用订阅、保单、物品，必须先删。
+      await prisma.autoPendingTransaction.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.autoRule.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.quickTemplate.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.subscription.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.subscriptionCategory.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.attachment.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
@@ -2093,9 +2270,6 @@ async function cleanup() {
         where: { ledgerId: { in: ledgerIds } },
       });
       await prisma.accountEntry.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
-      await prisma.autoPendingTransaction.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
-      await prisma.autoRule.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
-      await prisma.quickTemplate.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.planPeriod.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.plan.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.categoryBudget.deleteMany({ where: { ledgerId: { in: ledgerIds } } });

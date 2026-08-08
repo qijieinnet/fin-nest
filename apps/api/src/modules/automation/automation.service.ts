@@ -542,6 +542,14 @@ export class AutomationService {
               : this.relationJson(input.relations),
         insuranceId: type === "transfer" ? null : input.insuranceId,
         itemId: type === "transfer" ? null : input.itemId,
+        // 关联方式跟着物品走：换/清空物品时没带新的方式就回到默认（耗材），
+        // 否则「购入」会残留到下一件物品上。
+        itemLinkKind:
+          type === "transfer"
+            ? null
+            : input.itemId !== undefined && input.itemLinkKind === undefined
+              ? null
+              : input.itemLinkKind,
         subscriptionId: type === "transfer" ? null : input.subscriptionId,
         directEnabled: input.directEnabled,
         sortOrder: input.sortOrder,
@@ -566,6 +574,7 @@ export class AutomationService {
       ...this.templateToTransaction(template, todayKey()),
       insuranceId: template.insuranceId,
       itemId: template.itemId,
+      itemLinkKind: template.itemLinkKind,
       subscriptionId: template.subscriptionId,
     };
   }
@@ -601,6 +610,7 @@ export class AutomationService {
         await this.linkAssets(tx, ledgerId, transaction.id, {
           insuranceId: template.insuranceId,
           itemId: template.itemId,
+          itemLinkKind: template.itemLinkKind,
           subscriptionId: template.subscriptionId,
         });
         return transaction;
@@ -696,6 +706,7 @@ export class AutomationService {
       relationPayload: isTransfer ? Prisma.JsonNull : this.relationJson(input.relations),
       insuranceId: isTransfer ? null : (input.insuranceId ?? null),
       itemId: isTransfer ? null : (input.itemId ?? null),
+      itemLinkKind: isTransfer || !input.itemId ? null : (input.itemLinkKind ?? null),
       subscriptionId: isTransfer ? null : (input.subscriptionId ?? null),
       directEnabled: input.directEnabled ?? false,
       sortOrder: input.sortOrder ?? 0,
@@ -888,7 +899,13 @@ export class AutomationService {
     tx: PrismaTransactionClient,
     ledgerId: string,
     transactionId: string,
-    links: { insuranceId: string | null; itemId: string | null; subscriptionId: string | null },
+    links: {
+      insuranceId: string | null;
+      itemId: string | null;
+      /** 只有快捷模板能指定；自动记账的周期性支出恒为耗材，传 null 即可。 */
+      itemLinkKind?: string | null;
+      subscriptionId: string | null;
+    },
   ): Promise<void> {
     const targets: Array<{
       linkedType: "insurance" | "item" | "subscription";
@@ -899,7 +916,11 @@ export class AutomationService {
       targets.push({ linkedType: "insurance", linkedId: links.insuranceId, linkKind: "related" });
     }
     if (links.itemId) {
-      targets.push({ linkedType: "item", linkedId: links.itemId, linkKind: "consumable" });
+      targets.push({
+        linkedType: "item",
+        linkedId: links.itemId,
+        linkKind: links.itemLinkKind === "purchase" ? "purchase" : "consumable",
+      });
     }
     if (links.subscriptionId) {
       targets.push({

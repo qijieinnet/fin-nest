@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ToggleCard } from "./TransactionFieldRows";
@@ -16,6 +16,8 @@ export type AssetLinkOption = {
 type AssetLinkCardProps = {
   checked: boolean;
   emptyText: string;
+  /** 选中项下方的附加设置（如快捷模板的「关联方式」）。选中后才渲染。 */
+  footer?: ReactNode;
   hint: string;
   items: AssetLinkOption[];
   label: string;
@@ -30,6 +32,7 @@ type AssetLinkCardProps = {
 export function AssetLinkCard({
   checked,
   emptyText,
+  footer,
   hint,
   items,
   label,
@@ -73,6 +76,7 @@ export function AssetLinkCard({
             searchPlaceholder={`搜索${label}`}
             value={selectedId}
           />
+          {selectedId ? footer : null}
           {onCreate ? (
             <Button icon={<Plus size={16} />} onClick={onCreate} type="button" variant="secondary">
               {createLabel ?? `新建${label}`}

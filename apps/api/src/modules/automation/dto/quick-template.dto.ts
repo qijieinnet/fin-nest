@@ -101,6 +101,14 @@ export class CreateQuickTemplateDto {
   @IsString()
   itemId?: string | null;
 
+  @ApiPropertyOptional({
+    enum: ["consumable", "purchase"],
+    description: "关联物品的方式：consumable=耗材/维修（计入耗材合计），purchase=购入。默认耗材。",
+  })
+  @IsOptional()
+  @IsIn(["consumable", "purchase"])
+  itemLinkKind?: "consumable" | "purchase" | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

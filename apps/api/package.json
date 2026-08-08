@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "e2e": "pnpm run build && node scripts/e2e-api.mjs",
     "test:ai": "pnpm run build && node --test scripts/ai-logic.test.mjs",
+    "test:automation": "pnpm run build && node --test scripts/automation-logic.test.mjs",
     "test:feishu": "pnpm run build && node --test scripts/feishu-logic.test.mjs",
     "test:system-backup": "pnpm run build && node --test scripts/system-backup-logic.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

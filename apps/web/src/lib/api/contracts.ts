@@ -699,6 +699,8 @@ export type QuickTemplate = {
   relationPayload: AutoRelation[] | null;
   insuranceId: string | null;
   itemId: string | null;
+  /** 关联物品的方式；为空按「耗材」处理。只在 itemId 有值时有意义。 */
+  itemLinkKind: "consumable" | "purchase" | null;
   subscriptionId: string | null;
   directEnabled: boolean;
   sortOrder: number;
@@ -766,6 +768,11 @@ export type AutoPendingTransaction = {
   toSubAccountId: string | null;
   personId: string | null;
   note: string | null;
+  /** 规则生成时的快照，确认入账时原样带进交易；确认前只读展示。 */
+  relationPayload: AutoRelation[] | null;
+  insuranceId: string | null;
+  itemId: string | null;
+  subscriptionId: string | null;
   confirmedTransactionId: string | null;
   confirmedAt: string | null;
   deletedAt: string | null;

@@ -68,6 +68,13 @@ const TYPE_ITEMS = [
   { label: "转账", value: "transfer" },
 ];
 
+// 关联物品的两种记法。账单表单不给这个选择（手选=耗材、当场新建物品=购入），
+// 但模板是提前配好、反复复用的，配的时候必须能说清楚这一笔算哪种。
+const ITEM_LINK_KIND_ITEMS = [
+  { label: "耗材 / 维修", value: "consumable" },
+  { label: "购入", value: "purchase" },
+];
+
 /** 交易类型 + 关联桶（主/联动）对应的账户类型（可收回/需归还）。 */
 function relationAccountKind(
   type: TransactionType,
@@ -180,6 +187,9 @@ export function QuickTemplateEditorSheet({
   );
   const [itemEnabled, setItemEnabled] = useState(Boolean(template?.itemId));
   const [selectedItemId, setSelectedItemId] = useState<string | null>(template?.itemId ?? null);
+  const [itemLinkKind, setItemLinkKind] = useState<"consumable" | "purchase">(
+    template?.itemLinkKind === "purchase" ? "purchase" : "consumable",
+  );
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(Boolean(template?.subscriptionId));
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(
     template?.subscriptionId ?? null,
@@ -264,6 +274,7 @@ export function QuickTemplateEditorSheet({
       setSelectedInsuranceId(null);
       setItemEnabled(false);
       setSelectedItemId(null);
+      setItemLinkKind("consumable");
       setSubscriptionEnabled(false);
       setSelectedSubscriptionId(null);
       return;
@@ -364,6 +375,7 @@ export function QuickTemplateEditorSheet({
         relations,
         insuranceId: isTransfer || !insuranceEnabled ? null : (selectedInsuranceId ?? null),
         itemId: isTransfer || !itemEnabled ? null : (selectedItemId ?? null),
+        itemLinkKind: isTransfer || !itemEnabled || !selectedItemId ? null : itemLinkKind,
         subscriptionId:
           isTransfer || !subscriptionEnabled ? null : (selectedSubscriptionId ?? null),
         directEnabled,
@@ -599,6 +611,20 @@ export function QuickTemplateEditorSheet({
               <AssetLinkCard
                 checked={itemEnabled}
                 emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
+                footer={
+                  <div className="flex flex-col gap-1.5">
+                    <Tabs
+                      items={ITEM_LINK_KIND_ITEMS}
+                      onValueChange={(value) => setItemLinkKind(value as "consumable" | "purchase")}
+                      value={itemLinkKind}
+                    />
+                    <p className="transaction-form__empty-text">
+                      {itemLinkKind === "purchase"
+                        ? "记为购入：只挂在物品流水里，不计入耗材合计"
+                        : "记为耗材：累加进物品的耗材合计"}
+                    </p>
+                  </div>
+                }
                 hint={
                   type === "income"
                     ? "把这笔收入（如转卖回款）关联到一件物品"
@@ -608,7 +634,10 @@ export function QuickTemplateEditorSheet({
                 label="关联物品"
                 onCheckedChange={(checked) => {
                   setItemEnabled(checked);
-                  if (!checked) setSelectedItemId(null);
+                  if (!checked) {
+                    setSelectedItemId(null);
+                    setItemLinkKind("consumable");
+                  }
                 }}
                 onSelect={setSelectedItemId}
                 selectedId={selectedItemId}

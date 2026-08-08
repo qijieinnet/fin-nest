@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
+  autoPendingDataFromRule,
   BackgroundJobsService,
   currentTimeKey,
   DatabaseTransactionService,
@@ -101,31 +102,13 @@ export class AutoSchedulerService {
         where: { autoRuleId_periodKey: { autoRuleId: rule.id, periodKey } },
       });
       if (!existing) {
+        // 业务字段整份由 autoPendingDataFromRule 搬运（清单按 DMMF 现算），
+        // 这里只补「哪个账本、哪条规则」——加字段时不需要再回来改这一处。
         const pending = await tx.autoPendingTransaction.create({
           data: {
             ledgerId: rule.ledgerId,
             autoRuleId: rule.id,
-            periodKey,
-            scheduledFor: cursor,
-            status: "pending",
-            type: rule.type,
-            amountMicros: rule.amountMicros,
-            categoryId: rule.categoryId,
-            subcategoryId: rule.subcategoryId,
-            accountId: rule.accountId,
-            subAccountId: rule.subAccountId,
-            fromAccountId: rule.fromAccountId,
-            fromSubAccountId: rule.fromSubAccountId,
-            toAccountId: rule.toAccountId,
-            toSubAccountId: rule.toSubAccountId,
-            personId: rule.personId,
-            note: rule.note,
-            relationPayload:
-              rule.relationPayload === null || rule.relationPayload === undefined
-                ? Prisma.JsonNull
-                : (rule.relationPayload as Prisma.InputJsonValue),
-            insuranceId: rule.insuranceId,
-            itemId: rule.itemId,
+            ...autoPendingDataFromRule(rule, { periodKey, scheduledFor: cursor }),
           },
         });
         createdIds.push(pending.id);

@@ -72,6 +72,8 @@ export type TransactionSeed = {
   relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }> | null;
   insuranceId?: string | null;
   itemId?: string | null;
+  /** 关联物品的方式（快捷模板可指定）；为空按「耗材」处理。 */
+  itemLinkKind?: "consumable" | "purchase" | null;
   subscriptionId?: string | null;
 };
 
@@ -227,7 +229,7 @@ export function useTransactionFormModel({
     initialSubscriptionId,
   );
   const [selectedItemLinkKind, setSelectedItemLinkKind] = useState<"consumable" | "purchase">(
-    initialItemLink?.linkKind === "purchase" ? "purchase" : "consumable",
+    (initialItemLink?.linkKind ?? seed?.itemLinkKind) === "purchase" ? "purchase" : "consumable",
   );
 
   const catOptions = useMemo(

@@ -822,6 +822,7 @@ export class BackupService {
         relationPayload: remapRelationPayload(row.relationPayload, maps),
         insuranceId: ref(maps.insurance, row.insuranceId),
         itemId: ref(maps.item, row.itemId),
+        itemLinkKind: (row.itemLinkKind as string | null) ?? null,
         subscriptionId: ref(maps.subscription, row.subscriptionId),
         directEnabled: Boolean(row.directEnabled),
         sortOrder: Number(row.sortOrder ?? 0),

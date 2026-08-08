@@ -28,6 +28,8 @@ type PrefillResponse = {
   relations?: Array<{ accountId: string; relationKind: string; amountMicros: string }>;
   insuranceId?: string | null;
   itemId?: string | null;
+  itemLinkKind?: "consumable" | "purchase" | null;
+  subscriptionId?: string | null;
 };
 
 // 快捷模板列表已带齐预填所需字段，直接构建 seed，避免选择后再请求 /prefill 造成的 loading。
@@ -49,6 +51,7 @@ function templateToSeed(template: QuickTemplate): TransactionSeed {
     relations: template.relationPayload,
     insuranceId: template.insuranceId,
     itemId: template.itemId,
+    itemLinkKind: template.itemLinkKind,
     subscriptionId: template.subscriptionId,
   };
 }
@@ -130,6 +133,8 @@ export function NewBillFormScreen({
         relations: prefillQuery.data.relations ?? null,
         insuranceId: prefillQuery.data.insuranceId ?? null,
         itemId: prefillQuery.data.itemId ?? null,
+        itemLinkKind: prefillQuery.data.itemLinkKind ?? null,
+        subscriptionId: prefillQuery.data.subscriptionId ?? null,
       }
     : undefined;
 

@@ -494,6 +494,9 @@ model QuickTemplate {
   relationPayload  Json?     @map("relation_payload") @db.JsonB
   insuranceId      String?   @map("insurance_id") @db.Uuid
   itemId           String?   @map("item_id") @db.Uuid
+  /// 关联物品的方式：consumable=耗材/维修（计入耗材合计），purchase=购入（只挂流水）。
+  /// 为空按 consumable 处理，与交易关联的默认一致。
+  itemLinkKind     String?   @map("item_link_kind")
   subscriptionId   String?   @map("subscription_id") @db.Uuid
   directEnabled    Boolean   @default(false) @map("direct_enabled")
   sortOrder        Int       @default(0) @map("sort_order")

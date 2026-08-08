@@ -334,49 +334,56 @@ export class ReminderSchedulerService {
     }
 
     const bindings = await this.resolveBindings(targets.map((t) => t.feishuBindingId));
-    // 卡片要和网页端的待确认详情展示同一组字段，因此分类/账户都要连二级一起取。
-    const [ledgers, categories, subcategories, accounts, subAccounts, people] = await Promise.all([
-      this.prisma.client.ledger.findMany({
-        where: { id: { in: Array.from(new Set(pendings.map((p) => p.ledgerId))) } },
-        select: { id: true, currency: true, amountDecimalPlaces: true },
-      }),
-      this.prisma.client.category.findMany({
-        where: { id: { in: compact(pendings.map((p) => p.categoryId)) } },
-        select: { id: true, name: true },
-      }),
-      this.prisma.client.subcategory.findMany({
-        where: { id: { in: compact(pendings.map((p) => p.subcategoryId)) } },
-        select: { id: true, name: true },
-      }),
-      this.prisma.client.account.findMany({
-        where: {
-          id: {
-            in: compact(pendings.flatMap((p) => [p.accountId, p.fromAccountId, p.toAccountId])),
+    // 卡片要和网页端的待确认详情展示同一组字段，因此分类/账户都要连二级一起取；
+    // 关联项（应收/应付）的账户藏在 relationPayload 里，取账户名时要一并带上。
+    const [ledgers, categories, subcategories, accounts, subAccounts, people, links] =
+      await Promise.all([
+        this.prisma.client.ledger.findMany({
+          where: { id: { in: Array.from(new Set(pendings.map((p) => p.ledgerId))) } },
+          select: { id: true, currency: true, amountDecimalPlaces: true },
+        }),
+        this.prisma.client.category.findMany({
+          where: { id: { in: compact(pendings.map((p) => p.categoryId)) } },
+          select: { id: true, name: true },
+        }),
+        this.prisma.client.subcategory.findMany({
+          where: { id: { in: compact(pendings.map((p) => p.subcategoryId)) } },
+          select: { id: true, name: true },
+        }),
+        this.prisma.client.account.findMany({
+          where: {
+            id: {
+              in: compact([
+                ...pendings.flatMap((p) => [p.accountId, p.fromAccountId, p.toAccountId]),
+                ...pendings.flatMap((p) =>
+                  parsePendingRelations(p.relationPayload).map((relation) => relation.accountId),
+                ),
+              ]),
+            },
           },
-        },
-        select: { id: true, name: true },
-      }),
-      this.prisma.client.subAccount.findMany({
-        where: {
-          id: {
-            in: compact(
-              pendings.flatMap((p) => [p.subAccountId, p.fromSubAccountId, p.toSubAccountId]),
-            ),
+          select: { id: true, name: true },
+        }),
+        this.prisma.client.subAccount.findMany({
+          where: {
+            id: {
+              in: compact(
+                pendings.flatMap((p) => [p.subAccountId, p.fromSubAccountId, p.toSubAccountId]),
+              ),
+            },
           },
-        },
-        select: { id: true, name: true },
-      }),
-      this.prisma.client.person.findMany({
-        where: { id: { in: compact(pendings.map((p) => p.personId)) } },
-        select: { id: true, name: true },
-      }),
-    ]);
+          select: { id: true, name: true },
+        }),
+        this.prisma.client.person.findMany({
+          where: { id: { in: compact(pendings.map((p) => p.personId)) } },
+          select: { id: true, name: true },
+        }),
+        this.resolveAssetLinkNames(pendings),
+      ]);
     const ledgerById = new Map(ledgers.map((l) => [l.id, l]));
     const nameById = new Map(
-      [...categories, ...subcategories, ...accounts, ...subAccounts, ...people].map((row) => [
-        row.id,
-        row.name,
-      ]),
+      [...categories, ...subcategories, ...accounts, ...subAccounts, ...people, ...links].map(
+        (row) => [row.id, row.name],
+      ),
     );
 
     let enqueued = 0;
@@ -393,6 +400,37 @@ export class ReminderSchedulerService {
       }
     }
     return { enqueued };
+  }
+
+  /** 待确认关联的保单/物品/订阅名称。三张表的 id 都是 uuid，可以并进同一张名字表。 */
+  private async resolveAssetLinkNames(
+    pendings: PendingRow[],
+  ): Promise<Array<{ id: string; name: string }>> {
+    const insuranceIds = compact(pendings.map((p) => p.insuranceId));
+    const itemIds = compact(pendings.map((p) => p.itemId));
+    const subscriptionIds = compact(pendings.map((p) => p.subscriptionId));
+    if (!insuranceIds.length && !itemIds.length && !subscriptionIds.length) return [];
+    const [insurances, items, subscriptions] = await Promise.all([
+      insuranceIds.length
+        ? this.prisma.client.insurance.findMany({
+            where: { id: { in: insuranceIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+      itemIds.length
+        ? this.prisma.client.item.findMany({
+            where: { id: { in: itemIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+      subscriptionIds.length
+        ? this.prisma.client.subscription.findMany({
+            where: { id: { in: subscriptionIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+    return [...insurances, ...items, ...subscriptions];
   }
 
   /** 取生效绑定，并带出各自「仍是成员」的账本集合，供发送前二次校验。 */
@@ -673,7 +711,43 @@ type PendingRow = {
   toSubAccountId: string | null;
   personId: string | null;
   note: string | null;
+  relationPayload: unknown;
+  insuranceId: string | null;
+  itemId: string | null;
+  subscriptionId: string | null;
 };
+
+/** 待确认里存下的一条关联项（结构与交易关联一致，金额是字符串）。 */
+type PendingRelation = {
+  accountId: string;
+  relationKind: string;
+  amountMicros: string;
+};
+
+/** relation_payload 是 JSON 列，历史行可能是任何形状，取不出来就当没有。 */
+function parsePendingRelations(payload: unknown): PendingRelation[] {
+  if (!Array.isArray(payload)) return [];
+  return payload.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const { accountId, relationKind, amountMicros } = entry as Record<string, unknown>;
+    if (
+      typeof accountId !== "string" ||
+      typeof relationKind !== "string" ||
+      typeof amountMicros !== "string"
+    ) {
+      return [];
+    }
+    return [{ accountId, relationKind, amountMicros }];
+  });
+}
+
+/** 与网页端详情一致的两组关联项标签。 */
+function relationGroupLabel(type: string, relationKind: string): string {
+  const isPrimary =
+    relationKind === "receivable_from_expense" || relationKind === "payable_from_income";
+  if (isPrimary) return type === "income" ? "需归还" : "可收回";
+  return type === "income" ? "冲减可收回项目" : "冲减需归还项目";
+}
 
 /**
  * 待确认记账 → 推送事件。
@@ -714,6 +788,25 @@ function buildPendingOccurrence(
   push(fields, "计划入账日期", dateKey(pending.scheduledFor));
   push(fields, "人员", name(pending.personId));
   push(fields, "备注", pending.note?.trim() || null);
+  if (!isTransfer) {
+    // 关联项按详情页的分组合并成一行：同组多笔用「、」连起来，金额跟着账户名走。
+    const grouped = new Map<string, string[]>();
+    for (const relation of parsePendingRelations(pending.relationPayload)) {
+      const label = relationGroupLabel(pending.type, relation.relationKind);
+      const amount = formatMicros(
+        BigInt(relation.amountMicros),
+        ledger?.amountDecimalPlaces ?? 2,
+        ledger?.currency,
+      );
+      const bucket = grouped.get(label) ?? [];
+      bucket.push(`${name(relation.accountId) ?? "未知账户"} ${amount}`);
+      grouped.set(label, bucket);
+    }
+    for (const [label, values] of grouped) push(fields, label, values.join("、"));
+    push(fields, "保险", name(pending.insuranceId));
+    push(fields, "关联物品", name(pending.itemId));
+    push(fields, "关联订阅", name(pending.subscriptionId));
+  }
 
   return {
     ledgerId: pending.ledgerId,
