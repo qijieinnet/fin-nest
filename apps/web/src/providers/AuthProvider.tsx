@@ -12,6 +12,7 @@ import {
   type PublicUser,
 } from "@/lib/api";
 import { clearAppLockEnabledCache, writeAppLockEnabledCache } from "@/lib/app-lock/app-lock";
+import { tryFeishuSilentLogin } from "@/lib/feishu/silent-login";
 import { queryKeys } from "@/lib/query/query-keys";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -28,12 +29,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function fetchCurrentUser(): Promise<PublicUser | null> {
   // 本地没有 token 说明未登录，直接短路，省一次必然 401 的请求。
-  if (!getSessionToken()) return null;
+  if (!getSessionToken()) {
+    // 唯一的例外：在飞书客户端里打开时先试一次免登。非飞书环境该函数同步返回 null，
+    // 不产生任何请求；免登失败也返回 null，照常按未登录处理走到登录页。
+    const feishuUser = await tryFeishuSilentLogin();
+    if (!feishuUser) return null;
+    writeAppLockEnabledCache(feishuUser.appLockEnabled, feishuUser.appLockSkipInFeishu);
+    return feishuUser;
+  }
 
   try {
     const user = await apiRequest<PublicUser>(API_ENDPOINTS.me);
     // 应用锁开关的真值在服务端，这里同步一份本地缓存供下次整页加载首帧同步判断。
-    writeAppLockEnabledCache(user.appLockEnabled);
+    writeAppLockEnabledCache(user.appLockEnabled, user.appLockSkipInFeishu);
     return user;
   } catch (error) {
     // token 已由 apiRequest 里的统一处理清掉了，这里只需把「未登录」这个结果交出去。
@@ -56,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setUser = useCallback(
     (user: PublicUser) => {
-      writeAppLockEnabledCache(user.appLockEnabled);
+      writeAppLockEnabledCache(user.appLockEnabled, user.appLockSkipInFeishu);
       queryClient.setQueryData(queryKeys.currentUser, user);
     },
     [queryClient],

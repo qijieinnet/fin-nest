@@ -19,6 +19,8 @@ import { SessionAuthContext } from "./auth.types";
 export type AppLockStatus = {
   /** 账号级开关：开启后该用户在任何设备打开应用都要先验证身份。 */
   enabled: boolean;
+  /** 飞书客户端内跳过上面那道验证（默认开启）；`enabled` 为假时无意义。 */
+  skipInFeishu: boolean;
   /** 已注册的 Face ID / Touch ID 凭证数量，0 表示所有设备都只能用密码解锁。 */
   credentialCount: number;
 };
@@ -82,33 +84,59 @@ export class AppLockService {
       this.prisma.client.user.findUniqueOrThrow({ where: { id: auth.userId } }),
       this.prisma.client.appLockCredential.count({ where: { userId: auth.userId } }),
     ]);
-    return { enabled: user.appLockEnabled, credentialCount };
+    return {
+      enabled: user.appLockEnabled,
+      skipInFeishu: user.appLockSkipInFeishu,
+      credentialCount,
+    };
   }
 
   /**
    * 开关应用锁。关闭时一并清掉已注册凭证：重新开启会重新注册，
    * 留着只会在系统钥匙串里堆孤儿 passkey。
+   *
+   * `skipInFeishu` 单独可改（不传即保持不变），因为它是总开关下的子选项：
+   * 用户在设置页拨的是两个独立开关，一个的写入不该顺手覆盖另一个。
    */
-  async setEnabled(auth: SessionAuthContext, enabled: boolean): Promise<AppLockStatus> {
+  async setEnabled(
+    auth: SessionAuthContext,
+    input: { enabled?: boolean; skipInFeishu?: boolean },
+  ): Promise<AppLockStatus> {
+    // 两个字段都没传就是空请求，直接读回现状——否则会写一次什么都没改的 update，白白推 updatedAt。
+    if (input.enabled === undefined && input.skipInFeishu === undefined) {
+      return this.getStatus(auth);
+    }
     return this.txs.run(async (tx) => {
-      await tx.user.update({ where: { id: auth.userId }, data: { appLockEnabled: enabled } });
-      if (!enabled) {
+      const user = await tx.user.update({
+        where: { id: auth.userId },
+        data: {
+          ...(input.enabled === undefined ? {} : { appLockEnabled: input.enabled }),
+          ...(input.skipInFeishu === undefined ? {} : { appLockSkipInFeishu: input.skipInFeishu }),
+        },
+      });
+      if (input.enabled === false) {
         await tx.appLockCredential.deleteMany({ where: { userId: auth.userId } });
       }
-      await this.audit.write(
-        {
-          source: "user",
-          actorUserId: auth.userId,
-          action: enabled ? "auth.app_lock.enable" : "auth.app_lock.disable",
-          entityType: "user",
-          entityId: auth.userId,
-        },
-        tx,
-      );
-      const credentialCount = enabled
+      if (input.enabled !== undefined) {
+        await this.audit.write(
+          {
+            source: "user",
+            actorUserId: auth.userId,
+            action: input.enabled ? "auth.app_lock.enable" : "auth.app_lock.disable",
+            entityType: "user",
+            entityId: auth.userId,
+          },
+          tx,
+        );
+      }
+      const credentialCount = user.appLockEnabled
         ? await tx.appLockCredential.count({ where: { userId: auth.userId } })
         : 0;
-      return { enabled, credentialCount };
+      return {
+        enabled: user.appLockEnabled,
+        skipInFeishu: user.appLockSkipInFeishu,
+        credentialCount,
+      };
     });
   }
 
@@ -219,7 +247,11 @@ export class AppLockService {
         tx,
       );
       const credentialCount = await tx.appLockCredential.count({ where: { userId: auth.userId } });
-      return { enabled: true, credentialCount };
+      const { appLockSkipInFeishu } = await tx.user.findUniqueOrThrow({
+        where: { id: auth.userId },
+        select: { appLockSkipInFeishu: true },
+      });
+      return { enabled: true, skipInFeishu: appLockSkipInFeishu, credentialCount };
     });
   }
 

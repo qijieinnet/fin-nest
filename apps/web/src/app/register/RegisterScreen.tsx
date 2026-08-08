@@ -13,6 +13,7 @@ import {
   type RegistrationStatus,
   setSessionToken,
 } from "@/lib/api";
+import { bindPendingFeishuTicket } from "@/lib/feishu/silent-login";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
@@ -59,6 +60,8 @@ export function RegisterScreen() {
     onSuccess: async (result) => {
       setSessionToken(result.token);
       setUser(result.user);
+      // 首位用户在飞书里注册的场景：注册即建默认账本，可以直接把飞书号绑上。
+      await bindPendingFeishuTicket();
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
       router.replace(routes.bills);
     },

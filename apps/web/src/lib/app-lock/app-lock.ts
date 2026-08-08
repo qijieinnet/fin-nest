@@ -7,8 +7,8 @@
  * 解锁断言由后端验签，所以换浏览器/新设备登录后设置自动恢复、无需重新设置。
  * 代价是解锁必须能连上 API：离线时 Face ID 与密码两条路都走不通。
  *
- * 本地 localStorage 只留一份开关缓存，用途单一——整页加载首帧前同步判断要不要上锁，
- * 避免先闪现账目内容再弹锁屏；真值以服务端返回的 PublicUser.appLockEnabled 为准。
+ * 本地 localStorage 只留开关缓存（总开关 + 飞书内免验证），用途单一——整页加载首帧前
+ * 同步判断要不要上锁，避免先闪现账目内容再弹锁屏；真值以服务端返回的 PublicUser 为准。
  */
 
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
@@ -19,6 +19,7 @@ import type {
 import { API_ENDPOINTS, apiRequest, type AppLockStatus } from "@/lib/api";
 
 const ENABLED_CACHE_KEY = "fin-nest:app-lock-enabled";
+const SKIP_IN_FEISHU_CACHE_KEY = "fin-nest:app-lock-skip-feishu";
 /** 旧版（纯客户端应用锁）遗留的本地键，登录后顺手清掉。 */
 const LEGACY_CREDENTIAL_KEY = "fin-nest:app-lock-credential";
 
@@ -48,10 +49,27 @@ export function readAppLockEnabledCache(): boolean {
   }
 }
 
-export function writeAppLockEnabledCache(enabled: boolean): void {
+/**
+ * 「飞书内免验证」的首帧缓存。**缺省按 true**，与该设置项自身的默认值一致：
+ * 全新浏览器里读不到缓存时不该把默认开着免验证的用户拦在锁屏上，
+ * 真正关掉了这个开关的用户由 AppLockGate 的服务端兜底那一步补锁。
+ */
+export function readAppLockSkipInFeishuCache(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(SKIP_IN_FEISHU_CACHE_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function writeAppLockEnabledCache(enabled: boolean, skipInFeishu?: boolean): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(ENABLED_CACHE_KEY, enabled ? "1" : "0");
+    if (skipInFeishu !== undefined) {
+      window.localStorage.setItem(SKIP_IN_FEISHU_CACHE_KEY, skipInFeishu ? "1" : "0");
+    }
     window.localStorage.removeItem(LEGACY_CREDENTIAL_KEY);
   } catch {
     // localStorage 不可用时静默降级：只影响首帧上锁时机，服务端仍会要求验证。
@@ -62,6 +80,7 @@ export function clearAppLockEnabledCache(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(ENABLED_CACHE_KEY);
+    window.localStorage.removeItem(SKIP_IN_FEISHU_CACHE_KEY);
   } catch {
     // 同上，静默降级。
   }
@@ -71,13 +90,19 @@ export async function fetchAppLockStatus(): Promise<AppLockStatus> {
   return apiRequest<AppLockStatus>(API_ENDPOINTS.appLock);
 }
 
-/** 开关应用锁；关闭时后端会一并删除已注册凭证。 */
-export async function setAppLockEnabled(enabled: boolean): Promise<AppLockStatus> {
+/**
+ * 写应用锁设置。两个字段都可单独提交（不传即不改），对应设置页里两个独立开关。
+ * 关闭总开关时后端会一并删除已注册凭证。
+ */
+export async function updateAppLockSetting(input: {
+  enabled?: boolean;
+  skipInFeishu?: boolean;
+}): Promise<AppLockStatus> {
   const status = await apiRequest<AppLockStatus>(API_ENDPOINTS.appLock, {
     method: "PATCH",
-    body: { enabled },
+    body: input,
   });
-  writeAppLockEnabledCache(status.enabled);
+  writeAppLockEnabledCache(status.enabled, status.skipInFeishu);
   return status;
 }
 
@@ -99,7 +124,7 @@ export async function registerAppLockCredential(): Promise<boolean> {
       method: "POST",
       body: { response },
     });
-    writeAppLockEnabledCache(status.enabled);
+    writeAppLockEnabledCache(status.enabled, status.skipInFeishu);
     return status.credentialCount > 0;
   } catch {
     // NotAllowedError（用户取消）、网络错误、验签失败等一律视为未注册成功。

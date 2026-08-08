@@ -81,6 +81,8 @@ export type {
   CategorySnapshot,
   FeishuBindCode,
   FeishuBinding,
+  FeishuLoginConfig,
+  FeishuSilentLoginResult,
   FeishuStatus,
   LedgerFeishuBinding,
   Insurance,

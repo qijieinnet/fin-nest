@@ -18,6 +18,8 @@ export type PublicUser = {
   isAdmin: boolean;
   /** 应用锁开关，账号级；前端另存一份本地缓存用于整页加载首帧前的上锁判断。 */
   appLockEnabled: boolean;
+  /** 飞书客户端内跳过应用锁（默认 true）；同样进本地缓存，供首帧判断。 */
+  appLockSkipInFeishu: boolean;
 };
 
 export type AuthResult = {
@@ -29,6 +31,8 @@ export type AuthResult = {
 /** GET/PATCH /auth/app-lock 的返回。 */
 export type AppLockStatus = {
   enabled: boolean;
+  /** 飞书客户端内跳过验证；`enabled` 为假时无意义。 */
+  skipInFeishu: boolean;
   credentialCount: number;
 };
 
@@ -1165,3 +1169,17 @@ export type FeishuBindCode = {
   code: string;
   expiresAt: string;
 };
+
+/** GET /auth/feishu/config（公开）。未启用时 appId 为 null，前端跳过整条免登流程。 */
+export type FeishuLoginConfig = {
+  enabled: boolean;
+  appId: string | null;
+};
+
+/**
+ * POST /auth/feishu/silent-login（公开）。
+ * `unbound` 表示飞书身份已验明但没绑本地账号，前端存下 bindTicket 引导登录一次。
+ */
+export type FeishuSilentLoginResult =
+  | { status: "authenticated"; user: PublicUser; token: string; expiresAt: string }
+  | { status: "unbound"; bindTicket: string; displayName: string | null };

@@ -339,6 +339,54 @@ export class FeishuBindingService {
   }
 
   /**
+   * 直接建立绑定，供「已在飞书容器内验明身份」的路径使用（网页免登首次登录后自动绑定）。
+   *
+   * 与 {@link consumeBindCode} 的区别只在身份是怎么来的：那条路是用户手打一次性绑定码，
+   * 这条路是 OAuth 授权码换出的 open_id——身份由飞书直接背书，不需要绑定码。
+   * 建绑本身的约束一致：同一 open_id 同时只有一条生效绑定（部分唯一索引），重复绑定即换绑。
+   */
+  async bindOpenId(input: {
+    openId: string;
+    unionId?: string | null;
+    displayName?: string | null;
+    userId: string;
+    ledgerId: string;
+  }): Promise<{ bindingId: string }> {
+    this.assertEnabled();
+    await this.ledgers.assertMember(input.ledgerId, input.userId);
+
+    return this.tx.run(async (tx) => {
+      const now = new Date();
+      await tx.feishuBinding.updateMany({
+        where: { openId: input.openId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      const binding = await tx.feishuBinding.create({
+        data: {
+          openId: input.openId,
+          unionId: input.unionId ?? null,
+          displayName: input.displayName ?? null,
+          userId: input.userId,
+          currentLedgerId: input.ledgerId,
+        },
+      });
+      await this.audit.write(
+        {
+          ledgerId: input.ledgerId,
+          actorUserId: input.userId,
+          source: "user",
+          action: "feishu.bind",
+          entityType: "feishu_binding",
+          entityId: binding.id,
+          metadata: { via: "web_silent_login" },
+        },
+        tx,
+      );
+      return { bindingId: binding.id };
+    });
+  }
+
+  /**
    * 绑定成功后补写飞书昵称（供 Web 端辨认「绑的是哪个飞书号」）。
    *
    * 与绑定分开是为了让拉昵称的出站调用只发生在绑定确实成功之后（见 consumeBindCode 注释）。

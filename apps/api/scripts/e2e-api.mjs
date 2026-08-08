@@ -687,15 +687,31 @@ async function assertPasswordVerify(token) {
 async function assertAppLockFlow(token, otherToken) {
   assert.deepEqual(await api("GET", "/auth/app-lock", { token }), {
     enabled: false,
+    skipInFeishu: true,
     credentialCount: 0,
   });
 
   assert.deepEqual(await api("PATCH", "/auth/app-lock", { token, body: { enabled: true } }), {
     enabled: true,
+    skipInFeishu: true,
     credentialCount: 0,
   });
   const me = await api("GET", "/auth/me", { token });
   assert.equal(me.appLockEnabled, true, "开关必须随 /auth/me 下发，前端靠它做首帧上锁判断");
+  assert.equal(
+    me.appLockSkipInFeishu,
+    true,
+    "飞书内免验证默认开启，且要随 /auth/me 下发供首帧判断",
+  );
+
+  // 两个开关互不覆盖：只提交 skipInFeishu 时总开关必须原样保留。
+  assert.deepEqual(await api("PATCH", "/auth/app-lock", { token, body: { skipInFeishu: false } }), {
+    enabled: true,
+    skipInFeishu: false,
+    credentialCount: 0,
+  });
+  assert.equal((await api("GET", "/auth/me", { token })).appLockSkipInFeishu, false);
+  await api("PATCH", "/auth/app-lock", { token, body: { skipInFeishu: true } });
 
   const registrationOptions = await api("POST", "/auth/app-lock/registration/options", { token });
   assert.equal(registrationOptions.rp.id, appLockRpId);
@@ -708,7 +724,7 @@ async function assertAppLockFlow(token, otherToken) {
       token,
       body: { response: authenticator.register(registrationOptions.challenge) },
     }),
-    { enabled: true, credentialCount: 1 },
+    { enabled: true, skipInFeishu: true, credentialCount: 1 },
   );
 
   const unlockOptions = await api("POST", "/auth/app-lock/unlock/options", { token });
@@ -783,6 +799,7 @@ async function assertAppLockFlow(token, otherToken) {
   // 关闭开关同时清空凭证，避免系统钥匙串里留下解不开任何东西的孤儿 passkey。
   assert.deepEqual(await api("PATCH", "/auth/app-lock", { token, body: { enabled: false } }), {
     enabled: false,
+    skipInFeishu: true,
     credentialCount: 0,
   });
   const afterDisable = await api("POST", "/auth/app-lock/unlock/options", { token });

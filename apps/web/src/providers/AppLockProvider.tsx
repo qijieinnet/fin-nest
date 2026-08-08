@@ -3,13 +3,31 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppLockScreen } from "@/components/auth/AppLockScreen";
-import { getSessionToken } from "@/lib/api";
-import { readAppLockEnabledCache } from "@/lib/app-lock/app-lock";
+import { getSessionToken, type PublicUser } from "@/lib/api";
+import { readAppLockEnabledCache, readAppLockSkipInFeishuCache } from "@/lib/app-lock/app-lock";
+import { isFeishuClient } from "@/lib/feishu/silent-login";
 import { useAuth } from "./AuthProvider";
 
 // 本次整页加载是否已解锁（模块级内存标记）：
 // SPA 内部导航不重复上锁，刷新或重新打开应用后重置、需要再次验证。
 let unlockedThisPageLoad = false;
+
+/**
+ * 飞书客户端内是否豁免这道锁。
+ *
+ * 能在飞书里打开页面，说明已经过了飞书自己的登录态与设备锁，再验一次是重复动作；
+ * 想要双重保险的用户可以在「系统设置 › 安全」里关掉 `skipInFeishu`。
+ * 只在飞书 UA 下生效——普通浏览器里这个开关无论开关都不改变行为。
+ */
+function skipsAppLock(skipInFeishu: boolean): boolean {
+  return skipInFeishu && isFeishuClient();
+}
+
+/** 服务端真值口径。缓存缺省按「免验证」处理，这一步负责把关掉了开关的用户补锁。 */
+function shouldLockPerServer(user: PublicUser | null): boolean {
+  if (!user?.appLockEnabled) return false;
+  return !skipsAppLock(user.appLockSkipInFeishu);
+}
 
 /**
  * 应用锁门禁：账号开启「打开应用时验证身份」且本地存在登录 token 时，
@@ -33,7 +51,12 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     if (decidedRef.current) return;
     decidedRef.current = true;
     resumedSessionRef.current = Boolean(getSessionToken());
-    if (readAppLockEnabledCache() && !unlockedThisPageLoad && resumedSessionRef.current) {
+    if (
+      readAppLockEnabledCache() &&
+      !skipsAppLock(readAppLockSkipInFeishuCache()) &&
+      !unlockedThisPageLoad &&
+      resumedSessionRef.current
+    ) {
       setLocked(true);
     }
   }, []);
@@ -45,7 +68,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (serverCheckedRef.current || status === "loading") return;
     serverCheckedRef.current = true;
-    if (user?.appLockEnabled && !unlockedThisPageLoad && resumedSessionRef.current) {
+    if (shouldLockPerServer(user) && !unlockedThisPageLoad && resumedSessionRef.current) {
       setLocked(true);
     }
   }, [status, user]);

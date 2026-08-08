@@ -10,6 +10,8 @@ import { FeishuBindingService } from "./feishu-binding.service";
 import { FeishuCardActionService } from "./feishu-card-action.service";
 import { FeishuEventService } from "./feishu-event.service";
 import { FeishuInboxService } from "./feishu-inbox.service";
+import { FeishuWebLoginController } from "./feishu-web-login.controller";
+import { FeishuWebLoginService } from "./feishu-web-login.service";
 import { FeishuWsService } from "./feishu-ws.service";
 
 /**
@@ -32,10 +34,11 @@ import { FeishuWsService } from "./feishu-ws.service";
     AssetsModule,
     AutomationModule,
   ],
-  controllers: [FeishuBindController],
+  controllers: [FeishuBindController, FeishuWebLoginController],
   providers: [
     // FeishuClient 由 BackendPlatformModule（@Global）提供，worker 侧也要用，故不在此重复注册。
     FeishuBindingService,
+    FeishuWebLoginService,
     FeishuCardActionService,
     FeishuEventService,
     FeishuInboxService,

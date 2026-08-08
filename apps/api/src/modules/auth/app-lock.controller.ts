@@ -24,9 +24,9 @@ export class AppLockController {
   }
 
   @Patch()
-  @ApiOkResponse({ description: "开关应用锁；关闭时一并清除已注册的 Face ID / Touch ID 凭证" })
+  @ApiOkResponse({ description: "开关应用锁 / 飞书内免验证；关闭总开关时一并清除已注册凭证" })
   setEnabled(@CurrentAuth() auth: AuthContext, @Body() body: UpdateAppLockDto) {
-    return this.appLock.setEnabled(auth as SessionAuthContext, body.enabled);
+    return this.appLock.setEnabled(auth as SessionAuthContext, body);
   }
 
   @Post("registration/options")

@@ -24,6 +24,9 @@ model User {
   passwordHash String    @map("password_hash")
   // 应用锁（打开应用时验证身份）总开关，账号级：开启后该用户在任何设备/浏览器上都要先验证。
   appLockEnabled Boolean @default(false) @map("app_lock_enabled")
+  // 飞书客户端内是否跳过上面那道验证。默认跳过：能打开这个页面就已经过了飞书自己的
+  // 设备锁/登录态，再验一次纯属重复。只在 appLockEnabled 为真时才有意义。
+  appLockSkipInFeishu Boolean @default(true) @map("app_lock_skip_in_feishu")
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

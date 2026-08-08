@@ -190,6 +190,29 @@ await this.tx.run(async (tx) => {
 2. **按 open_id 限速失败尝试**（15 分钟 5 次，对齐登录限速思路），防枚举。
 3. **双向可见**：机器人回显绑定到了谁/哪个账本，Web 也列出已绑定账号与时间，两边都能解绑。误绑能立刻发现。
 
+### 5.1 飞书容器内网页免登（已实施）
+
+在飞书客户端里打开 Web 时，凭飞书身份直接换本地登录态，不必再输账号密码。**复用同一张 `feishu_bindings` 表**——机器人绑过的飞书号，网页端立刻免登；反过来也一样。
+
+```
+① 前端检出 UA 含 Lark/Feishu 且本地无 token
+② 整页跳 accounts.feishu.cn/open-apis/authen/v1/authorize（用户已登录飞书，无任何交互）
+③ 带 code 回跳 → POST /auth/feishu/silent-login
+④ 后端 code → user_access_token → open_id（POST /authen/v2/oauth/token + GET /authen/v1/user_info）
+⑤ 命中生效绑定 → 签发与密码登录同型的 fn_sess token；未绑定 → 下发待绑定票据
+⑥ 未绑定：用户在登录页输一次账号密码 → POST /auth/feishu/bind 消费票据建绑 → 此后免登
+```
+
+| 决策                          | 理由                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| **不按 open_id 自动建号**     | 飞书应用可用范围常是整个租户，自动建号 = 把记账系统对全公司敞开                             |
+| 待绑定票据放内存（10 分钟）   | 与本模块限速器同样的单实例假设；丢了最多重走一次授权，不值得为它加表（硬规则 8）           |
+| 免登会话与密码登录**完全同型** | 同一张 `sessions` 表、同一 TTL，管理员下线设备、改密码踢会话等既有能力自动适用             |
+| 换取失败一律静默回落密码登录  | 免登是锦上添花，飞书不可达 / 反代拦截 / 授权码过期都不能把用户挡在门外                     |
+| `redirect_uri` 前后端同一算法 | 只取 `origin + pathname`；授权与换取两步必须逐字一致，否则飞书拒绝                         |
+
+**前置条件（开放平台配置，代码之外）**：应用需增加「网页应用」形态并配置桌面端/移动端主页；`redirect_uri` 的域名要加进重定向白名单与安全设置；域名必须是飞书客户端可达的公网 HTTPS。若站点前面还有 Cloudflare Access 之类的边缘鉴权，它会先于本流程拦截，需为该域名放行或改用不设边缘鉴权的独立 hostname。
+
 ## 6. 指令集
 
 | 输入                   | 行为                                                    |
@@ -255,7 +278,10 @@ apps/api/src/modules/feishu/       # ✅ 已建，标 ☐ 的为 P2/P3 待建
   feishu.module.ts                # ✅ P1 只注册绑定链路；P2 加长连接（未配置则不建连）
   feishu-binding.service.ts       # ✅ 绑定码生成/原子消费、绑定 CRUD、切换账本
   feishu-bind.controller.ts       # ✅ Web 端接口，走 SessionAuthGuard
+  feishu-web-login.service.ts     # ✅ 容器内免登：code → open_id → 签发会话 / 下发待绑定票据（§5.1）
+  feishu-web-login.controller.ts  # ✅ 挂 auth/feishu，config 与 silent-login 必须未登录可访问
   dto/create-bind-code.dto.ts     # ✅
+  dto/feishu-silent-login.dto.ts  # ✅
   feishu-client.ts                # ✅ tenant_access_token 缓存 + 发文本（更新卡片留给 P3）
   feishu-ws.service.ts            # ✅ OnModuleInit 建连、OnModuleDestroy 断开；handler 只落库 + ack
   feishu-inbox.service.ts         # ✅ 收件箱消费者：FOR UPDATE SKIP LOCKED 认领、按 open_id 串行、重启重入队
@@ -271,6 +297,10 @@ apps/web/src/app/more/feishu/     # 新增子页（绑定流程有状态：生�
   page.tsx                        #   塞进现有系统设置页会挤）
   FeishuBindingScreen.tsx
 apps/web/src/app/more/MoreScreen.tsx                 # + 入口
+apps/web/src/lib/feishu/silent-login.ts              # ✅ 容器内免登（UA 判定、授权跳转、票据暂存）
+apps/web/src/providers/AuthProvider.tsx              # ✅ 无 token 时先试免登
+apps/web/src/app/login/LoginScreen.tsx               # ✅ 登录成功后消费待绑定票据
+apps/web/src/app/register/RegisterScreen.tsx         # ✅ 同上（首位用户在飞书里注册）
 apps/web/src/lib/api/contracts.ts + endpoints.ts     # 硬规则 7
 
 # 部署 —— 环境变量必须逐层穿透，漏一处就是「本地能跑、线上不启用」

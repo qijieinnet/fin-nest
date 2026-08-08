@@ -19,6 +19,12 @@ export const API_ENDPOINTS = {
   appLockUnlock: "/auth/app-lock/unlock",
   /** 公开：是否允许注册，供登录/注册页控制入口显示。 */
   registrationStatus: "/auth/registration",
+  /** 公开：飞书免登是否启用及 App ID，供未登录页面拼授权跳转地址。 */
+  feishuLoginConfig: "/auth/feishu/config",
+  /** 公开：用飞书授权码换登录态。 */
+  feishuSilentLogin: "/auth/feishu/silent-login",
+  /** 登录后消费待绑定票据，把飞书号绑到当前账号，此后免登。 */
+  feishuBindTicket: "/auth/feishu/bind",
   ledgers: "/ledgers",
   /** 通过邀请码创建 pending 加入申请。 */
   joinRequests: "/ledger-join-requests",

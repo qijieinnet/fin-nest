@@ -10,7 +10,7 @@ import {
   isAppleTouchDevice,
   isWebAuthnAvailable,
   registerAppLockCredential,
-  setAppLockEnabled,
+  updateAppLockSetting,
 } from "@/lib/app-lock/app-lock";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -28,6 +28,8 @@ export function SystemSettingsScreen() {
   // 应用锁开关是账号级设置（服务端持久化），换设备/浏览器登录后自动生效。
   const appLockQuery = useQuery({ queryKey: queryKeys.appLock, queryFn: fetchAppLockStatus });
   const appLockEnabled = appLockQuery.data?.enabled ?? false;
+  // 默认跳过：读不到状态时按默认值渲染，避免开关先显示「关」再跳到「开」。
+  const appLockSkipInFeishu = appLockQuery.data?.skipInFeishu ?? true;
   // 凭证是按设备注册的：在别处开了开关的 iPhone/iPad 需要在本机补注册一次才能刷脸解锁。
   // 已注册过的凭证由 excludeCredentials 兜底，重复点只会被系统提示「已注册」。
   const [deviceSupportsBiometrics] = useState(() => isAppleTouchDevice() && isWebAuthnAvailable());
@@ -69,11 +71,29 @@ export function SystemSettingsScreen() {
     }
   };
 
+  const handleSkipInFeishuChange = async (checked: boolean) => {
+    if (lockToggleBusy) return;
+    setLockToggleBusy(true);
+    try {
+      const status = await updateAppLockSetting({ skipInFeishu: checked });
+      queryClient.setQueryData(queryKeys.appLock, status);
+    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.appLock });
+      showToast({
+        message: getApiErrorMessage(error, "设置失败，请稍后重试"),
+        tone: "error",
+        title: "飞书内免验证设置失败",
+      });
+    } finally {
+      setLockToggleBusy(false);
+    }
+  };
+
   const handleAppLockChange = async (checked: boolean) => {
     if (lockToggleBusy) return;
     setLockToggleBusy(true);
     try {
-      const status = await setAppLockEnabled(checked);
+      const status = await updateAppLockSetting({ enabled: checked });
       queryClient.setQueryData(queryKeys.appLock, status);
       if (!checked) return;
 
@@ -150,8 +170,8 @@ export function SystemSettingsScreen() {
                   打开应用时验证身份
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                  账号级设置，对你的所有设备生效。每次打开需先验证：iPhone/iPad 使用 Face ID /
-                  Touch ID，其他设备输入登录密码
+                  账号级设置，对你的所有设备生效。每次打开需先验证：iPhone/iPad 使用 Face ID / Touch
+                  ID，其他设备输入登录密码
                 </span>
               </span>
               <Switch
@@ -161,6 +181,24 @@ export function SystemSettingsScreen() {
                 onCheckedChange={(checked) => void handleAppLockChange(checked)}
               />
             </div>
+            {appLockEnabled ? (
+              <div className="flex items-center gap-3 border-t border-[var(--color-border-subtle)] px-4 py-[15px]">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15.5px] text-[var(--color-text-primary)]">
+                    飞书内免验证
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                    在飞书客户端里打开时跳过上面这道验证——能打开就已经过了飞书自己的登录态与设备锁。关闭则在飞书里也要验一次
+                  </span>
+                </span>
+                <Switch
+                  checked={appLockSkipInFeishu}
+                  disabled={lockToggleBusy || appLockQuery.isPending}
+                  label="飞书内免验证"
+                  onCheckedChange={(checked) => void handleSkipInFeishuChange(checked)}
+                />
+              </div>
+            ) : null}
             {canRegisterBiometrics ? (
               <div className="flex items-center gap-3 border-t border-[var(--color-border-subtle)] px-4 py-[15px]">
                 <span className="min-w-0 flex-1">

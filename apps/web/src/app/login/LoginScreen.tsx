@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
 import {
@@ -13,6 +13,7 @@ import {
   type RegistrationStatus,
   setSessionToken,
 } from "@/lib/api";
+import { bindPendingFeishuTicket, readPendingBindTicket } from "@/lib/feishu/silent-login";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
@@ -24,6 +25,12 @@ export function LoginScreen() {
   const { setUser } = useAuth();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  // 从飞书免登跳过来但还没绑定：登录成功后自动绑定，这里先给个说明。
+  // 放 effect 里读是因为 sessionStorage 只在浏览器有，直接作为初值会与 SSR 结果不一致。
+  const [hasFeishuBindTicket, setHasFeishuBindTicket] = useState(false);
+  useEffect(() => {
+    setHasFeishuBindTicket(Boolean(readPendingBindTicket()));
+  }, []);
 
   const registrationQuery = useQuery({
     queryKey: queryKeys.registrationSetting,
@@ -45,6 +52,8 @@ export function LoginScreen() {
     onSuccess: async (result) => {
       setSessionToken(result.token);
       setUser(result.user);
+      // 绑定要在拿到 token 之后、跳转之前完成；内部自带兜底，失败不影响本次登录。
+      await bindPendingFeishuTicket();
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
       router.replace(routes.bills);
     },
@@ -61,7 +70,7 @@ export function LoginScreen() {
           </>
         ) : undefined
       }
-      subtitle=""
+      subtitle={hasFeishuBindTicket ? "登录一次即与当前飞书账号绑定，之后在飞书里免登" : ""}
       title="欢迎回来"
     >
       <form

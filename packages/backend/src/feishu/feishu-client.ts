@@ -20,6 +20,28 @@ type FeishuApiResponse<T> = {
   data?: T;
 };
 
+/** `/authen/v2/oauth/token` 是标准 OAuth 响应：字段在顶层，不套 `data`，失败时带 error 描述。 */
+type OAuthTokenResponse = {
+  code?: number;
+  msg?: string;
+  error?: string;
+  error_description?: string;
+  access_token?: string;
+};
+
+type FeishuUserInfo = {
+  open_id?: string;
+  union_id?: string;
+  name?: string;
+};
+
+/** 网页免登解析出的飞书身份。`displayName` 拿不到不影响绑定，只影响展示。 */
+export type FeishuUserIdentity = {
+  openId: string;
+  unionId: string | null;
+  displayName: string | null;
+};
+
 /**
  * 飞书开放平台的薄客户端（自写 fetch，风格对齐 `llm-client.ts`）。
  * SDK 只用来维持长连接，业务调用走这里，省得把整个 SDK 的 client 拖进来。
@@ -125,6 +147,59 @@ export class FeishuClient {
       );
       return null;
     }
+  }
+
+  /**
+   * 用网页授权码换取飞书身份（open_id / union_id / 昵称），供飞书容器内免登用。
+   *
+   * 走的是与机器人完全不同的一条鉴权链：这里拿的是 **user_access_token**（代表某个具体用户），
+   * 而 {@link request} 用的是 tenant_access_token（代表应用本身），因此不能复用 `request`。
+   *
+   * `redirectUri` 必须与前端发起授权时用的完全一致，否则飞书拒绝换取；由调用方透传。
+   * 授权码 5 分钟有效且一次性，换取失败一律按「身份未验证」抛 401，交由上层回落密码登录。
+   */
+  async exchangeOAuthCode(code: string, redirectUri?: string): Promise<FeishuUserIdentity> {
+    const { FEISHU_APP_ID, FEISHU_APP_SECRET } = this.config;
+    if (!FEISHU_APP_ID || !FEISHU_APP_SECRET) {
+      throw new AppError("FEISHU_NOT_CONFIGURED", "飞书应用未配置", 400);
+    }
+
+    const tokenResponse = await this.fetchWithTimeout(`${FEISHU_BASE_URL}/authen/v2/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        client_id: FEISHU_APP_ID,
+        client_secret: FEISHU_APP_SECRET,
+        code,
+        ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+      }),
+    });
+    const tokenPayload = (await tokenResponse.json()) as OAuthTokenResponse;
+    if (tokenPayload.code !== 0 || !tokenPayload.access_token) {
+      const detail = tokenPayload.error_description ?? tokenPayload.error ?? tokenPayload.msg ?? "";
+      throw new AppError("FEISHU_OAUTH_FAILED", `飞书授权码无效：${detail}`, 401);
+    }
+
+    const infoResponse = await this.fetchWithTimeout(`${FEISHU_BASE_URL}/authen/v1/user_info`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${tokenPayload.access_token}` },
+    });
+    const infoPayload = (await infoResponse.json()) as FeishuApiResponse<FeishuUserInfo>;
+    const openId = infoPayload.data?.open_id;
+    if (infoPayload.code !== 0 || !openId) {
+      throw new AppError(
+        "FEISHU_OAUTH_FAILED",
+        `获取飞书用户信息失败：${infoPayload.msg} (code=${infoPayload.code})`,
+        502,
+      );
+    }
+
+    return {
+      openId,
+      unionId: infoPayload.data?.union_id ?? null,
+      displayName: infoPayload.data?.name ?? null,
+    };
   }
 
   private async sendMessage(

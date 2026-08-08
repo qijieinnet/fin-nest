@@ -19,6 +19,8 @@ export type PublicUser = {
   isAdmin: boolean;
   /** 应用锁开关，随登录态一起下发，供前端在整页加载首帧前决定是否上锁。 */
   appLockEnabled: boolean;
+  /** 飞书客户端内跳过应用锁；同样要在首帧前拿到，否则免验证会先闪一下锁屏。 */
+  appLockSkipInFeishu: boolean;
 };
 
 export type AuthResult = {
@@ -186,6 +188,25 @@ export class AuthService {
     this.loginRateLimiter.recordSuccess(ipKey);
     this.loginRateLimiter.recordSuccess(accountKey);
     return this.createSessionForUser(user, input.deviceName, request);
+  }
+
+  /**
+   * 为身份已在别处核验过的用户签发会话（当前唯一调用方是飞书容器内免登）。
+   *
+   * **不做任何凭据校验**——调用方必须先自行证明「请求方确实是这个用户」，本方法只负责
+   * 落一条 session。签出的 token 与密码登录完全同型（同一张表、同一 TTL、同一吊销逻辑），
+   * 所以管理员下线设备、改密码踢会话等既有能力对免登会话一样生效。
+   */
+  async createSessionForVerifiedUser(
+    userId: string,
+    deviceName: string | undefined,
+    request: RequestWithAuth,
+  ): Promise<AuthResult> {
+    const user = await this.prisma.client.user.findUnique({ where: { id: userId } });
+    if (!user || user.disabledAt) {
+      throw new AppError("ACCOUNT_UNAVAILABLE", "账号已被禁用，请联系管理员", 403);
+    }
+    return this.createSessionForUser(user, deviceName, request);
   }
 
   async logout(auth: SessionAuthContext): Promise<void> {
@@ -509,6 +530,7 @@ export class AuthService {
       alias: user.alias,
       isAdmin: user.isAdmin,
       appLockEnabled: user.appLockEnabled,
+      appLockSkipInFeishu: user.appLockSkipInFeishu,
     };
   }
 }
