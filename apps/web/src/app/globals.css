@@ -6175,9 +6175,30 @@ select:focus-visible {
   color: var(--color-tint-strong);
 }
 
-.amount-keypad__tab--icon {
+/* 收起按钮：与页签同高的圆形图标键，手感（按压缩放 + tint-soft）沿用页签那一套，
+   但不画选中态——它是动作不是页签，常态只用 muted 色，不跟当前页签抢注意力。 */
+.amount-keypad__collapse {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
   color: var(--color-text-muted);
-  padding: 0 6px;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
+  width: 32px;
+}
+
+.amount-keypad__collapse:active {
+  background: var(--color-tint-soft);
+  transform: scale(0.97);
 }
 
 .amount-keypad__tab-value {

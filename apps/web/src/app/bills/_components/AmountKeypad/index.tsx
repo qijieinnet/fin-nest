@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, LoaderCircle, Zap } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/format/class-names";
@@ -66,7 +66,7 @@ export function AmountKeypad({
     onCloseRef.current = onClose;
   });
 
-  // 点键盘外部即收起——没有收起按钮，这是唯一的退出方式，必须可靠。
+  // 点键盘外部即收起——与页签行右端的收起按钮互为备份，必须可靠。
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: PointerEvent) {
@@ -165,6 +165,16 @@ export function AmountKeypad({
             </button>
           ))}
         </div>
+        {/* 收起按钮固定在页签行右端（不进 __tab-scroll，页签再多也不会被滚走）。 */}
+        <button
+          aria-label="收起键盘"
+          className="amount-keypad__collapse"
+          onClick={onClose}
+          title="收起"
+          type="button"
+        >
+          <ChevronDown size={20} />
+        </button>
       </div>
 
       {/* 操作区：高度固定，切页签时底部不跳，各面板内部自滚。 */}
