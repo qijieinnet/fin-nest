@@ -58,6 +58,8 @@ function templateToSeed(template: QuickTemplate): TransactionSeed {
 
 type NewBillFormScreenProps = {
   embedded?: boolean;
+  /** 隐藏页头（关闭 / 标题 / 保存）：内嵌宿主（如飞书 ?from=feishu）自带页头，提交走悬浮按钮。 */
+  hideHeader?: boolean;
   /** 外部注入的初始 seed（AI 草稿「去编辑」），优先级低于交互选择的快捷模板。 */
   initialSeed?: TransactionSeed | null;
   idempotencyKeyOverride?: string;
@@ -70,6 +72,7 @@ type NewBillFormScreenProps = {
 export function NewBillFormScreen({
   completeAfterSave = false,
   embedded = false,
+  hideHeader = false,
   idempotencyKeyOverride,
   initialSeed = null,
   onClose,
@@ -231,14 +234,16 @@ export function NewBillFormScreen({
   if (embedded) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-2 px-1 pb-2">
-          <div className="flex items-center gap-1">
-            {closeButton}
-            {quickButton}
-          </div>
-          <h2 className="text-base font-bold text-[var(--color-text-primary)]">记一笔</h2>
-          {saveAction}
-        </header>
+        {hideHeader ? null : (
+          <header className="flex items-center justify-between gap-2 px-1 pb-2">
+            <div className="flex items-center gap-1">
+              {closeButton}
+              {quickButton}
+            </div>
+            <h2 className="text-base font-bold text-[var(--color-text-primary)]">记一笔</h2>
+            {saveAction}
+          </header>
+        )}
         <div className="sheet-form-scroll flex-1">{body}</div>
         <BottomSheet
           className="ui-bottom-sheet--sheet-form"
@@ -260,7 +265,12 @@ export function NewBillFormScreen({
     <MobileAppShell>
       {/* 键盘展开时把它的高度补进页面底部内边距，否则靠后的字段被永久遮住。 */}
       <div data-keypad-open={keypadOpen ? "true" : undefined}>
-        <MobilePage action={saveAction} leading={closeButton} title="记一笔">
+        <MobilePage
+          action={saveAction}
+          hideNavigationBar={hideHeader}
+          leading={closeButton}
+          title="记一笔"
+        >
           {body}
         </MobilePage>
       </div>

@@ -29,6 +29,8 @@ export function NewBillScreen() {
   const params = useSearchParams();
   const templateId = params.get("template");
   const fromAiDraft = params.get("aiDraft") === "1";
+  // 飞书内嵌打开（?from=feishu）：宿主自带页头，这里隐藏关闭/标题/保存，提交走右下角悬浮按钮。
+  const hideHeader = params.get("from") === "feishu";
   // AI 草稿卡「去编辑」经 sessionStorage 传 seed；undefined = 读取中，避免表单先空白挂载再重挂载。
   const [handoff, setHandoff] = useState<AiDraftHandoff | null | undefined>(
     fromAiDraft ? undefined : null,
@@ -85,6 +87,7 @@ export function NewBillScreen() {
   return (
     <NewBillFormScreen
       completeAfterSave={Boolean(handoff)}
+      hideHeader={hideHeader}
       idempotencyKeyOverride={
         handoff ? aiCardIdempotencyKey(handoff.messageId, handoff.cardIndex) : undefined
       }
