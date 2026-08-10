@@ -19,15 +19,18 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <AuthProvider>
           <LedgerProvider>
             <DecimalPlacesProvider>
-              <ToastProvider>
-                <ConfirmProvider>
-                  <SheetStackProvider>
-                    <NavigationProgressProvider>
+              {/* 进度条 provider 必须在 Toast / Confirm / SheetStack 之上：这三者都把弹层
+                  渲染成 children 的兄弟节点，套在里层的话弹层内容拿不到 context，任何
+                  在弹层里调 useAppRouter 的组件（如桌面「记一笔」）都会抛错整页白屏。 */}
+              <NavigationProgressProvider>
+                <ToastProvider>
+                  <ConfirmProvider>
+                    <SheetStackProvider>
                       <AppLockGate>{children}</AppLockGate>
-                    </NavigationProgressProvider>
-                  </SheetStackProvider>
-                </ConfirmProvider>
-              </ToastProvider>
+                    </SheetStackProvider>
+                  </ConfirmProvider>
+                </ToastProvider>
+              </NavigationProgressProvider>
             </DecimalPlacesProvider>
           </LedgerProvider>
         </AuthProvider>
