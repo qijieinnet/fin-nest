@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import type { CSSProperties, PointerEvent, ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/format/class-names";
 import { haptic } from "@/lib/haptics";
@@ -67,6 +67,9 @@ export function SwipeActionRow({
   const lastXRef = useRef(0);
   const lastTRef = useRef(0);
   const velocityRef = useRef(0);
+  // 指针捕获的目标与 id：捕获要等方向锁定后才设，先记下来。
+  const captureTargetRef = useRef<HTMLElement | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
 
   const restingOffset = useCallback(
     (side: OpenSide) =>
@@ -110,7 +113,7 @@ export function SwipeActionRow({
     return offset;
   }
 
-  function beginDrag(clientX: number, clientY: number) {
+  function beginDrag(clientX: number, clientY: number, target: HTMLElement, pointerId: number) {
     startXRef.current = clientX;
     startYRef.current = clientY;
     lastXRef.current = clientX;
@@ -119,6 +122,32 @@ export function SwipeActionRow({
     baseOffsetRef.current = restingOffset(open);
     axisRef.current = "unknown";
     draggingRef.current = true;
+    captureTargetRef.current = target;
+    pointerIdRef.current = pointerId;
+  }
+
+  /**
+   * 捕获指针，让 move/up 在手指或鼠标移出本行后仍然发到这里。
+   *
+   * 只能等方向锁定为横向后再捕获，绝不能在 pointerdown 就捕获：捕获期间浏览器会把
+   * 兼容鼠标事件连同 click 一起改派到捕获元素上，内部那个真正的可点区（如账单行的
+   * 整行按钮）就再也收不到 click，鼠标点击整行会毫无反应。触屏走的是隐式捕获所以
+   * 看不出来，问题只在 PC 上暴露。
+   */
+  function capturePointer() {
+    const target = captureTargetRef.current;
+    const pointerId = pointerIdRef.current;
+    if (!target || pointerId === null) return;
+    if (target.hasPointerCapture?.(pointerId) === false) target.setPointerCapture(pointerId);
+  }
+
+  function releasePointer() {
+    const target = captureTargetRef.current;
+    const pointerId = pointerIdRef.current;
+    captureTargetRef.current = null;
+    pointerIdRef.current = null;
+    if (!target || pointerId === null) return;
+    if (target.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
   }
 
   function moveDrag(clientX: number, clientY: number) {
@@ -133,6 +162,7 @@ export function SwipeActionRow({
       if (axisRef.current === "x") {
         // 有可展开动作才吸附友邻关闭。
         if (actions.length > 0 || leadingActions.length > 0) notifyActive();
+        capturePointer();
         applyOffset(currentOffsetRef.current, false); // 关闭过渡，进入跟手
       }
     }
@@ -180,11 +210,9 @@ export function SwipeActionRow({
     setOpen(target);
   }
 
-  function handlePointerUp(event: PointerEvent<HTMLElement>) {
+  function handlePointerUp() {
     settleDrag();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
+    releasePointer();
   }
 
   const scrimStyle: CSSProperties =
@@ -232,11 +260,7 @@ export function SwipeActionRow({
         className="biz-swipe-row__content"
         ref={contentRef}
         onPointerDown={(event) => {
-          beginDrag(event.clientX, event.clientY);
-          // Capture so move/up keep firing even if the finger leaves the row.
-          if (event.currentTarget.hasPointerCapture?.(event.pointerId) === false) {
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }
+          beginDrag(event.clientX, event.clientY, event.currentTarget, event.pointerId);
         }}
         onPointerMove={(event) => {
           moveDrag(event.clientX, event.clientY);
@@ -251,7 +275,9 @@ export function SwipeActionRow({
           aria-label="收起操作"
           className="biz-swipe-row__scrim"
           onClick={() => setOpen(null)}
-          onPointerDown={(event) => beginDrag(event.clientX, event.clientY)}
+          onPointerDown={(event) =>
+            beginDrag(event.clientX, event.clientY, event.currentTarget, event.pointerId)
+          }
           onPointerMove={(event) => moveDrag(event.clientX, event.clientY)}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
