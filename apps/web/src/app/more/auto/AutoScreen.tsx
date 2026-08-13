@@ -215,7 +215,7 @@ export function AutoScreen() {
 
   const openDetail = (rule: AutoRule) => {
     push({
-      className: "ui-bottom-sheet--edge-scroll",
+      className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
       title: "自动记账详情",
       content: (
         <AutoRuleDetailSheet
