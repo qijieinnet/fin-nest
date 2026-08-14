@@ -85,7 +85,7 @@ export function AutoRuleDetailSheet({
   const upcoming = upcomingDates(rule.startDate, rule.repeatRule);
 
   return (
-    <div className="flex flex-col gap-4 pb-2">
+    <div className="flex w-full min-w-0 flex-1 flex-col gap-4 pb-2">
       <div className="flex items-center gap-3 rounded-[22px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
         <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[15px] bg-[var(--color-control-fill-muted)] text-[26px]">
           {summary.icon}
