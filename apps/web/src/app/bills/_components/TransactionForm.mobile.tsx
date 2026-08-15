@@ -17,8 +17,9 @@ import type { TransactionType } from "@/lib/api";
 import { orderedFieldsForType } from "@/lib/data/field-order";
 import { AmountKeypad } from "./AmountKeypad";
 import { useKeypadTabs } from "./AmountKeypad/useKeypadTabs";
-import { formatDateLabel, todayKey } from "./_model/transaction-form-utils";
-import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
+import { quickEntrySeed } from "./_model/quick-entry-handoff";
+import { NOTE_MAX_LENGTH, formatDateLabel, todayKey } from "./_model/transaction-form-utils";
+import type { TransactionFormRenderProps, TransactionSeed } from "./_model/useTransactionFormModel";
 
 const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
   { label: "支出", value: "expense" },
@@ -29,19 +30,26 @@ const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
 /** 交易表单移动渲染层（原 TransactionForm 主体，行为不变）。数据来自共享视图模型。 */
 export function TransactionFormMobile({
   formId,
+  keypadOnly = false,
   keypadOpen,
+  keypadSubmitLabel,
   model,
+  onExpand,
   onKeypadOpenChange,
   onQuickTemplates,
   openCreateItemSheet,
 }: TransactionFormRenderProps & {
   formId?: string;
+  /** 只渲染键盘（账单列表的快捷记账）：表单卡片不出现，字段全在键盘页签里改。 */
+  keypadOnly?: boolean;
   keypadOpen?: boolean;
+  keypadSubmitLabel?: string;
+  onExpand?: (seed: TransactionSeed) => void;
   onKeypadOpenChange?: (open: boolean) => void;
   onQuickTemplates?: () => void;
 }) {
   const { type, isPendingMode } = model;
-  const keypadTabs = useKeypadTabs(model);
+  const keypadTabs = useKeypadTabs(model, { keypadOnly });
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
   const primaryRelationHint =
@@ -144,7 +152,7 @@ export function TransactionFormMobile({
               <Input
                 aria-label="备注"
                 label="备注"
-                maxLength={240}
+                maxLength={NOTE_MAX_LENGTH}
                 onChange={(event) => model.setNote(event.target.value)}
                 // 备注要系统键盘，两套键盘叠在一起没法用——聚焦时先收起自绘键盘。
                 onFocus={() => onKeypadOpenChange?.(false)}
@@ -158,6 +166,29 @@ export function TransactionFormMobile({
         return null;
     }
   };
+
+  const keypad = onKeypadOpenChange ? (
+    <AmountKeypad
+      amount={model.amount}
+      canSubmit={!model.validationMessage && !model.mutationState.isPending}
+      decimalPlaces={model.decimalPlaces}
+      halfScreen={keypadOnly}
+      onAmountChange={model.setAmount}
+      onClose={() => onKeypadOpenChange(false)}
+      onExpand={onExpand ? () => onExpand(quickEntrySeed(model)) : undefined}
+      onQuickTemplates={onQuickTemplates}
+      onSubmit={() => model.handleSubmit()}
+      onToday={() => model.setOccurredOn(todayKey())}
+      open={Boolean(keypadOpen)}
+      savedSignal={model.savedCount}
+      submitLabel={keypadSubmitLabel}
+      submitting={model.mutationState.isPending}
+      tabs={keypadTabs}
+    />
+  ) : null;
+
+  // 快捷记账：页面上只有这块键盘，没有表单卡片（键盘自带 portal，不占页面位置）。
+  if (keypadOnly) return keypad;
 
   return (
     <form className="transaction-form" id={formId} onSubmit={model.handleSubmit}>
@@ -285,21 +316,7 @@ export function TransactionFormMobile({
         ) : null}
       </div>
 
-      {onKeypadOpenChange ? (
-        <AmountKeypad
-          amount={model.amount}
-          canSubmit={!model.validationMessage && !model.mutationState.isPending}
-          decimalPlaces={model.decimalPlaces}
-          onAmountChange={model.setAmount}
-          onClose={() => onKeypadOpenChange(false)}
-          onQuickTemplates={onQuickTemplates}
-          onSubmit={() => model.handleSubmit()}
-          onToday={() => model.setOccurredOn(todayKey())}
-          open={Boolean(keypadOpen)}
-          submitting={model.mutationState.isPending}
-          tabs={keypadTabs}
-        />
-      ) : null}
+      {keypad}
     </form>
   );
 }

@@ -8,40 +8,58 @@ import {
   nestedOptionLabel,
 } from "@/components/business";
 import { orderedFieldsForType } from "@/lib/data/field-order";
-import { formatDateLabel } from "../_model/transaction-form-utils";
+import { NOTE_MAX_LENGTH, formatDateLabel } from "../_model/transaction-form-utils";
 import type { TransactionFormModel } from "../_model/useTransactionFormModel";
 import { DatePanel } from "./DatePanel";
+import { NotePanel } from "./NotePanel";
 import type { KeypadTab } from ".";
 
 /**
  * 按记账设置组装键盘页签（amount 由外壳自己加在首位）。
  *
  * 顺序跟随 orderedFieldsForType，用户在设置里排的字段顺序在键盘里也是那个顺序；
- * note 不进键盘（要系统键盘，两套键盘会打架），转账只留金额（转出/转入双选留在表单卡片）。
+ * 转账只留金额与备注（转出/转入双选留在表单卡片）。
  */
-export function useKeypadTabs(model: TransactionFormModel): KeypadTab[] {
+export function useKeypadTabs(
+  model: TransactionFormModel,
+  { keypadOnly = false }: { keypadOnly?: boolean } = {},
+): KeypadTab[] {
   const {
     accountEnabled,
     accountSel,
     acctOptions,
     categoryId,
     catOptions,
+    note,
     occurredOn,
     order,
     peopleOpts,
     personId,
+    setAccountEnabled,
     setAccountSel,
     setCategoryId,
+    setNote,
     setOccurredOn,
     setPersonEnabled,
     setPersonId,
     showAccountCard,
+    showNoteCard,
     showPersonCard,
     type,
   } = model;
 
   return useMemo(() => {
-    if (type === "transfer") return [];
+    const noteTab: KeypadTab | null = showNoteCard
+      ? {
+          id: "note",
+          label: "备注",
+          value: note || undefined,
+          panel: <NotePanel maxLength={NOTE_MAX_LENGTH} onValueChange={setNote} value={note} />,
+        }
+      : null;
+
+    // 转账没有分类/人员，账户是转出转入两个选择器（留在表单卡片里）；备注与类型无关，照常给。
+    if (type === "transfer") return noteTab ? [noteTab] : [];
 
     const selectedCategory = catOptions.find((option) => option.id === categoryId);
     const selectedPerson = peopleOpts.find((option) => option.id === personId);
@@ -69,7 +87,8 @@ export function useKeypadTabs(model: TransactionFormModel): KeypadTab[] {
           // 表单里的账户卡是可关的开关卡：关掉表示「这笔账不记账户」。
           // 关着还在键盘里给个选择面板，等于绕过用户刚做的决定，因此整个页签一并隐藏，
           // 开关状态只由表单那张卡决定（acctRequired 时它恒为开）。
-          if (!showAccountCard || !accountEnabled) break;
+          // 快捷记账例外：那边根本没有卡，页签是唯一入口，必须常显，选中即视为开启。
+          if (!showAccountCard || (!accountEnabled && !keypadOnly)) break;
           tabs.push({
             id: "account",
             label: "账户",
@@ -79,6 +98,7 @@ export function useKeypadTabs(model: TransactionFormModel): KeypadTab[] {
                 onSelect={(option) => {
                   if (option.disabled) return;
                   setAccountSel(option.id);
+                  setAccountEnabled(true);
                 }}
                 options={acctOptions}
                 selectedId={accountSel}
@@ -116,6 +136,10 @@ export function useKeypadTabs(model: TransactionFormModel): KeypadTab[] {
           });
           break;
 
+        case "note":
+          if (noteTab) tabs.push(noteTab);
+          break;
+
         default:
           break;
       }
@@ -128,16 +152,21 @@ export function useKeypadTabs(model: TransactionFormModel): KeypadTab[] {
     acctOptions,
     categoryId,
     catOptions,
+    keypadOnly,
+    note,
     occurredOn,
     order,
     peopleOpts,
     personId,
+    setAccountEnabled,
     setAccountSel,
     setCategoryId,
+    setNote,
     setOccurredOn,
     setPersonEnabled,
     setPersonId,
     showAccountCard,
+    showNoteCard,
     showPersonCard,
     type,
   ]);

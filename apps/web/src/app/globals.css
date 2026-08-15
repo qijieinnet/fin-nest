@@ -6103,8 +6103,10 @@ select:focus-visible {
   z-index: 40;
 }
 
+/* 系统键盘弹起时整体上移（备注页签），位移量由 JS 从 visualViewport 算出来。
+   走 transform 就能复用上面那条过渡，抬起/落回都跟展开收起是同一条曲线。 */
 .amount-keypad--open {
-  transform: translate(-50%, 0);
+  transform: translate(-50%, calc(-1 * var(--space-keypad-keyboard-inset, 0px)));
   visibility: visible;
 }
 
@@ -6214,6 +6216,11 @@ select:focus-visible {
 .amount-keypad__body {
   height: var(--space-keypad-panel-height);
   padding: 0 10px;
+}
+
+/* 账单列表弹出的快捷记账：整块键盘占半屏，各页签同高（页签行与动作条定高，余量给操作区）。 */
+.amount-keypad--half .amount-keypad__body {
+  height: calc(50dvh - var(--space-keypad-tabs-height) - var(--space-keypad-actions-height));
 }
 
 .amount-keypad__panel {
@@ -6500,6 +6507,42 @@ select:focus-visible {
   background: var(--color-tint);
   color: var(--color-tint-contrast);
   font-weight: 590;
+}
+
+/* —— 备注面板 —— 唯一交给系统键盘的页签，面板压到两行高，给系统键盘让位。 */
+.keypad-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  padding-top: 2px;
+}
+
+.keypad-note__input {
+  background: var(--color-bg-app);
+  border: 0;
+  border-radius: 14px;
+  color: var(--color-text-primary);
+  flex: 1;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 22px;
+  min-height: 0;
+  outline: 0;
+  padding: 10px 12px;
+  resize: none;
+  width: 100%;
+}
+
+.keypad-note__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.keypad-note__count {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* —— 金额只读展示态（键盘接管后） —— */

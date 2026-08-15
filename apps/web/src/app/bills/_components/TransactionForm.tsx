@@ -17,8 +17,14 @@ export type { TransactionSeed };
 
 type TransactionFormProps = UseTransactionFormModelParams & {
   formId?: string;
+  /** 只渲染金额键盘：账单列表的快捷记账没有表单页，字段全在键盘页签里改。 */
+  keypadOnly?: boolean;
   /** 移动端金额键盘的展开态，由页面壳持有（FAB 要据此让位）。 */
   keypadOpen?: boolean;
+  /** 键盘里保存按钮的文案，跟随页面壳（待确认编辑页是「确认入账」）。 */
+  keypadSubmitLabel?: string;
+  /** 键盘里「转到记账页」：带上当前已填内容跳全屏表单。给了才显示那个按钮。 */
+  onExpand?: (seed: TransactionSeed) => void;
   onKeypadOpenChange?: (open: boolean) => void;
   onKeypadAutoOpen?: (enabled: boolean) => void;
   onQuickTemplates?: () => void;
@@ -30,7 +36,10 @@ type TransactionFormProps = UseTransactionFormModelParams & {
  */
 export function TransactionForm({
   formId,
+  keypadOnly = false,
   keypadOpen,
+  keypadSubmitLabel,
+  onExpand,
   onKeypadAutoOpen,
   onKeypadOpenChange,
   onQuickTemplates,
@@ -55,16 +64,21 @@ export function TransactionForm({
   }
 
   if (model.isLoading) {
-    return <LoadingState rows={5} title="加载记账设置" />;
+    // 只渲染键盘时不能占页面：加载骨架会凭空插进账单列表里。
+    return keypadOnly ? null : <LoadingState rows={5} title="加载记账设置" />;
   }
 
-  return isDesktop ? (
+  // 只有键盘的形态没有桌面版（桌面「记一笔」是弹层里的完整表单），不走断点分发。
+  return isDesktop && !keypadOnly ? (
     <TransactionFormDesktop formId={formId} model={model} openCreateItemSheet={openCreateItemSheet} />
   ) : (
     <TransactionFormMobile
       formId={formId}
+      keypadOnly={keypadOnly}
       keypadOpen={keypadOpen}
+      keypadSubmitLabel={keypadSubmitLabel}
       model={model}
+      onExpand={onExpand}
       onKeypadOpenChange={onKeypadOpenChange}
       onQuickTemplates={onQuickTemplates}
       openCreateItemSheet={openCreateItemSheet}

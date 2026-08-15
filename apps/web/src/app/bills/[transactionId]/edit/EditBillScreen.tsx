@@ -26,6 +26,9 @@ export function EditBillScreen({
   const [canSubmit, setCanSubmit] = useState(false);
   const [submitBlocked, setSubmitBlocked] = useState<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
+  // 金额键盘展开态：FAB 要据此让位，页面底部也要补出键盘高度。
+  // 编辑不像新建那样自动展开（设置项针对的是记账页），只在点金额区时展开。
+  const [keypadOpen, setKeypadOpen] = useState(false);
   const handleSubmitBlockedChange = useCallback((handler: () => void) => {
     setSubmitBlocked(() => handler);
   }, []);
@@ -72,8 +75,10 @@ export function EditBillScreen({
       <TransactionForm
         formId={formId}
         initial={transactionQuery.data}
+        keypadOpen={embedded ? undefined : keypadOpen}
         ledgerId={ledgerId}
         onCanSubmitChange={setCanSubmit}
+        onKeypadOpenChange={embedded ? undefined : setKeypadOpen}
         onPendingChange={setSaving}
         onSubmitBlocked={handleSubmitBlockedChange}
       />
@@ -96,16 +101,22 @@ export function EditBillScreen({
 
   return (
     <MobileAppShell>
-      <MobilePage action={saveAction} leading={closeButton} title="编辑交易">
-        {body}
-      </MobilePage>
-      <TransactionFormFab
-        canSubmit={canSubmit}
-        disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
-        formId={formId}
-        loading={saving}
-        onSubmitBlocked={() => submitBlocked?.()}
-      />
+      {/* 键盘展开时把它的高度补进页面底部内边距，否则靠后的字段被永久遮住。 */}
+      <div data-keypad-open={keypadOpen ? "true" : undefined}>
+        <MobilePage action={saveAction} leading={closeButton} title="编辑交易">
+          {body}
+        </MobilePage>
+      </div>
+      {/* 键盘展开时 FAB 让位：保存入口已搬进键盘，留着就是重复入口。 */}
+      {keypadOpen ? null : (
+        <TransactionFormFab
+          canSubmit={canSubmit}
+          disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
+          formId={formId}
+          loading={saving}
+          onSubmitBlocked={() => submitBlocked?.()}
+        />
+      )}
     </MobileAppShell>
   );
 }

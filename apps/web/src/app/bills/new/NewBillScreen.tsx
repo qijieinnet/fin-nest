@@ -20,6 +20,8 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { NewBillFormScreen } from "../_components/NewBillFormScreen";
+import type { TransactionSeed } from "../_components/TransactionForm";
+import { readQuickEntrySeed } from "../_components/_model/quick-entry-handoff";
 
 export function NewBillScreen() {
   const router = useAppRouter();
@@ -29,12 +31,25 @@ export function NewBillScreen() {
   const params = useSearchParams();
   const templateId = params.get("template");
   const fromAiDraft = params.get("aiDraft") === "1";
+  // 账单列表的快捷记账点「转到记账页」：草稿经 sessionStorage 带过来，读一次即清。
+  const fromQuickEntry = params.get("quick") === "1";
   // 飞书内嵌打开（?from=feishu）：宿主自带页头，这里隐藏关闭/标题/保存，提交走右下角悬浮按钮。
   const hideHeader = params.get("from") === "feishu";
   // AI 草稿卡「去编辑」经 sessionStorage 传 seed；undefined = 读取中，避免表单先空白挂载再重挂载。
   const [handoff, setHandoff] = useState<AiDraftHandoff | null | undefined>(
     fromAiDraft ? undefined : null,
   );
+  // 同样用 undefined 表示「还没读」，避免表单先空白挂载再带着草稿重挂。
+  const [quickSeed, setQuickSeed] = useState<TransactionSeed | null | undefined>(
+    fromQuickEntry ? undefined : null,
+  );
+
+  useEffect(() => {
+    if (!fromQuickEntry) return;
+    const seed = readQuickEntrySeed();
+    // StrictMode 下 effect 双跑：第二次已被消费，保留首次读到的草稿。
+    setQuickSeed((prev) => (prev === undefined ? seed : prev));
+  }, [fromQuickEntry]);
 
   useEffect(() => {
     if (!fromAiDraft) return;
@@ -83,7 +98,7 @@ export function NewBillScreen() {
     }
   }
 
-  if (handoff === undefined) return null;
+  if (handoff === undefined || quickSeed === undefined) return null;
   return (
     <NewBillFormScreen
       completeAfterSave={Boolean(handoff)}
@@ -91,7 +106,7 @@ export function NewBillScreen() {
       idempotencyKeyOverride={
         handoff ? aiCardIdempotencyKey(handoff.messageId, handoff.cardIndex) : undefined
       }
-      initialSeed={handoff?.draft ?? null}
+      initialSeed={handoff?.draft ?? quickSeed}
       onSaved={handoff ? handleAiSaved : undefined}
       templateId={templateId}
     />

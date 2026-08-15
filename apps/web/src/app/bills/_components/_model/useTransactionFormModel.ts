@@ -199,6 +199,8 @@ export function useTransactionFormModel({
   const [linkedRelationItems, setLinkedRelationItems] = useState<RecoverablePayableItem[]>(
     initialBuckets.linked,
   );
+  // 保存成功计数：连续记账下页面/键盘不关，键盘据此把页签切回金额，准备记下一笔。
+  const [savedCount, setSavedCount] = useState(0);
   const [attachmentsEnabled, setAttachmentsEnabled] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const attachmentsRef = useRef<PendingAttachment[]>([]);
@@ -437,6 +439,7 @@ export function useTransactionFormModel({
           });
     },
     onSuccess: async (transaction) => {
+      setSavedCount((current) => current + 1);
       if (isPendingMode) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: queryKeys.autoPending(ledgerId) }),
@@ -721,6 +724,7 @@ export function useTransactionFormModel({
     decimalPlaces,
     validationMessage,
     handleSubmit,
+    savedCount,
     mutationState: { isPending: mutation.isPending },
   };
 }

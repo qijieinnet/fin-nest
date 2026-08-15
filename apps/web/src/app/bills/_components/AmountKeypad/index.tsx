@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, ChevronDown, LoaderCircle, Zap } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronDown, LoaderCircle, Maximize2, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/format/class-names";
 import { groupMoneyDisplay } from "@/lib/money";
@@ -17,7 +17,7 @@ import {
 import { NumericPanel } from "./NumericPanel";
 
 /** 键盘页签。amount 恒在首位，其余按记账设置的字段顺序动态生成。 */
-export type KeypadTabId = "amount" | "category" | "account" | "person" | "date";
+export type KeypadTabId = "amount" | "category" | "account" | "person" | "date" | "note";
 
 export type KeypadTab = {
   id: KeypadTabId;
@@ -31,16 +31,24 @@ type AmountKeypadProps = {
   amount: string;
   canSubmit: boolean;
   decimalPlaces: number;
+  /** 半屏形态：账单列表弹出的快捷记账用，各页签统一为屏幕一半高。 */
+  halfScreen?: boolean;
   onAmountChange: (value: string) => void;
   onClose: () => void;
+  /** 转全屏记账页：只有账单列表直接弹出的快捷记账给，普通记账页本身就是全屏。 */
+  onExpand?: () => void;
   /** 快捷记账入口：键盘展开时 FAB 让位，它的功能搬到这里。 */
   onQuickTemplates?: () => void;
   onSubmit: () => void;
   /** 把日期设回今天。仅在存在日期页签时展示（转账下键盘只有金额页签）。 */
   onToday?: () => void;
   open: boolean;
+  /** 保存成功计数：变化即视为记完一笔，页签回到金额。 */
+  savedSignal?: number;
   /** amount 之外的页签，由调用方按 orderedFieldsForType + visibleFields 组装。 */
   tabs: KeypadTab[];
+  /** 提交按钮文案，跟随所在页面（待确认编辑页是「确认入账」）。 */
+  submitLabel?: string;
   submitting?: boolean;
 };
 
@@ -48,12 +56,16 @@ export function AmountKeypad({
   amount,
   canSubmit,
   decimalPlaces,
+  halfScreen = false,
   onAmountChange,
   onClose,
+  onExpand,
   onQuickTemplates,
   onSubmit,
   onToday,
   open,
+  savedSignal = 0,
+  submitLabel = "保存",
   submitting = false,
   tabs,
 }: AmountKeypadProps) {
@@ -104,6 +116,32 @@ export function AmountKeypad({
     if (!open) setActiveTab("amount");
   }, [open]);
 
+  // 记完一笔同样回到金额页签：连续记账时键盘不收起，停在备注/分类页上接着记下一笔很别扭。
+  // 初始的 0 不算一次保存，跳过。
+  useEffect(() => {
+    if (savedSignal > 0) setActiveTab("amount");
+  }, [savedSignal]);
+
+  // 备注页签要用系统键盘，而系统键盘不会把 fixed 元素顶上去（iOS 只缩视觉视口、不动布局视口，
+  // Android 默认也只缩视觉视口），不自己抬这一下，整个键盘连同备注输入框都会压在系统键盘底下。
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const sync = () => {
+      const inset = window.innerHeight - viewport.height - viewport.offsetTop;
+      // 地址栏收缩之类的小幅变化也会触发 resize，只有明显是键盘的高度才抬。
+      setKeyboardInset(inset > 120 ? inset : 0);
+    };
+    sync();
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+    };
+  }, []);
+
   const handleKey = (key: KeypadKey) => {
     const next = applyKeypadKey(stateRef.current, key, { decimalPlaces });
     commitState(next);
@@ -143,8 +181,13 @@ export function AmountKeypad({
   return createPortal(
     <div
       aria-hidden={!open}
-      className={cn("amount-keypad", open && "amount-keypad--open")}
+      className={cn(
+        "amount-keypad",
+        open && "amount-keypad--open",
+        halfScreen && "amount-keypad--half",
+      )}
       ref={rootRef}
+      style={{ "--space-keypad-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
     >
       <div className="amount-keypad__tabs">
         <div className="amount-keypad__tab-scroll">
@@ -185,6 +228,17 @@ export function AmountKeypad({
       {/* 底部动作条在操作区之外，因此切到任何页签都在：左侧快捷记账、右侧保存。 */}
       <div className="amount-keypad__actions">
         <div className="amount-keypad__actions-lead">
+          {onExpand ? (
+            <button
+              aria-label="转到记账页"
+              className="amount-keypad__action"
+              onClick={onExpand}
+              title="转到记账页"
+              type="button"
+            >
+              <Maximize2 size={20} />
+            </button>
+          ) : null}
           {onQuickTemplates ? (
             <button
               aria-label="快捷记账"
@@ -222,7 +276,7 @@ export function AmountKeypad({
           ) : (
             <>
               <Check size={18} strokeWidth={2.8} />
-              <span>保存</span>
+              <span>{submitLabel}</span>
             </>
           )}
         </button>

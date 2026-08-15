@@ -11,6 +11,7 @@ import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
 import { TransactionFormFab } from "./TransactionFormFab";
+import { templateToSeed } from "./_model/template-seed";
 
 type PrefillResponse = {
   type?: TransactionSeed["type"];
@@ -31,30 +32,6 @@ type PrefillResponse = {
   itemLinkKind?: "consumable" | "purchase" | null;
   subscriptionId?: string | null;
 };
-
-// 快捷模板列表已带齐预填所需字段，直接构建 seed，避免选择后再请求 /prefill 造成的 loading。
-// 注意：不设置 occurredOn，保留用户在记账页当前已选的日期。
-function templateToSeed(template: QuickTemplate): TransactionSeed {
-  return {
-    type: template.type,
-    grossAmountMicros: template.amountMicros,
-    categoryId: template.categoryId,
-    subcategoryId: template.subcategoryId,
-    personId: template.personId,
-    accountId: template.accountId,
-    subAccountId: template.subAccountId,
-    fromAccountId: template.fromAccountId,
-    fromSubAccountId: template.fromSubAccountId,
-    toAccountId: template.toAccountId,
-    toSubAccountId: template.toSubAccountId,
-    note: template.note,
-    relations: template.relationPayload,
-    insuranceId: template.insuranceId,
-    itemId: template.itemId,
-    itemLinkKind: template.itemLinkKind,
-    subscriptionId: template.subscriptionId,
-  };
-}
 
 type NewBillFormScreenProps = {
   embedded?: boolean;

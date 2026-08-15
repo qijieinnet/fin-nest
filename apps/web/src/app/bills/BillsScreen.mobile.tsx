@@ -56,6 +56,7 @@ import {
 import { InsuranceReminderSheet } from "@/app/more/insurances/_components/InsuranceReminderSheet";
 import { dueReminderInsurances } from "@/app/more/insurances/_components/insurance-utils";
 import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
+import { QuickEntryKeypad } from "./_components/QuickEntryKeypad";
 import { dayLabel, periodLabel } from "./_components/bill-utils";
 import { useBillsModel } from "./_model/useBillsModel";
 
@@ -100,6 +101,8 @@ export function BillsScreenMobile() {
   const scrolled = usePageScrolled();
   const [filterOpen, setFilterOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  // 「记一笔」不再跳页，直接在列表上弹金额键盘快捷记账（要完整表单再从键盘转全屏）。
+  const [quickEntryOpen, setQuickEntryOpen] = useState(false);
 
   const ledgerId = currentLedger?.id ?? null;
   const subscriptionsQuery = useSubscriptions(ledgerId);
@@ -386,7 +389,7 @@ export function BillsScreenMobile() {
             <button
               aria-label="记一笔"
               className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
-              onClick={() => router.push(routes.billNew)}
+              onClick={() => setQuickEntryOpen(true)}
               type="button"
             >
               <Plus size={22} />
@@ -394,6 +397,8 @@ export function BillsScreenMobile() {
           </div>
         </div>
       </div>
+
+      <QuickEntryKeypad onClose={() => setQuickEntryOpen(false)} open={quickEntryOpen} />
 
       {isPrimary ? <MobileTabBar /> : null}
 
