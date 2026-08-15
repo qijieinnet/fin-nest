@@ -33,7 +33,8 @@ function accountGroupOptionId(accountId: string): string {
   return `${ACCOUNT_GROUP_OPTION_PREFIX}${accountId}`;
 }
 
-function filterSubAccountOptionId(accountId: string, subAccountId: string): string {
+/** 筛选弹层里「某账户下的某个子账户」选项 id；解码见 {@link resolveFilterAccountOptionId}。 */
+export function filterSubAccountOptionId(accountId: string, subAccountId: string): string {
   return `${FILTER_SUB_ACCOUNT_PREFIX}${accountId}:${subAccountId}`;
 }
 

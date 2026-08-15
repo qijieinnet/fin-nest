@@ -62,10 +62,37 @@ export class StatsQueryDto {
   @IsString()
   subAccountId?: string;
 
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按账户多选筛选（含其全部子账户），与 subAccountIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  accountIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按子账户多选筛选，与 accountIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  subAccountIds?: string[];
+
   @ApiPropertyOptional({ description: "按人员筛选" })
   @IsOptional()
   @IsString()
   personId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: "按人员多选筛选" })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  personIds?: string[];
 
   @ApiPropertyOptional({ example: "1000000", description: "金额下限（micros）" })
   @IsOptional()

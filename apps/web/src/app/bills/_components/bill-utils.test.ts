@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "@/lib/api";
+import { filterSubAccountOptionId } from "@/lib/data/options";
 import { filterToQuery, groupByDay } from "./bill-utils";
 
 function transaction(overrides: Partial<Transaction>): Transaction {
@@ -90,5 +91,34 @@ describe("bill-utils filterToQuery", () => {
 
     expect(query.categoryIds).toBeUndefined();
     expect(query.subcategoryIds).toBeUndefined();
+  });
+
+  it("splits selected accounts into whole-account and sub-account params", () => {
+    const query = filterToQuery(
+      { accountIds: ["acc_1", filterSubAccountOptionId("acc_2", "sub_2a"), "acc_3"] },
+      2,
+    );
+
+    expect(query.accountIds).toEqual(["acc_1", "acc_3"]);
+    expect(query.subAccountIds).toEqual(["sub_2a"]);
+    expect(query.accountId).toBeUndefined();
+    expect(query.subAccountId).toBeUndefined();
+  });
+
+  it("keeps every selected person and creator", () => {
+    const query = filterToQuery({ creatorIds: ["u1", "u2"], personIds: ["p1", "p2"] }, 2);
+
+    expect(query.personIds).toEqual(["p1", "p2"]);
+    expect(query.createdByIds).toEqual(["u1", "u2"]);
+    expect(query.personId).toBeUndefined();
+    expect(query.createdBy).toBeUndefined();
+  });
+
+  it("falls back to the singular account / person / creator fields", () => {
+    const query = filterToQuery({ accountId: "acc_1", creatorId: "u1", personId: "p1" }, 2);
+
+    expect(query.accountIds).toEqual(["acc_1"]);
+    expect(query.personIds).toEqual(["p1"]);
+    expect(query.createdByIds).toEqual(["u1"]);
   });
 });

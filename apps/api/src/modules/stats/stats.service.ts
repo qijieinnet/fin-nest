@@ -9,7 +9,12 @@ import {
 } from "@fin-nest/backend";
 import { buildNetWorthSeries, type NetWorthRange } from "../accounts/net-worth";
 import { LedgersService } from "../ledgers/ledgers.service";
-import { categoryWhereFilters } from "../transactions/transaction-filters";
+import {
+  accountIdsNeedingRelations,
+  accountWhereFilters,
+  categoryWhereFilters,
+  mergeIdFilter,
+} from "../transactions/transaction-filters";
 import { StatsQueryDto } from "./dto/stats-query.dto";
 
 const TREND_MONTHS = 6;
@@ -164,60 +169,34 @@ export class StatsService {
     query: StatsQueryDto,
   ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = {};
-    if (query.personId) where.personId = query.personId;
+    const personIds = mergeIdFilter(query.personId, query.personIds);
+    if (personIds.length > 0) where.personId = { in: personIds };
     if (query.amountMinMicros || query.amountMaxMicros) {
       where.effectiveAmountMicros = {
         gte: query.amountMinMicros ? BigInt(query.amountMinMicros) : undefined,
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
-    // 分类多选是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
-    const andFilters: Prisma.TransactionWhereInput[] = categoryWhereFilters(query);
-    // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
-    if (query.accountId && query.subAccountId) {
-      const subAccountId = query.subAccountId;
-      andFilters.push({
-        OR: [
-          { accountId: query.accountId, subAccountId },
-          { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
-          { toAccountId: query.accountId, toSubAccountId: subAccountId },
-        ],
-      });
-    } else if (query.accountId) {
-      const relationTransactionIds = await this.transactionIdsLinkedToAccount(
-        ledgerId,
-        query.accountId,
-      );
-      const accountMatches: Prisma.TransactionWhereInput[] = [
-        { accountId: query.accountId },
-        { fromAccountId: query.accountId },
-        { toAccountId: query.accountId },
-      ];
-      if (relationTransactionIds.length > 0) {
-        accountMatches.push({ id: { in: relationTransactionIds } });
-      }
-      andFilters.push({ OR: accountMatches });
-    } else if (query.subAccountId) {
-      const subAccountId = query.subAccountId;
-      andFilters.push({
-        OR: [
-          { subAccountId },
-          { fromSubAccountId: subAccountId },
-          { toSubAccountId: subAccountId },
-        ],
-      });
-    }
+    // 分类 / 账户的多选都是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
+    const andFilters: Prisma.TransactionWhereInput[] = [
+      ...categoryWhereFilters(query),
+      ...accountWhereFilters(
+        query,
+        await this.transactionIdsLinkedToAccounts(ledgerId, accountIdsNeedingRelations(query)),
+      ),
+    ];
     if (andFilters.length) where.AND = andFilters;
     if (query.note) where.note = { contains: query.note };
     return where;
   }
 
-  private async transactionIdsLinkedToAccount(
+  private async transactionIdsLinkedToAccounts(
     ledgerId: string,
-    accountId: string,
+    accountIds: string[],
   ): Promise<string[]> {
+    if (accountIds.length === 0) return [];
     const rows = await this.prisma.client.transactionAccountRelation.findMany({
-      where: { ledgerId, accountId },
+      where: { ledgerId, accountId: { in: accountIds } },
       select: { transactionId: true },
     });
     return [...new Set(rows.map((row) => row.transactionId))];
@@ -410,7 +389,11 @@ export class StatsService {
     const end = addUtcDays(parseDateOnly(dateTo), 1);
     const filterQuery: StatsQueryDto = {
       ...(query.personId ? { personId: query.personId } : {}),
+      ...(query.personIds?.length ? { personIds: query.personIds } : {}),
       ...(query.accountId ? { accountId: query.accountId } : {}),
+      ...(query.subAccountId ? { subAccountId: query.subAccountId } : {}),
+      ...(query.accountIds?.length ? { accountIds: query.accountIds } : {}),
+      ...(query.subAccountIds?.length ? { subAccountIds: query.subAccountIds } : {}),
       ...(query.categoryIds?.length ? { categoryIds: query.categoryIds } : {}),
       ...(query.subcategoryIds?.length ? { subcategoryIds: query.subcategoryIds } : {}),
     };

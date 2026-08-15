@@ -17,7 +17,12 @@ import { BatchUpdateTransactionsDto } from "./dto/batch-update-transactions.dto"
 import { CreateTransactionDto, TransactionAccountRelationDto } from "./dto/create-transaction.dto";
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
 import { UpdateTransactionDto } from "./dto/update-transaction.dto";
-import { categoryWhereFilters } from "./transaction-filters";
+import {
+  accountIdsNeedingRelations,
+  accountWhereFilters,
+  categoryWhereFilters,
+  mergeIdFilter,
+} from "./transaction-filters";
 
 type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, never>> & {
   relations: Prisma.TransactionAccountRelationGetPayload<Record<string, never>>[];
@@ -76,8 +81,10 @@ export class TransactionsService {
   ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = { ledgerId, deletedAt: null };
     if (query.type) where.type = query.type;
-    if (query.personId) where.personId = query.personId;
-    if (query.createdBy) where.createdBy = query.createdBy;
+    const personIds = mergeIdFilter(query.personId, query.personIds);
+    if (personIds.length > 0) where.personId = { in: personIds };
+    const createdByIds = mergeIdFilter(query.createdBy, query.createdByIds);
+    if (createdByIds.length > 0) where.createdBy = { in: createdByIds };
     if (query.dateFrom || query.dateTo) {
       where.occurredOn = {
         gte: query.dateFrom ? parseDateOnly(query.dateFrom) : undefined,
@@ -99,53 +106,26 @@ export class TransactionsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
-    // 分类多选是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
-    const andFilters: Prisma.TransactionWhereInput[] = categoryWhereFilters(query);
-    // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
-    if (query.accountId && query.subAccountId) {
-      const subAccountId = query.subAccountId;
-      andFilters.push({
-        OR: [
-          { accountId: query.accountId, subAccountId },
-          { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
-          { toAccountId: query.accountId, toSubAccountId: subAccountId },
-        ],
-      });
-    } else if (query.accountId) {
-      const relationTransactionIds = await this.transactionIdsLinkedToAccount(
-        ledgerId,
-        query.accountId,
-      );
-      const accountMatches: Prisma.TransactionWhereInput[] = [
-        { accountId: query.accountId },
-        { fromAccountId: query.accountId },
-        { toAccountId: query.accountId },
-      ];
-      if (relationTransactionIds.length > 0) {
-        accountMatches.push({ id: { in: relationTransactionIds } });
-      }
-      andFilters.push({ OR: accountMatches });
-    } else if (query.subAccountId) {
-      const subAccountId = query.subAccountId;
-      andFilters.push({
-        OR: [
-          { subAccountId },
-          { fromSubAccountId: subAccountId },
-          { toSubAccountId: subAccountId },
-        ],
-      });
-    }
+    // 分类 / 账户的多选都是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
+    const andFilters: Prisma.TransactionWhereInput[] = [
+      ...categoryWhereFilters(query),
+      ...accountWhereFilters(
+        query,
+        await this.transactionIdsLinkedToAccounts(ledgerId, accountIdsNeedingRelations(query)),
+      ),
+    ];
     if (andFilters.length) where.AND = andFilters;
     if (query.note) where.note = { contains: query.note };
     return where;
   }
 
-  private async transactionIdsLinkedToAccount(
+  private async transactionIdsLinkedToAccounts(
     ledgerId: string,
-    accountId: string,
+    accountIds: string[],
   ): Promise<string[]> {
+    if (accountIds.length === 0) return [];
     const rows = await this.prisma.client.transactionAccountRelation.findMany({
-      where: { ledgerId, accountId },
+      where: { ledgerId, accountId: { in: accountIds } },
       select: { transactionId: true },
     });
     return [...new Set(rows.map((row) => row.transactionId))];

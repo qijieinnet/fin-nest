@@ -486,8 +486,13 @@ export type TransactionListQuery = {
   subcategoryIds?: string[];
   accountId?: string;
   subAccountId?: string;
+  /** 多选：accountIds（整账户，含其子账户）与 subAccountIds 之间取并集。 */
+  accountIds?: string[];
+  subAccountIds?: string[];
   personId?: string;
+  personIds?: string[];
   createdBy?: string;
+  createdByIds?: string[];
   dateFrom?: string;
   dateTo?: string;
   createdFrom?: string;

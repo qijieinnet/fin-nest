@@ -182,6 +182,7 @@ async function main() {
   });
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
   await assertMultiCategoryFilter({ ledgerId: ledger.id, owner, account });
+  await assertMultiAccountPersonCreatorFilter({ ledgerId: ledger.id, owner, category });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -382,6 +383,124 @@ async function assertMultiCategoryFilter({ ledgerId, owner, account }) {
     { token },
   );
   assert.equal(stats.expense.totalMicros, "2000000");
+}
+
+/** 账户 / 子账户 / 人员 / 记账人多选筛选：各自内部取并集，彼此之间取交集。 */
+async function assertMultiAccountPersonCreatorFilter({ ledgerId, owner, category }) {
+  const token = owner.token;
+  const note = `multiacc-${stamp}`;
+  const makeAccount = (name) =>
+    api("POST", `/ledgers/${ledgerId}/accounts`, {
+      token,
+      expected: 201,
+      body: { type: "savings", name: `${name} ${stamp}`, balanceMicros: "0" },
+    });
+  const [accA, accB, accC] = await Promise.all([
+    makeAccount("E2E MultiAcc A"),
+    makeAccount("E2E MultiAcc B"),
+    makeAccount("E2E MultiAcc C"),
+  ]);
+  // accC 下建一个命名子账户，用来验证「选到子账户」与「选整账户」能混着筛。
+  const subC1 = await api("POST", `/ledgers/${ledgerId}/accounts/${accC.id}/sub-accounts`, {
+    token,
+    expected: 201,
+    body: { name: `E2E MultiAcc C1 ${stamp}`, balanceMicros: "0" },
+  });
+  const makePerson = (name) =>
+    api("POST", `/ledgers/${ledgerId}/people`, {
+      token,
+      expected: 201,
+      body: { name: `${name} ${stamp}` },
+    });
+  const [personA, personB] = await Promise.all([
+    makePerson("E2E MultiPerson A"),
+    makePerson("E2E MultiPerson B"),
+  ]);
+
+  // 第二个记账人：另注册一个用户并批准入伙，避免动到既有 requester 的待审批状态。
+  const helper = await register("filter-helper");
+  const invite = await api("POST", `/ledgers/${ledgerId}/invites`, {
+    token,
+    expected: 201,
+    body: { expiresInDays: 1 },
+  });
+  const joinRequest = await api("POST", "/ledger-join-requests", {
+    token: helper.token,
+    expected: 201,
+    body: { inviteCode: invite.code, message: "e2e multi-filter helper" },
+  });
+  await api("POST", `/ledgers/${ledgerId}/join-requests/${joinRequest.id}/approve`, {
+    token,
+    expected: 201,
+  });
+
+  const makeExpense = ({ accountId, subAccountId, personId, asToken = token }) =>
+    api("POST", `/ledgers/${ledgerId}/transactions`, {
+      token: asToken,
+      expected: 201,
+      body: {
+        type: "expense",
+        grossAmountMicros: "1000000",
+        occurredOn: todayIso(),
+        categoryId: category.id,
+        accountId,
+        ...(subAccountId ? { subAccountId } : {}),
+        ...(personId ? { personId } : {}),
+        note,
+      },
+    });
+  await makeExpense({ accountId: accA.id, personId: personA.id });
+  await makeExpense({ accountId: accB.id, personId: personB.id });
+  await makeExpense({ accountId: accC.id, subAccountId: subC1.id, personId: personA.id });
+  await makeExpense({ accountId: accA.id, asToken: helper.token });
+
+  const list = (query) =>
+    api("GET", `/ledgers/${ledgerId}/transactions?note=${encodeURIComponent(note)}&${query}`, {
+      token,
+    });
+
+  // 账户多选取并集（accA 上有两笔：owner 一笔、helper 一笔）。
+  assert.equal((await list(`accountIds=${accA.id}&accountIds=${accB.id}`)).length, 3);
+  assert.equal((await list(`accountIds=${accA.id},${accB.id}`)).length, 3);
+  assert.equal((await list(`accountIds=${accB.id}`)).length, 1);
+  // 整账户与子账户混选取并集；单选整账户时也应命中其下子账户的交易。
+  assert.equal((await list(`accountIds=${accB.id}&subAccountIds=${subC1.id}`)).length, 2);
+  assert.equal((await list(`subAccountIds=${subC1.id}`)).length, 1);
+  assert.equal((await list(`accountIds=${accC.id}`)).length, 1);
+
+  // 人员多选取并集。
+  assert.equal((await list(`personIds=${personA.id}&personIds=${personB.id}`)).length, 3);
+  assert.equal((await list(`personIds=${personB.id}`)).length, 1);
+
+  // 记账人多选取并集。
+  assert.equal(
+    (await list(`createdByIds=${owner.userId}&createdByIds=${helper.userId}`)).length,
+    4,
+  );
+  assert.equal((await list(`createdByIds=${helper.userId}`)).length, 1);
+
+  // 不同维度之间仍是交集：accA 上 owner 记的那一笔。
+  assert.equal(
+    (await list(`accountIds=${accA.id}&accountIds=${accB.id}&createdByIds=${helper.userId}`))
+      .length,
+    1,
+  );
+  assert.equal((await list(`accountIds=${accB.id}&personIds=${personA.id}`)).length, 0);
+
+  const summary = await api(
+    "GET",
+    `/ledgers/${ledgerId}/transactions/summary?note=${encodeURIComponent(note)}&personIds=${personA.id}&personIds=${personB.id}`,
+    { token },
+  );
+  assert.equal(summary.count, 3);
+  assert.equal(summary.expenseMicros, "3000000");
+
+  const stats = await api(
+    "GET",
+    `/ledgers/${ledgerId}/stats?dateFrom=${todayIso()}&dateTo=${todayIso()}&note=${encodeURIComponent(note)}&accountIds=${accA.id}&accountIds=${accB.id}`,
+    { token },
+  );
+  assert.equal(stats.expense.totalMicros, "3000000");
 }
 
 /** 批量修改单字段：备注/分类/人员/账户/日期/类型，并验证转账对分类/账户被跳过、类型互转的余额冲正正确。 */

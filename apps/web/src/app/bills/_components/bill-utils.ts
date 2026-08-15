@@ -77,6 +77,12 @@ export function dayLabel(iso: string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAYS[date.getDay()]}`;
 }
 
+/** 多选列表优先；没有多选列表时回退到弹层写的单选字段。 */
+function selectedIds(many: string[] | undefined, single: string | null | undefined): string[] {
+  if (many?.length) return many;
+  return single ? [single] : [];
+}
+
 /** 把筛选弹层的值（不含时间，由月份控制）映射成交易列表查询参数。 */
 export function filterToQuery(
   value: BusinessFilterValue,
@@ -85,23 +91,28 @@ export function filterToQuery(
   const query: TransactionListQuery = {};
   if (value.type && value.type !== "all") query.type = value.type;
 
-  // 分类是多选：整份传给后端（一级与二级取并集）。弹层同时写了单选字段 categoryId，
-  // 这里只作为「没有多选列表」时的回退，否则会与多选并存并被后端当成额外的交集条件。
-  const categoryIds = value.categoryIds?.length
-    ? value.categoryIds
-    : value.categoryId
-      ? [value.categoryId]
-      : [];
+  // 分类 / 账户 / 人员 / 记账人都是多选：整份传给后端，不能只取第一个。
+  // 弹层同时写了单选字段（categoryId / accountId / ...），这里只作为「没有多选列表」时的
+  // 回退，否则会与多选并存、被后端再当成一层额外条件。
+  const categoryIds = selectedIds(value.categoryIds, value.categoryId);
   if (categoryIds.length) query.categoryIds = categoryIds;
   if (value.subcategoryIds?.length) query.subcategoryIds = value.subcategoryIds;
 
-  const account = resolveFilterAccountOptionId(value.accountIds?.[0] ?? value.accountId);
-  if (account.accountId) query.accountId = account.accountId;
-  if (account.subAccountId) query.subAccountId = account.subAccountId;
-  const personId = value.personIds?.[0] ?? value.personId ?? undefined;
-  if (personId) query.personId = personId;
-  const createdBy = value.creatorIds?.[0] ?? value.creatorId ?? undefined;
-  if (createdBy) query.createdBy = createdBy;
+  // 账户选项 id 里编码了「整账户」还是「某个子账户」，拆成两个参数发给后端。
+  const accounts = selectedIds(value.accountIds, value.accountId).map(resolveFilterAccountOptionId);
+  const accountIds = accounts
+    .filter((item) => item.accountId && !item.subAccountId)
+    .map((item) => item.accountId!);
+  const subAccountIds = accounts
+    .map((item) => item.subAccountId)
+    .filter((id): id is string => Boolean(id));
+  if (accountIds.length) query.accountIds = accountIds;
+  if (subAccountIds.length) query.subAccountIds = subAccountIds;
+
+  const personIds = selectedIds(value.personIds, value.personId);
+  if (personIds.length) query.personIds = personIds;
+  const createdByIds = selectedIds(value.creatorIds, value.creatorId);
+  if (createdByIds.length) query.createdByIds = createdByIds;
   if (value.createdFrom) query.createdFrom = value.createdFrom;
   if (value.createdTo) query.createdTo = value.createdTo;
   if (value.keyword) query.note = value.keyword;
