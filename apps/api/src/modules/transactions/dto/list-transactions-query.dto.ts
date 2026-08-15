@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from "class-validator";
+import { toIdList } from "../transaction-filters";
 
 export class ListTransactionsQueryDto {
   @ApiPropertyOptional({ enum: ["expense", "income", "transfer"] })
@@ -17,6 +18,26 @@ export class ListTransactionsQueryDto {
   @IsOptional()
   @IsString()
   subcategoryId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按一级分类多选筛选，与 subcategoryIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按二级分类多选筛选，与 categoryIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  subcategoryIds?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

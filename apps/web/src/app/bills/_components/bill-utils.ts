@@ -85,10 +85,15 @@ export function filterToQuery(
   const query: TransactionListQuery = {};
   if (value.type && value.type !== "all") query.type = value.type;
 
-  const categoryId = value.categoryIds?.[0] ?? value.categoryId ?? undefined;
-  if (categoryId) query.categoryId = categoryId;
-  const subcategoryId = value.subcategoryIds?.[0];
-  if (subcategoryId) query.subcategoryId = subcategoryId;
+  // 分类是多选：整份传给后端（一级与二级取并集）。弹层同时写了单选字段 categoryId，
+  // 这里只作为「没有多选列表」时的回退，否则会与多选并存并被后端当成额外的交集条件。
+  const categoryIds = value.categoryIds?.length
+    ? value.categoryIds
+    : value.categoryId
+      ? [value.categoryId]
+      : [];
+  if (categoryIds.length) query.categoryIds = categoryIds;
+  if (value.subcategoryIds?.length) query.subcategoryIds = value.subcategoryIds;
 
   const account = resolveFilterAccountOptionId(value.accountIds?.[0] ?? value.accountId);
   if (account.accountId) query.accountId = account.accountId;

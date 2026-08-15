@@ -17,6 +17,7 @@ import { BatchUpdateTransactionsDto } from "./dto/batch-update-transactions.dto"
 import { CreateTransactionDto, TransactionAccountRelationDto } from "./dto/create-transaction.dto";
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
 import { UpdateTransactionDto } from "./dto/update-transaction.dto";
+import { categoryWhereFilters } from "./transaction-filters";
 
 type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, never>> & {
   relations: Prisma.TransactionAccountRelationGetPayload<Record<string, never>>[];
@@ -75,8 +76,6 @@ export class TransactionsService {
   ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = { ledgerId, deletedAt: null };
     if (query.type) where.type = query.type;
-    if (query.categoryId) where.categoryId = query.categoryId;
-    if (query.subcategoryId) where.subcategoryId = query.subcategoryId;
     if (query.personId) where.personId = query.personId;
     if (query.createdBy) where.createdBy = query.createdBy;
     if (query.dateFrom || query.dateTo) {
@@ -100,11 +99,12 @@ export class TransactionsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
+    // 分类多选是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
+    const andFilters: Prisma.TransactionWhereInput[] = categoryWhereFilters(query);
     // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
-    const sideFilters: Prisma.TransactionWhereInput[] = [];
     if (query.accountId && query.subAccountId) {
       const subAccountId = query.subAccountId;
-      sideFilters.push({
+      andFilters.push({
         OR: [
           { accountId: query.accountId, subAccountId },
           { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
@@ -124,10 +124,10 @@ export class TransactionsService {
       if (relationTransactionIds.length > 0) {
         accountMatches.push({ id: { in: relationTransactionIds } });
       }
-      sideFilters.push({ OR: accountMatches });
+      andFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
       const subAccountId = query.subAccountId;
-      sideFilters.push({
+      andFilters.push({
         OR: [
           { subAccountId },
           { fromSubAccountId: subAccountId },
@@ -135,7 +135,7 @@ export class TransactionsService {
         ],
       });
     }
-    if (sideFilters.length) where.AND = sideFilters;
+    if (andFilters.length) where.AND = andFilters;
     if (query.note) where.note = { contains: query.note };
     return where;
   }

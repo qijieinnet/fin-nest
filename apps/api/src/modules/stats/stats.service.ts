@@ -9,6 +9,7 @@ import {
 } from "@fin-nest/backend";
 import { buildNetWorthSeries, type NetWorthRange } from "../accounts/net-worth";
 import { LedgersService } from "../ledgers/ledgers.service";
+import { categoryWhereFilters } from "../transactions/transaction-filters";
 import { StatsQueryDto } from "./dto/stats-query.dto";
 
 const TREND_MONTHS = 6;
@@ -68,8 +69,6 @@ export type PeriodSeriesQuery = Omit<
 > & {
   dateFrom: string;
   dateTo: string;
-  categoryIds?: string[];
-  subcategoryIds?: string[];
 };
 
 type PeriodSeriesGranularity = "day" | "week" | "month";
@@ -165,8 +164,6 @@ export class StatsService {
     query: StatsQueryDto,
   ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = {};
-    if (query.categoryId) where.categoryId = query.categoryId;
-    if (query.subcategoryId) where.subcategoryId = query.subcategoryId;
     if (query.personId) where.personId = query.personId;
     if (query.amountMinMicros || query.amountMaxMicros) {
       where.effectiveAmountMicros = {
@@ -174,11 +171,12 @@ export class StatsService {
         lte: query.amountMaxMicros ? BigInt(query.amountMaxMicros) : undefined,
       };
     }
+    // 分类多选是并集，只能挂在 AND 上（顶层 where 字段之间恒为 AND）。
+    const andFilters: Prisma.TransactionWhereInput[] = categoryWhereFilters(query);
     // 账户筛选命中任一侧；同时筛选子账户时，账户与子账户必须命中同一侧。
-    const sideFilters: Prisma.TransactionWhereInput[] = [];
     if (query.accountId && query.subAccountId) {
       const subAccountId = query.subAccountId;
-      sideFilters.push({
+      andFilters.push({
         OR: [
           { accountId: query.accountId, subAccountId },
           { fromAccountId: query.accountId, fromSubAccountId: subAccountId },
@@ -198,10 +196,10 @@ export class StatsService {
       if (relationTransactionIds.length > 0) {
         accountMatches.push({ id: { in: relationTransactionIds } });
       }
-      sideFilters.push({ OR: accountMatches });
+      andFilters.push({ OR: accountMatches });
     } else if (query.subAccountId) {
       const subAccountId = query.subAccountId;
-      sideFilters.push({
+      andFilters.push({
         OR: [
           { subAccountId },
           { fromSubAccountId: subAccountId },
@@ -209,7 +207,7 @@ export class StatsService {
         ],
       });
     }
-    if (sideFilters.length) where.AND = sideFilters;
+    if (andFilters.length) where.AND = andFilters;
     if (query.note) where.note = { contains: query.note };
     return where;
   }
@@ -410,20 +408,11 @@ export class StatsService {
     const { buckets, granularity } = periodSeriesBuckets(dateFrom, dateTo);
     const start = parseDateOnly(dateFrom);
     const end = addUtcDays(parseDateOnly(dateTo), 1);
-    const categoryIds = query.categoryIds ?? [];
-    const subcategoryIds = query.subcategoryIds ?? [];
-    const categoryWhere: Prisma.TransactionWhereInput =
-      categoryIds.length > 0 || subcategoryIds.length > 0
-        ? {
-            OR: [
-              ...(categoryIds.length > 0 ? [{ categoryId: { in: categoryIds } }] : []),
-              ...(subcategoryIds.length > 0 ? [{ subcategoryId: { in: subcategoryIds } }] : []),
-            ],
-          }
-        : {};
     const filterQuery: StatsQueryDto = {
       ...(query.personId ? { personId: query.personId } : {}),
       ...(query.accountId ? { accountId: query.accountId } : {}),
+      ...(query.categoryIds?.length ? { categoryIds: query.categoryIds } : {}),
+      ...(query.subcategoryIds?.length ? { subcategoryIds: query.subcategoryIds } : {}),
     };
     const transactions = await this.prisma.client.transaction.findMany({
       where: {
@@ -432,7 +421,6 @@ export class StatsService {
         type: { in: ["expense", "income"] },
         occurredOn: { gte: start, lt: end },
         ...(await this.buildFilterWhere(ledgerId, filterQuery)),
-        ...categoryWhere,
       },
       select: { type: true, occurredOn: true, effectiveAmountMicros: true },
     });

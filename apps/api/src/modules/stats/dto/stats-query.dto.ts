@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, Matches } from "class-validator";
+import { Transform } from "class-transformer";
+import { IsArray, IsOptional, IsString, Matches } from "class-validator";
+import { toIdList } from "../../transactions/transaction-filters";
 
 export class StatsQueryDto {
   @ApiPropertyOptional({ example: "2026-07", description: "统计月份，默认当月（未传日期范围时生效）" })
@@ -29,6 +31,26 @@ export class StatsQueryDto {
   @IsOptional()
   @IsString()
   subcategoryId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按一级分类多选筛选，与 subcategoryIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "按二级分类多选筛选，与 categoryIds 取并集",
+  })
+  @IsOptional()
+  @Transform(toIdList)
+  @IsArray()
+  @IsString({ each: true })
+  subcategoryIds?: string[];
 
   @ApiPropertyOptional({ description: "按账户筛选（出入账任一侧命中）" })
   @IsOptional()

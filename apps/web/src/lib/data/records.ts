@@ -37,9 +37,14 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 
-function cleanQuery(filters: TransactionListQuery): Record<string, string> {
-  const out: Record<string, string> = {};
+function cleanQuery(filters: TransactionListQuery): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
   for (const [key, value] of Object.entries(filters)) {
+    // 数组要保留成数组，交给 buildApiUrl 展开成重复参数；String(array) 会拼成逗号串。
+    if (Array.isArray(value)) {
+      if (value.length > 0) out[key] = value.map(String);
+      continue;
+    }
     if (value !== undefined && value !== null && value !== "") out[key] = String(value);
   }
   return out;
@@ -274,6 +279,8 @@ export type StatsQuery = Pick<
   | "dateTo"
   | "categoryId"
   | "subcategoryId"
+  | "categoryIds"
+  | "subcategoryIds"
   | "accountId"
   | "subAccountId"
   | "personId"

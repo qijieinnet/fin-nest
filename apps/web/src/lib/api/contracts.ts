@@ -478,8 +478,12 @@ export type TransactionInput = {
 
 export type TransactionListQuery = {
   type?: TransactionType;
+  /** 单选：与 subcategoryId 同时传时取交集（统计页下钻用）。 */
   categoryId?: string;
   subcategoryId?: string;
+  /** 多选：categoryIds 与 subcategoryIds 之间取并集（筛选弹层用）。 */
+  categoryIds?: string[];
+  subcategoryIds?: string[];
   accountId?: string;
   subAccountId?: string;
   personId?: string;

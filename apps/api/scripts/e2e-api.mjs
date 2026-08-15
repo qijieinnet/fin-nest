@@ -181,6 +181,7 @@ async function main() {
     person,
   });
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
+  await assertMultiCategoryFilter({ ledgerId: ledger.id, owner, account });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -310,6 +311,77 @@ async function assertEffectiveAmountQueries({ ledgerId, owner, account, category
       note: `invalid-date-${stamp}`,
     },
   });
+}
+
+/** 分类多选筛选：categoryIds / subcategoryIds 之间取并集，单选 categoryId + subcategoryId 仍取交集。 */
+async function assertMultiCategoryFilter({ ledgerId, owner, account }) {
+  const token = owner.token;
+  const note = `multicat-${stamp}`;
+  const makeCategory = (name) =>
+    api("POST", `/ledgers/${ledgerId}/categories`, {
+      token,
+      expected: 201,
+      body: { type: "expense", name: `${name} ${stamp}` },
+    });
+  const [catA, catB, catC] = await Promise.all([
+    makeCategory("E2E MultiCat A"),
+    makeCategory("E2E MultiCat B"),
+    makeCategory("E2E MultiCat C"),
+  ]);
+  const subC1 = await api("POST", `/ledgers/${ledgerId}/categories/${catC.id}/subcategories`, {
+    token,
+    expected: 201,
+    body: { name: `E2E MultiCat C1 ${stamp}` },
+  });
+
+  const makeExpense = (categoryId, subcategoryId) =>
+    api("POST", `/ledgers/${ledgerId}/transactions`, {
+      token,
+      expected: 201,
+      body: {
+        type: "expense",
+        grossAmountMicros: "1000000",
+        occurredOn: todayIso(),
+        categoryId,
+        ...(subcategoryId ? { subcategoryId } : {}),
+        accountId: account.id,
+        note,
+      },
+    });
+  await makeExpense(catA.id);
+  await makeExpense(catB.id);
+  await makeExpense(catC.id, subC1.id);
+
+  const list = (query) =>
+    api("GET", `/ledgers/${ledgerId}/transactions?note=${encodeURIComponent(note)}&${query}`, {
+      token,
+    });
+
+  // 重复参数与逗号分隔两种写法都应命中两个分类，而不是只认第一个。
+  assert.equal((await list(`categoryIds=${catA.id}&categoryIds=${catB.id}`)).length, 2);
+  assert.equal((await list(`categoryIds=${catA.id},${catB.id}`)).length, 2);
+  assert.equal((await list(`categoryIds=${catA.id}`)).length, 1);
+  // 一级与二级混选取并集。
+  assert.equal((await list(`categoryIds=${catA.id}&subcategoryIds=${subC1.id}`)).length, 2);
+  assert.equal((await list(`subcategoryIds=${subC1.id}`)).length, 1);
+  // 单选保持交集语义（统计页下钻依赖）。
+  assert.equal((await list(`categoryId=${catA.id}&subcategoryId=${subC1.id}`)).length, 0);
+  assert.equal((await list(`categoryId=${catC.id}&subcategoryId=${subC1.id}`)).length, 1);
+
+  const summary = await api(
+    "GET",
+    `/ledgers/${ledgerId}/transactions/summary?note=${encodeURIComponent(note)}&categoryIds=${catA.id}&categoryIds=${catB.id}`,
+    { token },
+  );
+  assert.equal(summary.count, 2);
+  assert.equal(summary.expenseMicros, "2000000");
+
+  const stats = await api(
+    "GET",
+    `/ledgers/${ledgerId}/stats?dateFrom=${todayIso()}&dateTo=${todayIso()}&note=${encodeURIComponent(note)}&categoryIds=${catA.id}&categoryIds=${catB.id}`,
+    { token },
+  );
+  assert.equal(stats.expense.totalMicros, "2000000");
 }
 
 /** 批量修改单字段：备注/分类/人员/账户/日期/类型，并验证转账对分类/账户被跳过、类型互转的余额冲正正确。 */

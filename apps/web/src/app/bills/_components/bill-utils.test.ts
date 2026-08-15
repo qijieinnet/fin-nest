@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "@/lib/api";
-import { groupByDay } from "./bill-utils";
+import { filterToQuery, groupByDay } from "./bill-utils";
 
 function transaction(overrides: Partial<Transaction>): Transaction {
   return {
@@ -63,5 +63,32 @@ describe("bill-utils groupByDay", () => {
 
     expect(group?.expenseMicros).toBe(100000000n);
     expect(group?.incomeMicros).toBe(50000000n);
+  });
+});
+
+describe("bill-utils filterToQuery", () => {
+  it("keeps every selected category instead of only the first", () => {
+    const query = filterToQuery(
+      { categoryId: "c2", categoryIds: ["c1", "c2"], subcategoryIds: ["c3-1"] },
+      2,
+    );
+
+    expect(query.categoryIds).toEqual(["c1", "c2"]);
+    expect(query.subcategoryIds).toEqual(["c3-1"]);
+    // 单选字段是弹层的历史遗留写法，不能再额外发出去当交集条件。
+    expect(query.categoryId).toBeUndefined();
+  });
+
+  it("falls back to the singular category when no multi-select list exists", () => {
+    const query = filterToQuery({ categoryId: "c1" }, 2);
+
+    expect(query.categoryIds).toEqual(["c1"]);
+  });
+
+  it("omits category keys when nothing is selected", () => {
+    const query = filterToQuery({ categoryIds: [], subcategoryIds: [] }, 2);
+
+    expect(query.categoryIds).toBeUndefined();
+    expect(query.subcategoryIds).toBeUndefined();
   });
 });
