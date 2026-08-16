@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, ChevronDown, LoaderCircle, Maximize2, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, LoaderCircle, Maximize2, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Tabs } from "@/components/ui";
+import { PopoverMenu } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { groupMoneyDisplay } from "@/lib/money";
@@ -87,6 +87,7 @@ export function AmountKeypad({
   type,
 }: AmountKeypadProps) {
   const [activeTab, setActiveTab] = useState<KeypadTabId>("amount");
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [state, setState] = useState<KeypadState>(() => keypadStateFromValue(amount));
   const rootRef = useRef<HTMLDivElement>(null);
   // onClose 由调用方内联创建，每次按键都换新引用；存进 ref 才不会每敲一下就重挂监听。
@@ -103,7 +104,12 @@ export function AmountKeypad({
       if (!target || rootRef.current?.contains(target)) return;
       // 金额展示区负责重新展开，层叠在键盘之上的 sheet / 弹出菜单也不算「外部」，
       // 否则点分类的「更多」弹层或快捷记账弹层会把身下的键盘一并关掉。
-      if (target.closest(".biz-amount, .sheet-root, .ui-popover-menu")) return;
+      // 弹出菜单的透明背板同理：点它是「关掉这个菜单」，不该顺手把键盘也收了。
+      if (
+        target.closest(".biz-amount, .sheet-root, .ui-popover-menu, .ui-popover-menu__backdrop")
+      ) {
+        return;
+      }
       onCloseRef.current();
     }
     window.addEventListener("pointerdown", handlePointerDown);
@@ -129,8 +135,11 @@ export function AmountKeypad({
   }, [amount, decimalPlaces]);
 
   // 键盘收起时回到金额页签：下次展开总是从「输金额」开始。
+  // 类型菜单一并关掉，否则它的全屏背板会留在已经收起的键盘上方。
   useEffect(() => {
-    if (!open) setActiveTab("amount");
+    if (open) return;
+    setActiveTab("amount");
+    setTypeMenuOpen(false);
   }, [open]);
 
   // 记完一笔同样回到金额页签：连续记账时键盘不收起，停在备注/分类页上接着记下一笔很别扭。
@@ -216,15 +225,6 @@ export function AmountKeypad({
       style={{ "--space-keypad-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
     >
       <div className="amount-keypad__tabs">
-        {/* 类型钉在页签行最左，不进 __tab-scroll：它是这一笔的前提，任何时候都不该被滚走。 */}
-        {onTypeChange && type ? (
-          <Tabs
-            className="amount-keypad__type"
-            items={TYPE_TAB_ITEMS}
-            onValueChange={(next) => onTypeChange(next as TransactionType)}
-            value={type}
-          />
-        ) : null}
         <div className="amount-keypad__tab-scroll">
           {allTabs.map((tab) => (
             <button
@@ -260,7 +260,7 @@ export function AmountKeypad({
         <div className="amount-keypad__panel">{active?.panel}</div>
       </div>
 
-      {/* 底部动作条在操作区之外，因此切到任何页签都在：左侧快捷记账、右侧保存。 */}
+      {/* 底部动作条在操作区之外，因此切到任何页签都在：左侧快捷记账、右侧类型与保存。 */}
       <div className="amount-keypad__actions">
         <div className="amount-keypad__actions-lead">
           {onExpand ? (
@@ -299,22 +299,51 @@ export function AmountKeypad({
           ) : null}
         </div>
 
-        <button
-          aria-disabled={!canSubmit ? true : undefined}
-          className={cn("amount-keypad__submit", !canSubmit && "amount-keypad__submit--idle")}
-          disabled={submitting}
-          onClick={onSubmit}
-          type="button"
-        >
-          {submitting ? (
-            <LoaderCircle className="ui-button__spinner" size={18} />
-          ) : (
-            <>
-              <Check size={18} strokeWidth={2.8} />
-              <span>{submitLabel}</span>
-            </>
-          )}
-        </button>
+        <div className="amount-keypad__actions-trail">
+          {/* 类型紧挨保存：「记成哪一类」和「记下去」是同一个决定，比钉在页签行更好找。
+              只显示当前类型，点开 PopoverMenu 换——三种类型排开会挤掉保存按钮的位置。 */}
+          {onTypeChange && type ? (
+            <div className="relative">
+              <button
+                aria-haspopup="menu"
+                className="amount-keypad__type"
+                onClick={() => setTypeMenuOpen((current) => !current)}
+                type="button"
+              >
+                <span>{TYPE_TAB_ITEMS.find((item) => item.value === type)?.label}</span>
+                <ChevronsUpDown size={15} />
+              </button>
+              <PopoverMenu
+                groups={[
+                  TYPE_TAB_ITEMS.map((item) => ({
+                    label: item.label,
+                    onSelect: () => onTypeChange(item.value),
+                    selected: item.value === type,
+                  })),
+                ]}
+                onOpenChange={setTypeMenuOpen}
+                open={typeMenuOpen}
+              />
+            </div>
+          ) : null}
+
+          <button
+            aria-disabled={!canSubmit ? true : undefined}
+            className={cn("amount-keypad__submit", !canSubmit && "amount-keypad__submit--idle")}
+            disabled={submitting}
+            onClick={onSubmit}
+            type="button"
+          >
+            {submitting ? (
+              <LoaderCircle className="ui-button__spinner" size={18} />
+            ) : (
+              <>
+                <Check size={18} strokeWidth={2.8} />
+                <span>{submitLabel}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>,
     document.body,

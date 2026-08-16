@@ -6132,17 +6132,6 @@ select:focus-visible {
   padding: 0 10px;
 }
 
-/* 类型切换（快捷记账专用）：复用全站的 ui-tabs 分段控件，只把尺寸压进页签行的高度。 */
-.amount-keypad__type {
-  flex: 0 0 auto;
-}
-
-.amount-keypad__type .ui-tabs__item {
-  font-size: 13px;
-  min-height: 28px;
-  padding: 0 8px;
-}
-
 .amount-keypad__tab-scroll {
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -6334,6 +6323,46 @@ select:focus-visible {
   align-items: center;
   display: flex;
   gap: 2px;
+  min-width: 0;
+  /* 日期页签下多出「今天」，最窄的手机上会顶到保存按钮：让这一侧先让步（裁字），
+     右侧的类型与保存是主动作，宽度不能动。 */
+  overflow: hidden;
+}
+
+/* 类型 + 保存成组靠右：两者是同一个决定的两半，中间不能被 space-between 撑开。 */
+.amount-keypad__actions-trail {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+/* 类型触发键（快捷记账专用）：显示当前类型，点开菜单换。
+   用 tint-soft 底 + tint-strong 字，与保存按钮同高但明显是次级动作。 */
+.amount-keypad__type {
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  background: var(--color-tint-soft);
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-tint-strong);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 16px;
+  font-weight: 590;
+  gap: 3px;
+  height: var(--space-control-height);
+  padding: 0 10px 0 13px;
+  transition: transform var(--motion-duration-press) var(--ease-out);
+  white-space: nowrap;
+}
+
+.amount-keypad__type:active {
+  transform: scale(0.97);
+}
+
+/* 类型键占了位，保存按钮就不再吃那 116px 的保底宽度（自身内边距已经够撑）。 */
+.amount-keypad__actions-trail:has(.amount-keypad__type) .amount-keypad__submit {
   min-width: 0;
 }
 
