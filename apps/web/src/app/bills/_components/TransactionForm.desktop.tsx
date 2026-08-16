@@ -9,13 +9,8 @@ import {
 import { AccountSelect, CategorySelect, DesktopDatePicker, FormSelect } from "@/components/desktop";
 import { Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
+import { TYPE_TAB_ITEMS } from "./_model/transaction-form-utils";
 import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
-
-const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

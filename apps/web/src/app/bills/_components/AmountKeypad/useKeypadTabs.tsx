@@ -18,7 +18,8 @@ import type { KeypadTab } from ".";
  * 按记账设置组装键盘页签（amount 由外壳自己加在首位）。
  *
  * 顺序跟随 orderedFieldsForType，用户在设置里排的字段顺序在键盘里也是那个顺序；
- * 转账只留金额与备注（转出/转入双选留在表单卡片）。
+ * 转账没有分类，转出/转入拆成两个页签（表单页有双选卡片，只有快捷记账需要）；
+ * 人员与日期转账同样适用（表单卡片与 buildPayload 的转账分支都带人员），照常给页签。
  */
 export function useKeypadTabs(
   model: TransactionFormModel,
@@ -30,6 +31,7 @@ export function useKeypadTabs(
     acctOptions,
     categoryId,
     catOptions,
+    fromSel,
     note,
     occurredOn,
     order,
@@ -38,13 +40,16 @@ export function useKeypadTabs(
     setAccountEnabled,
     setAccountSel,
     setCategoryId,
+    setFromSel,
     setNote,
     setOccurredOn,
     setPersonEnabled,
     setPersonId,
+    setToSel,
     showAccountCard,
     showNoteCard,
     showPersonCard,
+    toSel,
     type,
   } = model;
 
@@ -58,9 +63,6 @@ export function useKeypadTabs(
         }
       : null;
 
-    // 转账没有分类/人员，账户是转出转入两个选择器（留在表单卡片里）；备注与类型无关，照常给。
-    if (type === "transfer") return noteTab ? [noteTab] : [];
-
     const selectedCategory = catOptions.find((option) => option.id === categoryId);
     const selectedPerson = peopleOpts.find((option) => option.id === personId);
     const tabs: KeypadTab[] = [];
@@ -68,6 +70,8 @@ export function useKeypadTabs(
     for (const field of orderedFieldsForType(order, type)) {
       switch (field) {
         case "category":
+          // 转账不涉及分类。
+          if (type === "transfer") break;
           tabs.push({
             id: "category",
             label: "分类",
@@ -84,6 +88,42 @@ export function useKeypadTabs(
           break;
 
         case "account":
+          if (type === "transfer") {
+            // 表单页的转出/转入是卡片里的双选器，键盘不重复给；
+            // 快捷记账没有卡片，这两个页签是唯一入口，缺了转账就记不成。
+            if (!keypadOnly) break;
+            tabs.push({
+              id: "fromAccount",
+              label: "转出",
+              value: nestedOptionLabel(acctOptions, fromSel, "") || undefined,
+              panel: (
+                <AccountSelectionList
+                  onSelect={(option) => {
+                    if (option.disabled) return;
+                    setFromSel(option.id);
+                  }}
+                  options={acctOptions}
+                  selectedId={fromSel}
+                />
+              ),
+            });
+            tabs.push({
+              id: "toAccount",
+              label: "转入",
+              value: nestedOptionLabel(acctOptions, toSel, "") || undefined,
+              panel: (
+                <AccountSelectionList
+                  onSelect={(option) => {
+                    if (option.disabled) return;
+                    setToSel(option.id);
+                  }}
+                  options={acctOptions}
+                  selectedId={toSel}
+                />
+              ),
+            });
+            break;
+          }
           // 表单里的账户卡是可关的开关卡：关掉表示「这笔账不记账户」。
           // 关着还在键盘里给个选择面板，等于绕过用户刚做的决定，因此整个页签一并隐藏，
           // 开关状态只由表单那张卡决定（acctRequired 时它恒为开）。
@@ -92,7 +132,11 @@ export function useKeypadTabs(
           tabs.push({
             id: "account",
             label: "账户",
-            value: nestedOptionLabel(acctOptions, accountSel, "") || undefined,
+            // 回显与选中态都跟着开关走：切一趟转账再切回来，handleTypeChange 关掉了开关
+            // 但留着 accountSel，只看 accountSel 会显示一个保存时并不会写进去的账户。
+            value: accountEnabled
+              ? nestedOptionLabel(acctOptions, accountSel, "") || undefined
+              : undefined,
             panel: (
               <AccountSelectionList
                 onSelect={(option) => {
@@ -101,7 +145,7 @@ export function useKeypadTabs(
                   setAccountEnabled(true);
                 }}
                 options={acctOptions}
-                selectedId={accountSel}
+                selectedId={accountEnabled ? accountSel : null}
               />
             ),
           });
@@ -152,6 +196,7 @@ export function useKeypadTabs(
     acctOptions,
     categoryId,
     catOptions,
+    fromSel,
     keypadOnly,
     note,
     occurredOn,
@@ -161,13 +206,16 @@ export function useKeypadTabs(
     setAccountEnabled,
     setAccountSel,
     setCategoryId,
+    setFromSel,
     setNote,
     setOccurredOn,
     setPersonEnabled,
     setPersonId,
+    setToSel,
     showAccountCard,
     showNoteCard,
     showPersonCard,
+    toSel,
     type,
   ]);
 }

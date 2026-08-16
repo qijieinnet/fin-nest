@@ -3,8 +3,11 @@
 import { Check, ChevronDown, LoaderCircle, Maximize2, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Tabs } from "@/components/ui";
+import type { TransactionType } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { groupMoneyDisplay } from "@/lib/money";
+import { TYPE_TAB_ITEMS } from "../_model/transaction-form-utils";
 import {
   applyKeypadKey,
   keypadDisplayValue,
@@ -17,7 +20,15 @@ import {
 import { NumericPanel } from "./NumericPanel";
 
 /** 键盘页签。amount 恒在首位，其余按记账设置的字段顺序动态生成。 */
-export type KeypadTabId = "amount" | "category" | "account" | "person" | "date" | "note";
+export type KeypadTabId =
+  | "amount"
+  | "category"
+  | "account"
+  | "fromAccount"
+  | "toAccount"
+  | "person"
+  | "date"
+  | "note";
 
 export type KeypadTab = {
   id: KeypadTabId;
@@ -40,8 +51,10 @@ type AmountKeypadProps = {
   /** 快捷记账入口：键盘展开时 FAB 让位，它的功能搬到这里。 */
   onQuickTemplates?: () => void;
   onSubmit: () => void;
-  /** 把日期设回今天。仅在存在日期页签时展示（转账下键盘只有金额页签）。 */
+  /** 把日期设回今天。只在日期页签当前选中时才出现在动作条上。 */
   onToday?: () => void;
+  /** 类型切换：只有快捷记账给（页面上的表单顶部本来就有类型页签）。给了才显示这一组。 */
+  onTypeChange?: (type: TransactionType) => void;
   open: boolean;
   /** 保存成功计数：变化即视为记完一笔，页签回到金额。 */
   savedSignal?: number;
@@ -50,6 +63,8 @@ type AmountKeypadProps = {
   /** 提交按钮文案，跟随所在页面（待确认编辑页是「确认入账」）。 */
   submitLabel?: string;
   submitting?: boolean;
+  /** 当前交易类型，配合 onTypeChange 渲染类型切换。 */
+  type?: TransactionType;
 };
 
 export function AmountKeypad({
@@ -63,11 +78,13 @@ export function AmountKeypad({
   onQuickTemplates,
   onSubmit,
   onToday,
+  onTypeChange,
   open,
   savedSignal = 0,
   submitLabel = "保存",
   submitting = false,
   tabs,
+  type,
 }: AmountKeypadProps) {
   const [activeTab, setActiveTab] = useState<KeypadTabId>("amount");
   const [state, setState] = useState<KeypadState>(() => keypadStateFromValue(amount));
@@ -169,6 +186,12 @@ export function AmountKeypad({
     [amount, decimalPlaces, state, tabs],
   );
 
+  // 页签集合随类型变（转账没有分类）。当前页签被切没了，展示上有 allTabs[0] 兜底，
+  // 但 activeTab 还停在那个已不存在的 id 上：类型再切回来会莫名跳回旧面板，一并归位。
+  useEffect(() => {
+    setActiveTab((current) => (allTabs.some((tab) => tab.id === current) ? current : "amount"));
+  }, [allTabs]);
+
   const active = allTabs.find((tab) => tab.id === activeTab) ?? allTabs[0];
 
   // 必须 portal 到 body：祖先 .mobile-page 带入场动画（transform: translateY），
@@ -185,11 +208,23 @@ export function AmountKeypad({
         "amount-keypad",
         open && "amount-keypad--open",
         halfScreen && "amount-keypad--half",
+        // 备注页签交给系统键盘，操作区收到两行输入的高度：两套键盘同屏时，
+        // 键盘再按原高度撑着就会把页签行顶出屏幕上沿，切页签/收起都够不着了。
+        active?.id === "note" && "amount-keypad--compact",
       )}
       ref={rootRef}
       style={{ "--space-keypad-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
     >
       <div className="amount-keypad__tabs">
+        {/* 类型钉在页签行最左，不进 __tab-scroll：它是这一笔的前提，任何时候都不该被滚走。 */}
+        {onTypeChange && type ? (
+          <Tabs
+            className="amount-keypad__type"
+            items={TYPE_TAB_ITEMS}
+            onValueChange={(next) => onTypeChange(next as TransactionType)}
+            value={type}
+          />
+        ) : null}
         <div className="amount-keypad__tab-scroll">
           {allTabs.map((tab) => (
             <button

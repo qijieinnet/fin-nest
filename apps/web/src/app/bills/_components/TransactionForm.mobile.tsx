@@ -18,14 +18,13 @@ import { orderedFieldsForType } from "@/lib/data/field-order";
 import { AmountKeypad } from "./AmountKeypad";
 import { useKeypadTabs } from "./AmountKeypad/useKeypadTabs";
 import { quickEntrySeed } from "./_model/quick-entry-handoff";
-import { NOTE_MAX_LENGTH, formatDateLabel, todayKey } from "./_model/transaction-form-utils";
+import {
+  NOTE_MAX_LENGTH,
+  TYPE_TAB_ITEMS,
+  formatDateLabel,
+  todayKey,
+} from "./_model/transaction-form-utils";
 import type { TransactionFormRenderProps, TransactionSeed } from "./_model/useTransactionFormModel";
-
-const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
 
 /** 交易表单移动渲染层（原 TransactionForm 主体，行为不变）。数据来自共享视图模型。 */
 export function TransactionFormMobile({
@@ -179,11 +178,15 @@ export function TransactionFormMobile({
       onQuickTemplates={onQuickTemplates}
       onSubmit={() => model.handleSubmit()}
       onToday={() => model.setOccurredOn(todayKey())}
+      // 快捷记账没有表单页，类型只能在键盘里切；表单页顶部本来就有类型页签，不重复给。
+      // 待确认模式类型固定（后端确认接口不支持改类型），同样不给。
+      onTypeChange={keypadOnly && !isPendingMode ? model.handleTypeChange : undefined}
       open={Boolean(keypadOpen)}
       savedSignal={model.savedCount}
       submitLabel={keypadSubmitLabel}
       submitting={model.mutationState.isPending}
       tabs={keypadTabs}
+      type={type}
     />
   ) : null;
 

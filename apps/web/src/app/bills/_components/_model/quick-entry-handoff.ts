@@ -22,6 +22,9 @@ export function quickEntrySeed(model: TransactionFormModel): TransactionSeed {
     // accountSel 本身就是 accountSelectionId(accountId, subAccountId) 的结果（子账户优先），
     // 原样放回 accountId 就能被同一个函数还原成同一个选中项。
     accountId: model.accountEnabled ? model.accountSel : null,
+    // 转账的两个账户同理（accountSelectionId 的结果放回 xxxAccountId 就能还原）。
+    fromAccountId: model.type === "transfer" ? model.fromSel : null,
+    toAccountId: model.type === "transfer" ? model.toSel : null,
     personId: model.personEnabled ? model.personId : null,
     occurredOn: model.occurredOn,
     note: model.note,

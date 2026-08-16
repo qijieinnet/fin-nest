@@ -6132,6 +6132,17 @@ select:focus-visible {
   padding: 0 10px;
 }
 
+/* 类型切换（快捷记账专用）：复用全站的 ui-tabs 分段控件，只把尺寸压进页签行的高度。 */
+.amount-keypad__type {
+  flex: 0 0 auto;
+}
+
+.amount-keypad__type .ui-tabs__item {
+  font-size: 13px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
 .amount-keypad__tab-scroll {
   -webkit-overflow-scrolling: touch;
   display: flex;
@@ -6212,7 +6223,8 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-/* —— 操作区 —— 高度锁死：各面板内容量差很多，任其自撑会让切页签时底部跳动。 */
+/* —— 操作区 —— 高度锁死：各面板内容量差很多，任其自撑会让切页签时底部跳动。
+   唯一的例外是备注页签（--compact），那里整块键盘必须变矮给系统键盘让位。 */
 .amount-keypad__body {
   height: var(--space-keypad-panel-height);
   padding: 0 10px;
@@ -6221,6 +6233,13 @@ select:focus-visible {
 /* 账单列表弹出的快捷记账：整块键盘占半屏，各页签同高（页签行与动作条定高，余量给操作区）。 */
 .amount-keypad--half .amount-keypad__body {
   height: calc(50dvh - var(--space-keypad-tabs-height) - var(--space-keypad-actions-height));
+}
+
+/* 备注页签：操作区改为跟着内容走（两行输入 + 计数）。
+   系统键盘要占掉近半屏，键盘本体再按原高度撑着，两者相加超过一屏，
+   页签行与收起按钮就被顶出屏幕上沿——写在 --half 之后覆盖它的定高。 */
+.amount-keypad--compact .amount-keypad__body {
+  height: auto;
 }
 
 .amount-keypad__panel {
@@ -6509,12 +6528,12 @@ select:focus-visible {
   font-weight: 590;
 }
 
-/* —— 备注面板 —— 唯一交给系统键盘的页签，面板压到两行高，给系统键盘让位。 */
+/* —— 备注面板 —— 唯一交给系统键盘的页签，面板压到两行高，给系统键盘让位。
+   高度不吃满操作区（见 .amount-keypad--compact），整块键盘因此缩到 ~190px。 */
 .keypad-note {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  height: 100%;
   padding-top: 2px;
 }
 
@@ -6523,11 +6542,12 @@ select:focus-visible {
   border: 0;
   border-radius: 14px;
   color: var(--color-text-primary);
-  flex: 1;
+  /* 两行正文 + 上下内边距，定高不随内容长高：多出来的每一像素都在跟系统键盘抢屏幕。 */
+  flex: 0 0 auto;
   font-family: inherit;
   font-size: 17px;
+  height: 64px;
   line-height: 22px;
-  min-height: 0;
   outline: 0;
   padding: 10px 12px;
   resize: none;

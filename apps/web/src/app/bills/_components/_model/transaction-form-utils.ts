@@ -39,6 +39,13 @@ export type PendingPatchBody = {
 /** 备注长度上限：表单卡片与键盘备注页签共用一份，避免两处限制走岔。 */
 export const NOTE_MAX_LENGTH = 240;
 
+/** 类型页签项：表单顶部页签与金额键盘的类型切换共用一份，避免文案/顺序走岔。 */
+export const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
+  { label: "支出", value: "expense" },
+  { label: "收入", value: "income" },
+  { label: "转账", value: "transfer" },
+];
+
 /** 纯函数返回结果：成功携带值，失败携带面向用户的错误信息（由调用方转 toast）。 */
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; message: string };
 

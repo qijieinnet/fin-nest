@@ -31,6 +31,14 @@ export function QuickEntryKeypad({ onClose, open }: { onClose: () => void; open:
   const [seedRevision, setSeedRevision] = useState(0);
   // 记住表单当前日期，套用模板重挂时保留用户已选日期。
   const occurredOnRef = useRef<string | null>(null);
+  // 上一笔还没被清掉：延迟重置排上了但还没跑（或被重新打开打断了）。
+  const resetPendingRef = useRef(false);
+
+  function resetForm() {
+    resetPendingRef.current = false;
+    setInstance((current) => current + 1);
+    setSeed(null);
+  }
 
   useEffect(() => {
     if (!open) {
@@ -38,6 +46,9 @@ export function QuickEntryKeypad({ onClose, open }: { onClose: () => void; open:
       return;
     }
     setEverOpened(true);
+    // 收起动画没跑完就又被打开，延迟重置会被下面的 cleanup 取消：这里补上，
+    // 否则金额、备注、幂等键都还是上一笔的（同一个幂等键会被服务端判成重复提交）。
+    if (resetPendingRef.current) resetForm();
     // 先以收起态挂载，下一帧再展开，否则键盘是「直接出现」而不是滑上来。
     const frame = requestAnimationFrame(() => setKeypadOpen(true));
     return () => cancelAnimationFrame(frame);
@@ -45,10 +56,8 @@ export function QuickEntryKeypad({ onClose, open }: { onClose: () => void; open:
 
   useEffect(() => {
     if (open || !everOpened) return;
-    const timer = setTimeout(() => {
-      setInstance((current) => current + 1);
-      setSeed(null);
-    }, RESET_DELAY_MS);
+    resetPendingRef.current = true;
+    const timer = setTimeout(resetForm, RESET_DELAY_MS);
     return () => clearTimeout(timer);
   }, [everOpened, open]);
 
