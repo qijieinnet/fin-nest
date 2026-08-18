@@ -10,10 +10,12 @@ import {
   isSessionExpiredError,
   onSessionExpired,
   type PublicUser,
+  setLastLoginId,
 } from "@/lib/api";
 import { clearAppLockEnabledCache, writeAppLockEnabledCache } from "@/lib/app-lock/app-lock";
 import { tryFeishuSilentLogin } from "@/lib/feishu/silent-login";
 import { queryKeys } from "@/lib/query/query-keys";
+import { resetSessionQueryCache } from "@/lib/query/session-cache";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -35,6 +37,7 @@ async function fetchCurrentUser(): Promise<PublicUser | null> {
     const feishuUser = await tryFeishuSilentLogin();
     if (!feishuUser) return null;
     writeAppLockEnabledCache(feishuUser.appLockEnabled, feishuUser.appLockSkipInFeishu);
+    setLastLoginId(feishuUser.account);
     return feishuUser;
   }
 
@@ -42,6 +45,8 @@ async function fetchCurrentUser(): Promise<PublicUser | null> {
     const user = await apiRequest<PublicUser>(API_ENDPOINTS.me);
     // 应用锁开关的真值在服务端，这里同步一份本地缓存供下次整页加载首帧同步判断。
     writeAppLockEnabledCache(user.appLockEnabled, user.appLockSkipInFeishu);
+    // 记住账号：会话过期后应用锁要靠它 + 用户输入的密码原地续期登录。
+    setLastLoginId(user.account);
     return user;
   } catch (error) {
     // token 已由 apiRequest 里的统一处理清掉了，这里只需把「未登录」这个结果交出去。
@@ -65,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback(
     (user: PublicUser) => {
       writeAppLockEnabledCache(user.appLockEnabled, user.appLockSkipInFeishu);
+      setLastLoginId(user.account);
       queryClient.setQueryData(queryKeys.currentUser, user);
     },
     [queryClient],
@@ -84,16 +90,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * 任意请求撞上会话失效时收口到这里。
    *
    * 只把当前用户置空——`AuthGate` 盯着 `status`，受保护路由会自己跳 /login，
-   * 所以这里不需要认识 router。顺带清掉整个查询缓存：上一个会话残留的账本、流水
-   * 不能让下一个登录进来的人看到，哪怕只是跳转前的一帧。
+   * 所以这里不需要认识 router。顺带清掉其余查询缓存（`resetSessionQueryCache`，
+   * 其中解释了为什么不能直接 `queryClient.clear()`）。
    */
   useEffect(
     () =>
       onSessionExpired(() => {
         clearAppLockEnabledCache();
-        queryClient.clear();
-        // clear() 之后再写，避免 currentUser 退回 pending 让 AuthGate 闪一下加载态。
-        queryClient.setQueryData(queryKeys.currentUser, null);
+        resetSessionQueryCache(queryClient);
       }),
     [queryClient],
   );

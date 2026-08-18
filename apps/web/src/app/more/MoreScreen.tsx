@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, KeyRound, LogOut, Shield } from "lucide-react";
 import { useState } from "react";
 import { EdgeFade, MobileAppShell, MobileTabBar, PopoverMenu } from "@/components/ui";
-import { API_ENDPOINTS, apiRequest, clearSessionToken } from "@/lib/api";
+import { API_ENDPOINTS, apiRequest, clearLastLoginId, clearSessionToken } from "@/lib/api";
 import { ChangePasswordDialog } from "./_components/ChangePasswordDialog";
 import {
   useAutoPending,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/data/records";
 import { useFeishuStatus } from "@/lib/data/feishu";
 import { type NavMenuKey, resolveNavMenuLayout } from "@/lib/nav/navMenus";
+import { resetSessionQueryCache } from "@/lib/query/session-cache";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useLedger, usePreferences } from "@/providers";
@@ -45,9 +46,11 @@ export function MoreScreen() {
     mutationFn: () => apiRequest<void>(API_ENDPOINTS.logout, { method: "POST" }),
     onSettled: () => {
       clearSessionToken();
+      // 主动退出才清掉记住的账号：会话过期不清，应用锁要靠它原地重新登录。
+      clearLastLoginId();
       clearLedger();
       clearUser();
-      queryClient.clear();
+      resetSessionQueryCache(queryClient);
       router.replace(routes.login);
     },
   });

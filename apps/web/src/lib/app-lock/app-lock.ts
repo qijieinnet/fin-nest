@@ -1,7 +1,8 @@
 /**
  * 应用锁（打开应用时验证身份）工具：
  * - iPhone/iPad 上用 WebAuthn 平台认证器（Face ID / Touch ID）解锁；
- * - 其他设备回退为输入账号密码（走后端 /auth/password/verify 校验）。
+ * - 其他设备回退为输入账号密码（走后端 /auth/password/verify 校验；会话已过期时
+ *   改用同一个密码重新登录续期，见 `unlockWithPassword`）。
  *
  * 开关与凭证公钥都存在服务端（users.app_lock_enabled + app_lock_credentials），
  * 解锁断言由后端验签，所以换浏览器/新设备登录后设置自动恢复、无需重新设置。
@@ -16,7 +17,18 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { API_ENDPOINTS, apiRequest, type AppLockStatus } from "@/lib/api";
+import {
+  API_ENDPOINTS,
+  ApiClientError,
+  apiRequest,
+  type AppLockStatus,
+  type AuthResult,
+  getLastLoginId,
+  getSessionToken,
+  isSessionExpiredError,
+  type PublicUser,
+  setSessionToken,
+} from "@/lib/api";
 
 const ENABLED_CACHE_KEY = "fin-nest:app-lock-enabled";
 const SKIP_IN_FEISHU_CACHE_KEY = "fin-nest:app-lock-skip-feishu";
@@ -130,6 +142,46 @@ export async function registerAppLockCredential(): Promise<boolean> {
     // NotAllowedError（用户取消）、网络错误、验签失败等一律视为未注册成功。
     return false;
   }
+}
+
+/**
+ * 密码解锁。会话还在时只校验密码（不签发新 session）；会话已过期或 token 已被
+ * 全局 401 处理清掉时，用同一个密码 + 记住的账号直接重新登录续期，再放行。
+ *
+ * 这一步是必要的：应用锁的密码就是登录密码，会话过期后 `/auth/password/verify`
+ * 只会回 401「请先登录」，用户明明输对了密码却卡在锁屏上出不去。
+ *
+ * 返回非 null 表示发生了重新登录，调用方需要把新的当前用户写回 AuthProvider。
+ */
+export async function unlockWithPassword(password: string): Promise<PublicUser | null> {
+  if (getSessionToken()) {
+    try {
+      await apiRequest<void>(API_ENDPOINTS.passwordVerify, { method: "POST", body: { password } });
+      return null;
+    } catch (error) {
+      // 密码错误、限速等原样抛给调用方内联展示；只有会话失效才转去重新登录。
+      if (!isSessionExpiredError(error)) throw error;
+    }
+  }
+  return reloginWithPassword(password);
+}
+
+/** 会话已失效时的续期登录。没有记住的账号就没法自动重登，交由调用方引导去登录页。 */
+async function reloginWithPassword(password: string): Promise<PublicUser> {
+  const login = getLastLoginId();
+  if (!login) {
+    throw new ApiClientError(401, {
+      code: "UNAUTHENTICATED",
+      message: "登录状态已过期，请重新登录",
+    });
+  }
+  const result = await apiRequest<AuthResult>(API_ENDPOINTS.login, {
+    method: "POST",
+    body: { login, password },
+  });
+  setSessionToken(result.token);
+  writeAppLockEnabledCache(result.user.appLockEnabled, result.user.appLockSkipInFeishu);
+  return result.user;
 }
 
 /**

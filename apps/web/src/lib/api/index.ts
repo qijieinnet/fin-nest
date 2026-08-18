@@ -37,7 +37,14 @@ export {
 } from "./endpoints";
 export { ApiClientError, getApiErrorMessage, isApiClientError } from "./errors";
 export { isSessionExpiredError, onSessionExpired } from "./session-expiry";
-export { clearSessionToken, getSessionToken, setSessionToken } from "./token-storage";
+export {
+  clearLastLoginId,
+  clearSessionToken,
+  getLastLoginId,
+  getSessionToken,
+  setLastLoginId,
+  setSessionToken,
+} from "./token-storage";
 export type { ApiErrorPayload } from "./errors";
 export type {
   Account,

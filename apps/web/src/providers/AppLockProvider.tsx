@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppLockScreen } from "@/components/auth/AppLockScreen";
-import { getSessionToken, type PublicUser } from "@/lib/api";
+import { getLastLoginId, getSessionToken, type PublicUser } from "@/lib/api";
 import { readAppLockEnabledCache, readAppLockSkipInFeishuCache } from "@/lib/app-lock/app-lock";
 import { isFeishuClient } from "@/lib/feishu/silent-login";
 import { useAuth } from "./AuthProvider";
@@ -73,9 +73,11 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     }
   }, [status, user]);
 
-  // 会话已失效（将进入登录页）时不再拦截，避免锁屏挡住登录流程。
+  // 会话已失效时：本机记着上次登录的账号，锁屏上输密码即可原地重新登录（见
+  // `unlockWithPassword`），不必先放行到登录页再让用户把账号也敲一遍；
+  // 记不住账号（换过浏览器、清过本地数据）才撤锁，避免锁屏挡住登录流程。
   useEffect(() => {
-    if (locked && status === "unauthenticated") {
+    if (locked && status === "unauthenticated" && !getLastLoginId()) {
       unlockedThisPageLoad = true;
       setLocked(false);
     }
