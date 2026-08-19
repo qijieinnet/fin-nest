@@ -91,6 +91,14 @@ const REQUEST_TIMEOUT_MS = 90_000;
 // 流式整体超时放宽：带思维链的模型（reasoning_content）首 token 前可能停顿较久。
 const STREAM_TIMEOUT_MS = 300_000;
 
+/**
+ * 归一化 base url：容忍配置里把完整端点（.../v1/chat/completions）填进 AI_BASE_URL，
+ * 否则会拼成 .../chat/completions/chat/completions 并以无指向性的 404 失败。
+ */
+export function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
+}
+
 /** DeepSeek V4 工具调用在非思考模式下更稳定，且可使用 required tool_choice。 */
 export function shouldDisableThinking(baseUrl: string, model: string): boolean {
   let deepSeekHost = false;
@@ -120,7 +128,7 @@ export class LlmClient {
     const timeout = AbortSignal.timeout(stream ? STREAM_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+      response = await fetch(`${normalizeBaseUrl(this.baseUrl)}/chat/completions`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
