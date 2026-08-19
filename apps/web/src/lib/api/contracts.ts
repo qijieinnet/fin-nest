@@ -973,6 +973,8 @@ export type AttachmentRecord = {
 export type AiStatus = {
   enabled: boolean;
   model: string | null;
+  /** 实际生效的上游协议；`enabled` 为假时为 null。 */
+  protocol: "chat" | "responses" | null;
 };
 
 export type AiConversationSummary = {

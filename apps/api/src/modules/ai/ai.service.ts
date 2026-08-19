@@ -37,7 +37,7 @@ import { isTrendRequested, isValidDateKey, isValidMonthKey } from "./ai-validati
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
-import { LlmClient, LlmMessage, LlmTool, LlmToolCall } from "./llm-client";
+import { LlmClient, LlmMessage, LlmTool, LlmToolCall, resolveLlmProtocol } from "./llm-client";
 
 // 工具循环上限：防模型死循环刷上游调用；正常一轮记账/查询 2~3 轮就够。
 const MAX_TOOL_ROUNDS = 6;
@@ -469,10 +469,15 @@ export class AiService {
     private readonly automation: AutomationService,
     private readonly reminders: RemindersService,
   ) {
-    const { AI_BASE_URL, AI_API_KEY, AI_MODEL } = this.config;
+    const { AI_BASE_URL, AI_API_KEY, AI_MODEL, AI_PROTOCOL } = this.config;
     this.llm =
       AI_BASE_URL && AI_API_KEY && AI_MODEL
-        ? new LlmClient(AI_BASE_URL, AI_API_KEY, AI_MODEL)
+        ? new LlmClient(
+            AI_BASE_URL,
+            AI_API_KEY,
+            AI_MODEL,
+            resolveLlmProtocol(AI_BASE_URL, AI_PROTOCOL),
+          )
         : null;
   }
 
@@ -490,7 +495,12 @@ export class AiService {
 
   async status(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return { enabled: this.llm !== null, model: this.llm ? (this.config.AI_MODEL ?? null) : null };
+    return {
+      enabled: this.llm !== null,
+      model: this.llm ? (this.config.AI_MODEL ?? null) : null,
+      // 协议可由 AI_BASE_URL 推断得来，暴露实际生效值省掉「为什么请求打到了另一个端点」的排查。
+      protocol: this.llm?.protocol ?? null,
+    };
   }
 
   async listConversations(ledgerId: string, userId: string, query: ListConversationsQueryDto = {}) {

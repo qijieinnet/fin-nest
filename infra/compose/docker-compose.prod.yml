@@ -38,6 +38,7 @@ x-app-env: &app-env
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
   AI_MODEL: ${AI_MODEL:-}
+  AI_PROTOCOL: ${AI_PROTOCOL:-}
   # 飞书机器人（可选）：两者需同时配置，只配一半会启动报错。
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}

@@ -110,6 +110,8 @@ services:
       # AI_BASE_URL: https://api.deepseek.com/v1
       # AI_API_KEY: sk-xxx
       # AI_MODEL: deepseek-chat
+      # 上游协议，不填按 AI_BASE_URL 推断；网关只提供 Responses API 且 base url 是 /v1 时填 responses
+      # AI_PROTOCOL: chat
       # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
       # FEISHU_APP_ID: cli_xxx
       # FEISHU_APP_SECRET: xxx

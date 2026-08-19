@@ -81,11 +81,14 @@ const EnvSchema = z.object({
   // 前者读列表/下载/恢复，后者写周期备份），备份文件就直接躺在宿主机上，重装系统也还在。
   BACKUP_DIR: z.string().min(1).default("./data/backups"),
 
-  // AI 助手（可选）：三者都配置时启用；OpenAI-compatible /chat/completions 协议，
-  // 可指向 DeepSeek / 通义 / 本地 Ollama 等。未配置时 AI 相关端点返回未启用、前端隐藏入口。
+  // AI 助手（可选）：三者都配置时启用；未配置时 AI 相关端点返回未启用、前端隐藏入口。
   AI_BASE_URL: z.string().url().optional(),
   AI_API_KEY: z.string().min(1).optional(),
   AI_MODEL: z.string().min(1).optional(),
+  // 上游协议：chat = OpenAI-compatible /chat/completions（DeepSeek / 通义 / 本地 Ollama 等），
+  // responses = OpenAI Responses API /responses。不配时按 AI_BASE_URL 末段推断：
+  // 以 /responses 结尾走 Responses，其余按 chat。网关同时支持两者、但 base url 是 /v1 时才需显式指定。
+  AI_PROTOCOL: z.enum(["chat", "responses"]).optional(),
 
   // 飞书机器人（可选）：两者都配置时启用，走长连接（WSClient），不需要公网回调地址，
   // 因而也不需要 Encrypt Key / Verification Token。未配置时整个飞书模块不注册、不建连接。

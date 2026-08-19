@@ -77,7 +77,8 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - 口径统一采用**有效金额**（原始金额 − 关联合计）。
 
 ### AI 助手（可选启用）
-- 配置 `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`（OpenAI-compatible `/chat/completions` 协议，可接 DeepSeek / 通义 / 本地 Ollama 等）即启用；未配置时接口返回未启用、前端自动隐藏入口。
+- 配置 `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` 即启用；未配置时接口返回未启用、前端自动隐藏入口。
+- 支持两种上游协议：OpenAI-compatible `/chat/completions`（DeepSeek / 通义 / 本地 Ollama 等，默认）与 OpenAI Responses API `/responses`。默认按 `AI_BASE_URL` 末段推断，必要时用 `AI_PROTOCOL=chat|responses` 显式指定；工具调用、流式增量、思维链隐藏在两种协议下行为一致。
 - 聊天页 `/ai`（移动端底部导航独立入口 / 桌面侧边栏入口）：自然语言记账与查询，SSE 流式输出，思维链不透出。
 - **自然语言记账**：LLM 通过工具调用只产出**记账草稿卡片**（不直接写库），用户直接确认或进表单编辑后保存，均带幂等键入账并回写卡片状态；支持按名称调用自己的快捷模板生成草稿（金额 / 日期 / 备注可覆盖）。
 - **查询与统计**：逐笔明细查询；日 / 周 / 月 / 季度 / 年 / 自定义区间收支统计（分类饼图 + 一级分类汇总，趋势类问题额外返回自动选粒度的折线图）；账户余额、预算进度卡片；另有计划进度、保险 / 物品 / 订阅档案、自动记账规则与待确认、提醒汇总等只读查询由模型文字转述。
@@ -245,7 +246,8 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `APP_LOCK_RP_ID` | 应用锁 Face ID 的 WebAuthn RP ID，默认取 `WEB_ORIGIN` 第一项的 hostname；多域名部署才需显式指定 |
 | `TRUST_PROXY` | 有可信反代（nginx）时设 `true`，直连保持 `false`（详见「安全基线」） |
 | `APP_TIMEZONE` | 「今天 / 本月」的时区（默认 `Asia/Shanghai`），影响统计月份与自动记账触发时点 |
-| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用，OpenAI-compatible `/chat/completions` 协议 |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用 |
+| `AI_PROTOCOL` | AI 上游协议 `chat`（`/chat/completions`，默认）或 `responses`（OpenAI Responses API）；不填按 `AI_BASE_URL` 末段推断 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书机器人（可选）：两项都配置才启用，长连接形态无需回调地址 |
 | `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
 | `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |

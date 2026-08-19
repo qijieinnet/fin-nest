@@ -1,102 +1,55 @@
 import { AppError } from "@fin-nest/backend";
 
-// OpenAI-compatible /chat/completions 客户端（非流式）。
-// 用原生 fetch 而非 SDK：避免新增依赖，且自部署可指向 DeepSeek/通义/Ollama 等任意兼容端点。
+import { chatProtocolAdapter } from "./llm-chat-protocol";
+import { responsesProtocolAdapter } from "./llm-responses-protocol";
+import type {
+  LlmCallOptions,
+  LlmMessage,
+  LlmProtocol,
+  LlmProtocolAdapter,
+  LlmReply,
+  LlmTool,
+} from "./llm-types";
 
-export type LlmToolCall = {
-  id: string;
-  type: "function";
-  function: { name: string; arguments: string };
+// 上游 LLM 客户端。用原生 fetch 而非 SDK：避免新增依赖，且自部署可指向
+// DeepSeek/通义/Ollama 等任意 OpenAI-compatible 端点，或走 OpenAI Responses API。
+// 请求/响应的协议差异由 llm-*-protocol.ts 适配，这里只负责取端点、发请求、读 SSE。
+
+export type {
+  LlmCallOptions,
+  LlmMessage,
+  LlmProtocol,
+  LlmReply,
+  LlmTool,
+  LlmToolCall,
+  LlmToolChoice,
+  LlmUsage,
+} from "./llm-types";
+
+const ADAPTERS: Record<LlmProtocol, LlmProtocolAdapter> = {
+  chat: chatProtocolAdapter,
+  responses: responsesProtocolAdapter,
 };
-
-export type LlmMessage =
-  | { role: "system" | "user"; content: string }
-  | {
-      role: "assistant";
-      content: string | null;
-      tool_calls?: LlmToolCall[];
-      /** DeepSeek 思考模式的工具调用续轮要求原样带回，但不向用户展示。 */
-      reasoning_content?: string | null;
-    }
-  | { role: "tool"; tool_call_id: string; content: string };
-
-export type LlmTool = {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-};
-
-export type LlmUsage = {
-  promptTokens: number;
-  completionTokens: number;
-};
-
-export type LlmReply = {
-  content: string | null;
-  reasoningContent: string | null;
-  toolCalls: LlmToolCall[];
-  usage?: LlmUsage;
-};
-
-export type LlmToolChoice = "auto" | "required";
-
-export type LlmCallOptions = {
-  signal?: AbortSignal;
-  toolChoice?: LlmToolChoice;
-};
-
-type RawUsage = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-};
-
-type ChatCompletionResponse = {
-  choices?: Array<{
-    message?: {
-      content?: string | null;
-      reasoning_content?: string | null;
-      tool_calls?: LlmToolCall[];
-    };
-  }>;
-  usage?: RawUsage;
-};
-
-type ChatCompletionChunk = {
-  choices?: Array<{
-    delta?: {
-      content?: string | null;
-      reasoning_content?: string | null;
-      tool_calls?: Array<{
-        index: number;
-        id?: string;
-        function?: { name?: string; arguments?: string };
-      }>;
-    };
-  }>;
-  usage?: RawUsage;
-};
-
-function packUsage(usage: RawUsage | undefined): LlmUsage | undefined {
-  if (!usage) return undefined;
-  return {
-    promptTokens: usage.prompt_tokens ?? 0,
-    completionTokens: usage.completion_tokens ?? 0,
-  };
-}
 
 const REQUEST_TIMEOUT_MS = 90_000;
 // 流式整体超时放宽：带思维链的模型（reasoning_content）首 token 前可能停顿较久。
 const STREAM_TIMEOUT_MS = 300_000;
 
 /**
- * 归一化 base url：容忍配置里把完整端点（.../v1/chat/completions）填进 AI_BASE_URL，
- * 否则会拼成 .../chat/completions/chat/completions 并以无指向性的 404 失败。
+ * 归一化 base url：容忍配置里把完整端点（.../v1/chat/completions、.../v1/responses）
+ * 填进 AI_BASE_URL，否则会拼成 .../responses/responses 并以无指向性的 404 失败。
  */
 export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "").replace(/\/chat\/completions$/i, "");
+  return baseUrl.replace(/\/+$/, "").replace(/\/(?:chat\/completions|responses)$/i, "");
+}
+
+/**
+ * 选择上游协议：显式配置（AI_PROTOCOL）优先；未配置时按 base url 末段推断，
+ * 因为 `.../v1/responses` 只可能是 Responses API，其余一律按 chat/completions 走。
+ */
+export function resolveLlmProtocol(baseUrl: string, configured?: string | null): LlmProtocol {
+  if (configured === "chat" || configured === "responses") return configured;
+  return /\/responses\/*$/i.test(baseUrl) ? "responses" : "chat";
 }
 
 /** DeepSeek V4 工具调用在非思考模式下更稳定，且可使用 required tool_choice。 */
@@ -112,11 +65,20 @@ export function shouldDisableThinking(baseUrl: string, model: string): boolean {
 }
 
 export class LlmClient {
+  private readonly adapter: LlmProtocolAdapter;
+
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
     private readonly model: string,
-  ) {}
+    protocol: LlmProtocol = "chat",
+  ) {
+    this.adapter = ADAPTERS[protocol];
+  }
+
+  get protocol(): LlmProtocol {
+    return this.adapter.protocol;
+  }
 
   private async request(
     messages: LlmMessage[],
@@ -128,23 +90,22 @@ export class LlmClient {
     const timeout = AbortSignal.timeout(stream ? STREAM_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
-      response = await fetch(`${normalizeBaseUrl(this.baseUrl)}/chat/completions`, {
+      response = await fetch(`${normalizeBaseUrl(this.baseUrl)}${this.adapter.endpoint}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${this.apiKey}`,
         },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          ...(tools.length > 0 ? { tools, tool_choice: toolChoice } : {}),
-          ...(shouldDisableThinking(this.baseUrl, this.model)
-            ? { thinking: { type: "disabled" } }
-            : {}),
-          temperature: 0.2,
-          // include_usage：让上游在流式末块附带 token 用量（OpenAI-compatible），用于用量记账。
-          ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
-        }),
+        body: JSON.stringify(
+          this.adapter.buildBody({
+            model: this.model,
+            messages,
+            tools,
+            toolChoice,
+            stream,
+            disableThinking: shouldDisableThinking(this.baseUrl, this.model),
+          }),
+        ),
         signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
     } catch (error) {
@@ -167,22 +128,12 @@ export class LlmClient {
     options: LlmCallOptions = {},
   ): Promise<LlmReply> {
     const response = await this.request(messages, tools, false, options);
-    const data = (await response.json()) as ChatCompletionResponse;
-    const message = data.choices?.[0]?.message;
-    if (!message) {
-      throw new AppError("AI_UPSTREAM_ERROR", "AI 服务返回了空响应", 502);
-    }
-    return {
-      content: message.content ?? null,
-      reasoningContent: message.reasoning_content ?? null,
-      toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
-      usage: packUsage(data.usage),
-    };
+    return this.adapter.parseResponse(await response.json());
   }
 
   /**
-   * 流式调用：正文增量经 onDelta 实时回调（思维链 reasoning_content 不透出），
-   * tool_call 的参数分片在此累积，最终整体结果与非流式 chat() 同构返回。
+   * 流式调用：正文增量经 onDelta 实时回调（思维链不透出），
+   * tool_call 的参数分片由协议适配层累积，最终整体结果与非流式 chat() 同构返回。
    */
   async chatStream(
     messages: LlmMessage[],
@@ -195,42 +146,7 @@ export class LlmClient {
       throw new AppError("AI_UPSTREAM_ERROR", "AI 服务未返回流式响应", 502);
     }
 
-    let content = "";
-    let reasoningContent = "";
-    let usage: LlmUsage | undefined;
-    const toolCalls = new Map<number, LlmToolCall>();
-    const applyChunk = (chunk: ChatCompletionChunk) => {
-      // 用量随末块下发（choices 通常为空），单独提取。
-      if (chunk.usage) usage = packUsage(chunk.usage);
-      const delta = chunk.choices?.[0]?.delta;
-      if (!delta) return;
-      if (delta.content) {
-        content += delta.content;
-        onDelta(delta.content);
-      }
-      if (delta.reasoning_content) reasoningContent += delta.reasoning_content;
-      for (const fragment of delta.tool_calls ?? []) {
-        let call = toolCalls.get(fragment.index);
-        if (!call) {
-          call = {
-            id: fragment.id ?? `call_${fragment.index}`,
-            type: "function",
-            function: { name: fragment.function?.name ?? "", arguments: "" },
-          };
-          toolCalls.set(fragment.index, call);
-        }
-        if (fragment.id) call.id = fragment.id;
-        if (fragment.function?.name) {
-          const name = fragment.function.name;
-          if (!call.function.name) call.function.name = name;
-          else if (call.function.name !== name && !call.function.name.endsWith(name)) {
-            call.function.name += name;
-          }
-        }
-        if (fragment.function?.arguments) call.function.arguments += fragment.function.arguments;
-      }
-    };
-
+    const accumulator = this.adapter.createStreamAccumulator(onDelta);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -240,6 +156,7 @@ export class LlmClient {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         // SSE 以空行分隔事件；data 行可能跨网络分片，按行缓冲解析。
+        // 只读 data 行：两种协议的事件类型都写在 JSON 负载里，`event:` 行可以忽略。
         let newlineIndex: number;
         while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, newlineIndex).trimEnd();
@@ -248,7 +165,7 @@ export class LlmClient {
           const payload = line.slice(5).trim();
           if (payload === "[DONE]") continue;
           try {
-            applyChunk(JSON.parse(payload) as ChatCompletionChunk);
+            accumulator.apply(JSON.parse(payload));
           } catch {
             // 忽略无法解析的分片（keep-alive 注释等）
           }
@@ -260,11 +177,7 @@ export class LlmClient {
       });
     }
 
-    return {
-      content: content || null,
-      reasoningContent: reasoningContent || null,
-      toolCalls: [...toolCalls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call),
-      usage,
-    };
+    // finish 放在 try 外：上游以事件下发的错误要原样抛出，不被「流中断」话术盖掉。
+    return accumulator.finish();
   }
 }

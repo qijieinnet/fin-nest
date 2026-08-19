@@ -7,7 +7,12 @@ import {
   isValidDateKey,
   isValidMonthKey,
 } from "../dist/modules/ai/ai-validation.js";
-import { LlmClient, shouldDisableThinking } from "../dist/modules/ai/llm-client.js";
+import {
+  LlmClient,
+  normalizeBaseUrl,
+  resolveLlmProtocol,
+  shouldDisableThinking,
+} from "../dist/modules/ai/llm-client.js";
 import { periodSeriesBuckets } from "../dist/modules/stats/stats.service.js";
 import { transactionOrderBy } from "../dist/modules/transactions/transactions.service.js";
 
@@ -82,6 +87,472 @@ test("DeepSeek tool requests require a tool and preserve hidden reasoning metada
     assert.equal(requestBody.tool_choice, "required");
     assert.deepEqual(requestBody.thinking, { type: "disabled" });
     assert.equal(reply.reasoningContent, "hidden reasoning");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+function sseStream(events) {
+  const body = events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  return new Response(new Blob(body).stream(), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function sseChunks(payloads) {
+  const body = payloads.map((payload) => `data: ${JSON.stringify(payload)}\n\n`);
+  return new Response(new Blob([...body, "data: [DONE]\n\n"]).stream(), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+const CHAT_TOOL = {
+  type: "function",
+  function: {
+    name: "draft_transaction",
+    description: "生成草稿",
+    parameters: { type: "object", properties: { amount: { type: "string" } } },
+  },
+};
+
+test("chat streaming accumulates text deltas, split tool names and arguments", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseChunks([
+      { choices: [{ delta: { reasoning_content: "想一想" } }] },
+      { choices: [{ delta: { content: "好" } }] },
+      { choices: [{ delta: { content: "的" } }] },
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: "call_abc", function: { name: "draft_", arguments: "" } },
+              ],
+            },
+          },
+        ],
+      },
+      // 函数名分片续传：拼接而不是覆盖，否则工具名会退化成最后一片。
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "transaction" } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"amo' } }] } }] },
+      {
+        choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'unt":"10"}' } }] } }],
+      },
+      { choices: [], usage: { prompt_tokens: 5, completion_tokens: 6 } },
+    ]);
+  try {
+    const client = new LlmClient("https://api.deepseek.com/v1", "test-key", "deepseek-chat");
+    const deltas = [];
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [CHAT_TOOL],
+      (text) => deltas.push(text),
+    );
+    assert.deepEqual(deltas, ["好", "的"]);
+    assert.equal(reply.content, "好的");
+    assert.equal(reply.reasoningContent, "想一想");
+    assert.deepEqual(reply.toolCalls, [
+      {
+        id: "call_abc",
+        type: "function",
+        function: { name: "draft_transaction", arguments: '{"amount":"10"}' },
+      },
+    ]);
+    assert.deepEqual(reply.usage, { promptTokens: 5, completionTokens: 6 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("chat streaming keeps a repeated full tool name intact", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseChunks([
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_abc",
+                  function: { name: "draft_transaction", arguments: "" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      // 部分上游每片都重复完整函数名；此时不能再拼，否则变成 draft_transactiondraft_transaction。
+      {
+        choices: [
+          { delta: { tool_calls: [{ index: 0, function: { name: "draft_transaction" } }] } },
+        ],
+      },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "{}" } }] } }] },
+    ]);
+  try {
+    const client = new LlmClient("https://api.deepseek.com/v1", "test-key", "deepseek-chat");
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [CHAT_TOOL],
+      () => {},
+    );
+    assert.equal(reply.toolCalls[0].function.name, "draft_transaction");
+    assert.equal(reply.toolCalls[0].function.arguments, "{}");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("chat streaming keeps parallel tool calls separated by index", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseChunks([
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 1, id: "call_2", function: { name: "get_budget_progress" } },
+                { index: 0, id: "call_1", function: { name: "get_account_balances" } },
+              ],
+            },
+          },
+        ],
+      },
+      { choices: [{ delta: { tool_calls: [{ index: 1, function: { arguments: '{"b":1}' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"a":1}' } }] } }] },
+    ]);
+  try {
+    const client = new LlmClient("https://api.deepseek.com/v1", "test-key", "deepseek-chat");
+    const reply = await client.chatStream(
+      [{ role: "user", content: "看看余额和预算" }],
+      [CHAT_TOOL],
+      () => {},
+    );
+    // 结果按 index 升序，与分片到达顺序无关。
+    assert.deepEqual(
+      reply.toolCalls.map((call) => [call.id, call.function.name, call.function.arguments]),
+      [
+        ["call_1", "get_account_balances", '{"a":1}'],
+        ["call_2", "get_budget_progress", '{"b":1}'],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("AI base url normalization strips either full endpoint", () => {
+  assert.equal(normalizeBaseUrl("https://api.deepseek.com/v1/"), "https://api.deepseek.com/v1");
+  assert.equal(
+    normalizeBaseUrl("https://api.deepseek.com/v1/chat/completions"),
+    "https://api.deepseek.com/v1",
+  );
+  assert.equal(
+    normalizeBaseUrl("https://gw.example.com/v1/responses"),
+    "https://gw.example.com/v1",
+  );
+});
+
+test("AI protocol falls back to the base url shape and honours explicit config", () => {
+  assert.equal(resolveLlmProtocol("https://api.deepseek.com/v1"), "chat");
+  assert.equal(resolveLlmProtocol("https://gw.example.com/v1/responses"), "responses");
+  assert.equal(resolveLlmProtocol("https://gw.example.com/v1/responses/"), "responses");
+  assert.equal(resolveLlmProtocol("https://gw.example.com/v1", "responses"), "responses");
+  assert.equal(resolveLlmProtocol("https://gw.example.com/v1/responses", "chat"), "chat");
+});
+
+const RESPONSES_TOOL = {
+  type: "function",
+  function: {
+    name: "draft_transaction",
+    description: "生成草稿",
+    parameters: { type: "object", properties: { amount: { type: "string" } } },
+  },
+};
+
+test("Responses protocol flattens chat messages into instructions and input items", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl;
+  let requestBody;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(init.body);
+    return new Response(
+      JSON.stringify({
+        output: [
+          { type: "reasoning", summary: [{ type: "summary_text", text: "hidden reasoning" }] },
+          { type: "message", content: [{ type: "output_text", text: "好的" }] },
+          {
+            type: "function_call",
+            id: "fc_1",
+            call_id: "call_abc",
+            name: "draft_transaction",
+            arguments: '{"amount":"10"}',
+          },
+        ],
+        usage: { input_tokens: 11, output_tokens: 22 },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1/responses",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    const reply = await client.chat(
+      [
+        { role: "system", content: "系统提示" },
+        { role: "user", content: "记一笔 10 元午饭" },
+        {
+          role: "assistant",
+          content: "稍等",
+          tool_calls: [
+            {
+              id: "call_prev",
+              type: "function",
+              function: { name: "draft_transaction", arguments: "{}" },
+            },
+          ],
+          reasoning_content: "上一轮的思考",
+        },
+        { role: "tool", tool_call_id: "call_prev", content: '{"ok":true}' },
+      ],
+      [RESPONSES_TOOL],
+      { toolChoice: "required" },
+    );
+
+    // 端点只拼一次，且 base url 里已有的 /responses 被归一化掉。
+    assert.equal(requestUrl, "https://gw.example.com/v1/responses");
+    assert.equal(requestBody.instructions, "系统提示");
+    assert.equal(requestBody.store, false);
+    assert.equal(requestBody.temperature, undefined);
+    assert.equal(requestBody.tool_choice, "required");
+    assert.deepEqual(requestBody.tools[0], {
+      type: "function",
+      name: "draft_transaction",
+      description: "生成草稿",
+      parameters: { type: "object", properties: { amount: { type: "string" } } },
+      strict: false,
+    });
+    assert.deepEqual(requestBody.input, [
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "记一笔 10 元午饭" }],
+      },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "稍等" }] },
+      {
+        type: "function_call",
+        call_id: "call_prev",
+        name: "draft_transaction",
+        arguments: "{}",
+      },
+      { type: "function_call_output", call_id: "call_prev", output: '{"ok":true}' },
+    ]);
+
+    assert.equal(reply.content, "好的");
+    assert.equal(reply.reasoningContent, "hidden reasoning");
+    // 工具调用 id 取 call_id，续轮 function_call_output 才对得上。
+    assert.deepEqual(reply.toolCalls, [
+      {
+        id: "call_abc",
+        type: "function",
+        function: { name: "draft_transaction", arguments: '{"amount":"10"}' },
+      },
+    ]);
+    assert.deepEqual(reply.usage, { promptTokens: 11, completionTokens: 22 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Responses streaming accumulates text deltas and tool call arguments", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseStream([
+      { type: "response.reasoning_summary_text.delta", delta: "想一想" },
+      { type: "response.output_text.delta", output_index: 0, delta: "好" },
+      { type: "response.output_text.delta", output_index: 0, delta: "的" },
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        item: { type: "function_call", call_id: "call_abc", name: "draft_transaction" },
+      },
+      { type: "response.function_call_arguments.delta", output_index: 1, delta: '{"amo' },
+      { type: "response.function_call_arguments.delta", output_index: 1, delta: 'unt":"10"}' },
+      {
+        type: "response.completed",
+        response: { usage: { input_tokens: 5, output_tokens: 6 } },
+      },
+    ]);
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    const deltas = [];
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [RESPONSES_TOOL],
+      (text) => deltas.push(text),
+    );
+    assert.deepEqual(deltas, ["好", "的"]);
+    assert.equal(reply.content, "好的");
+    assert.equal(reply.reasoningContent, "想一想");
+    assert.deepEqual(reply.toolCalls, [
+      {
+        id: "call_abc",
+        type: "function",
+        function: { name: "draft_transaction", arguments: '{"amount":"10"}' },
+      },
+    ]);
+    assert.deepEqual(reply.usage, { promptTokens: 5, completionTokens: 6 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Responses streaming treats added-frame arguments as a seed, not a prefix", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseStream([
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        // 少数网关在建槽位时就塞了参数，随后仍然把完整参数逐片重发一遍。
+        item: {
+          type: "function_call",
+          call_id: "call_abc",
+          name: "draft_transaction",
+          arguments: "{}",
+        },
+      },
+      { type: "response.function_call_arguments.delta", output_index: 0, delta: '{"amo' },
+      { type: "response.function_call_arguments.delta", output_index: 0, delta: 'unt":"10"}' },
+      { type: "response.completed", response: {} },
+    ]);
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [RESPONSES_TOOL],
+      () => {},
+    );
+    assert.equal(reply.toolCalls[0].function.arguments, '{"amount":"10"}');
+    assert.deepEqual(JSON.parse(reply.toolCalls[0].function.arguments), { amount: "10" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Responses streaming keeps added-frame arguments when no increment follows", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseStream([
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        item: {
+          type: "function_call",
+          call_id: "call_abc",
+          name: "draft_transaction",
+          arguments: '{"amount":"10"}',
+        },
+      },
+      { type: "response.completed", response: {} },
+    ]);
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [RESPONSES_TOOL],
+      () => {},
+    );
+    assert.equal(reply.toolCalls[0].function.arguments, '{"amount":"10"}');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Responses streaming falls back to the completed frame when no increments arrive", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseStream([
+      {
+        type: "response.completed",
+        response: {
+          output: [
+            { type: "message", content: [{ type: "output_text", text: "一次性返回" }] },
+            {
+              type: "function_call",
+              call_id: "call_xyz",
+              name: "draft_transaction",
+              arguments: "{}",
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 2 },
+        },
+      },
+    ]);
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    const deltas = [];
+    const reply = await client.chatStream(
+      [{ role: "user", content: "记一笔" }],
+      [RESPONSES_TOOL],
+      (text) => deltas.push(text),
+    );
+    // 补发增量，保证流式所见与最终持久化的正文一致。
+    assert.deepEqual(deltas, ["一次性返回"]);
+    assert.equal(reply.content, "一次性返回");
+    assert.equal(reply.toolCalls[0].id, "call_xyz");
+    assert.deepEqual(reply.usage, { promptTokens: 1, completionTokens: 2 });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Responses streaming surfaces upstream error events instead of a generic stream abort", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    sseStream([{ type: "response.failed", response: { error: { message: "rate limited" } } }]);
+  try {
+    const client = new LlmClient(
+      "https://gw.example.com/v1",
+      "test-key",
+      "gpt-5.6-luna",
+      "responses",
+    );
+    await assert.rejects(
+      client.chatStream([{ role: "user", content: "记一笔" }], [RESPONSES_TOOL], () => {}),
+      /rate limited/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
