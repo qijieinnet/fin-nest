@@ -64,6 +64,7 @@ export function DesktopSidebar() {
     { label: "快速记账", route: routes.quickTemplates },
     { label: "记账设置", route: routes.recordSettings },
     { label: "系统设置", route: routes.systemSettings },
+    { label: "通知", route: routes.notifications },
     ...(feishuEnabled ? [{ label: "飞书机器人", route: routes.feishu }] : []),
     { label: "导入导出", route: routes.importExport },
   ];

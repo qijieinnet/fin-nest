@@ -77,7 +77,7 @@ export class AutomationService {
     );
     return rules.map((rule) => ({
       ...rule,
-      remindFeishuBindings: targets.get(rule.id) ?? [],
+      notifyTargets: targets.get(rule.id) ?? [],
     }));
   }
 
@@ -121,7 +121,7 @@ export class AutomationService {
         ledgerId,
         "auto_rule",
         rule.id,
-        rule.runTime ? (input.remindFeishuBindingIds ?? []) : [],
+        rule.runTime ? (input.notifyUserIds ?? []) : [],
       );
       await this.jobs.enqueue(
         { type: "auto.schedule", payload: { ledgerId }, runAfter: startDate },
@@ -238,13 +238,13 @@ export class AutomationService {
       // 避免改个金额就把推送接收人清了。
       if (!rule.runTime) {
         await this.reminderTargets.replace(tx, ledgerId, "auto_rule", ruleId, []);
-      } else if (input.remindFeishuBindingIds !== undefined) {
+      } else if (input.notifyUserIds !== undefined) {
         await this.reminderTargets.replace(
           tx,
           ledgerId,
           "auto_rule",
           ruleId,
-          input.remindFeishuBindingIds,
+          input.notifyUserIds,
         );
       }
       if (scheduleChanged && enabled)

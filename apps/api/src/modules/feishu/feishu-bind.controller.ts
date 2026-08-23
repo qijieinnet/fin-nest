@@ -35,12 +35,6 @@ export class FeishuBindController {
     return this.binding.listBindings((auth as SessionAuthContext).userId);
   }
 
-  @Get("ledgers/:ledgerId/bindings")
-  @ApiOkResponse({ description: "本账本所有成员的生效绑定，供选择推送接收人" })
-  listLedgerBindings(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
-    return this.binding.listLedgerBindings(ledgerId, (auth as SessionAuthContext).userId);
-  }
-
   @Post("bind-codes")
   @ApiCreatedResponse({ description: "生成一次性绑定码，明文仅返回一次" })
   createBindCode(@CurrentAuth() auth: AuthContext, @Body() body: CreateBindCodeDto) {

@@ -1,5 +1,11 @@
-/** 目前只有飞书一条通道；新增渠道时在这里扩，`NotificationService` 的分发处会强制补齐分支。 */
-export type NotificationChannel = "feishu";
+/**
+ * 投递渠道。新增时在这里扩，`NotificationService.send` 的分发处会强制补齐分支。
+ *
+ * 渠道**不是配置项**：配置者只选「推给谁」（`reminder_targets.userId`），
+ * 走哪条渠道由接收人自己的 `users.notifyFeishu / notifyWebPush` 决定，
+ * 由 `NotificationTargetsResolver` 展开。
+ */
+export type NotificationChannel = "feishu" | "webpush";
 
 /** notifications.source_id 指向的对象：订阅 / 保单本身，或一条待确认的自动记账。 */
 export type NotificationSourceType =
@@ -57,7 +63,7 @@ export type ReminderOccurrence = {
   sourceType: NotificationSourceType;
   sourceId: string;
   channel: NotificationChannel;
-  /** 渠道内的收件标识，飞书为 open_id。 */
+  /** 渠道内的收件标识：飞书为 open_id，Web Push 为 userId（多设备在发送时展开）。 */
   targetRef: string;
   /** 幂等键，见 schema.prisma 里 Notification 的注释。 */
   dedupeKey: string;
@@ -101,6 +107,9 @@ export type NotificationPayload = {
   fields: NotificationField[];
   /** 旧结构：本次改版前入队的行是整行文本。仅在 `fields` 为空时作为回退渲染，新代码不要再写。 */
   lines?: string[];
-  /** 卡片底部按钮；为空则发成不可操作的信息卡。 */
+  /**
+   * 可执行的动作。飞书渲染成卡片底部按钮；Web Push 渲染不出按钮（iOS 忽略通知的 actions），
+   * 改为让整条通知点进 `/n/{id}` 落地页处理——两边共享 occurrenceKey，只会生效一次。
+   */
   actions?: NotificationAction[];
 };

@@ -59,12 +59,13 @@ export class EntryReminderDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: "推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。",
+    description:
+      "推送接收人（用户 id，须为本账本成员）。走飞书还是 Web Push 由接收人自己的通知设置决定。",
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  feishuBindingIds?: string[];
+  notifyUserIds?: string[];
 }
 
 export class UpdateRecordSettingDto {

@@ -3,8 +3,9 @@
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import type { ChangeEvent, ReactNode } from "react";
 import { useState } from "react";
-import type { ReminderSchedule } from "@/lib/api";
+import type { NotifyTarget, ReminderSchedule } from "@/lib/api";
 import { IconButton, PopoverMenu } from "@/components/ui";
+import { NotifyTargetsRow, toggleUserId } from "./NotifyTargetsRow";
 import { TimeWheelPicker } from "./TimeWheelPicker";
 import { ToggleCard } from "./TransactionFieldRows";
 
@@ -25,7 +26,8 @@ export type ReminderDraft = {
   leadValue: string;
   leadUnit: RemindUnit;
   remindTime: string;
-  feishuBindingIds: string[];
+  /** 这一档推给谁（用户 id）。渠道由接收人自己的通知设置决定。 */
+  notifyUserIds: string[];
 };
 
 /** 档位上限，与后端 DTO 的 ArrayMaxSize 一致。 */
@@ -46,7 +48,7 @@ export function createReminderDraft(
     leadValue: String(leadValue),
     leadUnit,
     remindTime,
-    feishuBindingIds: [],
+    notifyUserIds: [],
   };
 }
 
@@ -59,7 +61,7 @@ export function toReminderDrafts(reminders: ReminderSchedule[] | undefined): Rem
       leadValue: String(reminder.leadValue),
       leadUnit: reminder.leadUnit,
       remindTime: reminder.remindTime,
-      feishuBindingIds: reminder.feishuBindings.map((binding) => binding.id),
+      notifyUserIds: reminder.notifyTargets.map((target) => target.userId),
     };
   });
 }
@@ -74,7 +76,7 @@ export function toReminderPayload(drafts: ReminderDraft[]): Array<{
   leadValue: number;
   leadUnit: RemindUnit;
   remindTime: string;
-  feishuBindingIds: string[];
+  notifyUserIds: string[];
 }> {
   const byLead = new Map<string, ReturnType<typeof toReminderPayload>[number]>();
   for (const draft of drafts) {
@@ -84,29 +86,25 @@ export function toReminderPayload(drafts: ReminderDraft[]): Array<{
       leadValue,
       leadUnit: draft.leadUnit,
       remindTime: draft.remindTime || DEFAULT_REMIND_TIME,
-      feishuBindingIds: draft.feishuBindingIds,
+      notifyUserIds: draft.notifyUserIds,
     });
   }
   return Array.from(byLead.values());
 }
 
-/** 「提前 30 天 · 09:00 · 飞书 张三」——详情页展示一档提醒用。 */
+/** 「提前 30 天 · 09:00 · 推送给 张三」——详情页展示一档提醒用。 */
 export function reminderSummary(reminder: ReminderSchedule): string {
   const unit =
     REMIND_UNIT_OPTIONS.find((option) => option.value === reminder.leadUnit)?.label ?? "";
-  const receivers = reminder.feishuBindings
-    .map((binding) => binding.displayName ?? `···${binding.openIdSuffix}`)
-    .join("、");
+  const receivers = reminder.notifyTargets.map((target) => target.alias).join("、");
   return [
     `提前 ${reminder.leadValue} ${unit}`,
     reminder.remindTime,
-    receivers && `飞书 ${receivers}`,
+    receivers && `推送给 ${receivers}`,
   ]
     .filter(Boolean)
     .join(" · ");
 }
-
-type FeishuOption = { label: string; value: string };
 
 function leadKeyOf(draft: ReminderDraft): string {
   return `${Number.parseInt(draft.leadValue, 10)}${draft.leadUnit}`;
@@ -129,16 +127,15 @@ function nextFreeLead(drafts: ReminderDraft[], defaultLeadValue: number, unit: R
 /**
  * 多档到期提醒的编辑块（订阅与保单共用）。
  *
- * 每档独立配置提前量 / 提醒时刻 / 飞书接收人：先发的那档可能只想提醒自己，
+ * 每档独立配置提前量 / 提醒时刻 / 接收人：先发的那档可能只想提醒自己，
  * 临到期的那档才抄送家人。关掉开关等于清空所有档位。
  */
 export function ReminderSchedulesEditor({
+  candidates,
+  candidatesLoading,
   defaultLeadValue,
   defaultLeadUnit = "day",
   enabled,
-  feishuEnabled,
-  feishuLoading,
-  feishuOptions,
   footer,
   hint,
   label = "到期提醒",
@@ -146,13 +143,13 @@ export function ReminderSchedulesEditor({
   onEnabledChange,
   value,
 }: {
+  /** 可选接收人：本账本成员 + 每人当前可达的渠道。 */
+  candidates: ReadonlyArray<NotifyTarget>;
+  candidatesLoading?: boolean;
   /** 新增一档时的默认提前量（订阅 3 天、保单 30 天）。 */
   defaultLeadValue: number;
   defaultLeadUnit?: RemindUnit;
   enabled: boolean;
-  feishuEnabled: boolean;
-  feishuLoading?: boolean;
-  feishuOptions: ReadonlyArray<FeishuOption>;
   /** 「需先设置到期日」这类提示，挂在列表下方。 */
   footer?: ReactNode;
   hint?: string;
@@ -170,14 +167,10 @@ export function ReminderSchedulesEditor({
     value.map(leadKeyOf).filter((leadKey, index, keys) => keys.indexOf(leadKey) !== index),
   );
 
-  const toggleBinding = (key: string, bindingId: string) => {
+  const toggleTarget = (key: string, userId: string) => {
     const draft = value.find((item) => item.key === key);
     if (!draft) return;
-    update(key, {
-      feishuBindingIds: draft.feishuBindingIds.includes(bindingId)
-        ? draft.feishuBindingIds.filter((id) => id !== bindingId)
-        : [...draft.feishuBindingIds, bindingId],
-    });
+    update(key, { notifyUserIds: toggleUserId(draft.notifyUserIds, userId) });
   };
 
   return (
@@ -223,14 +216,12 @@ export function ReminderSchedulesEditor({
               value={draft.remindTime}
             />
           </div>
-          {feishuEnabled ? (
-            <MultiSelectRow
-              label="推送飞书"
-              onToggle={(bindingId) => toggleBinding(draft.key, bindingId)}
-              options={feishuOptions}
-              values={draft.feishuBindingIds}
-            />
-          ) : null}
+          <NotifyTargetsRow
+            candidates={candidates}
+            loading={candidatesLoading}
+            onToggle={(userId) => toggleTarget(draft.key, userId)}
+            values={draft.notifyUserIds}
+          />
           {duplicatedKeys.has(leadKeyOf(draft)) ? (
             <p className="px-1 text-xs text-[var(--color-accent-warning)]">
               与其它提醒的提前量相同，保存时只会保留一条。
@@ -238,12 +229,6 @@ export function ReminderSchedulesEditor({
           ) : null}
         </div>
       ))}
-
-      {feishuEnabled && feishuOptions.length === 0 && !feishuLoading ? (
-        <p className="px-1 text-xs text-[var(--color-text-muted)]">
-          账本成员均未绑定飞书，可在「更多 › 飞书」中绑定。
-        </p>
-      ) : null}
 
       {value.length < MAX_REMINDERS ? (
         <button
@@ -321,54 +306,6 @@ function SelectRow({
             label: option.label,
             onSelect: () => onChange(option.value),
             selected: option.value === value,
-          })),
-        ]}
-        onOpenChange={setOpen}
-        open={open}
-      />
-    </div>
-  );
-}
-
-function MultiSelectRow({
-  label,
-  onToggle,
-  options,
-  values,
-}: {
-  label: string;
-  onToggle: (value: string) => void;
-  options: ReadonlyArray<FeishuOption>;
-  values: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const selectedLabels = options
-    .filter((option) => values.includes(option.value))
-    .map((option) => option.label);
-  const isEmpty = options.length === 0;
-  const display = isEmpty
-    ? "无可用飞书账号"
-    : selectedLabels.length > 0
-      ? selectedLabels.join("、")
-      : "不推送";
-  return (
-    <div className="relative">
-      <button
-        className="transaction-form__select-row"
-        disabled={isEmpty}
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <span>{label}</span>
-        <strong>{display}</strong>
-        <ChevronRight size={18} />
-      </button>
-      <PopoverMenu
-        groups={[
-          options.map((option) => ({
-            label: option.label,
-            onSelect: () => onToggle(option.value),
-            selected: values.includes(option.value),
           })),
         ]}
         onOpenChange={setOpen}

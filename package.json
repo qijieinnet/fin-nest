@@ -26,6 +26,7 @@
     "infra:up": "docker compose -f infra/compose/docker-compose.dev.yml --env-file .env up -d",
     "infra:down": "docker compose -f infra/compose/docker-compose.dev.yml down",
     "check:compose": "node scripts/check-compose-consistency.mjs",
+    "gen:vapid": "node scripts/generate-vapid-keys.mjs",
     "compose:up": "docker compose --env-file .env.docker up -d",
     "compose:pull": "docker compose --env-file .env.docker pull",
     "compose:logs": "docker compose --env-file .env.docker logs -f",

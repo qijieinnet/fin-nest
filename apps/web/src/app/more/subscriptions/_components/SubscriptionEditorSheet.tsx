@@ -23,7 +23,7 @@ import {
   type Subscription,
   uploadAttachmentFile,
 } from "@/lib/api";
-import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
+import { useNotifyCandidates } from "@/lib/data/notifications";
 import { useAttachments, useSubscriptionCategories } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput, parseMoneyToMicros } from "@/lib/money";
@@ -244,10 +244,8 @@ export function SubscriptionEditorSheet({
     "subscription",
     subscription?.id ?? null,
   );
-  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
-  const feishuStatusQuery = useFeishuStatus();
-  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
-  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
+  // 可选接收人 = 本账本成员。走哪条渠道由接收人自己的通知设置决定，这里不区分。
+  const candidatesQuery = useNotifyCandidates(ledgerId);
 
   const [name, setName] = useState(subscription?.name ?? "");
   const [categoryId, setCategoryId] = useState(subscription?.categoryId ?? "");
@@ -322,16 +320,6 @@ export function SubscriptionEditorSheet({
 
   const attachmentItems = [...existingAttachments, ...pendingAttachments];
   const trimmedName = name.trim();
-
-  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
-  const feishuTargetOptions = useMemo(
-    () =>
-      (feishuBindingsQuery.data ?? []).map((binding) => ({
-        value: binding.id,
-        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
-      })),
-    [feishuBindingsQuery.data],
-  );
 
   const save = useMutation({
     mutationFn: async () => {
@@ -542,10 +530,9 @@ export function SubscriptionEditorSheet({
 
           <ReminderSchedulesEditor
             defaultLeadValue={DEFAULT_REMIND_LEAD_DAYS}
+            candidates={candidatesQuery.data ?? []}
+            candidatesLoading={candidatesQuery.isLoading}
             enabled={remindEnabled}
-            feishuEnabled={feishuEnabled}
-            feishuLoading={feishuBindingsQuery.isLoading}
-            feishuOptions={feishuTargetOptions}
             footer={
               nextRenewalDate ? null : (
                 <p className="px-1 text-xs text-[var(--color-text-muted)]">

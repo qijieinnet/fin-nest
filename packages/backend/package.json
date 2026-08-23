@@ -23,6 +23,7 @@
     "exceljs": "^4.4.0",
     "minio": "^8.0.7",
     "rxjs": "^7.8.1",
+    "web-push": "^3.6.7",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
@@ -30,6 +31,7 @@
     "@fin-nest/tsconfig": "workspace:*",
     "@types/archiver": "^6.0.3",
     "@types/node": "^22.8.7",
+    "@types/web-push": "^3.6.4",
     "@types/yauzl": "^3.4.0",
     "eslint": "^9.8.0",
     "typescript": "^5.8.3"

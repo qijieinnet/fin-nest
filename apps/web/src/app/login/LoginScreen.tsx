@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { Button, Input } from "@/components/ui";
@@ -19,8 +20,28 @@ import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
 
+/**
+ * 登录后要回到哪。只接受**解析后仍然同源**的地址，否则退回 null。
+ *
+ * 不能只用前缀判断：URL 解析器把反斜杠也当成路径分隔符，`/\evil.com` 会解析成
+ * `https://evil.com/`，一个「以 / 开头且不以 // 开头」的检查照样放它过去，
+ * 那就是一个可以从登录页把人送去钓鱼站的开放重定向。用真实解析结果比对 origin
+ * 是唯一穷尽的判法，编码变体（`/%5C…`）也一并覆盖。
+ */
+export function safeNext(value: string | null, origin: string): string | null {
+  if (!value || !value.startsWith("/")) return null;
+  try {
+    const resolved = new URL(value, origin);
+    if (resolved.origin !== new URL(origin).origin) return null;
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export function LoginScreen() {
   const router = useAppRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { setUser } = useAuth();
   const [login, setLogin] = useState("");
@@ -55,7 +76,7 @@ export function LoginScreen() {
       // 绑定要在拿到 token 之后、跳转之前完成；内部自带兜底，失败不影响本次登录。
       await bindPendingFeishuTicket();
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
-      router.replace(routes.bills);
+      router.replace(safeNext(searchParams.get("next"), window.location.origin) ?? routes.bills);
     },
   });
 

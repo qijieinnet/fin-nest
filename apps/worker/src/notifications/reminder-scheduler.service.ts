@@ -2,11 +2,13 @@ import { Injectable } from "@nestjs/common";
 import {
   currentTimeKey,
   dateKey,
+  DeliveryTarget,
   formatMicros,
   matchesEntryReminderDate,
   NotificationAmountTone,
   NotificationField,
   NotificationService,
+  NotificationTargetsResolver,
   parseDateOnly,
   PrismaService,
   reminderCycleKey,
@@ -32,6 +34,7 @@ export class ReminderSchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
+    private readonly recipients: NotificationTargetsResolver,
   ) {}
 
   async scanSubscriptions(): Promise<{ enqueued: number }> {
@@ -45,8 +48,8 @@ export class ReminderSchedulerService {
     );
     if (!due.length) return { enqueued: 0 };
 
-    const bindings = await this.resolveBindings(
-      due.flatMap((tier) => tier.targets.map((target) => target.feishuBindingId)),
+    const recipients = await this.recipients.resolve(
+      due.flatMap((tier) => tier.targets.map((target) => target.userId)),
     );
     // 卡片要展示费用与订阅分类，各自需要账本的币种/小数位与分类名。
     const [ledgers, categories] = await Promise.all([
@@ -65,16 +68,20 @@ export class ReminderSchedulerService {
     let enqueued = 0;
     for (const tier of due) {
       for (const target of tier.targets) {
-        const binding = bindings.get(target.feishuBindingId);
+        const recipient = recipients.get(target.userId);
         // 目标写入时校验过成员身份，但那之后对方可能已退出账本，这里再挡一次。
-        if (!binding || !binding.ledgerIds.has(target.ledgerId)) continue;
-        const created = await this.notifications.enqueue(
-          buildOccurrence(target.ledgerId, tier, binding.openId, {
-            ledger: ledgerById.get(target.ledgerId),
-            categoryName: categoryNameById.get(tier.row.categoryId ?? "") ?? null,
-          }),
-        );
-        if (created) enqueued += 1;
+        if (!recipient || !recipient.ledgerIds.has(target.ledgerId)) continue;
+        // 一个人可能同时收飞书和 Web Push：每条渠道各一行 notification，
+        // 但 occurrenceKey 相同——所以按钮动作在哪一边点都只生效一次。
+        for (const delivery of recipient.targets) {
+          const created = await this.notifications.enqueue(
+            buildOccurrence(target.ledgerId, tier, delivery, {
+              ledger: ledgerById.get(target.ledgerId),
+              categoryName: categoryNameById.get(tier.row.categoryId ?? "") ?? null,
+            }),
+          );
+          if (created) enqueued += 1;
+        }
       }
     }
     return { enqueued };
@@ -97,8 +104,8 @@ export class ReminderSchedulerService {
     );
     if (!due.length) return { enqueued: 0 };
 
-    const bindings = await this.resolveBindings(
-      due.flatMap((tier) => tier.targets.map((target) => target.feishuBindingId)),
+    const recipients = await this.recipients.resolve(
+      due.flatMap((tier) => tier.targets.map((target) => target.userId)),
     );
     const [ledgers, insuredNames] = await Promise.all([
       this.prisma.client.ledger.findMany({
@@ -112,15 +119,17 @@ export class ReminderSchedulerService {
     let enqueued = 0;
     for (const tier of due) {
       for (const target of tier.targets) {
-        const binding = bindings.get(target.feishuBindingId);
-        if (!binding || !binding.ledgerIds.has(target.ledgerId)) continue;
-        const created = await this.notifications.enqueue(
-          buildInsuranceOccurrence(target.ledgerId, tier, binding.openId, {
-            ledger: ledgerById.get(target.ledgerId),
-            insuredNames: insuredNames.get(tier.row.id) ?? [],
-          }),
-        );
-        if (created) enqueued += 1;
+        const recipient = recipients.get(target.userId);
+        if (!recipient || !recipient.ledgerIds.has(target.ledgerId)) continue;
+        for (const delivery of recipient.targets) {
+          const created = await this.notifications.enqueue(
+            buildInsuranceOccurrence(target.ledgerId, tier, delivery, {
+              ledger: ledgerById.get(target.ledgerId),
+              insuredNames: insuredNames.get(tier.row.id) ?? [],
+            }),
+          );
+          if (created) enqueued += 1;
+        }
       }
     }
     return { enqueued };
@@ -146,7 +155,7 @@ export class ReminderSchedulerService {
     const nowTime = currentTimeKey();
 
     const targets = await this.prisma.client.reminderTarget.findMany({
-      where: { sourceType: "reminder_schedule", channel: "feishu" },
+      where: { sourceType: "reminder_schedule" },
     });
     if (!targets.length) return [];
 
@@ -210,7 +219,7 @@ export class ReminderSchedulerService {
     const nowTime = currentTimeKey();
 
     const targets = await this.prisma.client.reminderTarget.findMany({
-      where: { sourceType: "entry_reminder", channel: "feishu" },
+      where: { sourceType: "entry_reminder" },
     });
     if (!targets.length) return { enqueued: 0 };
 
@@ -234,7 +243,7 @@ export class ReminderSchedulerService {
     if (!dueLedgerIds.size) return { enqueued: 0 };
 
     const dueTargets = targets.filter((target) => dueLedgerIds.has(target.sourceId));
-    const bindings = await this.resolveBindings(dueTargets.map((target) => target.feishuBindingId));
+    const recipients = await this.recipients.resolve(dueTargets.map((target) => target.userId));
     const [ledgers, counts] = await Promise.all([
       this.prisma.client.ledger.findMany({
         where: { id: { in: Array.from(dueLedgerIds) } },
@@ -259,21 +268,23 @@ export class ReminderSchedulerService {
 
     let enqueued = 0;
     for (const target of dueTargets) {
-      const binding = bindings.get(target.feishuBindingId);
+      const recipient = recipients.get(target.userId);
       // 目标写入时校验过成员身份，但那之后对方可能已退出账本，这里再挡一次。
-      if (!binding || !binding.ledgerIds.has(target.ledgerId)) continue;
-      const created = await this.notifications.enqueue(
-        buildEntryReminderOccurrence(target.ledgerId, binding.openId, {
-          today,
-          ledgerName: ledgerById.get(target.ledgerId)?.name ?? "账本",
-          todayCount: countByLedger.get(target.ledgerId) ?? 0,
-          scheduledAt: zonedDateTimeToUtc(
+      if (!recipient || !recipient.ledgerIds.has(target.ledgerId)) continue;
+      for (const delivery of recipient.targets) {
+        const created = await this.notifications.enqueue(
+          buildEntryReminderOccurrence(target.ledgerId, delivery, {
             today,
-            remindTimeByLedger.get(target.ledgerId) ?? "00:00",
-          ),
-        }),
-      );
-      if (created) enqueued += 1;
+            ledgerName: ledgerById.get(target.ledgerId)?.name ?? "账本",
+            todayCount: countByLedger.get(target.ledgerId) ?? 0,
+            scheduledAt: zonedDateTimeToUtc(
+              today,
+              remindTimeByLedger.get(target.ledgerId) ?? "00:00",
+            ),
+          }),
+        );
+        if (created) enqueued += 1;
+      }
     }
     return { enqueued };
   }
@@ -321,7 +332,6 @@ export class ReminderSchedulerService {
       where: {
         sourceType: "auto_rule",
         sourceId: { in: Array.from(new Set(pendings.map((p) => p.autoRuleId))) },
-        channel: "feishu",
       },
     });
     if (!targets.length) return { enqueued: 0 };
@@ -333,7 +343,7 @@ export class ReminderSchedulerService {
       targetsByRule.set(target.sourceId, bucket);
     }
 
-    const bindings = await this.resolveBindings(targets.map((t) => t.feishuBindingId));
+    const recipients = await this.recipients.resolve(targets.map((t) => t.userId));
     // 卡片要和网页端的待确认详情展示同一组字段，因此分类/账户都要连二级一起取；
     // 关联项（应收/应付）的账户藏在 relationPayload 里，取账户名时要一并带上。
     const [ledgers, categories, subcategories, accounts, subAccounts, people, links] =
@@ -390,13 +400,15 @@ export class ReminderSchedulerService {
     for (const pending of pendings) {
       const ledger = ledgerById.get(pending.ledgerId);
       for (const target of targetsByRule.get(pending.autoRuleId) ?? []) {
-        const binding = bindings.get(target.feishuBindingId);
+        const recipient = recipients.get(target.userId);
         // 目标写入时校验过成员身份，但那之后对方可能已退出账本，这里再挡一次。
-        if (!binding || !binding.ledgerIds.has(pending.ledgerId)) continue;
-        const created = await this.notifications.enqueue(
-          buildPendingOccurrence(pending, binding.openId, ledger, nameById),
-        );
-        if (created) enqueued += 1;
+        if (!recipient || !recipient.ledgerIds.has(pending.ledgerId)) continue;
+        for (const delivery of recipient.targets) {
+          const created = await this.notifications.enqueue(
+            buildPendingOccurrence(pending, delivery, ledger, nameById),
+          );
+          if (created) enqueued += 1;
+        }
       }
     }
     return { enqueued };
@@ -433,39 +445,22 @@ export class ReminderSchedulerService {
     return [...insurances, ...items, ...subscriptions];
   }
 
-  /** 取生效绑定，并带出各自「仍是成员」的账本集合，供发送前二次校验。 */
-  private async resolveBindings(
-    bindingIds: string[],
-  ): Promise<Map<string, { openId: string; ledgerIds: Set<string> }>> {
-    const result = new Map<string, { openId: string; ledgerIds: Set<string> }>();
-    const unique = Array.from(new Set(bindingIds));
-    if (!unique.length) return result;
+}
 
-    const bindings = await this.prisma.client.feishuBinding.findMany({
-      where: { id: { in: unique }, revokedAt: null },
-      select: { id: true, openId: true, userId: true },
-    });
-    if (!bindings.length) return result;
-
-    const memberships = await this.prisma.client.ledgerMember.findMany({
-      where: { userId: { in: bindings.map((binding) => binding.userId) }, removedAt: null },
-      select: { userId: true, ledgerId: true },
-    });
-    const ledgersByUser = new Map<string, Set<string>>();
-    for (const membership of memberships) {
-      const bucket = ledgersByUser.get(membership.userId) ?? new Set<string>();
-      bucket.add(membership.ledgerId);
-      ledgersByUser.set(membership.userId, bucket);
-    }
-
-    for (const binding of bindings) {
-      result.set(binding.id, {
-        openId: binding.openId,
-        ledgerIds: ledgersByUser.get(binding.userId) ?? new Set<string>(),
-      });
-    }
-    return result;
-  }
+/**
+ * 收件端 → notification 的三件套。四处 build 函数共用，避免哪一处漏写渠道段：
+ * dedupeKey 少了渠道，同一个人的飞书与 Web Push 会算出同一个 key，后插的那条被
+ * 唯一约束静默吞掉（表现为「只收到一条」，且看不出是哪条被吞了）。
+ */
+function deliveryFields(
+  occurrenceKey: string,
+  delivery: DeliveryTarget,
+): Pick<ReminderOccurrence, "channel" | "targetRef" | "dedupeKey"> {
+  return {
+    channel: delivery.channel,
+    targetRef: delivery.targetRef,
+    dedupeKey: `${occurrenceKey}:${delivery.channel}:${delivery.targetRef}`,
+  };
 }
 
 /** 一档「此刻该发」的提醒：业务行 + 档位 + 该档接收人 + 算好的周期键与应发时刻。 */
@@ -490,7 +485,7 @@ type ReminderScheduleRow = {
 
 type ReminderTargetRow = {
   ledgerId: string;
-  feishuBindingId: string;
+  userId: string;
 };
 
 type SubscriptionRow = {
@@ -524,7 +519,7 @@ const BILLING_CYCLE_LABELS: Record<string, string> = {
 function buildOccurrence(
   ledgerId: string,
   tier: DueTier<SubscriptionRow>,
-  openId: string,
+  delivery: DeliveryTarget,
   context: {
     ledger: { currency: string; amountDecimalPlaces: number } | undefined;
     categoryName: string | null;
@@ -561,9 +556,7 @@ function buildOccurrence(
     ledgerId,
     sourceType: "subscription",
     sourceId: subscription.id,
-    channel: "feishu",
-    targetRef: openId,
-    dedupeKey: `${occurrenceKey}:${openId}`,
+    ...deliveryFields(occurrenceKey, delivery),
     occurrenceKey,
     scheduledAt: tier.scheduledAt,
     payload: {
@@ -627,7 +620,7 @@ const RENEWAL_LABELS: Record<string, string> = {
 function buildInsuranceOccurrence(
   ledgerId: string,
   tier: DueTier<InsuranceRow>,
-  openId: string,
+  delivery: DeliveryTarget,
   context: {
     ledger: { currency: string; amountDecimalPlaces: number } | undefined;
     insuredNames: string[];
@@ -663,9 +656,7 @@ function buildInsuranceOccurrence(
     ledgerId,
     sourceType: "insurance",
     sourceId: insurance.id,
-    channel: "feishu",
-    targetRef: openId,
-    dedupeKey: `${occurrenceKey}:${openId}`,
+    ...deliveryFields(occurrenceKey, delivery),
     occurrenceKey,
     scheduledAt: tier.scheduledAt,
     payload: {
@@ -761,7 +752,7 @@ function relationGroupLabel(type: string, relationKind: string): string {
  */
 function buildPendingOccurrence(
   pending: PendingRow,
-  openId: string,
+  delivery: DeliveryTarget,
   ledger: { currency: string; amountDecimalPlaces: number } | undefined,
   nameById: Map<string, string>,
 ): ReminderOccurrence {
@@ -812,9 +803,7 @@ function buildPendingOccurrence(
     ledgerId: pending.ledgerId,
     sourceType: "auto_pending",
     sourceId: pending.id,
-    channel: "feishu",
-    targetRef: openId,
-    dedupeKey: `${occurrenceKey}:${openId}`,
+    ...deliveryFields(occurrenceKey, delivery),
     occurrenceKey,
     // 待确认刚生成就该推，不像订阅提醒有「当天某时刻」的概念。
     scheduledAt: new Date(),
@@ -884,7 +873,7 @@ function describeLead(remainingDays: number | null, noDateText: string): string 
  */
 function buildEntryReminderOccurrence(
   ledgerId: string,
-  openId: string,
+  delivery: DeliveryTarget,
   context: { today: string; ledgerName: string; todayCount: number; scheduledAt: Date },
 ): ReminderOccurrence {
   // 一个账本一天最多一条，因此周期键里没有档位段。
@@ -893,9 +882,7 @@ function buildEntryReminderOccurrence(
     ledgerId,
     sourceType: "entry_reminder",
     sourceId: ledgerId,
-    channel: "feishu",
-    targetRef: openId,
-    dedupeKey: `${occurrenceKey}:${openId}`,
+    ...deliveryFields(occurrenceKey, delivery),
     occurrenceKey,
     scheduledAt: context.scheduledAt,
     payload: {

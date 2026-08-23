@@ -27,6 +27,10 @@ model User {
   // 飞书客户端内是否跳过上面那道验证。默认跳过：能打开这个页面就已经过了飞书自己的
   // 设备锁/登录态，再验一次纯属重复。只在 appLockEnabled 为真时才有意义。
   appLockSkipInFeishu Boolean @default(true) @map("app_lock_skip_in_feishu")
+  // 推送渠道偏好，账号级：配置提醒时只选「推给谁」，走哪条渠道由本人这两个开关决定。
+  // 默认都开——关掉某条渠道是主动行为，静默不收才是最难排查的。
+  notifyFeishu   Boolean @default(true) @map("notify_feishu")
+  notifyWebPush  Boolean @default(true) @map("notify_web_push")
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -833,36 +837,68 @@ model ReminderSchedule {
 
 /// 提醒推送目标。订阅/保单的接收人挂在**档位**（ReminderSchedule）上，自动记账挂在规则上。
 /// sourceType/sourceId 泛化，后续预算等接入推送时复用同一张表。
-/// 刻意不建到 feishu_bindings 的外键：解绑是软删，读取时按 revokedAt IS NULL 过滤。
+///
+/// 挂的是**用户**而不是某条渠道端点：配置者只回答「推给谁」，走飞书还是 Web Push
+/// 由接收人自己的 `users.notifyFeishu / notifyWebPush` 决定。这样新增一条渠道
+/// 不需要动任何业务表单，且接收人换设备、换飞书号都不必回来重配每一档提醒。
 model ReminderTarget {
-  id              String   @id @default(uuid()) @db.Uuid
-  ledgerId        String   @map("ledger_id") @db.Uuid
+  id         String   @id @default(uuid()) @db.Uuid
+  ledgerId   String   @map("ledger_id") @db.Uuid
   // reminder_schedule | auto_rule | entry_reminder
-  sourceType      String   @map("source_type")
-  sourceId        String   @map("source_id") @db.Uuid
-  // feishu
-  channel         String
-  feishuBindingId String   @map("feishu_binding_id") @db.Uuid
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  sourceType String   @map("source_type")
+  sourceId   String   @map("source_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@unique([sourceType, sourceId, channel, feishuBindingId])
+  @@unique([sourceType, sourceId, userId])
   @@index([ledgerId])
   @@map("reminder_targets")
+}
+
+/// Web Push 订阅，**按设备**一行：同一个人的手机 / 平板 / 桌面浏览器各一个 endpoint，
+/// 推送时全部投递。正因为它是设备粒度、且会随「删掉主屏图标再加回来」静默失效，
+/// 才不能把它做成配置界面上的可选项（见 ReminderTarget 的注释）。
+///
+/// endpoint 唯一：浏览器重新订阅可能拿回同一个 endpoint 但轮换了密钥，走 upsert 覆盖。
+model PushSubscription {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /// 推送服务投递地址。iOS/Safari 为 https://web.push.apple.com/...，Chrome 为 fcm.googleapis.com。
+  endpoint      String    @unique
+  /// RFC 8291 的两把料：客户端 P-256 公钥与 16 字节 auth secret（均为 base64url）。
+  p256dh        String
+  auth          String
+  /// 「iPhone · Safari」这类展示名，让用户在通知设置里认出是哪台设备。
+  deviceLabel   String?   @map("device_label")
+  userAgent     String?   @map("user_agent")
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(6)
+  /// 连续失败次数。404/410 一次即删（订阅确已失效），其余错误累计到上限再删，
+  /// 免得推送服务临时抽风就把用户的订阅清空。
+  failureCount  Int       @default(0) @map("failure_count")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// 推送记录 + 幂等闸门。调度器先插 pending 抢占 dedupeKey（唯一冲突即已排/已发，跳过），
 /// 插入成功才调飞书接口，出站调用**不放在事务里**。进程在两者之间崩溃会留下 pending 行，
 /// 由同一个扫描循环按 attempts 上限重捞。
 ///
-/// dedupeKey 形如 `subscription:{id}:{续费日}:{提前量}:{openId}`。提前量段是为多档提醒预留的，
-/// 现在恒为单档（如 `3d`）——少了它，「提前 7 天」和「提前 1 天」会算成同一个 key 互相吞掉。
+/// dedupeKey 形如 `subscription:{id}:{续费日}:{提前量}:{渠道}:{收件标识}`。提前量段区分多档提醒
+/// （少了它「提前 7 天」和「提前 1 天」会算成同一个 key 互相吞掉）；渠道段让同一个人
+/// 在飞书与 Web Push 上各收一条，而 occurrenceKey 仍然共享，动作抢占因此跨渠道生效。
 model Notification {
   id            String    @id @default(uuid()) @db.Uuid
   ledgerId      String    @map("ledger_id") @db.Uuid
   sourceType    String    @map("source_type")
   sourceId      String    @map("source_id") @db.Uuid
+  // feishu | webpush
   channel       String
-  /// 渠道内的收件标识，飞书为 openId。
+  /// 渠道内的收件标识：飞书为 openId，Web Push 为 userId（一个人的多台设备共享一条
+  /// notification，发送时才展开成多次投递——否则新增一台设备就会让同一条提醒重发一遍）。
   targetRef     String    @map("target_ref")
   dedupeKey     String    @unique @map("dedupe_key")
   /// dedupeKey 去掉收件人段，标识「同一次提醒事件」——多个接收人的行共享同一个值。

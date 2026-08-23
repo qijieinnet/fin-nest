@@ -34,7 +34,7 @@ const INLINE_FILES = new Set(["docker-compose.inline.yml", "docker-compose.inlin
 
 // 可选功能变量：内联版里以注释形式提供（让用户按需取消注释），
 // 故不要求是生效的 YAML 键，但必须在文件里出现，避免新增功能时被整份漏掉。
-const OPTIONAL_KEYS = /^(AI_|FEISHU_|APP_LOCK_)/;
+const OPTIONAL_KEYS = /^(AI_|FEISHU_|APP_LOCK_|VAPID_)/;
 
 // 这些服务承载应用配置，环境变量键集合必须跨文件一致。
 const APP_SERVICES = ["api", "worker"];

@@ -140,6 +140,14 @@ services:
       # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
       # FEISHU_APP_ID: cli_xxx
       # FEISHU_APP_SECRET: xxx
+      # Web Push（可选）：三者必须同时填，只填一部分会启动报错。
+      # 生成密钥：npx web-push generate-vapid-keys
+      # VAPID_SUBJECT 必须是 mailto: 或 https:// 开头，否则 Apple 的推送服务返回 403。
+      # 注意：iPhone 上必须把站点「添加到主屏幕」后从主屏图标打开才能收到通知，
+      # 且站点必须是有效证书的 HTTPS（自签名证书不行）。
+      # VAPID_PUBLIC_KEY: BxxxxTxxx
+      # VAPID_PRIVATE_KEY: xxxx
+      # VAPID_SUBJECT: mailto:you@example.com
     volumes:
       # ★5 建议改：备份归档的宿主机目录（左侧）。改成绝对路径更稳妥，如
       # /volume1/docker/fin-nest/backups:/data/backups

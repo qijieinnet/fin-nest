@@ -18,6 +18,7 @@ export { InlineHint } from "./InlineHint";
 export { LoadingState } from "./LoadingState";
 export { MoneyText } from "./MoneyText";
 export { MonthWheelPicker } from "./MonthWheelPicker";
+export { NotifyTargetsRow, toggleUserId } from "./NotifyTargetsRow";
 export { OptionPicker } from "./OptionPicker";
 export { PersonChipRow, PersonSelectField } from "./PersonSelectField";
 export {

@@ -13,7 +13,7 @@ function schedule(overrides: Partial<ReminderSchedule> = {}): ReminderSchedule {
     leadValue: 30,
     leadUnit: "day",
     remindTime: "09:00",
-    feishuBindings: [],
+    notifyTargets: [],
     ...overrides,
   };
 }
@@ -26,14 +26,14 @@ describe("多档提醒的回显与提交", () => {
         leadValue: 7,
         leadUnit: "day",
         remindTime: "20:00",
-        feishuBindings: [{ id: "b1", displayName: "老婆", openIdSuffix: "abc123" }],
+        notifyTargets: [{ userId: "u1", alias: "老婆", channels: ["feishu", "webpush"] }],
       }),
     ]);
     expect(drafts).toHaveLength(2);
     expect(
       drafts.map((draft) => `${draft.leadValue}${draft.leadUnit}@${draft.remindTime}`),
     ).toEqual(["30day@09:00", "7day@20:00"]);
-    expect(drafts[1]!.feishuBindingIds).toEqual(["b1"]);
+    expect(drafts[1]!.notifyUserIds).toEqual(["u1"]);
     // key 必须两两不同，否则 React 会把后一档当成前一档复用。
     expect(new Set(drafts.map((draft) => draft.key)).size).toBe(2);
   });
@@ -45,10 +45,9 @@ describe("多档提醒的回显与提交", () => {
     ]);
     render(
       <ReminderSchedulesEditor
+        candidates={[]}
         defaultLeadValue={30}
         enabled
-        feishuEnabled={false}
-        feishuOptions={[]}
         onChange={vi.fn()}
         onEnabledChange={vi.fn()}
         value={drafts}
@@ -74,7 +73,7 @@ describe("多档提醒的回显与提交", () => {
       schedule({ leadValue: 30, leadUnit: "day", remindTime: "21:00" }),
     ]);
     expect(toReminderPayload(duplicated)).toEqual([
-      { leadValue: 30, leadUnit: "day", remindTime: "21:00", feishuBindingIds: [] },
+      { leadValue: 30, leadUnit: "day", remindTime: "21:00", notifyUserIds: [] },
     ]);
   });
 });

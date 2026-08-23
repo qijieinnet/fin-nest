@@ -76,7 +76,7 @@ export function RecordSettingsScreen() {
       const previous = queryClient.getQueryData<RecordSetting>(queryKeys.recordSetting(ledgerId));
       if (previous) {
         // 记账提醒的乐观更新交给 EntryReminderCard 自己的草稿：它的 patch 是「部分字段」，
-        // 且 feishuBindingIds ≠ feishuBindings，塞进缓存反而会写出一份形状不对的值。
+        // 且 notifyUserIds ≠ notifyTargets，塞进缓存反而会写出一份形状不对的值。
         const { entryReminder: _entryReminder, ...rest } = patch;
         queryClient.setQueryData<RecordSetting>(queryKeys.recordSetting(ledgerId), {
           ...previous,

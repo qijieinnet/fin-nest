@@ -135,6 +135,9 @@ COPY --from=build /app/apps/web/.next/standalone ./
 # 补齐 standalone 追踪漏掉的包（见 build 阶段末尾的归拢步骤）。
 COPY --from=build /prod/web-extra ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+# public/ 不在 standalone 的追踪范围里，必须显式拷。缺了它 /sw.js 会 404，
+# 表现为「Web Push 在开发环境好好的，一上容器就永远收不到通知」，且没有任何报错。
+COPY --from=build /app/apps/web/public ./apps/web/public
 EXPOSE 4001
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "apps/web/server.js"]

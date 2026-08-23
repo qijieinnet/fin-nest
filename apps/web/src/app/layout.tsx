@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppProviders } from "@/providers";
 import { PrimaryDataPrefetcher } from "./_components/PrimaryDataPrefetcher";
+import { PushSubscriptionSync } from "./_components/PushSubscriptionSync";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <AppProviders>
           <PrimaryDataPrefetcher />
+          <PushSubscriptionSync />
           {children}
         </AppProviders>
       </body>

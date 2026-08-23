@@ -94,6 +94,18 @@ const EnvSchema = z.object({
   // 因而也不需要 Encrypt Key / Verification Token。未配置时整个飞书模块不注册、不建连接。
   FEISHU_APP_ID: z.string().min(1).optional(),
   FEISHU_APP_SECRET: z.string().min(1).optional(),
+
+  // Web Push（可选）：三者都配置时启用。公钥由 API 在运行时随 GET /notifications/settings
+  // 下发给前端，**刻意不走 NEXT_PUBLIC_**——那是编译期内联的，而镜像构建时还不知道部署方的密钥。
+  // 生成：`node scripts/generate-vapid-keys.mjs`（或 `npx web-push generate-vapid-keys`）。
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  // VAPID 的联系方式，必须是 mailto: 或 https:// URL —— 其他格式 Apple 的
+  // web.push.apple.com 直接返回 403，且报错信息不会告诉你原因。
+  VAPID_SUBJECT: z
+    .string()
+    .regex(/^(mailto:.+|https:\/\/.+)$/u, "VAPID_SUBJECT 必须是 mailto: 邮箱或 https:// 地址")
+    .optional(),
 }).superRefine((config, ctx) => {
   // 生产环境禁止 MinIO 弱凭证：secret 是附件存储的唯一门禁，默认值等于对外裸奔。
   const weakSecrets = new Set(["minioadmin", "change-me-please"]);
@@ -114,6 +126,18 @@ const EnvSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: [missing[0]!],
       message: `飞书机器人需要同时配置 ${feishuKeys.join(" 和 ")}，当前缺少 ${missing.join(", ")}`,
+    });
+  }
+
+  // 同理：VAPID 只配一半，Web Push 会静默不发，而用户在设置页看到的是「已开启」。
+  const vapidKeys = ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"] as const;
+  const vapidSet = vapidKeys.filter((key) => config[key] !== undefined);
+  if (vapidSet.length > 0 && vapidSet.length < vapidKeys.length) {
+    const missing = vapidKeys.filter((key) => config[key] === undefined);
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [missing[0]!],
+      message: `Web Push 需要同时配置 ${vapidKeys.join("、")}，当前缺少 ${missing.join(", ")}`,
     });
   }
 });

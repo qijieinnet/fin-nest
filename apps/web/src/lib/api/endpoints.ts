@@ -168,7 +168,43 @@ export function feishuBindingPath(bindingId: string): string {
   return `/feishu/bindings/${encodeURIComponent(bindingId)}`;
 }
 
-/** 本账本所有成员的生效绑定，供选择推送接收人。挂在 feishu 下而非 ledgerApiPath 下，与其余绑定接口同源。 */
-export function feishuLedgerBindingsPath(ledgerId: string): string {
-  return `/feishu/ledgers/${encodeURIComponent(ledgerId)}/bindings`;
+/**
+ * 推送通知（渠道整合后统一入口）。
+ *
+ * 全部是账号维度的：渠道开关与设备订阅属于人，不属于账本。唯一的账本维度接口是
+ * 候选接收人 `notifyCandidatesPath`。
+ */
+export const NOTIFICATION_ENDPOINTS = {
+  /** 渠道可用性 + 我的开关 + 我的设备。带 ?endpoint= 时标出哪台是本机。 */
+  settings: "/notifications/settings",
+  /** 登记/更新本设备的 Web Push 订阅（按 endpoint upsert）。 */
+  subscriptions: "/notifications/subscriptions",
+  /** 按 endpoint 移除本设备订阅。 */
+  subscriptionsDetach: "/notifications/subscriptions/detach",
+  /** 给自己的所有设备发一条测试通知。 */
+  test: "/notifications/test",
+} as const;
+
+export function notificationSettingsPath(endpoint?: string | null): string {
+  if (!endpoint) return NOTIFICATION_ENDPOINTS.settings;
+  return `${NOTIFICATION_ENDPOINTS.settings}?endpoint=${encodeURIComponent(endpoint)}`;
+}
+
+export function pushSubscriptionPath(id: string): string {
+  return `${NOTIFICATION_ENDPOINTS.subscriptions}/${encodeURIComponent(id)}`;
+}
+
+/** 推送落地页要渲染的那条提醒。 */
+export function notificationPath(notificationId: string): string {
+  return `/notifications/${encodeURIComponent(notificationId)}`;
+}
+
+/** 落地页上的动作（确认续订 / 退订 / 确认入账 …）。 */
+export function notificationActionsPath(notificationId: string): string {
+  return `${notificationPath(notificationId)}/actions`;
+}
+
+/** 本账本成员 + 每人当前可达的渠道，供选择推送接收人。 */
+export function notifyCandidatesPath(ledgerId: string): string {
+  return `/ledgers/${encodeURIComponent(ledgerId)}/notify-candidates`;
 }

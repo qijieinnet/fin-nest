@@ -194,6 +194,7 @@ async function main() {
   await assertSubscriptionReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertInsuranceReminderTargets({ ledgerId: ledger.id, owner, requester });
   await assertEntryReminder({ ledgerId: ledger.id, owner });
+  await assertNotificationChannels({ ledgerId: ledger.id, owner, requester });
   await assertPlanPeriodConfirm({ ledgerId: ledger.id, owner, category });
   await assertPlanPeriodBackupRestore({ owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
@@ -228,6 +229,7 @@ async function main() {
           "subscription_reminder_targets",
           "insurance_reminder_targets",
           "entry_reminder",
+          "notification_channels",
           "plan_period_confirm",
           "plan_period_backup_restore",
           "feishu_db_constraints",
@@ -1843,10 +1845,11 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
 // 飞书机器人的 DB 级不变式：这些约束是绑定 / 去重链路正确性的地基，纯 Prisma 即可验证，
 // 不依赖真实飞书连接，也不依赖 FEISHU_APP_ID/SECRET 是否配置（对应 FEISHU_BOT_PLAN.md §12）。
 /**
- * 到期提醒的多档配置与飞书推送目标：档位与接收人逐档独立，写入范围限本账本成员的生效绑定，
+ * 到期提醒的多档配置与推送接收人：档位与接收人逐档独立，写入范围限本账本成员，
  * 关掉提醒（传空数组）时档位与接收人一并清空。
- * 未配置 FEISHU_APP_ID/SECRET 时账本维度绑定列表返回空数组（前端据此隐藏入口），
- * 但档位上的目标读写不依赖该开关，因此这里直接建绑定行来验证。
+ *
+ * 渠道整合后接收人是**用户**而不是某条渠道端点，因此这套断言与飞书是否配置无关；
+ * 「这个人现在走哪条渠道」由 notifyTargets[].channels 现算，是只读的展示信息。
  */
 /**
  * 关联订阅的自动记账：规则 → 待确认 → 确认入账 → 交易带上订阅关联 → 续订自动确认。
@@ -1932,25 +1935,186 @@ async function assertAutoPendingSubscriptionLink({ ledgerId, owner, account, cat
   );
 }
 
-async function assertSubscriptionReminderTargets({ ledgerId, owner, requester }) {
+/**
+ * 推送渠道整合：候选接收人、渠道开关、Web Push 订阅登记、落地页读与动作。
+ *
+ * 这一组不依赖任何真实推送服务：候选人与开关是纯数据库读写；订阅登记在未配置 VAPID 时
+ * 按 400 拒绝（部署没开这条渠道），配了才走 upsert，因此断言按两种情况分别放行。
+ */
+async function assertNotificationChannels({ ledgerId, owner, requester }) {
   const token = owner.token;
-  // owner 是本账本成员，requester 只提交了加入申请（仍是外人），正好覆盖越权分支。
-  const memberBinding = await prisma.feishuBinding.create({
-    data: {
-      openId: `e2e-sub-member-${stamp}`,
-      displayName: "E2E 成员飞书",
-      userId: owner.userId,
-      currentLedgerId: ledgerId,
+
+  // ① 候选接收人 = 本账本在册成员，且带上「当前能收到的渠道」。
+  const candidates = await api("GET", `/ledgers/${ledgerId}/notify-candidates`, { token });
+  assert.ok(
+    candidates.some((candidate) => candidate.userId === owner.userId),
+    "本人应出现在候选接收人里",
+  );
+  assert.ok(
+    !candidates.some((candidate) => candidate.userId === requester.userId),
+    "非成员不该出现在候选接收人里",
+  );
+  // channels 是现算的只读信息：没绑飞书、没订阅推送时是空数组，前端据此提示「选了也收不到」。
+  const self = candidates.find((candidate) => candidate.userId === owner.userId);
+  assert.ok(Array.isArray(self.channels));
+  assert.ok(typeof self.alias === "string" && self.alias.length > 0);
+
+  // 非成员读不到候选人列表。
+  await api("GET", `/ledgers/${ledgerId}/notify-candidates`, {
+    token: requester.token,
+    expected: 403,
+  });
+
+  // ② 渠道开关：账号级，默认都开，改动后原样回读。
+  const settings = await api("GET", "/notifications/settings", { token });
+  assert.equal(settings.notifyFeishu, true);
+  assert.equal(settings.notifyWebPush, true);
+  assert.equal(typeof settings.channels.feishu, "boolean");
+  assert.equal(typeof settings.channels.webPush, "boolean");
+  assert.deepEqual(settings.devices, []);
+
+  const off = await api("PATCH", "/notifications/settings", {
+    token,
+    body: { notifyWebPush: false },
+  });
+  assert.equal(off.notifyWebPush, false);
+  // 只传一个字段不影响另一个（与其它设置接口同口径）。
+  assert.equal(off.notifyFeishu, true);
+  const back = await api("PATCH", "/notifications/settings", {
+    token,
+    body: { notifyWebPush: true },
+  });
+  assert.equal(back.notifyWebPush, true);
+
+  // 关掉渠道后，候选人里这个人的 channels 不该再含它——「能不能收到」必须反映当前状态。
+  await api("PATCH", "/notifications/settings", { token, body: { notifyFeishu: false } });
+  const afterOff = await api("GET", `/ledgers/${ledgerId}/notify-candidates`, { token });
+  assert.ok(
+    !afterOff
+      .find((candidate) => candidate.userId === owner.userId)
+      .channels.includes("feishu"),
+    "关掉飞书开关后不应再算作可达渠道",
+  );
+  await api("PATCH", "/notifications/settings", { token, body: { notifyFeishu: true } });
+
+  // ③ Web Push 订阅登记。未配置 VAPID 的部署按 400 拒绝，这是正常状态而非故障。
+  const subscription = {
+    endpoint: `https://web.push.apple.com/e2e-${stamp}`,
+    p256dh: "BF3xE2E00000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    auth: "e2eAuthSecret0000000",
+    deviceLabel: "E2E 设备",
+  };
+  if (settings.channels.webPush) {
+    const device = await api("POST", "/notifications/subscriptions", {
+      token,
+      body: subscription,
+    });
+    assert.equal(device.deviceLabel, "E2E 设备");
+    // 同一 endpoint 重复登记走 upsert，不新增一行（浏览器重订阅常拿回同一个 endpoint）。
+    await api("POST", "/notifications/subscriptions", { token, body: subscription });
+    assert.equal(
+      await prisma.pushSubscription.count({ where: { endpoint: subscription.endpoint } }),
+      1,
+    );
+    // 有订阅之后，候选人里应当出现 webpush 渠道。
+    const withPush = await api("GET", `/ledgers/${ledgerId}/notify-candidates`, { token });
+    assert.ok(
+      withPush
+        .find((candidate) => candidate.userId === owner.userId)
+        .channels.includes("webpush"),
+    );
+    // 退订按 endpoint 定位（前端手里只有它）。
+    await api("POST", "/notifications/subscriptions/detach", {
+      token,
+      expected: 204,
+      body: { endpoint: subscription.endpoint },
+    });
+    assert.equal(
+      await prisma.pushSubscription.count({ where: { endpoint: subscription.endpoint } }),
+      0,
+    );
+  } else {
+    await api("POST", "/notifications/subscriptions", {
+      token,
+      expected: 400,
+      body: subscription,
+    });
+    await api("POST", "/notifications/test", { token, expected: 400 });
+  }
+
+  // ④ 落地页：直接造一条 notification 行（发送链路归 worker 管，这里只测读与动作）。
+  const subscriptionRow = await api("POST", `/ledgers/${ledgerId}/subscriptions`, {
+    token,
+    expected: 201,
+    body: {
+      name: `E2E 落地页订阅 ${stamp}`,
+      billingCycle: "monthly",
+      nextRenewalDate: todayIso(),
     },
   });
-  const outsiderBinding = await prisma.feishuBinding.create({
+  const occurrenceKey = `subscription:${subscriptionRow.id}:${todayIso()}:7d`;
+  const notification = await prisma.notification.create({
     data: {
-      openId: `e2e-sub-outsider-${stamp}`,
-      userId: requester.userId,
-      currentLedgerId: ledgerId,
+      ledgerId,
+      sourceType: "subscription",
+      sourceId: subscriptionRow.id,
+      channel: "webpush",
+      targetRef: owner.userId,
+      dedupeKey: `${occurrenceKey}:webpush:${owner.userId}`,
+      occurrenceKey,
+      scheduledAt: new Date(),
+      payload: {
+        kind: "subscription_due",
+        title: "订阅到期提醒",
+        leadDescription: "还有 7 天",
+        fields: [{ label: "计费周期", value: "每月" }],
+        actions: [{ key: "subscription_terminate", label: "退订", style: "danger" }],
+      },
     },
   });
 
+  const view = await api("GET", `/notifications/${notification.id}`, { token });
+  assert.equal(view.payload.title, "订阅到期提醒");
+  assert.equal(view.actionState, null);
+  // 非本账本成员读不到——推送里带的 id 泄漏出去也不能被外人看见内容。
+  await api("GET", `/notifications/${notification.id}`, {
+    token: requester.token,
+    expected: 403,
+  });
+
+  // 动作 ↔ sourceType 必须匹配：拿订阅提醒的 id 去点自动记账的按钮要被挡住。
+  await api("POST", `/notifications/${notification.id}/actions`, {
+    token,
+    expected: 400,
+    body: { action: "auto_pending_confirm" },
+  });
+
+  const acted = await api("POST", `/notifications/${notification.id}/actions`, {
+    token,
+    body: { action: "subscription_terminate" },
+  });
+  assert.equal(acted.status, "done");
+  assert.equal(acted.actionState, "terminated");
+  assert.equal(acted.actedByAlias !== null, true);
+  // 业务动作真的落下去了（走的是 Web 端同一个 AssetsService.terminateSubscription）。
+  const terminated = await prisma.subscription.findUniqueOrThrow({
+    where: { id: subscriptionRow.id },
+  });
+  assert.ok(terminated.terminatedAt, "退订动作应当写入 terminatedAt");
+
+  // 再点一次不重复执行：抢占按 occurrenceKey 跨渠道生效，飞书那边点过这里也是 already。
+  const again = await api("POST", `/notifications/${notification.id}/actions`, {
+    token,
+    body: { action: "subscription_terminate" },
+  });
+  assert.equal(again.status, "already");
+}
+
+async function assertSubscriptionReminderTargets({ ledgerId, owner, requester }) {
+  const token = owner.token;
+  // owner 是本账本成员，requester 只提交了加入申请（仍是外人），正好覆盖越权分支。
+  // 渠道整合后接收人挂的是**用户**：绑没绑飞书、订没订阅 Web Push 都不影响能不能被选中，
+  // 那是接收人自己在通知设置里的事。
   // 两档：提前 7 天只提醒自己，提前 1 天不推送。
   const subscription = await api("POST", `/ledgers/${ledgerId}/subscriptions`, {
     token,
@@ -1965,7 +2129,7 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
           leadValue: 7,
           leadUnit: "day",
           remindTime: "09:00",
-          feishuBindingIds: [memberBinding.id],
+          notifyUserIds: [owner.userId],
         },
       ],
     },
@@ -1976,11 +2140,13 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
     ["7day", "1day"],
   );
   assert.deepEqual(
-    subscription.reminders[0].feishuBindings.map((binding) => binding.id),
-    [memberBinding.id],
+    subscription.reminders[0].notifyTargets.map((target) => target.userId),
+    [owner.userId],
   );
-  assert.equal(subscription.reminders[0].feishuBindings[0].displayName, "E2E 成员飞书");
-  assert.deepEqual(subscription.reminders[1].feishuBindings, []);
+  // channels 是「当前真能收到的渠道」，由后端现算——没绑飞书也没订阅推送时为空数组，
+  // 前端据此提示「选了也收不到」。
+  assert.ok(Array.isArray(subscription.reminders[0].notifyTargets[0].channels));
+  assert.deepEqual(subscription.reminders[1].notifyTargets, []);
   // 镜像列 = 最早那一档，前端的「即将到期」标签与红点靠它。
   assert.equal(subscription.remindLeadValue, 7);
   assert.equal(subscription.remindLeadUnit, "day");
@@ -2003,7 +2169,7 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
     },
   });
 
-  // 非本账本成员的绑定不能设为接收人，否则退出账本的人还能持续收到该账本的推送。
+  // 非本账本成员不能设为接收人，否则退出账本的人还能持续收到该账本的推送。
   await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
     expected: 403,
@@ -2013,22 +2179,22 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
           leadValue: 3,
           leadUnit: "day",
           remindTime: "09:00",
-          feishuBindingIds: [outsiderBinding.id],
+          notifyUserIds: [requester.userId],
         },
       ],
     },
   });
-  // 不存在 / 已解绑的绑定按 404 处理。
+  // 不存在的用户与「不是成员」合并成同一个 403：不泄漏某个 id 是否存在。
   await api("PATCH", `/ledgers/${ledgerId}/subscriptions/${subscription.id}`, {
     token,
-    expected: 404,
+    expected: 403,
     body: {
       reminders: [
         {
           leadValue: 3,
           leadUnit: "day",
           remindTime: "09:00",
-          feishuBindingIds: ["00000000-0000-4000-8000-000000000000"],
+          notifyUserIds: ["00000000-0000-4000-8000-000000000000"],
         },
       ],
     },
@@ -2046,8 +2212,8 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
   });
   assert.equal(renamed.reminders.length, 2);
   assert.deepEqual(
-    renamed.reminders[0].feishuBindings.map((binding) => binding.id),
-    [memberBinding.id],
+    renamed.reminders[0].notifyTargets.map((target) => target.userId),
+    [owner.userId],
   );
 
   // 关掉到期提醒 → 档位与接收人一并清空，重新打开不会静默沿用上次的接收人。
@@ -2064,7 +2230,9 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
     0,
   );
   assert.equal(
-    await prisma.reminderTarget.count({ where: { feishuBindingId: memberBinding.id } }),
+    await prisma.reminderTarget.count({
+      where: { sourceType: "reminder_schedule", userId: owner.userId },
+    }),
     0,
   );
 }
@@ -2072,22 +2240,6 @@ async function assertSubscriptionReminderTargets({ ledgerId, owner, requester })
 /** 保单到期提醒：与订阅同一套档位口径，这里只覆盖保险侧的读写链路。 */
 async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
   const token = owner.token;
-  const memberBinding = await prisma.feishuBinding.create({
-    data: {
-      openId: `e2e-ins-member-${stamp}`,
-      displayName: "E2E 保单飞书",
-      userId: owner.userId,
-      currentLedgerId: ledgerId,
-    },
-  });
-  const outsiderBinding = await prisma.feishuBinding.create({
-    data: {
-      openId: `e2e-ins-outsider-${stamp}`,
-      userId: requester.userId,
-      currentLedgerId: ledgerId,
-    },
-  });
-
   const insurance = await api("POST", `/ledgers/${ledgerId}/insurances`, {
     token,
     expected: 201,
@@ -2100,7 +2252,7 @@ async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
           leadValue: 30,
           leadUnit: "day",
           remindTime: "09:00",
-          feishuBindingIds: [memberBinding.id],
+          notifyUserIds: [owner.userId],
         },
         { leadValue: 1, leadUnit: "week", remindTime: "10:00" },
       ],
@@ -2110,7 +2262,7 @@ async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
     insurance.reminders.map((reminder) => `${reminder.leadValue}${reminder.leadUnit}`),
     ["30day", "1week"],
   );
-  assert.equal(insurance.reminders[0].feishuBindings[0].displayName, "E2E 保单飞书");
+  assert.equal(insurance.reminders[0].notifyTargets[0].userId, owner.userId);
   assert.equal(insurance.remindLeadValue, 30);
 
   const detail = await api("GET", `/ledgers/${ledgerId}/insurances/${insurance.id}`, { token });
@@ -2125,7 +2277,7 @@ async function assertInsuranceReminderTargets({ ledgerId, owner, requester }) {
           leadValue: 30,
           leadUnit: "day",
           remindTime: "09:00",
-          feishuBindingIds: [outsiderBinding.id],
+          notifyUserIds: [requester.userId],
         },
       ],
     },
@@ -2386,7 +2538,7 @@ async function assertEntryReminder({ ledgerId, owner }) {
   // 没配过也要返回一份默认值，前端不必区分「没配过」和「配了但关着」。
   assert.equal(initial.entryReminder.enabled, false);
   assert.equal(initial.entryReminder.frequency, "daily");
-  assert.deepEqual(initial.entryReminder.feishuBindings, []);
+  assert.deepEqual(initial.entryReminder.notifyTargets, []);
 
   // 金额键盘自动展开：默认关闭，可开可关，且不传时保持不变（与其它布尔设置同口径）。
   assert.equal(initial.keypadAutoOpen, false);
@@ -2406,15 +2558,6 @@ async function assertEntryReminder({ ledgerId, owner }) {
   });
   assert.equal(keypadOff.keypadAutoOpen, false);
 
-  const binding = await prisma.feishuBinding.create({
-    data: {
-      openId: `e2e-entry-${stamp}`,
-      displayName: "E2E 记账提醒飞书",
-      userId: owner.userId,
-      currentLedgerId: ledgerId,
-    },
-  });
-
   const weekly = await api("PATCH", `/ledgers/${ledgerId}/record-setting`, {
     token,
     body: {
@@ -2423,7 +2566,7 @@ async function assertEntryReminder({ ledgerId, owner }) {
         frequency: "weekly",
         weekdays: [5, 1, 1],
         remindTime: "20:30",
-        feishuBindingIds: [binding.id],
+        notifyUserIds: [owner.userId],
       },
     },
   });
@@ -2431,8 +2574,8 @@ async function assertEntryReminder({ ledgerId, owner }) {
   assert.deepEqual(weekly.entryReminder.weekdays, [1, 5]);
   assert.equal(weekly.entryReminder.remindTime, "20:30");
   assert.deepEqual(
-    weekly.entryReminder.feishuBindings.map((item) => item.id),
-    [binding.id],
+    weekly.entryReminder.notifyTargets.map((item) => item.userId),
+    [owner.userId],
   );
 
   // 每周不选星期 = 永远不会触发，开着开关却收不到提醒最难排查，直接拒绝。
@@ -2464,8 +2607,8 @@ async function assertEntryReminder({ ledgerId, owner }) {
   assert.equal(disabled.entryReminder.enabled, false);
   assert.deepEqual(disabled.entryReminder.weekdays, [1, 5]);
   assert.deepEqual(
-    disabled.entryReminder.feishuBindings.map((item) => item.id),
-    [binding.id],
+    disabled.entryReminder.notifyTargets.map((item) => item.userId),
+    [owner.userId],
   );
 }
 
@@ -2576,6 +2719,10 @@ async function cleanup() {
       .catch(() => undefined);
     await prisma.feishuEvent
       .deleteMany({ where: { eventId: { contains: stamp } } })
+      .catch(() => undefined);
+    // Web Push 订阅是用户级的（不挂账本），与飞书绑定同一批清理。
+    await prisma.pushSubscription
+      .deleteMany({ where: { userId: { in: userIds } } })
       .catch(() => undefined);
     if (ledgerIds.length) {
       const insuranceIds = (

@@ -339,7 +339,7 @@ export class RecordsService {
       weekdays: reminder?.weekdays ?? [],
       monthDays: reminder?.monthDays ?? [],
       remindTime: reminder?.remindTime ?? "20:00",
-      feishuBindings: targets.remindFeishuBindings,
+      notifyTargets: targets.notifyTargets,
     };
   }
 
@@ -380,13 +380,13 @@ export class RecordsService {
       create: { ledgerId, ...next, weekdays, monthDays, updatedBy: userId },
       update: { ...next, weekdays, monthDays, updatedBy: userId },
     });
-    if (input.feishuBindingIds !== undefined) {
+    if (input.notifyUserIds !== undefined) {
       await this.reminderTargets.replace(
         tx,
         ledgerId,
         "entry_reminder",
         ledgerId,
-        input.feishuBindingIds,
+        input.notifyUserIds,
       );
     }
   }

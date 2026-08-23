@@ -2,10 +2,14 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Notification, Prisma } from "@fin-nest/db";
 import { FeishuClient } from "../feishu/feishu-client";
 import { PrismaService } from "../prisma/prisma.service";
+import { PushDeliveryService } from "../push/push-delivery.service";
+import { WebPushClient } from "../push/web-push.client";
 import { cycleKeyOfOccurrence } from "../reminders/reminder-schedule";
 import { renderNotificationCard } from "./notification-card";
+import { renderWebPushMessage } from "./notification-web-push";
 import {
   NotificationActionState,
+  NotificationChannel,
   NotificationPayload,
   NotificationSourceType,
   ReminderOccurrence,
@@ -33,6 +37,8 @@ export class NotificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly feishu: FeishuClient,
+    private readonly webPush: WebPushClient,
+    private readonly pushDelivery: PushDeliveryService,
   ) {}
 
   /**
@@ -68,14 +74,22 @@ export class NotificationService {
   /**
    * 发送所有到点的待发推送。
    *
-   * 渠道未配置时直接返回：不消耗 attempts，否则一个没配飞书的部署会把每条推送的
-   * 重试次数烧光，等真配上了反而永远发不出去。
+   * 渠道未配置时**按渠道跳过**，不消耗 attempts：否则一个只开了 Web Push 的部署会把
+   * 飞书那半边的重试次数烧光，等真配上飞书反而永远发不出去。早期这里是
+   * `if (!feishu.enabled) return`，整合渠道后必须按行判定——不然只用 Web Push 的部署
+   * 整个推送系统都是哑的。
    */
   async dispatchPending(now = new Date()): Promise<{ sent: number; failed: number }> {
-    if (!this.feishu.enabled) return { sent: 0, failed: 0 };
+    const channels = this.enabledChannels();
+    if (!channels.length) return { sent: 0, failed: 0 };
 
     const due = await this.prisma.client.notification.findMany({
-      where: { status: "pending", scheduledAt: { lte: now }, attempts: { lt: MAX_ATTEMPTS } },
+      where: {
+        status: "pending",
+        scheduledAt: { lte: now },
+        attempts: { lt: MAX_ATTEMPTS },
+        channel: { in: channels },
+      },
       orderBy: { scheduledAt: "asc" },
       take: DISPATCH_BATCH_SIZE,
     });
@@ -164,17 +178,64 @@ export class NotificationService {
     });
   }
 
+  /** 本次部署实际配好了的渠道。两条都没配时整个派发循环跳过。 */
+  private enabledChannels(): NotificationChannel[] {
+    const channels: NotificationChannel[] = [];
+    if (this.feishu.enabled) channels.push("feishu");
+    if (this.webPush.enabled) channels.push("webpush");
+    return channels;
+  }
+
   private async send(notification: Notification): Promise<void> {
-    if (notification.channel !== "feishu") {
-      throw new Error(`Unsupported notification channel: ${notification.channel}`);
-    }
     const payload = normalizePayload(notification.payload);
-    // 一律发卡片：没有按钮的提醒（如保单到期）也要保留标题与字段网格的排版，
-    // 退回纯文本等于把「谁、哪一笔、什么金额」压成一坨看不清的行。
-    await this.feishu.sendCardToUser(
-      notification.targetRef,
-      renderNotificationCard(notification.id, payload),
+    switch (notification.channel as NotificationChannel) {
+      case "feishu":
+        // 一律发卡片：没有按钮的提醒（如保单到期）也要保留标题与字段网格的排版，
+        // 退回纯文本等于把「谁、哪一笔、什么金额」压成一坨看不清的行。
+        await this.feishu.sendCardToUser(
+          notification.targetRef,
+          renderNotificationCard(notification.id, payload),
+        );
+        return;
+      case "webpush":
+        await this.sendWebPush(notification, payload);
+        return;
+      default:
+        throw new Error(`Unsupported notification channel: ${notification.channel}`);
+    }
+  }
+
+  /**
+   * 投递到一个用户的所有设备（targetRef = userId）。
+   *
+   * 成功判据是「至少有一台设备收到」：有人手机装了三台、其中一台的订阅早就失效，
+   * 不该因为那一台把整条推送判为失败再重试三轮——另外两台会被重复投递。
+   *
+   * 订阅的善后（清零 / 删除 / 累计失败）交给 {@link PushDeliveryService}，
+   * 与「发送测试通知」共用同一套规则。
+   */
+  private async sendWebPush(
+    notification: Notification,
+    payload: NotificationPayload,
+  ): Promise<void> {
+    const subscriptions = await this.prisma.client.pushSubscription.findMany({
+      where: { userId: notification.targetRef },
+    });
+    if (!subscriptions.length) {
+      // 入队时这个人还有订阅，之后全删了（换设备、关权限、订阅失效被清）。
+      // 不当故障处理（不重试、不烧 attempts），但这条会被记成 sent，
+      // 日志是「明明标了已发却没人收到」时唯一的线索，故用 warn。
+      this.logger.warn(`用户 ${notification.targetRef} 已无 Web Push 订阅，跳过该条推送`);
+      return;
+    }
+
+    const report = await this.pushDelivery.deliver(
+      subscriptions,
+      renderWebPushMessage(notification.id, payload, notification.occurrenceKey),
     );
+    if (report.delivered === 0) {
+      throw new Error(`所有设备投递失败：${report.errors.join("；")}`);
+    }
   }
 }
 

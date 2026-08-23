@@ -1,11 +1,11 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { TimeWheelPicker } from "@/components/business";
+import { useEffect, useState } from "react";
+import { NotifyTargetsRow, TimeWheelPicker, toggleUserId } from "@/components/business";
 import { PopoverMenu, Switch } from "@/components/ui";
 import type { EntryReminder, EntryReminderFrequency, EntryReminderInput } from "@/lib/api";
-import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
+import { useNotifyCandidates } from "@/lib/data/notifications";
 
 const FREQUENCY_OPTIONS: ReadonlyArray<{ value: EntryReminderFrequency; label: string }> = [
   { value: "daily", label: "每天" },
@@ -55,27 +55,15 @@ export function EntryReminderCard({
 }) {
   const [draft, setDraft] = useState<EntryReminder>(value);
   const [frequencyOpen, setFrequencyOpen] = useState(false);
-  const [feishuOpen, setFeishuOpen] = useState(false);
 
   // 服务端值变化（保存成功、切换账本）时同步回来；用户正在编辑的字段也以服务端为准，
   // 因为每次改动都会立刻提交，两者不会长时间不一致。
   useEffect(() => setDraft(value), [value]);
 
-  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
-  const feishuStatusQuery = useFeishuStatus();
-  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
-  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
-
-  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
-  const feishuOptions = useMemo(
-    () =>
-      (feishuBindingsQuery.data ?? []).map((binding) => ({
-        value: binding.id,
-        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
-      })),
-    [feishuBindingsQuery.data],
-  );
-  const selectedBindingIds = draft.feishuBindings.map((binding) => binding.id);
+  // 可选接收人 = 本账本成员。走哪条渠道由接收人自己的通知设置决定，这里不区分。
+  const candidatesQuery = useNotifyCandidates(ledgerId);
+  const candidates = candidatesQuery.data ?? [];
+  const selectedUserIds = draft.notifyTargets.map((target) => target.userId);
 
   /** 本地先改、同时提交。patch 只带真正变化的字段，避免把并发的其它改动覆盖回去。 */
   const apply = (patch: EntryReminderInput, next: Partial<EntryReminder>) => {
@@ -93,31 +81,14 @@ export function EntryReminderCard({
     apply({ frequency, weekdays, monthDays }, { frequency, weekdays, monthDays });
   };
 
-  const toggleBinding = (bindingId: string) => {
-    const nextIds = toggleId(selectedBindingIds, bindingId);
+  const toggleTarget = (userId: string) => {
+    const nextIds = toggleUserId(selectedUserIds, userId);
+    // 本地草稿直接从候选列表取整条（含 channels），这样「收不到」的提示无需等服务端返回。
     apply(
-      { feishuBindingIds: nextIds },
-      {
-        feishuBindings: feishuOptions
-          .filter((option) => nextIds.includes(option.value))
-          .map((option) => ({
-            id: option.value,
-            displayName: option.label,
-            openIdSuffix: "",
-          })),
-      },
+      { notifyUserIds: nextIds },
+      { notifyTargets: candidates.filter((candidate) => nextIds.includes(candidate.userId)) },
     );
   };
-
-  const feishuDisplay =
-    feishuOptions.length === 0
-      ? "无可用飞书账号"
-      : selectedBindingIds.length === 0
-        ? "不推送"
-        : feishuOptions
-            .filter((option) => selectedBindingIds.includes(option.value))
-            .map((option) => option.label)
-            .join("、");
 
   return (
     <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
@@ -215,44 +186,15 @@ export function EntryReminderCard({
             />
           </div>
 
-          {feishuEnabled ? (
-            <>
-              <div className="relative">
-                <button
-                  className="transaction-form__select-row"
-                  disabled={feishuOptions.length === 0}
-                  onClick={() => setFeishuOpen((open) => !open)}
-                  type="button"
-                >
-                  <span>推送飞书</span>
-                  <strong>{feishuDisplay}</strong>
-                  <ChevronRight size={18} />
-                </button>
-                <PopoverMenu
-                  groups={[
-                    feishuOptions.map((option) => ({
-                      label: option.label,
-                      onSelect: () => toggleBinding(option.value),
-                      selected: selectedBindingIds.includes(option.value),
-                    })),
-                  ]}
-                  onOpenChange={setFeishuOpen}
-                  open={feishuOpen}
-                />
-              </div>
-              {feishuOptions.length === 0 && !feishuBindingsQuery.isLoading ? (
-                <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                  账本成员均未绑定飞书，可在「更多 › 飞书」中绑定。
-                </p>
-              ) : null}
-            </>
-          ) : null}
+          <NotifyTargetsRow
+            candidates={candidates}
+            loading={candidatesQuery.isLoading}
+            onToggle={toggleTarget}
+            values={selectedUserIds}
+          />
         </div>
       ) : null}
     </section>
   );
 }
 
-function toggleId(values: string[], value: string): string[] {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
-}

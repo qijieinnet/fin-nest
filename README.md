@@ -92,6 +92,13 @@ Fin Nest 是一个 monorepo 全栈应用：移动端优先的响应式 PWA（`<1
 - **卡片操作鉴权**：点击者必须已绑定，且其绑定身份须为卡片所属会话的本人，防止群内他人点按钮往你账本写账。
 - **事件可靠投递**：消息事件先落库（`feishu_events`，`event_id` 唯一去重）再异步消费，进程重启不丢已收消息；卡片按钮回调同步处理以保证手感。
 
+### 推送通知（飞书 / Web Push）
+- **只选人，不选渠道**：在订阅、保单、自动记账规则、记账提醒里配的是「推送给谁」（账本成员），走飞书还是浏览器通知由**接收人自己**在「更多 → 通知」里决定。加一条渠道不需要动任何业务表单。
+- **Web Push / PWA（可选启用）**：配 `VAPID_*` 三项即启用（`pnpm gen:vapid` 生成）。走标准 Web Push 协议，服务端只往浏览器给的 endpoint 投递加密密文，**不需要 Apple 开发者账号或上架**。
+- **iPhone 用法**：Safari 打开站点 → 分享 → 添加到主屏幕 → **从主屏图标打开**，再到「更多 → 通知」开启。这是 iOS 的硬性要求（Safari 标签页里收不到），站点还必须是有效证书的 HTTPS。
+- **动作**：飞书卡片上的「确认续订 / 退订 / 确认入账」在手机通知上点不了（iOS 不支持通知按钮），改为点通知打开落地页处理。两边共享同一次抢占，**同一条提醒只会生效一次**——在飞书点过之后，手机上看到的是「已由 XX 处理」。
+- 详见 [`docs/NOTIFY_CHANNELS_PLAN.md`](docs/NOTIFY_CHANNELS_PLAN.md)。
+
 ### 提醒红点
 - `reminder-summary` 聚合入口，一处汇总：自动待确认、加入申请（owner）、保险 30 天内到期、订阅 30 天内续费、计划超限、预算超限。
 
@@ -249,6 +256,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 助手（可选）：三项都配置才启用 |
 | `AI_PROTOCOL` | AI 上游协议 `chat`（`/chat/completions`，默认）或 `responses`（OpenAI Responses API）；不填按 `AI_BASE_URL` 末段推断 |
 | `FEISHU_APP_ID` / `FEISHU_APP_SECRET` | 飞书机器人（可选）：两项都配置才启用，长连接形态无需回调地址 |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push 通知（可选）：三项都配置才启用，`pnpm gen:vapid` 生成；subject 须为 `mailto:` 或 `https://`。api 与 worker 都要拿到 |
 | `WORKER_POLL_INTERVAL_MS` | Worker 轮询间隔（默认 30s） |
 | `NEXT_PUBLIC_API_BASE_URL` | 浏览器 API 前缀（默认 `/api`，同源代理） |
 | `API_INTERNAL_URL` | web 容器内转发 `/api` 的目标 |
@@ -267,6 +275,7 @@ pnpm docker:up                          # = docker compose -f infra/compose/dock
 | `pnpm db:migrate` / `db:deploy` / `db:studio` | Prisma 迁移（dev / prod）与 Studio |
 | `pnpm e2e:api` | 后端端到端测试（自动拉起 API，需本地 DB） |
 | `pnpm check:compose` | 校验四份 compose 的一致性（CI 每次 PR 跑） |
+| `pnpm gen:vapid` | 生成 Web Push 的 VAPID 密钥对（一个部署生成一次，之后不要更换） |
 | `pnpm compose:up` / `compose:pull` / `compose:logs` / `compose:down` | 生产整栈（拉取预构建镜像） |
 | `pnpm docker:up` / `docker:down` / `docker:logs` | 生产整栈（从源码构建） |
 

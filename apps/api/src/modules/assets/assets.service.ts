@@ -58,7 +58,7 @@ type ReminderScheduleView = {
   leadValue: number;
   leadUnit: string;
   remindTime: string;
-  feishuBindings: ReminderTargetSummary[];
+  notifyTargets: ReminderTargetSummary[];
 };
 
 /**
@@ -1057,7 +1057,7 @@ export class AssetsService {
         ledgerId,
         "reminder_schedule",
         schedule.id,
-        reminder.feishuBindingIds ?? [],
+        reminder.notifyUserIds ?? [],
       );
     }
   }
@@ -1086,7 +1086,7 @@ export class AssetsService {
         leadValue: schedule.leadValue,
         leadUnit: schedule.leadUnit,
         remindTime: schedule.remindTime,
-        feishuBindings: targets.get(schedule.id) ?? [],
+        notifyTargets: targets.get(schedule.id) ?? [],
       });
       result.set(schedule.sourceId, bucket);
     }

@@ -11,6 +11,9 @@ export const routes = {
   recordSettings: "/more/settings",
   systemSettings: "/more/system",
   feishu: "/more/feishu",
+  notifications: "/more/notifications",
+  /** 推送通知点进来的落地页：展示提醒内容，并承接飞书卡片上的那组动作。 */
+  notification: (notificationId: string) => `/n/${notificationId}`,
   insurances: "/more/insurances",
   items: "/more/items",
   subscriptions: "/more/subscriptions",

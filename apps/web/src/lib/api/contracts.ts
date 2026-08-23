@@ -350,7 +350,7 @@ export type EntryReminder = {
   monthDays: number[];
   /** 本地 HH:mm（24 小时制）。 */
   remindTime: string;
-  feishuBindings: ReminderFeishuTarget[];
+  notifyTargets: NotifyTarget[];
 };
 
 /** PATCH 记账设置时提交的记账提醒；缺省字段沿用当前值。 */
@@ -360,7 +360,7 @@ export type EntryReminderInput = {
   weekdays?: number[];
   monthDays?: number[];
   remindTime?: string;
-  feishuBindingIds?: string[];
+  notifyUserIds?: string[];
 };
 
 export type RecordSetting = {
@@ -779,8 +779,8 @@ export type AutoRule = {
   nextRunOn: string | null;
   /** 指定时间：当天几点生成待确认（本地 HH:mm）；为空表示不指定，到期即生成。 */
   runTime: string | null;
-  /** 生成待确认后推送到的飞书账号。已解绑的绑定后端已过滤。 */
-  remindFeishuBindings: ReminderFeishuTarget[];
+  /** 生成待确认后推送给谁。渠道由接收人自己的通知设置决定。 */
+  notifyTargets: NotifyTarget[];
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -829,8 +829,8 @@ export type ReminderSchedule = {
   leadUnit: "day" | "week" | "month" | "year";
   /** 本地 HH:mm（24 小时制）。 */
   remindTime: string;
-  /** 这一档推送到的飞书账号。已解绑的绑定后端已过滤。 */
-  feishuBindings: ReminderFeishuTarget[];
+  /** 这一档推送给谁。渠道由接收人自己的通知设置决定。 */
+  notifyTargets: NotifyTarget[];
 };
 
 export type Insurance = {
@@ -965,11 +965,95 @@ export type SubscriptionDetail = Subscription & {
   totalExpenseMicros: string;
 };
 
-/** 已选中的飞书推送目标（订阅到期、自动记账共用），够渲染选中项即可。 */
-export type ReminderFeishuTarget = {
+/** 推送渠道。配置界面不选渠道，只用它说明「这个人现在能不能收到」。 */
+export type NotifyChannel = "feishu" | "webpush";
+
+/**
+ * 推送接收人（订阅/保单到期、自动记账、记账提醒共用）。
+ *
+ * `channels` 是**当前真能收到**的渠道，由后端现算：空数组表示这个人选了也收不到
+ * （没绑飞书、没订阅 Web Push，或自己把开关关了），前端要显式提示——
+ * 静默不发是最难排查的故障。
+ */
+export type NotifyTarget = {
+  userId: string;
+  alias: string;
+  channels: NotifyChannel[];
+};
+
+/** 通知设置页的全部状态：渠道可用性 + 我的开关 + 我的设备。 */
+export type NotificationSettings = {
+  channels: { feishu: boolean; webPush: boolean };
+  notifyFeishu: boolean;
+  notifyWebPush: boolean;
+  /** 做 pushManager.subscribe() 用的 VAPID 公钥；未启用 Web Push 时为 null。 */
+  vapidPublicKey: string | null;
+  feishuBindings: Array<{ id: string; displayName: string | null; openIdSuffix: string }>;
+  devices: PushDevice[];
+};
+
+export type PushDevice = {
   id: string;
-  displayName: string | null;
-  openIdSuffix: string;
+  deviceLabel: string | null;
+  createdAt: string;
+  lastSuccessAt: string | null;
+  /** 是否就是当前这台设备（按 endpoint 比对）。 */
+  current: boolean;
+};
+
+/** 提交给后端的浏览器订阅，取自 `PushSubscription.toJSON()`。 */
+export type PushSubscriptionInput = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  deviceLabel?: string;
+};
+
+/** 推送提醒上的动作，与飞书卡片按钮同源。 */
+export type NotificationActionKey =
+  | "subscription_renew"
+  | "subscription_terminate"
+  | "auto_pending_confirm"
+  | "auto_pending_discard"
+  | "insurance_acknowledge";
+
+export type NotificationAction = {
+  key: NotificationActionKey;
+  label: string;
+  style: "primary" | "danger" | "default";
+};
+
+/** 推送正文的结构化内容，与飞书卡片同一份 payload。 */
+export type NotificationPayload = {
+  kind: "subscription_due" | "auto_pending" | "insurance_due" | "entry_reminder";
+  title: string;
+  leadDescription: string;
+  amount?: { text: string; tone: "expense" | "income" | "transfer" };
+  fields: Array<{ label: string; value: string }>;
+  lines?: string[];
+  actions?: NotificationAction[];
+};
+
+/** 推送落地页 `/n/{id}` 的一条提醒。 */
+export type NotificationView = {
+  id: string;
+  ledgerId: string;
+  sourceType: "subscription" | "insurance" | "auto_pending" | "entry_reminder";
+  sourceId: string;
+  payload: NotificationPayload;
+  /** null = 尚未处理，动作按钮可点。 */
+  actionState: string | null;
+  resultSummary: string | null;
+  actedByAlias: string | null;
+  actedAt: string | null;
+  scheduledAt: string;
+};
+
+/** 执行动作后的响应：落地页状态 + 本次结果。 */
+export type NotificationActionResult = NotificationView & {
+  /** done = 本次执行成功；already/taken = 此前已处理，本次什么也没做。 */
+  status: "done" | "already" | "taken";
+  detail: string | null;
 };
 
 export type AttachmentRecord = {
@@ -1189,18 +1273,6 @@ export type FeishuBinding = {
   currentLedgerId: string;
   currentLedgerName: string | null;
   createdAt: string;
-};
-
-/**
- * 账本维度的绑定：本账本所有成员的生效绑定，供选择推送接收人。
- * 与 {@link FeishuBinding}（我的账号管理）的差别是范围，因此带上是谁的（userAlias）。
- */
-export type LedgerFeishuBinding = {
-  id: string;
-  displayName: string | null;
-  openIdSuffix: string;
-  userId: string;
-  userAlias: string;
 };
 
 /** 明文绑定码仅在生成时返回一次，服务端只存 sha256。 */

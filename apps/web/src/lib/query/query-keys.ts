@@ -62,7 +62,12 @@ export const queryKeys = {
   // 因此切换账本时会被一并清理。这是有意的：绑定卡片上展示当前账本名，重取一次更省心。
   feishuStatus: ["feishu", "status"] as const,
   feishuBindings: ["feishu", "bindings"] as const,
-  feishuLedgerBindings: (ledgerId: string) => ["feishu", "bindings", "ledger", ledgerId] as const,
+  // 通知设置与单条推送都是用户级的（渠道开关、设备订阅都不随账本变）。key 根既不是
+  // "auth" 也不是 "ledgers"，所以切账本时会被一并清掉——与上面的飞书绑定同一处理：
+  // 多取一次的代价远小于为它们单开一条豁免规则。
+  notificationSettings: ["notifications", "settings"] as const,
+  notification: (notificationId: string) => ["notifications", notificationId] as const,
+  notifyCandidates: (ledgerId: string) => ["ledger", ledgerId, "notify-candidates"] as const,
 };
 
 /**

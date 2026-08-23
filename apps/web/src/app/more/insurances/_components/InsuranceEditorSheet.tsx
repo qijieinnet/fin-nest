@@ -23,7 +23,7 @@ import {
   type Person,
   uploadAttachmentFile,
 } from "@/lib/api";
-import { useFeishuStatus, useLedgerFeishuBindings } from "@/lib/data/feishu";
+import { useNotifyCandidates } from "@/lib/data/notifications";
 import { useAttachments, useInsurance } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput, parseMoneyToMicros } from "@/lib/money";
@@ -255,10 +255,8 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
   const detailQuery = useInsurance(ledgerId, insurance?.id ?? null);
   const existingAttachmentsQuery = useAttachments(ledgerId, "insurance", insurance?.id ?? null);
-  // 未配置飞书时不发这个请求，整行也不渲染——这是「没开这个功能」，不是「没绑账号」。
-  const feishuStatusQuery = useFeishuStatus();
-  const feishuEnabled = feishuStatusQuery.data?.enabled ?? false;
-  const feishuBindingsQuery = useLedgerFeishuBindings(ledgerId, feishuEnabled);
+  // 可选接收人 = 本账本成员。走哪条渠道由接收人自己的通知设置决定，这里不区分。
+  const candidatesQuery = useNotifyCandidates(ledgerId);
 
   const [name, setName] = useState(insurance?.name ?? "");
   const [type, setType] = useState(insurance?.type ?? "medical");
@@ -456,16 +454,6 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
     }
   }
 
-  // 同一个人可能绑多个飞书号，所以标签是「昵称（成员别名）」；昵称取不到时回退 open_id 尾段。
-  const feishuTargetOptions = useMemo(
-    () =>
-      (feishuBindingsQuery.data ?? []).map((binding) => ({
-        value: binding.id,
-        label: `${binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`}（${binding.userAlias}）`,
-      })),
-    [feishuBindingsQuery.data],
-  );
-
   const toggleInsured = (personId: string) => {
     setInsuredIds((current) =>
       current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId],
@@ -610,10 +598,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
           <ReminderSchedulesEditor
             defaultLeadValue={DEFAULT_REMIND_LEAD_DAYS}
+            candidates={candidatesQuery.data ?? []}
+            candidatesLoading={candidatesQuery.isLoading}
             enabled={remindEnabled}
-            feishuEnabled={feishuEnabled}
-            feishuLoading={feishuBindingsQuery.isLoading}
-            feishuOptions={feishuTargetOptions}
             footer={
               endDate ? null : (
                 <p className="px-1 text-xs text-[var(--color-text-muted)]">

@@ -122,12 +122,12 @@ export class CreateAutoRuleDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      "生成待确认后推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；未指定时间时后端一并清空。",
+      "生成待确认后的推送接收人（用户 id，须为本账本成员）。传空数组清除；未指定时间时后端一并清空。",
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  remindFeishuBindingIds?: string[];
+  notifyUserIds?: string[];
 }
 
 export class UpdateAutoRuleDto {
@@ -243,10 +243,10 @@ export class UpdateAutoRuleDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      "生成待确认后推送到的飞书绑定 id 列表（须为本账本成员的生效绑定）。传空数组清除；未指定时间时后端一并清空。",
+      "生成待确认后的推送接收人（用户 id，须为本账本成员）。传空数组清除；未指定时间时后端一并清空。",
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  remindFeishuBindingIds?: string[];
+  notifyUserIds?: string[];
 }

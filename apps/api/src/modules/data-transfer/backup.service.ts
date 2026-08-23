@@ -103,8 +103,8 @@ export class BackupService {
       client.autoRule.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.autoPendingTransaction.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.quickTemplate.findMany({ where, orderBy: { createdAt: "asc" } }),
-      // 提醒档位。接收人（reminder_targets）不备份——它指向的飞书绑定是用户级的，
-      // 换个实例恢复也对不上人，因此恢复出来的档位是「配好了时间但没有接收人」。
+      // 提醒档位。接收人（reminder_targets）不备份——它指向的是**用户**，
+      // 换个实例恢复对不上人（用户 id 不同），因此恢复出来的档位是「配好了时间但没有接收人」。
       client.reminderSchedule.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.entryReminder.findUnique({ where: { ledgerId } }),
     ]);
@@ -245,6 +245,15 @@ export class BackupService {
     });
     await tx.entryReminder.deleteMany({ where });
     await tx.autoPendingTransaction.deleteMany({ where });
+    // 自动记账规则的接收人同样要先清，否则规则删了、reminder_targets 留下孤儿行。
+    await tx.reminderTarget.deleteMany({
+      where: {
+        sourceType: "auto_rule",
+        sourceId: {
+          in: (await tx.autoRule.findMany({ where, select: { id: true } })).map((row) => row.id),
+        },
+      },
+    });
     await tx.autoRule.deleteMany({ where });
     await tx.quickTemplate.deleteMany({ where });
     await tx.accountEntry.deleteMany({ where });
