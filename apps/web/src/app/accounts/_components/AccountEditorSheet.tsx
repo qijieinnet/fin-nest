@@ -13,6 +13,7 @@ import {
   type AccountType,
   type SubAccount,
 } from "@/lib/api";
+import { usePeople } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -188,8 +189,19 @@ export function AccountEditorSheet({
   const [dueDate, setDueDate] = useState(account?.dueDate?.slice(0, 10) ?? "");
   const [billDay, setBillDay] = useState(account?.billDay ? String(account.billDay) : "");
   const [repayDay, setRepayDay] = useState(account?.repayDay ? String(account.repayDay) : "");
+  const [personId, setPersonId] = useState<string | null>(account?.personId ?? null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+  const [personMenuOpen, setPersonMenuOpen] = useState(false);
+
+  const peopleQuery = usePeople(isSubAccountMode ? null : ledgerId);
+  const people = peopleQuery.data ?? [];
+  // 归档的人员不在 /people 里，但账户可能还挂着它：补一条进选项，免得显示成「未指定」。
+  const personOptions = account?.person && !people.some((item) => item.id === account.person!.id)
+    ? [...people, { id: account.person.id, name: `${account.person.name}（已归档）` }]
+    : people;
+  const selectedPersonName =
+    personOptions.find((item) => item.id === personId)?.name ?? "未指定";
 
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0;
@@ -235,6 +247,8 @@ export function AccountEditorSheet({
       const shared = {
         name: trimmedName,
         icon,
+        // null 表示清除归属；后端 undefined 才是「保持不变」。
+        personId: personId ?? null,
         creditLimitMicros: type === "credit" ? limitParsed?.amountMicros : undefined,
         investmentCostMicros: type === "invest" ? costParsed?.amountMicros : undefined,
         counterparty:
@@ -384,6 +398,40 @@ export function AccountEditorSheet({
             value={name}
           />
         </div>
+
+        {!isSubAccountMode && personOptions.length > 0 ? (
+          <div className="transaction-form__card transaction-form__picker-card">
+            <div className="relative">
+              <button
+                className="account-form__select-row"
+                onClick={() => setPersonMenuOpen((open) => !open)}
+                type="button"
+              >
+                <span>归属人员</span>
+                <strong>{selectedPersonName}</strong>
+                <ChevronRight size={18} />
+              </button>
+              <PopoverMenu
+                groups={[
+                  [
+                    {
+                      label: "未指定",
+                      onSelect: () => setPersonId(null),
+                      selected: personId === null,
+                    },
+                  ],
+                  personOptions.map((person) => ({
+                    label: person.name,
+                    onSelect: () => setPersonId(person.id),
+                    selected: person.id === personId,
+                  })),
+                ]}
+                onOpenChange={setPersonMenuOpen}
+                open={personMenuOpen}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {isSubAccountMode && !isEditing ? (
           <div className="transaction-form__card">

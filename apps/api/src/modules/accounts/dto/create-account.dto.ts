@@ -17,6 +17,11 @@ export class CreateAccountDto {
   @Length(1, 40)
   icon?: string;
 
+  @ApiPropertyOptional({ description: "归属人员 id，不传或传空表示未指定" })
+  @IsOptional()
+  @IsString()
+  personId?: string | null;
+
   @ApiPropertyOptional({ example: "0" })
   @IsOptional()
   @IsString()

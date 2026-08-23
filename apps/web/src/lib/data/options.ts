@@ -179,6 +179,7 @@ export function moneyAccountOptions(
         id: !parentSelectable && defaultSub ? defaultSub.id : account.id,
         label: account.name,
         icon: account.icon ?? undefined,
+        badge: account.person?.name,
       });
       continue;
     }
@@ -188,6 +189,8 @@ export function moneyAccountOptions(
       id: parentId,
       label: account.name,
       icon: account.icon ?? undefined,
+      // 归属挂在账户上，子账户不带标签。
+      badge: account.person?.name,
       disabled: !parentSelectable,
     });
     for (const sub of subAccounts) {
@@ -225,7 +228,7 @@ export function relationAccountOptions(
 ): BusinessOption[] {
   return orderedAccounts(accounts)
     .filter((account) => account.type === kind)
-    .map((account) => ({ id: account.id, label: account.name }));
+    .map((account) => ({ id: account.id, label: account.name, badge: account.person?.name }));
 }
 
 export function personOptions(people: Person[]): BusinessOption[] {

@@ -1314,6 +1314,7 @@ export class AiService {
       return {
         name: account.name,
         type: account.type,
+        person: account.person?.name ?? null,
         balanceMicros: account.balanceMicros.toString(),
         isLiability,
       };

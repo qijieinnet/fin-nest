@@ -49,6 +49,7 @@ export type { ApiErrorPayload } from "./errors";
 export type {
   Account,
   AccountEntry,
+  AccountPerson,
   AccountType,
   AdminUser,
   AdminUserPage,
@@ -131,6 +132,7 @@ export type {
   CashflowSeries,
   NetWorthRange,
   NetWorthSeries,
+  NetWorthPersonSeries,
   StatsCategoryEntry,
   StatsSubcategoryEntry,
   StatsTypeSummary,

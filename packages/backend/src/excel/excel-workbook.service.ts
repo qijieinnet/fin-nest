@@ -388,6 +388,7 @@ export class ExcelWorkbookService {
         type: labelOf(ACCOUNT_TYPE_LABELS, account.type),
         name: account.name,
         icon: account.icon ?? "",
+        person: account.personId ? (data.personById.get(account.personId)?.name ?? "") : "",
         balance: microsToYuanNumber(account.balanceMicros),
         includeInNetWorth: labelOf(BOOLEAN_LABELS, String(account.includeInNetWorth)),
         creditLimit: microsToYuanNumber(account.creditLimitMicros),

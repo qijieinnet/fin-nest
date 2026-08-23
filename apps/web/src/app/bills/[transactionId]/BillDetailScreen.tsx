@@ -5,6 +5,7 @@ import { Check, Pencil, Trash2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import {
+  AccountPersonBadge,
   AttachmentPreview,
   LoadingState,
   MoneyText,
@@ -12,6 +13,7 @@ import {
 } from "@/components/business";
 import { IconButton, Button, MobileAppShell, MobilePage } from "@/components/ui";
 import {
+  type AccountPerson,
   apiRequest,
   type AttachmentRecord,
   type AutoPendingTransaction,
@@ -103,8 +105,15 @@ function signedAmount(
   return formatMicros(amount, { decimalPlaces, trimTrailingZeros: true });
 }
 
+type AccountLike = {
+  id: string;
+  name: string;
+  person?: AccountPerson | null;
+  subAccounts: Array<{ id: string; name: string }>;
+};
+
 function accountLabel(
-  accounts: Array<{ id: string; name: string; subAccounts: Array<{ id: string; name: string }> }>,
+  accounts: AccountLike[],
   accountId: string | null | undefined,
   subAccountId?: string | null,
 ): string | null {
@@ -113,6 +122,30 @@ function accountLabel(
   if (!account) return null;
   const sub = subAccountId ? account.subAccounts.find((item) => item.id === subAccountId) : null;
   return sub ? `${account.name} · ${sub.name}` : account.name;
+}
+
+/** 账户名 + 归属人员标签：账户行、转出/转入、往来关联共用。 */
+function AccountValue({
+  accountId,
+  accounts,
+  fallback,
+  subAccountId,
+}: {
+  accountId: string | null | undefined;
+  accounts: AccountLike[];
+  fallback: string;
+  subAccountId?: string | null;
+}) {
+  const label = accountLabel(accounts, accountId, subAccountId);
+  const person = accountId
+    ? (accounts.find((item) => item.id === accountId)?.person ?? null)
+    : null;
+  return (
+    <span className="inline-flex items-center gap-1.5 align-middle">
+      <span>{label ?? fallback}</span>
+      <AccountPersonBadge person={person} />
+    </span>
+  );
 }
 
 function creatorName(members: LedgerMember[], createdBy: string): string {
@@ -251,7 +284,7 @@ function RelationBlock({
   label,
   relations,
 }: {
-  accounts: Array<{ id: string; name: string; subAccounts: Array<{ id: string; name: string }> }>;
+  accounts: AccountLike[];
   label: string;
   relations: TransactionDetail["relations"];
 }) {
@@ -260,7 +293,7 @@ function RelationBlock({
     <ReadonlyBlock label={label}>
       {relations.map((relation) => (
         <div className="bill-detail__relation-row" key={relation.id}>
-          <span>{accountLabel(accounts, relation.accountId) ?? "未知账户"}</span>
+          <AccountValue accountId={relation.accountId} accounts={accounts} fallback="未知账户" />
           <MoneyText amountMicros={relation.amountMicros} tone="muted" />
         </div>
       ))}
@@ -502,14 +535,23 @@ export function BillDetailScreen({
                 <ReadonlyRow
                   label="转出账户"
                   value={
-                    accountLabel(accounts, detail.fromAccountId, detail.fromSubAccountId) ??
-                    "未选择"
+                    <AccountValue
+                      accountId={detail.fromAccountId}
+                      accounts={accounts}
+                      fallback="未选择"
+                      subAccountId={detail.fromSubAccountId}
+                    />
                   }
                 />
                 <ReadonlyRow
                   label="转入账户"
                   value={
-                    accountLabel(accounts, detail.toAccountId, detail.toSubAccountId) ?? "未选择"
+                    <AccountValue
+                      accountId={detail.toAccountId}
+                      accounts={accounts}
+                      fallback="未选择"
+                      subAccountId={detail.toSubAccountId}
+                    />
                   }
                 />
               </ReadonlyCard>
@@ -520,7 +562,14 @@ export function BillDetailScreen({
             <ReadonlyCard key="account">
               <ReadonlyRow
                 label="账户"
-                value={accountLabel(accounts, detail.accountId, detail.subAccountId) ?? "未知账户"}
+                value={
+                  <AccountValue
+                    accountId={detail.accountId}
+                    accounts={accounts}
+                    fallback="未知账户"
+                    subAccountId={detail.subAccountId}
+                  />
+                }
               />
             </ReadonlyCard>
           ) : null;

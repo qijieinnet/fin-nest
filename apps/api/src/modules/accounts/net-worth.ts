@@ -10,6 +10,7 @@ type NetWorthAccount = {
   type: string;
   balanceMicros: bigint;
   includeInNetWorth: boolean;
+  personId: string | null;
 };
 
 type NetWorthSub = {
@@ -70,7 +71,8 @@ export type NetWorthResult = {
 };
 
 type NetWorthContext = {
-  currentNetWorth: bigint;
+  /** 各活跃账户对当前净资产的有符号贡献；按人拆分时只挑其中一部分求和。 */
+  currentByAccount: Map<string, bigint>;
   entries: NetWorthEntry[];
   accountsById: Map<string, NetWorthAccount>;
   subsById: Map<string, NetWorthSub>;
@@ -110,24 +112,39 @@ async function loadNetWorthContext(
     orderBy: { occurredAt: "asc" },
   });
 
-  const currentNetWorth = activeAccounts.reduce(
-    (sum, account) => sum + accountNetWorthMicros(account, subsByAccount.get(account.id) ?? []),
-    0n,
+  const currentByAccount = new Map(
+    activeAccounts.map((account) => [
+      account.id,
+      accountNetWorthMicros(account, subsByAccount.get(account.id) ?? []),
+    ]),
   );
 
-  return { currentNetWorth, entries, accountsById, subsById, subsByAccount };
+  return { currentByAccount, entries, accountsById, subsById, subsByAccount };
 }
 
-/** 某时刻净资产 = 当前净资产 − 该时刻及之后所有流水的净资产变化。 */
-function netWorthAt(ctx: NetWorthContext, end: Date): bigint {
+/** 当前净资产；传 accountIds 则只统计这些账户（按人拆分用）。 */
+function currentNetWorth(ctx: NetWorthContext, accountIds?: ReadonlySet<string>): bigint {
+  let sum = 0n;
+  for (const [accountId, micros] of ctx.currentByAccount) {
+    if (accountIds && !accountIds.has(accountId)) continue;
+    sum += micros;
+  }
+  return sum;
+}
+
+/**
+ * 某时刻净资产 = 当前净资产 − 该时刻及之后所有流水的净资产变化。
+ * 传 accountIds 则当前值与回放都只看这些账户，得到该子集的历史净资产。
+ */
+function netWorthAt(ctx: NetWorthContext, end: Date, accountIds?: ReadonlySet<string>): bigint {
   const futureDelta = ctx.entries.reduce(
     (sum, entry) =>
-      entry.occurredAt >= end
+      entry.occurredAt >= end && (!accountIds || accountIds.has(entry.accountId))
         ? sum + entryNetWorthDeltaMicros(entry, ctx.accountsById, ctx.subsById)
         : sum,
     0n,
   );
-  return ctx.currentNetWorth - futureDelta;
+  return currentNetWorth(ctx, accountIds) - futureDelta;
 }
 
 /**
@@ -146,14 +163,32 @@ export async function buildNetWorth(
     month,
     netWorthMicros: netWorthAt(ctx, monthRange(month).end).toString(),
   }));
-  return { netWorthMicros: ctx.currentNetWorth.toString(), netWorthTrend };
+  return { netWorthMicros: currentNetWorth(ctx).toString(), netWorthTrend };
 }
 
 export type NetWorthRange = "week" | "month1" | "month6" | "year";
 
+export type NetWorthPoint = { label: string; netWorthMicros: string };
+
+/**
+ * 按归属人员拆分的一条净资产曲线。`personId` 为 null 表示「未指定归属」的账户。
+ * 归属只存当前值、没有历史，所以这里的历史点是按「当前归属」追溯重算的：
+ * 把一个账户改挂到别人名下，两个人过去的曲线都会跟着变（总曲线不变）。
+ */
+export type NetWorthPersonSeries = {
+  personId: string | null;
+  name: string;
+  icon: string | null;
+  archived: boolean;
+  netWorthMicros: string;
+  points: NetWorthPoint[];
+};
+
 export type NetWorthSeries = {
   netWorthMicros: string;
-  points: { label: string; netWorthMicros: string }[];
+  points: NetWorthPoint[];
+  /** 只有显式要求按人拆分（`?groupBy=person`）且账本里有账户设过归属时才非空。 */
+  people: NetWorthPersonSeries[];
 };
 
 function startOfDay(date: Date): Date {
@@ -193,11 +228,71 @@ function rangeBoundaries(
   return { boundaries, since };
 }
 
-/** 按范围（近1周/近1个月/近6个月/近1年）计算净资产走势。 */
+type PersonAccountGroup = {
+  personId: string | null;
+  name: string;
+  icon: string | null;
+  archived: boolean;
+  accountIds: Set<string>;
+};
+
+/**
+ * 按归属人员把账户分桶（含归档账户：它们余额为 0，但历史流水仍属于当时那个人）。
+ * 返回顺序：人员按 sortOrder，「未指定」永远排最后。
+ */
+async function groupAccountsByPerson(
+  prisma: PrismaService,
+  ledgerId: string,
+  accounts: NetWorthAccount[],
+): Promise<PersonAccountGroup[]> {
+  const byPerson = new Map<string | null, Set<string>>();
+  for (const account of accounts) {
+    const key = account.personId ?? null;
+    const bucket = byPerson.get(key) ?? new Set<string>();
+    bucket.add(account.id);
+    byPerson.set(key, bucket);
+  }
+  // 全账本都没设归属：不做拆分，省掉一次人员查询。
+  if (byPerson.size === 1 && byPerson.has(null)) return [];
+
+  // 含归档人员：账户可以挂着一个已归档的人员，名字仍要显示得出来。
+  const people = await prisma.client.person.findMany({
+    where: { ledgerId },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, icon: true, archivedAt: true },
+  });
+
+  const groups: PersonAccountGroup[] = people
+    .filter((person) => byPerson.has(person.id))
+    .map((person) => ({
+      personId: person.id,
+      name: person.name,
+      icon: person.icon,
+      archived: person.archivedAt !== null,
+      accountIds: byPerson.get(person.id)!,
+    }));
+  const unassigned = byPerson.get(null);
+  if (unassigned) {
+    groups.push({
+      personId: null,
+      name: "未指定",
+      icon: null,
+      archived: false,
+      accountIds: unassigned,
+    });
+  }
+  return groups;
+}
+
+/**
+ * 按范围（近1周/近1个月/近6个月/近1年）计算净资产走势。
+ * `groupByPerson` 时额外按归属人员各拆一条曲线——多算 N 份，默认不做。
+ */
 export async function buildNetWorthSeries(
   prisma: PrismaService,
   ledgerId: string,
   range: NetWorthRange,
+  groupByPerson = false,
 ): Promise<NetWorthSeries> {
   const { boundaries, since } = rangeBoundaries(range, new Date());
   const ctx = await loadNetWorthContext(prisma, ledgerId, since);
@@ -205,5 +300,19 @@ export async function buildNetWorthSeries(
     label: boundary.label,
     netWorthMicros: netWorthAt(ctx, boundary.end).toString(),
   }));
-  return { netWorthMicros: ctx.currentNetWorth.toString(), points };
+  const groups = groupByPerson
+    ? await groupAccountsByPerson(prisma, ledgerId, [...ctx.accountsById.values()])
+    : [];
+  const people = groups.map((group) => ({
+    personId: group.personId,
+    name: group.name,
+    icon: group.icon,
+    archived: group.archived,
+    netWorthMicros: currentNetWorth(ctx, group.accountIds).toString(),
+    points: boundaries.map((boundary) => ({
+      label: boundary.label,
+      netWorthMicros: netWorthAt(ctx, boundary.end, group.accountIds).toString(),
+    })),
+  }));
+  return { netWorthMicros: currentNetWorth(ctx).toString(), points, people };
 }

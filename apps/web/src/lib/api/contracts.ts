@@ -304,12 +304,23 @@ export type SubAccount = {
   archivedAt: string | null;
 };
 
+/** 账户上的归属人员快照（后端 join 出来的，含已归档人员，前端不必再查 /people）。 */
+export type AccountPerson = {
+  id: string;
+  name: string;
+  icon: string | null;
+  archived: boolean;
+};
+
 export type Account = {
   id: string;
   ledgerId: string;
   type: AccountType;
   name: string;
   icon: string | null;
+  /** 归属人员 id，null 表示未指定。 */
+  personId: string | null;
+  person: AccountPerson | null;
   /** 账户总余额（含子账户，等于各子账户余额之和）。 */
   balanceMicros: string;
   includeInNetWorth: boolean;
@@ -681,11 +692,26 @@ export type LedgerStats = {
 
 export type NetWorthRange = "week" | "month1" | "month6" | "year";
 
+export type NetWorthPersonSeries = {
+  /** null 表示「未指定归属」的账户合计，恒排在最后。 */
+  personId: string | null;
+  name: string;
+  icon: string | null;
+  archived: boolean;
+  netWorthMicros: string;
+  points: Array<{ label: string; netWorthMicros: string }>;
+};
+
 export type NetWorthSeries = {
   /** 当前净资产（资产 − 负债，已按各级开关剔除）。 */
   netWorthMicros: string;
   /** 各时段末净资产（旧 → 新），label 已按粒度格式化。 */
   points: Array<{ label: string; netWorthMicros: string }>;
+  /**
+   * 按归属人员拆分的曲线，只有请求带 `groupBy=person` 时才非空（目前前端未使用）。
+   * 归属不记历史，历史点按「当前归属」追溯重算：改归属会改写各人过去的曲线，总曲线不变。
+   */
+  people: NetWorthPersonSeries[];
 };
 
 export type CashflowSeries = {
@@ -1043,6 +1069,8 @@ export type AiStatsTrend = {
 export type AiAccountBalance = {
   name: string;
   type: string;
+  /** 归属人员名字；未设归属或旧历史卡片缺省。 */
+  person?: string | null;
   balanceMicros: string;
   /** 负债类账户（信用/需归还）：balanceMicros 记为正数的欠款，前端展示为负向。 */
   isLiability: boolean;

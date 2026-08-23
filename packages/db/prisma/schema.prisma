@@ -255,6 +255,8 @@ model Account {
   type                 String
   name                 String
   icon                 String?
+  // 归属人员（可空＝未指定）。只存当前值、不记历史，净资产按人拆分的历史按当前归属追溯重算。
+  personId             String?   @map("person_id") @db.Uuid
   balanceMicros        BigInt    @default(0) @map("balance_micros")
   includeInNetWorth    Boolean   @default(true) @map("include_in_net_worth")
   // 同一分类内的手动排序序号，列表按其升序排列。
@@ -273,6 +275,7 @@ model Account {
   updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([ledgerId, type, archivedAt])
+  @@index([ledgerId, personId])
   @@map("accounts")
 }
 

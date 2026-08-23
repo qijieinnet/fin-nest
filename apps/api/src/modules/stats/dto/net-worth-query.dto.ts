@@ -10,4 +10,12 @@ export class NetWorthQueryDto {
   @IsOptional()
   @IsIn(["week", "month1", "month6", "year"])
   range?: NetWorthRange;
+
+  @ApiPropertyOptional({
+    enum: ["person"],
+    description: "额外按归属人员拆一份曲线（people 字段）；不传则 people 为空数组",
+  })
+  @IsOptional()
+  @IsIn(["person"])
+  groupBy?: "person";
 }

@@ -29,6 +29,8 @@ function account(overrides: Partial<Account>): Account {
     type: "savings",
     name: "账户",
     icon: null,
+    personId: null,
+    person: null,
     balanceMicros: "0",
     includeInNetWorth: true,
     creditLimitMicros: null,

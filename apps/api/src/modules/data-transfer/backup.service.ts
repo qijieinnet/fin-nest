@@ -407,6 +407,7 @@ export class BackupService {
       type: row.type,
       name: row.name,
       icon: row.icon ?? null,
+      personId: ref(maps.person, row.personId),
       balanceMicros: bi(row.balanceMicros) ?? 0n,
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
       sortOrder: Number(row.sortOrder ?? 0),

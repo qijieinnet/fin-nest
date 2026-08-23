@@ -25,6 +25,8 @@ function account(overrides: Partial<Account>): Account {
     type: "savings",
     name: "Account",
     icon: null,
+    personId: null,
+    person: null,
     balanceMicros: "0",
     includeInNetWorth: true,
     creditLimitMicros: null,

@@ -71,6 +71,7 @@ type PlannedAccount = {
   type: string;
   name: string;
   icon: string | null;
+  personRef: Ref | null;
   balanceMicros: string;
   includeInNetWorth: boolean;
   creditLimitMicros: string | null;
@@ -690,11 +691,16 @@ export class ExcelImportService {
         const includeText = cellToText(value("includeInNetWorth"));
         const ref: Ref = { id: null };
         registry.accountByName.set(name, { ref, type });
+        const personName = cellToText(value("person"));
         plan.accounts.push({
           ref,
           type,
           name,
           icon: cellToText(value("icon")) || null,
+          // 归属人员按姓名匹配；人员表里没有的名字会顺带新建一个人员（与账单表一致）。
+          personRef: personName
+            ? this.resolveOrPlanPerson(registry, plan, counts, personName)
+            : null,
           balanceMicros: hasCellValue(value("balance"))
             ? cellToMicrosString(value("balance"), { allowNegative: true })
             : "0",
@@ -1437,6 +1443,7 @@ export class ExcelImportService {
           type: planned.type,
           name: planned.name,
           icon: planned.icon,
+          personId: refId(planned.personRef),
           balanceMicros,
           includeInNetWorth: planned.includeInNetWorth,
           creditLimitMicros: planned.creditLimitMicros ? BigInt(planned.creditLimitMicros) : null,

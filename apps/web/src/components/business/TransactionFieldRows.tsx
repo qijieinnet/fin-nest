@@ -10,15 +10,20 @@ import { InlineHint } from "./InlineHint";
 import type { BusinessOption, CategoryOption } from "./business-types";
 
 export function nestedOptionLabel(
-  options: Array<{ id: string; label: string; parentId?: string }>,
+  options: Array<{ id: string; label: string; parentId?: string; badge?: string }>,
   value: string | null,
   fallback: string,
+  config: { withBadge?: boolean } = {},
 ): string {
   const selected = options.find((option) => option.id === value);
   if (!selected) return fallback;
-  if (!selected.parentId) return selected.label;
-  const parent = options.find((option) => option.id === selected.parentId);
-  return parent ? `${parent.label}/${selected.label}` : selected.label;
+  const parent = selected.parentId
+    ? options.find((option) => option.id === selected.parentId)
+    : undefined;
+  const label = parent ? `${parent.label}/${selected.label}` : selected.label;
+  // 归属人员挂在账户级选项上，选中子账户时取父账户那条的标签。
+  const badge = config.withBadge ? (parent?.badge ?? selected.badge) : undefined;
+  return badge ? `${label}（${badge}）` : label;
 }
 
 type FieldCardProps = {
@@ -123,6 +128,9 @@ export function AccountSelectionList({ onSelect, options, selectedId }: AccountS
             >
               {account.icon ? <span className="biz-category-icon">{account.icon}</span> : null}
               <span>{account.label}</span>
+              {account.badge ? (
+                <span className="biz-category-chip__badge">{account.badge}</span>
+              ) : null}
             </button>
 
             {subOptions.length > 0 ? (
@@ -173,7 +181,7 @@ export function AccountSelectRow({
   value,
 }: AccountSelectRowProps) {
   const [open, setOpen] = useState(false);
-  const displayValue = nestedOptionLabel(options, value, placeholder);
+  const displayValue = nestedOptionLabel(options, value, placeholder, { withBadge: true });
 
   return (
     <>

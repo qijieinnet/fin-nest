@@ -1,4 +1,5 @@
 export { AccountBalanceCard } from "./AccountBalanceCard";
+export { AccountPersonBadge } from "./AccountPersonBadge";
 export { AccountPicker } from "./AccountPicker";
 export { AmountInput } from "./AmountInput";
 export { AssetLinkCard } from "./AssetLinkCard";

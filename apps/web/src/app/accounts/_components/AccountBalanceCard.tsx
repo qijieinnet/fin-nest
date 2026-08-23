@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import type { AccountEntry } from "@/lib/api";
+import { AccountPersonBadge } from "@/components/business";
+import type { AccountEntry, AccountPerson } from "@/lib/api";
 import {
   COLOR_MONEY_NEGATIVE,
   COLOR_MONEY_POSITIVE,
@@ -17,6 +18,8 @@ type AccountBalanceCardProps = {
   icon: string;
   /** 主标题（账户名，子账户时可含父账户名） */
   name: string;
+  /** 归属人员，跟在标题后面显示成标签；子账户页传父账户的（归属挂在账户级）。 */
+  person?: AccountPerson | null;
   /** 副标题（账户类型 / 子账户说明） */
   subtitle: string;
   /** 余额行的说明文案，如“账户余额”“已用额度” */
@@ -142,6 +145,7 @@ const PAD_BOTTOM = 20;
 export function AccountBalanceCard({
   icon,
   name,
+  person,
   subtitle,
   balanceLabel,
   balanceMicros,
@@ -199,8 +203,9 @@ export function AccountBalanceCard({
           {icon}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[16px] font-semibold text-[var(--color-text-primary)]">
-            {name}
+          <p className="flex items-center gap-1.5 text-[16px] font-semibold text-[var(--color-text-primary)]">
+            <span className="truncate">{name}</span>
+            <AccountPersonBadge person={person ?? null} />
           </p>
           <p className="mt-0.5 truncate text-[12.5px] text-[var(--color-text-muted)]">{subtitle}</p>
         </div>

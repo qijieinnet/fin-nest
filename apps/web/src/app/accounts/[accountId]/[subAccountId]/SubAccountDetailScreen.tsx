@@ -216,6 +216,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           entries={entries}
           icon={subAccountIcon}
           name={`${account.name} · ${subAccountName}`}
+          person={account.person}
           subtitle={`子账户 · ${meta.name}`}
         />
 

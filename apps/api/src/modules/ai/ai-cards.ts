@@ -71,6 +71,8 @@ export type AiStatsTrend = {
 export type AiAccountBalance = {
   name: string;
   type: string;
+  /** 归属人员名字，未指定归属时缺省。 */
+  person?: string | null;
   balanceMicros: string;
   /** 负债类账户（信用/需归还）：balanceMicros 记为正数的欠款，前端展示为负向。 */
   isLiability: boolean;

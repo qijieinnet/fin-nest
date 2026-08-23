@@ -677,6 +677,7 @@ export function AccountBalancesCard({
                 <span className="truncate text-[var(--color-text-primary)]">{account.name}</span>
                 <span className="ml-2 text-xs text-[var(--color-text-muted)]">
                   {ACCOUNT_TYPE_LABEL[account.type] ?? account.type}
+                  {account.person ? ` · ${account.person}` : ""}
                 </span>
               </div>
               <span

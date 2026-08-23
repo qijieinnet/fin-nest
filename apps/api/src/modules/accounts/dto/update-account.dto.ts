@@ -14,6 +14,11 @@ export class UpdateAccountDto {
   @Length(1, 40)
   icon?: string;
 
+  @ApiPropertyOptional({ description: "归属人员 id；传 null / 空串清除归属，不传则保持不变" })
+  @IsOptional()
+  @IsString()
+  personId?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

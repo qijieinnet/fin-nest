@@ -65,7 +65,7 @@ export class AccountsService {
 
   async list(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const [accounts, subAccounts] = await Promise.all([
+    const [accounts, subAccounts, people] = await Promise.all([
       this.prisma.client.account.findMany({
         where: { ledgerId, archivedAt: null },
         orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
@@ -74,11 +74,28 @@ export class AccountsService {
         where: { ledgerId, archivedAt: null },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       }),
+      // 含归档人员：人员被归档后账户仍挂着它，前端的 /people 只返回未归档的，拼不出名字。
+      this.prisma.client.person.findMany({
+        where: { ledgerId },
+        select: { id: true, name: true, icon: true, archivedAt: true },
+      }),
     ]);
-    return accounts.map((account) => ({
-      ...account,
-      subAccounts: subAccounts.filter((subAccount) => subAccount.accountId === account.id),
-    }));
+    const peopleById = new Map(people.map((person) => [person.id, person]));
+    return accounts.map((account) => {
+      const person = account.personId ? peopleById.get(account.personId) : undefined;
+      return {
+        ...account,
+        subAccounts: subAccounts.filter((subAccount) => subAccount.accountId === account.id),
+        person: person
+          ? {
+              id: person.id,
+              name: person.name,
+              icon: person.icon,
+              archived: person.archivedAt !== null,
+            }
+          : null,
+      };
+    });
   }
 
   /** 账户排序：ids 须同属一个分类，按顺序写入 sortOrder（只允许分类内排序）。 */
@@ -250,6 +267,7 @@ export class AccountsService {
     if (mustStayNonNegative(input.type) && balanceMicros < 0n) {
       throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
     }
+    await this.assertPerson(ledgerId, input.personId);
     return this.idempotency.run(
       { scope: `account.create:${ledgerId}`, key: idempotencyKey, userId },
       () =>
@@ -260,6 +278,7 @@ export class AccountsService {
               type: input.type,
               name: input.name,
               icon: input.icon,
+              personId: input.personId || null,
               balanceMicros,
               includeInNetWorth: input.includeInNetWorth ?? true,
               creditLimitMicros: input.creditLimitMicros ? BigInt(input.creditLimitMicros) : null,
@@ -297,12 +316,18 @@ export class AccountsService {
 
   async update(ledgerId: string, accountId: string, userId: string, input: UpdateAccountDto) {
     await this.ledgers.assertMember(ledgerId, userId);
-    await this.assertAccountInLedger(ledgerId, accountId);
+    const existing = await this.assertAccountInLedger(ledgerId, accountId);
+    // 归属没变就不校验：人员归档后账户仍挂着它，此时改个名字不该被「人员不存在」拦下。
+    if (input.personId !== undefined && (input.personId || null) !== existing.personId) {
+      await this.assertPerson(ledgerId, input.personId);
+    }
     return this.prisma.client.account.update({
       where: { id: accountId },
       data: {
         name: input.name,
         icon: input.icon,
+        // 不传保持不变；传 null / 空串清除归属。
+        personId: input.personId === undefined ? undefined : input.personId || null,
         includeInNetWorth: input.includeInNetWorth,
         creditLimitMicros:
           input.creditLimitMicros === undefined ? undefined : BigInt(input.creditLimitMicros),
@@ -538,11 +563,13 @@ export class AccountsService {
     if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
   }
 
-  private async assertAccountInLedger(ledgerId: string, accountId: string): Promise<void> {
+  /** 账户必须属于该账本（含已归档），返回账户行供调用方复用。 */
+  private async assertAccountInLedger(ledgerId: string, accountId: string) {
     const account = await this.prisma.client.account.findFirst({
       where: { id: accountId, ledgerId },
     });
     if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    return account;
   }
 
   private async assertActiveSubAccount(
@@ -554,5 +581,14 @@ export class AccountsService {
       where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
     });
     if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+  }
+
+  /** 归属人员校验：空值表示不指定；非空必须是本账本未归档的人员。 */
+  private async assertPerson(ledgerId: string, personId?: string | null): Promise<void> {
+    if (!personId) return;
+    const person = await this.prisma.client.person.findFirst({
+      where: { id: personId, ledgerId, archivedAt: null },
+    });
+    if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
   }
 }

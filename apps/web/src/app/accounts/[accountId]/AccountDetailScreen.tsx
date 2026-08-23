@@ -401,6 +401,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           icon={account.icon ?? "💼"}
           name={account.name}
           negativePrefix={liability}
+          person={account.person}
           subtitle={meta.name}
         />
 

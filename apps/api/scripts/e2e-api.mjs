@@ -183,6 +183,7 @@ async function main() {
   await assertEffectiveAmountQueries({ ledgerId: ledger.id, owner, account, category, person });
   await assertMultiCategoryFilter({ ledgerId: ledger.id, owner, account });
   await assertMultiAccountPersonCreatorFilter({ ledgerId: ledger.id, owner, category });
+  await assertAccountPersonOwnership({ ledgerId: ledger.id, owner });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -504,6 +505,138 @@ async function assertMultiAccountPersonCreatorFilter({ ledgerId, owner, category
 }
 
 /** 批量修改单字段：备注/分类/人员/账户/日期/类型，并验证转账对分类/账户被跳过、类型互转的余额冲正正确。 */
+/**
+ * 账户归属人员：写入/改人/清空/校验，净资产曲线按人拆分，以及「名下有账户的人员删不掉、只归档」。
+ */
+async function assertAccountPersonOwnership({ ledgerId, owner }) {
+  const token = owner.token;
+  const [alice, bob] = await Promise.all([
+    api("POST", `/ledgers/${ledgerId}/people`, {
+      token,
+      expected: 201,
+      body: { name: `E2E Owner A ${stamp}` },
+    }),
+    api("POST", `/ledgers/${ledgerId}/people`, {
+      token,
+      expected: 201,
+      body: { name: `E2E Owner B ${stamp}` },
+    }),
+  ]);
+
+  const owned = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: {
+      type: "savings",
+      name: `E2E Owned ${stamp}`,
+      balanceMicros: "50000000",
+      personId: alice.id,
+    },
+  });
+  assert.equal(owned.personId, alice.id);
+
+  const findAccount = async (accountId) => {
+    const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
+    return accounts.find((item) => item.id === accountId);
+  };
+
+  // 列表把人员 join 出来，前端不必再查 /people。
+  let listed = await findAccount(owned.id);
+  assert.equal(listed.personId, alice.id);
+  assert.equal(listed.person.name, alice.name);
+  assert.equal(listed.person.archived, false);
+
+  // 净资产曲线按人拆：该人员这一桶的当前净资产就是这个账户的余额。
+  const series = await api(
+    "GET",
+    `/ledgers/${ledgerId}/stats/net-worth?range=month6&groupBy=person`,
+    { token },
+  );
+  const aliceBucket = series.people.find((item) => item.personId === alice.id);
+  assert.equal(aliceBucket.netWorthMicros, "50000000");
+  assert.equal(aliceBucket.points.length, series.points.length);
+  // 各人（含「未指定」）之和等于总净资产。
+  assert.equal(
+    series.people.reduce((sum, item) => sum + BigInt(item.netWorthMicros), 0n).toString(),
+    series.netWorthMicros,
+  );
+  assert.ok(series.people.some((item) => item.personId === null));
+  // 不要求拆分时不算这一份。
+  const plain = await api("GET", `/ledgers/${ledgerId}/stats/net-worth?range=month6`, { token });
+  assert.deepEqual(plain.people, []);
+
+  // 改挂到另一个人。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${owned.id}`, {
+    token,
+    body: { personId: bob.id },
+  });
+  listed = await findAccount(owned.id);
+  assert.equal(listed.personId, bob.id);
+
+  // 传 null 清空归属；不传则保持不变。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${owned.id}`, {
+    token,
+    body: { personId: null },
+  });
+  listed = await findAccount(owned.id);
+  assert.equal(listed.personId, null);
+  assert.equal(listed.person, null);
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${owned.id}`, {
+    token,
+    body: { name: `E2E Owned ${stamp}` },
+  });
+  assert.equal((await findAccount(owned.id)).personId, null);
+
+  // 别的账本的人员 / 不存在的 id 一律 404。
+  await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 404,
+    body: {
+      type: "savings",
+      name: `E2E Bad Person ${stamp}`,
+      personId: "00000000-0000-4000-8000-000000000000",
+    },
+  });
+
+  // 名下还有账户的人员：DELETE 转归档而不是物理删（people.id 上有外键，硬删会撞约束）。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${owned.id}`, {
+    token,
+    body: { personId: bob.id },
+  });
+  await api("DELETE", `/ledgers/${ledgerId}/people/${bob.id}`, { token });
+  const activePeople = await api("GET", `/ledgers/${ledgerId}/people`, { token });
+  assert.ok(!activePeople.some((item) => item.id === bob.id));
+  listed = await findAccount(owned.id);
+  assert.equal(listed.personId, bob.id);
+  assert.equal(listed.person.archived, true);
+
+  // 归属没变时不再校验人员：挂着已归档人员的账户改个名不该被「人员不存在」拦下。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${owned.id}`, {
+    token,
+    body: { name: `E2E Owned Renamed ${stamp}`, personId: bob.id },
+  });
+  // 但不能把别的账户新挂到已归档的人员上。
+  const other = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Owned Other ${stamp}`, balanceMicros: "0" },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${other.id}`, {
+    token,
+    expected: 404,
+    body: { personId: bob.id },
+  });
+  await api("DELETE", `/ledgers/${ledgerId}/accounts/${other.id}`, { token });
+
+  // 归档账户余额必须为 0，清干净再归档，免得影响后续净资产断言。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${owned.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "0" },
+  });
+  await api("DELETE", `/ledgers/${ledgerId}/accounts/${owned.id}`, { token });
+}
+
 async function assertBatchUpdate({ ledgerId, owner, account, transferAccount, category, person }) {
   const token = owner.token;
   const category2 = await api("POST", `/ledgers/${ledgerId}/categories`, {

@@ -32,7 +32,7 @@ export function AccountSelect({
 }: AccountSelectProps) {
   const [open, setOpen] = useState(false);
   const hasValue = value != null && options.some((option) => option.id === value);
-  const label = nestedOptionLabel(options, value, placeholder);
+  const label = nestedOptionLabel(options, value, placeholder, { withBadge: true });
 
   return (
     <div className={cn("form-select", className)}>

@@ -2,7 +2,7 @@
 
 import { ArrowUpDown, ChevronRight, Ellipsis, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { EmptyState, LoadingState } from "@/components/business";
+import { AccountPersonBadge, EmptyState, LoadingState } from "@/components/business";
 import { Button, IconButton, IconButtonGroup, MobileAppShell, PopoverMenu, Switch } from "@/components/ui";
 import type { MenuItem } from "@/components/ui";
 import type { Account, SubAccount } from "@/lib/api";
@@ -184,6 +184,7 @@ function AccountRow({
           <span className="truncate text-[15px] font-medium text-[var(--color-text-primary)]">
             {account.name}
           </span>
+          <AccountPersonBadge person={account.person} />
           {!account.includeInNetWorth ? (
             <span className="shrink-0 rounded-[5px] bg-[var(--color-control-fill-muted)] px-1 py-px text-[10px] text-[var(--color-text-muted)]">
               不计入
@@ -443,6 +444,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
         icon={account.icon ?? "💼"}
         name={account.name}
         negativePrefix={liability}
+        person={account.person}
         subtitle={meta.name}
       />
 
@@ -642,6 +644,7 @@ function SubAccountDetailPanel({
         entries={entries}
         icon={subAccountIcon}
         name={`${account.name} · ${subAccountName}`}
+        person={account.person}
         subtitle={`子账户 · ${meta.name}`}
       />
 

@@ -296,16 +296,19 @@ export class RecordsService {
   async deletePerson(ledgerId: string, personId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     await this.assertPerson(ledgerId, personId);
-    const [hasTransactions, templateRefs, ruleRefs, pendingRefs, insuredRefs] = await Promise.all([
-      this.prisma.client.transaction.count({ where: { ledgerId, personId, deletedAt: null } }),
-      this.prisma.client.quickTemplate.count({ where: { ledgerId, personId, archivedAt: null } }),
-      this.prisma.client.autoRule.count({ where: { ledgerId, personId, archivedAt: null } }),
-      this.prisma.client.autoPendingTransaction.count({
-        where: { ledgerId, personId, status: "pending" },
-      }),
-      this.prisma.client.insuranceInsuredPerson.count({ where: { personId } }),
-    ]);
-    if (hasTransactions + templateRefs + ruleRefs + pendingRefs + insuredRefs > 0) {
+    const [hasTransactions, templateRefs, ruleRefs, pendingRefs, insuredRefs, accountRefs] =
+      await Promise.all([
+        this.prisma.client.transaction.count({ where: { ledgerId, personId, deletedAt: null } }),
+        this.prisma.client.quickTemplate.count({ where: { ledgerId, personId, archivedAt: null } }),
+        this.prisma.client.autoRule.count({ where: { ledgerId, personId, archivedAt: null } }),
+        this.prisma.client.autoPendingTransaction.count({
+          where: { ledgerId, personId, status: "pending" },
+        }),
+        this.prisma.client.insuranceInsuredPerson.count({ where: { personId } }),
+        // 归档账户也算引用：account.person_id 有外键，物理删人员会直接撞约束。
+        this.prisma.client.account.count({ where: { ledgerId, personId } }),
+      ]);
+    if (hasTransactions + templateRefs + ruleRefs + pendingRefs + insuredRefs + accountRefs > 0) {
       await this.prisma.client.person.update({
         where: { id: personId },
         data: { archivedAt: new Date(), updatedBy: userId },

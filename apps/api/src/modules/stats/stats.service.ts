@@ -329,9 +329,14 @@ export class StatsService {
     };
   }
 
-  async netWorthSeries(ledgerId: string, userId: string, range: NetWorthRange) {
+  async netWorthSeries(
+    ledgerId: string,
+    userId: string,
+    range: NetWorthRange,
+    groupByPerson = false,
+  ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return buildNetWorthSeries(this.prisma, ledgerId, range);
+    return buildNetWorthSeries(this.prisma, ledgerId, range, groupByPerson);
   }
 
   /** 收支走势：按 range（近1周/近1个月按天，近6个月/近1年按月）分桶汇总支出与收入。 */

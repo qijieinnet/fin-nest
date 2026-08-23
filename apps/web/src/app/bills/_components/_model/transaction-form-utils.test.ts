@@ -12,6 +12,8 @@ function account(overrides: Partial<Account> & Pick<Account, "id" | "type">): Ac
     ledgerId: "ledger_1",
     name: overrides.id,
     icon: null,
+    personId: null,
+    person: null,
     balanceMicros: "0",
     includeInNetWorth: true,
     creditLimitMicros: null,

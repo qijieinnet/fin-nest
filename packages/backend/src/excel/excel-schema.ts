@@ -115,6 +115,7 @@ export const ACCOUNT_COLUMNS: ColumnDef[] = [
   { key: "type", header: "账户类型", width: 10 },
   { key: "name", header: "名称", width: 14 },
   { key: "icon", header: "图标", width: 12 },
+  { key: "person", header: "归属人员", width: 12 },
   { key: "balance", header: "余额(元)", width: 12 },
   { key: "includeInNetWorth", header: "计入净资产", width: 10 },
   { key: "creditLimit", header: "信用额度(元)", width: 12 },

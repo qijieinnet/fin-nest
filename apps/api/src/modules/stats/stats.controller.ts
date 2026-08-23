@@ -36,6 +36,7 @@ export class StatsController {
       ledgerId,
       (auth as SessionAuthContext).userId,
       query.range ?? "month6",
+      query.groupBy === "person",
     );
   }
 

@@ -2,7 +2,7 @@
 
 import { ArrowUpDown, ChevronLeft, ChevronRight, Ellipsis, Plus } from "lucide-react";
 import { useState } from "react";
-import { EmptyState, LoadingState } from "@/components/business";
+import { AccountPersonBadge, EmptyState, LoadingState } from "@/components/business";
 import {
   Button,
   EdgeFade,
@@ -79,6 +79,7 @@ export function AccountsScreenMobile() {
             <span className="truncate text-[15px] font-medium text-[var(--color-text-primary)]">
               {account.name}
             </span>
+            <AccountPersonBadge person={account.person} />
             {!account.includeInNetWorth ? (
               <span className="shrink-0 rounded-[5px] bg-[var(--color-control-fill-muted)] px-1 py-px text-[10px] text-[var(--color-text-muted)]">
                 不计入
