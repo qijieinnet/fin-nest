@@ -2,7 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { apiRequest, NOTIFICATION_ENDPOINTS } from "@/lib/api";
-import { currentSubscription, toSubscriptionInput } from "@/lib/push/web-push";
+import {
+  clearAppBadge,
+  clearDeliveredNotifications,
+  currentSubscription,
+  toSubscriptionInput,
+} from "@/lib/push/web-push";
 import { useAuth } from "@/providers";
 
 /**
@@ -43,6 +48,23 @@ export function PushSubscriptionSync() {
     }
     const id = window.setTimeout(() => void run(), 1500);
     return () => window.clearTimeout(id);
+  }, [status]);
+
+  // 清红点 + 收走通知中心里的旧通知。走另一个 effect：跟上面的订阅同步没关系，
+  // 且每次「回到前台」都要清，不能只清一次——用户不点通知、直接点图标打开时，
+  // Service Worker 那边根本不知道用户已经看过了。
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const clear = () => {
+      clearAppBadge();
+      void clearDeliveredNotifications();
+    };
+    clear();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") clear();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [status]);
 
   return null;

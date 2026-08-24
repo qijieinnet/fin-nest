@@ -80,6 +80,40 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return Notification.requestPermission();
 }
 
+/**
+ * 清掉主屏图标右上角的红点（Badging API）。
+ *
+ * 只覆盖「用户没点通知、直接点图标打开 app」这条路径——点通知进来的那条已经在
+ * Service Worker 的 notificationclick 里清过了。不支持的浏览器里这个方法不存在，
+ * 可选链一跳过去就行，不用先探测能力。
+ */
+export function clearAppBadge(): void {
+  (navigator as Navigator & { clearAppBadge?: () => Promise<void> }).clearAppBadge?.().catch(
+    () => {},
+  );
+}
+
+/**
+ * 关掉通知中心里还挂着的本应用通知。
+ *
+ * 系统不会因为用户打开了应用就自动收走通知——只有点击那一条会消失，其余的会一直堆着，
+ * 跟「我已经看过了」的心理预期对不上。所以进应用时统一清一遍。
+ *
+ * 用 getRegistration() 而不是 serviceWorker.ready：后者在「从未注册过」的环境里
+ * 永远不 resolve，会把调用方挂死。
+ */
+export async function clearDeliveredNotifications(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) return;
+    const notifications = await registration.getNotifications();
+    for (const notification of notifications) notification.close();
+  } catch {
+    // 纯清理动作，失败了没有任何补救的必要，也不该冒泡到界面。
+  }
+}
+
 /** 取当前订阅（可能没有）。 */
 export async function currentSubscription(): Promise<PushSubscription | null> {
   const registration = await registerServiceWorker();
