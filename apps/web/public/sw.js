@@ -72,30 +72,36 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
 
-  event.waitUntil(
-    (async () => {
-      // 点进来了，红点的使命就结束了；不清的话它会一直挂在图标上，跟未读状态脱节。
-      // 同上：Badging API 在 self.navigator 上，不在 self.registration 上。
-      await self.navigator.clearAppBadge?.().catch(() => {});
+  // 点进来了，红点的使命就结束了；不清的话它会一直挂在图标上，跟未读状态脱节。
+  // 同上：Badging API 在 self.navigator 上，不在 self.registration 上。
+  //
+  // 和下面的开窗逻辑**并行**跑，不串在它前面：清角标没有任何理由挡在用户的点击与
+  // app 打开之间，一旦这个原生调用慢一拍，用户看到的就是「点了没反应」。
+  const badge = self.navigator.clearAppBadge?.().catch(() => {});
 
-      const windows = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      for (const client of windows) {
-        // 同源的已开窗口直接导航过去：在 iOS 上重新 openWindow 会闪一下白屏。
-        if (new URL(client.url).origin !== self.location.origin || !("focus" in client)) continue;
-        await client.focus();
-        try {
-          // navigate() 对「尚未被本 SW 接管」的窗口会抛 TypeError（首次注册后、
-          // clients.claim() 生效前就是这种状态）。这时退回开新窗口，别把点击吞掉。
-          if ("navigate" in client) await client.navigate(target);
-          return;
-        } catch {
-          break;
+  event.waitUntil(
+    Promise.all([
+      badge,
+      (async () => {
+        const windows = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        for (const client of windows) {
+          // 同源的已开窗口直接导航过去：在 iOS 上重新 openWindow 会闪一下白屏。
+          if (new URL(client.url).origin !== self.location.origin || !("focus" in client)) continue;
+          await client.focus();
+          try {
+            // navigate() 对「尚未被本 SW 接管」的窗口会抛 TypeError（首次注册后、
+            // clients.claim() 生效前就是这种状态）。这时退回开新窗口，别把点击吞掉。
+            if ("navigate" in client) await client.navigate(target);
+            return;
+          } catch {
+            break;
+          }
         }
-      }
-      await self.clients.openWindow(target);
-    })(),
+        await self.clients.openWindow(target);
+      })(),
+    ]),
   );
 });

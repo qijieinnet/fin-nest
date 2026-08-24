@@ -88,6 +88,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
  * 可选链一跳过去就行，不用先探测能力。
  */
 export function clearAppBadge(): void {
+  if (typeof navigator === "undefined") return;
   (navigator as Navigator & { clearAppBadge?: () => Promise<void> }).clearAppBadge?.().catch(
     () => {},
   );
