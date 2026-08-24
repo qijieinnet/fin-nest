@@ -1,13 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
-    <linearGradient id="finNestBg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#EFF4FD"/>
-      <stop offset="1" stop-color="#DBE8F8"/>
+    <linearGradient id="finNestMarkGradient" x1="35" y1="36" x2="94" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7259D9"/>
+      <stop offset="0.52" stop-color="#4B68D5"/>
+      <stop offset="1" stop-color="#2698C1"/>
     </linearGradient>
   </defs>
-  <rect width="128" height="128" rx="28" fill="url(#finNestBg)"/>
-  <circle cx="64" cy="48" r="12" fill="#F1C877"/>
-  <path d="M26 58 Q64 90 102 58" fill="none" stroke="#7295D4" stroke-width="5" stroke-linecap="round"/>
-  <path d="M34 64 Q64 87 94 64" fill="none" stroke="#7295D4" stroke-width="3.4" stroke-linecap="round" opacity="0.6"/>
-  <path d="M43 69 Q64 82 85 69" fill="none" stroke="#7295D4" stroke-width="2.6" stroke-linecap="round" opacity="0.45"/>
+  <rect width="128" height="128" rx="28" fill="#FFFFFF"/>
+  <path d="M37 87 V40 L91 87 V40" fill="none" stroke="url(#finNestMarkGradient)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M37 87 Q64 103 91 87" fill="none" stroke="url(#finNestMarkGradient)" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="64" cy="63" r="12" fill="url(#finNestMarkGradient)"/>
+  <path d="M64 54 C65.1 59.1 67.9 61.9 73 63 C67.9 64.1 65.1 66.9 64 72 C62.9 66.9 60.1 64.1 55 63 C60.1 61.9 62.9 59.1 64 54Z" fill="#FFFFFF"/>
 </svg>
