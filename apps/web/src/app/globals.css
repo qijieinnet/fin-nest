@@ -815,39 +815,7 @@ select:focus-visible {
   overflow: hidden;
   padding: calc(60px + env(safe-area-inset-top)) var(--space-page-x)
     calc(40px + env(safe-area-inset-bottom));
-  background:
-    radial-gradient(circle at 14% 6%, rgba(10, 132, 255, 0.22), transparent 42%),
-    radial-gradient(circle at 88% 10%, rgba(128, 202, 255, 0.26), transparent 40%),
-    radial-gradient(circle at 82% 94%, rgba(47, 158, 119, 0.16), transparent 46%),
-    radial-gradient(circle at 16% 92%, rgba(240, 140, 90, 0.14), transparent 48%),
-    linear-gradient(180deg, #f7f9fc 0%, #eef3fb 52%, #f6f8fc 100%);
-}
-
-/* 漂浮光斑，营造景深 */
-.auth-main::before,
-.auth-main::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  border-radius: 999px;
-  filter: blur(46px);
-  pointer-events: none;
-}
-
-.auth-main::before {
-  top: -64px;
-  left: -44px;
-  width: 220px;
-  height: 220px;
-  background: radial-gradient(circle, rgba(10, 132, 255, 0.34), transparent 70%);
-}
-
-.auth-main::after {
-  right: -52px;
-  bottom: -72px;
-  width: 260px;
-  height: 260px;
-  background: radial-gradient(circle, rgba(47, 158, 119, 0.26), transparent 70%);
+  background: var(--color-bg-app);
 }
 
 .auth-hero {
