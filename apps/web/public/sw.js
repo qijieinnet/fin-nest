@@ -49,12 +49,15 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/" },
   };
 
-  // App Badge：主屏图标右上角的红点。iOS 16.4+ 且已装到主屏才支持，其余环境这个方法
-  // 压根不存在——用可选链跳过，不额外做能力探测。
+  // App Badge：主屏图标右上角的红点。iOS 16.4+ 且已装到主屏才支持。
   //
-  // 显式传 1 而不是留空：规范里不传参数是「flag」语义，各平台渲染不一致（iOS 上尤其不稳）。
+  // 必须挂在 self.navigator（Worker 里是 WorkerNavigator）上——Badging API 定义在
+  // Navigator / WorkerNavigator，**不在** ServiceWorkerRegistration 上。写成
+  // self.registration.setAppBadge 会被可选链静默跳过，表现为「通知照弹、红点永远不出现」。
+  //
+  // 显式传 1 而不是留空：规范里不传参数是「flag」语义，各平台渲染不一致。
   // 项目里没有未读数概念，这个 1 只表示「有新消息」，不是真实条数。
-  const badge = self.registration.setAppBadge?.(1).catch(() => {});
+  const badge = self.navigator.setAppBadge?.(1).catch(() => {});
 
   event.waitUntil(Promise.all([self.registration.showNotification(title, options), badge]));
 });
@@ -72,7 +75,8 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     (async () => {
       // 点进来了，红点的使命就结束了；不清的话它会一直挂在图标上，跟未读状态脱节。
-      await self.registration.clearAppBadge?.().catch(() => {});
+      // 同上：Badging API 在 self.navigator 上，不在 self.registration 上。
+      await self.navigator.clearAppBadge?.().catch(() => {});
 
       const windows = await self.clients.matchAll({
         type: "window",
