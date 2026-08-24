@@ -94,41 +94,34 @@ export function clearAppBadge(): void {
     .catch(() => {});
 }
 
-/** 一次清理的战果：拿到几条、清完还剩几条。 */
-export type NotificationClearStat = { got: number; left: number };
-
 /**
  * 关掉通知中心里还挂着的本应用通知。
  *
- * 系统不会因为用户打开了应用就自动收走通知——只有点击那一条会消失，其余的会一直堆着，
+ * 系统不会因为用户打开了应用就自动收走通知——只有被点的那一条会消失，其余的一直堆着，
  * 跟「我已经看过了」的心理预期对不上。所以进应用时统一清一遍。
  *
- * **两条路都走**：页面侧自己清一遍，再让 Service Worker 也清一遍。通知是 SW 弹的，
- * iOS 上页面侧的 registration 未必看得见它们，而 SW 自己持有的 self.registration
- * 更直接；两边都是幂等的 close()，重复清没有副作用。
+ * ⚠️ **iOS 上这个函数不起作用，且无法修复**（2026-08 实测 iOS 26）：
+ * WebKit 自 iOS 16.4 引入 Web Push 起，`getNotifications()` 就恒定返回空数组，
+ * 通知也无法以编程方式关闭——只能由用户点击或手动划掉。真机诊断确认页面侧与
+ * Service Worker 侧（改用 self.registration 再试一遍）拿到的都是 0 条，
+ * 所以那条「让 SW 自己清」的迂回已经删掉，别再试第二遍。
+ * iPhone 上防止通知堆积只能靠 showNotification 的 `tag` 覆盖，见 public/sw.js。
+ *
+ * 保留它是因为在桌面 Chrome / Edge / Firefox 与 Android 上确实有效，那些平台
+ * 装 PWA 同样会遇到通知堆积。
  *
  * 用 getRegistration() 而不是 serviceWorker.ready：后者在「从未注册过」的环境里
  * 永远不 resolve，会把调用方挂死。
- *
- * 返回页面侧的战果供诊断用；SW 侧的结果走 postMessage 异步回传，见 sw.js。
  */
-export async function clearDeliveredNotifications(): Promise<NotificationClearStat | null> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
+export async function clearDeliveredNotifications(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
-    if (!registration) return null;
-
+    if (!registration) return;
     const notifications = await registration.getNotifications();
-    const got = notifications.length;
     for (const notification of notifications) notification.close();
-    const left = (await registration.getNotifications()).length;
-
-    registration.active?.postMessage({ type: "clear-notifications" });
-
-    return { got, left };
   } catch {
     // 纯清理动作，失败了没有任何补救的必要，也不该冒泡到界面。
-    return null;
   }
 }
 

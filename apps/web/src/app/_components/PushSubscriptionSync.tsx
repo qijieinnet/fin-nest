@@ -3,11 +3,6 @@
 import { useEffect, useRef } from "react";
 import { apiRequest, NOTIFICATION_ENDPOINTS } from "@/lib/api";
 import {
-  beginClearRound,
-  recordPageClear,
-  recordSwClear,
-} from "@/lib/push/notification-clear-debug";
-import {
   clearAppBadge,
   clearDeliveredNotifications,
   currentSubscription,
@@ -63,9 +58,7 @@ export function PushSubscriptionSync() {
 
     const clear = () => {
       clearAppBadge();
-      // 先开一轮再触发清理，否则 SW 的回传可能比页面侧的 then 先到，被后写覆盖掉。
-      beginClearRound();
-      void clearDeliveredNotifications().then(recordPageClear);
+      void clearDeliveredNotifications();
     };
     clear();
 
@@ -73,18 +66,7 @@ export function PushSubscriptionSync() {
       if (document.visibilityState === "visible") clear();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
-
-    // 【临时诊断】接住 SW 侧清理的战果，见 lib/push/notification-clear-debug.ts。
-    const onServiceWorkerMessage = (event: MessageEvent) => {
-      if (event.data?.type !== "clear-notifications-result") return;
-      recordSwClear({ got: event.data.got, left: event.data.left });
-    };
-    navigator.serviceWorker?.addEventListener("message", onServiceWorkerMessage);
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      navigator.serviceWorker?.removeEventListener("message", onServiceWorkerMessage);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [status]);
 
   return null;

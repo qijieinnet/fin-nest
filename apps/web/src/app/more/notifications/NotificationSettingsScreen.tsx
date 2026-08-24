@@ -3,7 +3,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api";
-import { type NotificationClearDebug, readClearDebug } from "@/lib/push/notification-clear-debug";
 import {
   useDetachPushSubscription,
   useNotificationSettings,
@@ -319,7 +318,6 @@ export function NotificationSettingsScreen() {
                     收不到就说明链路有问题：权限、Service Worker、服务端配置三者缺一不可，
                     而前两者在浏览器里看起来都是「已就绪」。
                   </p>
-                  <NotificationClearDiagnostics />
                 </>
               ) : null}
             </>
@@ -421,46 +419,4 @@ function formatDateTime(iso: string): string {
   const date = new Date(iso);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/**
- * 【临时诊断】显示最近一次「打开应用时清理通知中心」的战果。
- *
- * iOS 上 getNotifications() / close() 的真实行为没有公开结论，而没有真机调试线时
- * 这是唯一能看见它的办法。三种读数对应三种结论：
- *   - 页面 0 条、SW ≥1 条 → 页面侧看不见 SW 弹的通知，SW 侧这条路才是对的
- *   - 两边都 ≥1 条但通知中心没清空 → close() 撤不下系统通知，属平台限制
- *   - 两边都 0 条 → getNotifications() 在 iOS 上拿不到已投递的通知
- *
- * **结论确定后，本组件连同 lib/push/notification-clear-debug.ts 一起删掉。**
- */
-function NotificationClearDiagnostics() {
-  // localStorage 在 SSR 阶段不存在，且首屏 HTML 不该带上它——放 effect 里读。
-  const [debug, setDebug] = useState<NotificationClearDebug | null>(null);
-  useEffect(() => {
-    setDebug(readClearDebug());
-  }, []);
-
-  if (!debug) return null;
-
-  const describe = (stat: { got: number; left: number } | null) => {
-    if (!stat) return "未执行";
-    if (stat.got < 0) return "调用抛错";
-    return `拿到 ${stat.got} 条，清后剩 ${stat.left} 条`;
-  };
-
-  return (
-    <div className="mx-1 mt-2 rounded-xl bg-[var(--color-bg-surface)] px-3 py-2.5">
-      <p className="text-xs font-semibold text-[var(--color-text-secondary)]">
-        通知清理诊断（临时）
-      </p>
-      <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-        页面侧：{describe(debug.page)}
-        <br />
-        SW 侧：{describe(debug.sw)}
-        <br />
-        时间：{formatDateTime(debug.at)}
-      </p>
-    </div>
-  );
 }
