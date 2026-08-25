@@ -94,35 +94,20 @@ export function clearAppBadge(): void {
     .catch(() => {});
 }
 
-/** 一次清理的战果，兼诊断用。got/left 为 -1 表示那步直接抛了异常。 */
-export type NotificationClearStat = {
-  /** registration 的来源：ready = 等到 SW 激活；fallback = ready 超时后退回；none = 没拿到。 */
-  source: "ready" | "fallback" | "none";
-  /** active service worker 的 state。对照 WebKit Bug 268797「推送唤起的 SW 生命周期不正常」。 */
-  swState: string;
-  got: number;
-  left: number;
-};
-
 /**
  * 拿到一个**已激活**的 registration。
  *
- * 为什么不直接用 getRegistration()：它会立刻返回，哪怕 SW 还没 activate。
- * WebKit Bug 268797 记录了 APNS 推送会唤起一个生命周期不正常的新 SW 实例，
- * 在那种状态下查通知列表未必可靠。`ready` 会等到激活为止。
+ * 不直接用 getRegistration()：它会立刻返回，哪怕 SW 还没 activate，那时查通知列表
+ * 未必可靠。`ready` 会等到激活为止；正常情况下它 2ms 内就 resolve，没有代价。
  *
  * 而 `ready` 单用不安全：在「从未注册过」的环境里它永远不 resolve，会把调用方挂死。
  * 所以给它一个超时，超时后退回 getRegistration()——两头的坑都绕开。
  */
-async function activeRegistration(): Promise<{
-  registration: ServiceWorkerRegistration | null;
-  source: NotificationClearStat["source"];
-}> {
+async function activeRegistration(): Promise<ServiceWorkerRegistration | null> {
   const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
   const viaReady = await Promise.race([navigator.serviceWorker.ready, timeout]);
-  if (viaReady) return { registration: viaReady, source: "ready" };
-  const fallback = (await navigator.serviceWorker.getRegistration()) ?? null;
-  return { registration: fallback, source: fallback ? "fallback" : "none" };
+  if (viaReady) return viaReady;
+  return (await navigator.serviceWorker.getRegistration()) ?? null;
 }
 
 /**
@@ -131,30 +116,31 @@ async function activeRegistration(): Promise<{
  * 系统不会因为用户打开了应用就自动收走通知——只有被点的那一条会消失，其余的一直堆着，
  * 跟「我已经看过了」的心理预期对不上。所以进应用时统一清一遍。
  *
- * ⚠️ iOS 上能不能成，取决于 WebKit 的两个长期缺陷（均见 Bug 258922，2026-07 仍 NEW）：
- * `getNotifications()` 早期恒返回空数组（Comment #6），后被真机更正为可正常返回
- * （Comment #8）；但同一条评论指出 `close()` 「什么也不做」。本函数返回 got/left
- * 就是为了把这两种失败分开：拿到 0 条 = 查不到；got>0 且 left>0 = close 无效。
+ * ⚠️ **iPhone 上这个函数不起作用，别再试了**（2026-08 实测 iOS 26，装到主屏的 PWA）。
+ * `getNotifications()` 拿到 0 条，SW 推送投递到通知中心的通知它查不到，因而没有任何
+ * 句柄可以 close。三种可能的成因都已逐一排除：
+ *   1. registration 未激活 → 诊断确认走的是 `ready`、SW state 为 activated
+ *   2. 页面侧看不见 SW 弹的通知 → 改由 SW 用 self.registration 自己查，同样 0 条
+ *   3. WebKit 已修复（Bug 258922 Comment #8 称真机上能正常返回）→ 那是 2024 初 iOS 17
+ *      的观察，在 iOS 26 + SW 推送这个组合下不成立
+ * 相关 WebKit issue 均为 NEW 未解决：258922（同 tag 不替换、close() 无效）、268797。
  *
- * 桌面 Chrome / Edge / Firefox 与 Android 上是确实有效的，那些平台装 PWA 同样会堆积。
+ * 连带后果：iPhone 上多条提醒**会堆积**，`showNotification` 的 `tag` 覆盖同样不生效
+ * （258922 正是此事），且没有干净的绕法——Comment #19 给的 workaround 依赖 close()。
+ * 目前只能由用户自己划掉。红点是独立机制，不受影响，见 public/sw.js。
+ *
+ * 保留本函数是因为桌面 Chrome / Edge / Firefox 与 Android 上确实有效，
+ * 那些平台装 PWA 同样会遇到通知堆积。
  */
-export async function clearDeliveredNotifications(): Promise<NotificationClearStat> {
-  const miss: NotificationClearStat = { source: "none", swState: "n/a", got: -1, left: -1 };
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return miss;
+export async function clearDeliveredNotifications(): Promise<void> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   try {
-    const { registration, source } = await activeRegistration();
-    if (!registration) return miss;
-    const swState = registration.active?.state ?? "无 active";
-
+    const registration = await activeRegistration();
+    if (!registration) return;
     const notifications = await registration.getNotifications();
-    const got = notifications.length;
     for (const notification of notifications) notification.close();
-    const left = (await registration.getNotifications()).length;
-
-    return { source, swState, got, left };
   } catch {
     // 纯清理动作，失败了没有任何补救的必要，也不该冒泡到界面。
-    return miss;
   }
 }
 

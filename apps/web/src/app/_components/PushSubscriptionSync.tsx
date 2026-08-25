@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { apiRequest, NOTIFICATION_ENDPOINTS } from "@/lib/api";
-import { recordClear } from "@/lib/push/notification-clear-debug";
 import {
   clearAppBadge,
   clearDeliveredNotifications,
@@ -59,7 +58,7 @@ export function PushSubscriptionSync() {
 
     const clear = () => {
       clearAppBadge();
-      void clearDeliveredNotifications().then(recordClear);
+      void clearDeliveredNotifications();
     };
     clear();
 
