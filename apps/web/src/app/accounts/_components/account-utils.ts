@@ -181,6 +181,7 @@ export function accountSubtitle(account: Account): string {
 
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   adjustment: "余额调整",
+  opening: "初始余额",
   settlement: "历史收款 / 还款",
   expense: "支出",
   income: "收入",

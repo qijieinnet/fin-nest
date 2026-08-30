@@ -184,6 +184,7 @@ async function main() {
   await assertMultiCategoryFilter({ ledgerId: ledger.id, owner, account });
   await assertMultiAccountPersonCreatorFilter({ ledgerId: ledger.id, owner, category });
   await assertAccountPersonOwnership({ ledgerId: ledger.id, owner });
+  await assertSubAccountOpeningEntry({ ledgerId: ledger.id, owner });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -510,6 +511,40 @@ async function assertMultiAccountPersonCreatorFilter({ ledgerId, owner, category
 /**
  * 账户归属人员：写入/改人/清空/校验，净资产曲线按人拆分，以及「名下有账户的人员删不掉、只归档」。
  */
+/**
+ * 带初始余额建子账户必须落一条 opening 流水：
+ * 余额曲线与净资产趋势都按「当前值 − 之后所有 delta」反推，缺这段会把该时点之前的历史整体抬高。
+ */
+async function assertSubAccountOpeningEntry({ ledgerId, owner }) {
+  const token = owner.token;
+  const account = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Opening ${stamp}`, balanceMicros: "0" },
+  });
+  const sub = await api("POST", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts`, {
+    token,
+    expected: 201,
+    body: { name: `E2E Opening Sub ${stamp}`, balanceMicros: "1000000" },
+  });
+  // 返回值不能停留在建表时的 0，余额已由 applyEntry 写入。
+  assert.equal(sub.balanceMicros, "1000000");
+  assert.equal(await accountBalance(ledgerId, account.id, token), "1000000");
+
+  const entries = await api("GET", `/ledgers/${ledgerId}/accounts/${account.id}/entries`, {
+    token,
+  });
+  const opening = entries.filter((entry) => entry.entryType === "opening");
+  assert.equal(opening.length, 1);
+  assert.equal(opening[0].subAccountId, sub.id);
+  assert.equal(opening[0].amountDeltaMicros, "1000000");
+  assert.equal(opening[0].balanceBeforeMicros, "0");
+  assert.equal(opening[0].balanceAfterMicros, "1000000");
+  // 关键不变式：账户余额 = Σ流水 delta（账户开户余额为 0 时）。
+  const sum = entries.reduce((acc, entry) => acc + BigInt(entry.amountDeltaMicros), 0n);
+  assert.equal(sum.toString(), "1000000");
+}
+
 async function assertAccountPersonOwnership({ ledgerId, owner }) {
   const token = owner.token;
   const [alice, bob] = await Promise.all([

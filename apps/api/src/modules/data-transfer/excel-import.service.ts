@@ -1486,7 +1486,8 @@ export class ExcelImportService {
           updatedBy: userId,
         },
       });
-      // 子账户余额计入父账户（与 AccountsService.createSubAccountInner 保持一致）。
+      // 子账户余额计入父账户。这里不像 AccountsService.createSubAccountInner 那样补 opening 流水：
+      // Excel 导入整体是快照式的（全程不写 account_entries），补一条会与该导入的其余数据不自洽。
       if (balanceMicros !== 0n) {
         await tx.account.update({
           where: { id: planned.accountRef.id! },

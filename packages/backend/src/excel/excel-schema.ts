@@ -84,6 +84,7 @@ export const ACCOUNT_ENTRY_TYPE_LABELS: Record<string, string> = {
   payable_increase: "需归还增加",
   payable_decrease: "需归还减少",
   adjustment: "余额调整",
+  opening: "初始余额",
   reversal: "冲正",
 };
 

@@ -178,16 +178,24 @@ export class AccountsService {
           accountId,
           name: input.name,
           icon: input.icon,
-          balanceMicros,
+          balanceMicros: 0n,
           includeInNetWorth: input.includeInNetWorth ?? true,
           createdBy: userId,
           updatedBy: userId,
         },
       });
+      // 初始余额经 applyEntry 落成一条流水（账户余额也由它 increment）。
+      // 直接改余额不写流水，会让账户的 delta 序列缺这一段：余额曲线与净资产趋势
+      // 都是「当前值 − 之后所有 delta」反推的，缺一段就会把该时点之前的历史整体抬高。
       if (balanceMicros !== 0n) {
-        await tx.account.update({
-          where: { id: accountId },
-          data: { balanceMicros: { increment: balanceMicros }, updatedBy: userId },
+        await this.applyEntry(tx, {
+          ledgerId,
+          accountId,
+          subAccountId: subAccount.id,
+          entryType: "opening",
+          amountDeltaMicros: balanceMicros,
+          occurredAt: new Date(),
+          createdBy: userId,
         });
       }
       await this.audit.write(
@@ -201,7 +209,10 @@ export class AccountsService {
         },
         tx,
       );
-      return subAccount;
+      // applyEntry 之后 subAccount 上的余额已过期，重新读一次再返回。
+      return balanceMicros === 0n
+        ? subAccount
+        : tx.subAccount.findUniqueOrThrow({ where: { id: subAccount.id } });
     });
   }
 
