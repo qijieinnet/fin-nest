@@ -165,7 +165,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     push({
       title: "余额修改记录",
       content: (
-        <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />
+        <BalanceAdjustmentListSheet
+          accountType={account.type}
+          currentBalanceMicros={subAccount.balanceMicros}
+          entries={entries}
+        />
       ),
     });
   };

@@ -285,7 +285,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
   const openAdjustmentRecords = () =>
     push({
       title: "余额修改记录",
-      content: <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />,
+      content: <BalanceAdjustmentListSheet accountType={account.type} entries={entries} />,
     });
   const openEntryRecords = () =>
     push({
@@ -440,7 +440,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
         balanceLabel={balanceLabel(account.type)}
         balanceMicros={displayTotal.toString()}
         currentBalanceMicros={total.toString()}
-        entries={model.entriesQuery.data ?? []}
+        entries={entries}
         icon={account.icon ?? "💼"}
         name={account.name}
         negativePrefix={liability}
@@ -595,7 +595,13 @@ function SubAccountDetailPanel({
   const openAdjustmentRecords = () =>
     push({
       title: "余额修改记录",
-      content: <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />,
+      content: (
+        <BalanceAdjustmentListSheet
+          accountType={account.type}
+          currentBalanceMicros={subAccount.balanceMicros}
+          entries={entries}
+        />
+      ),
     });
 
   const subMenuGroups: MenuItem[][] = [

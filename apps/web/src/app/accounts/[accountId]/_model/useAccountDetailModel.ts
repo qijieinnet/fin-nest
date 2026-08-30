@@ -31,7 +31,9 @@ export function useAccountDetailModel(accountId: string) {
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const isLend = account ? isLendAccount(account.type) : false;
 
-  const entries = (entriesQuery.data ?? []).filter((entry) => entry.entryType !== "reversal");
+  // 冲正（reversal）是编辑/删除交易产生的真实对冲流水，隐藏它会让资金变动记录里
+  // 只剩被冲掉的原始流水，可见 delta 之和与余额对不上；子账户视图也是全量展示。
+  const entries = entriesQuery.data ?? [];
   const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
   const transactions = transactionsQuery.data ?? [];
 
@@ -134,7 +136,6 @@ export function useAccountDetailModel(accountId: string) {
     account,
     isLend,
     isLoading: !ledgerId || accountsQuery.isPending,
-    entriesQuery,
     entries,
     adjustmentEntries,
     transactions,

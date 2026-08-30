@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type SubAccount } from "@/lib/api";
 import { useAccountEntries, useAccounts, useTransactions } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -26,7 +27,11 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
   const isDefaultSubAccount = Boolean(subAccount?.isDefault);
 
   const transactions = transactionsQuery.data ?? [];
-  const entries = (entriesQuery.data ?? []).filter((entry) => entry.subAccountId === subAccountId);
+  // 保持引用稳定：下游（余额卡曲线、调整记录反推）按 entries 做 useMemo。
+  const entries = useMemo(
+    () => (entriesQuery.data ?? []).filter((entry) => entry.subAccountId === subAccountId),
+    [entriesQuery.data, subAccountId],
+  );
   const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
 
   const removeSub = useMutation({

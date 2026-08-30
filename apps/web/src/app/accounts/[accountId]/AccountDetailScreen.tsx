@@ -227,7 +227,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     push({
       title: "余额修改记录",
       content: (
-        <BalanceAdjustmentListSheet accountType={account.type} entries={adjustmentEntries} />
+        <BalanceAdjustmentListSheet accountType={account.type} entries={entries} />
       ),
     });
   };
@@ -397,7 +397,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
           balanceLabel={balanceLabel(account.type)}
           balanceMicros={displayTotal.toString()}
           currentBalanceMicros={total.toString()}
-          entries={model.entriesQuery.data ?? []}
+          entries={entries}
           icon={account.icon ?? "💼"}
           name={account.name}
           negativePrefix={liability}
