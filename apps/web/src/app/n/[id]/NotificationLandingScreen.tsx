@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft } from "lucide-react";
+import { useCallback, useEffect } from "react";
 import { getApiErrorMessage, type NotificationActionKey, type NotificationView } from "@/lib/api";
 import { useNotification, useNotificationAction } from "@/lib/data/notifications";
 import { routes } from "@/lib/route/routes";
@@ -33,10 +34,29 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
    * 先把当前账本切过去：推送可能来自当前没选中的那个账本（家庭账本 + 个人账本很常见），
    * 直接跳过去只会看到一个空页面或 404——业务页面读的都是「当前账本」。
    */
-  const openSource = (view: NotificationView) => {
-    if (view.ledgerId !== ledgerId) setLedgerId(view.ledgerId);
-    router.push(sourceRoute(view));
-  };
+  const openSource = useCallback(
+    (view: NotificationView, mode: "push" | "replace" = "push") => {
+      if (view.ledgerId !== ledgerId) setLedgerId(view.ledgerId);
+      router[mode](sourceRoute(view));
+    },
+    [ledgerId, router, setLedgerId],
+  );
+
+  /**
+   * 没有动作的提醒（记账提醒）不在这一页停留，直接送到业务页。
+   *
+   * 这一页存在的理由只有「iOS 的通知点不了按钮」；没有按钮时它剩下的内容与通知正文
+   * 完全重复，用户从通知中心点进来还要再点一次「查看详情」才到得了记账页。
+   *
+   * 用 replace：留在历史里会让返回键退回一个立刻又自动跳走的页面。账本切换仍走
+   * openSource——推送可能来自当前没选中的那个账本，直接跳过去会看到空页面。
+   */
+  const redirecting = Boolean(notification && !notification.payload.actions?.length);
+
+  useEffect(() => {
+    if (!notification || !redirecting) return;
+    openSource(notification, "replace");
+  }, [notification, redirecting, openSource]);
 
   const handleAction = async (key: NotificationActionKey) => {
     try {
@@ -71,7 +91,9 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
         title={notification?.payload.title ?? "提醒"}
       >
         <div className="flex flex-col gap-3 pb-6">
-          {query.isLoading ? (
+          {/* redirecting 的那一帧也按加载中渲染：否则用户会看见落地页连同「查看详情」
+              按钮闪一下再跳走，正是这次要去掉的那次多余点击的视觉残影。 */}
+          {query.isLoading || redirecting ? (
             <p className="px-1 text-[14px] text-[var(--color-text-muted)]">加载中…</p>
           ) : null}
 
@@ -84,7 +106,7 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
             </section>
           ) : null}
 
-          {notification ? (
+          {notification && !redirecting ? (
             <>
               {notification.payload.amount ? (
                 <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
