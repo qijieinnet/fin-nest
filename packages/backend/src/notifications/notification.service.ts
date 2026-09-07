@@ -15,8 +15,34 @@ import {
   ReminderOccurrence,
 } from "./notifications.types";
 
-/** 与 background_jobs 的 maxAttempts 对齐。耗尽后落 failed，靠 lastError 排查，不无限重试。 */
-const MAX_ATTEMPTS = 3;
+/**
+ * 每次失败后要等多久再试（毫秒），索引 = 已失败次数 - 1。
+ *
+ * **退避不是可选的**：worker 每 30s 轮询一轮，而失败的行下一轮就会被重新捞起，
+ * 没有退避时三次机会全部烧在 90 秒内。线上真实案例：一次到 web.push.apple.com 的
+ * TLS 握手抖动（同一秒发飞书成功），60 秒里连败三次，这条推送就此永久 failed；
+ * 而 Web Push 的 TTL 有 4 小时，一小时后重试完全来得及。
+ *
+ * 总覆盖 ~1.7 小时，刻意压在 TTL 之内：再往后推，推送服务那边也已经丢弃了。
+ */
+const RETRY_BACKOFF_MS = [2, 10, 30, 60].map((minutes) => minutes * 60_000);
+
+/**
+ * 第 `failures` 次失败之后要等多久。
+ *
+ * 兜底值只为让类型收敛（`noUncheckedIndexedAccess`）：调用方已经用 {@link MAX_ATTEMPTS}
+ * 挡住了越界，退避表被取空的分支实际走不到。
+ */
+function backoffAfter(failures: number): number {
+  return RETRY_BACKOFF_MS[failures - 1] ?? 60_000;
+}
+
+/**
+ * 耗尽后落 failed，靠 lastError 排查，不无限重试。
+ *
+ * 由退避表长度推导，两者不会各改一半：最后一次尝试之后没有「再等一会」可言。
+ */
+const MAX_ATTEMPTS = RETRY_BACKOFF_MS.length + 1;
 /** 单轮派发上限，避免一次积压把轮询周期撑爆。 */
 const DISPATCH_BATCH_SIZE = 50;
 
@@ -89,6 +115,8 @@ export class NotificationService {
         scheduledAt: { lte: now },
         attempts: { lt: MAX_ATTEMPTS },
         channel: { in: channels },
+        // null = 还没失败过（或退避上线前入的库），立刻可试。
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
       },
       orderBy: { scheduledAt: "asc" },
       take: DISPATCH_BATCH_SIZE,
@@ -108,15 +136,21 @@ export class NotificationService {
         await this.send(notification);
         await this.prisma.client.notification.update({
           where: { id: notification.id },
-          data: { status: "sent", sentAt: new Date(), lastError: null },
+          data: { status: "sent", sentAt: new Date(), lastError: null, nextAttemptAt: null },
         });
         sent += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const exhausted = notification.attempts + 1 >= MAX_ATTEMPTS;
+        const failures = notification.attempts + 1;
+        const exhausted = failures >= MAX_ATTEMPTS;
         await this.prisma.client.notification.update({
           where: { id: notification.id },
-          data: { status: exhausted ? "failed" : "pending", lastError: message.slice(0, 2000) },
+          data: {
+            status: exhausted ? "failed" : "pending",
+            lastError: message.slice(0, 2000),
+            // 耗尽后清空：留着一个永远不会到来的重试时刻只会让排查时多问一句。
+            nextAttemptAt: exhausted ? null : new Date(Date.now() + backoffAfter(failures)),
+          },
         });
         if (exhausted) failed += 1;
         this.logger.warn(

@@ -1,0 +1,13 @@
+-- 通知重试加退避。
+--
+-- 改动前：投递失败只把 status 写回 pending，下一轮轮询（默认 30s）立刻再试一次。
+-- 三次 attempts 因此全部烧在 60 秒内 —— 线上真实案例：一次到 web.push.apple.com 的
+-- TLS 握手抖动（同一秒发飞书成功），60 秒里连败三次，这条推送就此永久 failed。
+-- 而 Web Push 的 TTL 给了 4 小时，一小时后重试完全来得及，那个窗口被白白浪费。
+--
+-- next_attempt_at = 这行最早可以再试的时刻。null 表示「立刻可试」（新插入的行、
+-- 以及本次迁移之前的历史行）。派发查询按 `next_attempt_at IS NULL OR <= now()` 放行。
+--
+-- 不复用 scheduled_at 来延后：它是「应发时刻」，推送落地页 /n/{id} 会展示给用户，
+-- 拿它当重试游标会让界面显示一个错误的时间。
+ALTER TABLE notifications ADD COLUMN next_attempt_at TIMESTAMPTZ NULL;

@@ -909,6 +909,12 @@ model Notification {
   status        String    @default("pending")
   payload       Json      @db.JsonB
   attempts      Int       @default(0)
+  /// 最早可以再次投递的时刻。null = 立刻可试（新插入的行、以及退避上线前的历史行）。
+  ///
+  /// 没有它的话三次 attempts 会全部烧在一个轮询间隔的三倍时间里（默认 90 秒），
+  /// 任何超过一分钟的网络抖动都会让推送永久 failed —— 而 Web Push 的 TTL 有 4 小时，
+  /// 那个窗口本该用来重试。不复用 scheduledAt：那是「应发时刻」，落地页会展示。
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(6)
   sentAt        DateTime? @map("sent_at") @db.Timestamptz(6)
   lastError     String?   @map("last_error")
   /// null = 卡片按钮尚未被点（仍可操作）；renewed / terminated = 已是终态。
