@@ -1,17 +1,24 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { EmptyState, MoneyText } from "@/components/business";
-import type { AccountEntry } from "@/lib/api";
+import { apiRequest, getApiErrorMessage, ledgerApiPath, type AccountEntry } from "@/lib/api";
+import { queryKeys } from "@/lib/query/query-keys";
+import { useToast } from "@/providers";
 import {
   entryTypeLabel,
   formatDateLabel,
   formatMoney,
   isBalanceEditEntry,
+  isInvestmentEntry,
 } from "./account-utils";
 
 type BalanceAdjustmentListSheetProps = {
   accountType: string;
+  /** 传入这两个才显示「改判」动作（投资账户专用）；纯展示场景可省略。 */
+  ledgerId?: string;
+  accountId?: string;
   /** 该范围（账户 / 子账户）下的全部资金流水，组件内部再筛出调整记录 */
   entries: AccountEntry[];
   /**
@@ -49,11 +56,33 @@ function resolveBalances(entries: AccountEntry[], currentMicros: bigint) {
 }
 
 export function BalanceAdjustmentListSheet({
+  accountId,
   accountType,
   currentBalanceMicros,
   entries,
+  ledgerId,
 }: BalanceAdjustmentListSheetProps) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const adjustments = entries.filter((entry) => isBalanceEditEntry(entry.entryType));
+
+  // 改判只换归类、不动金额，所以余额与净资产不受影响，刷新账户列表拿新的本金/收益即可。
+  const reclassify = useMutation({
+    mutationFn: ({ entryId, entryType }: { entryId: string; entryType: string }) =>
+      apiRequest(ledgerApiPath(ledgerId!, `/accounts/${accountId}/entries/${entryId}`), {
+        method: "PATCH",
+        body: { entryType },
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId!, accountId!) }),
+      ]);
+      showToast({ tone: "success", message: "已改判" });
+    },
+    onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
+  });
+  const canReclassify = Boolean(ledgerId && accountId);
   const balances = useMemo(
     () =>
       currentBalanceMicros === undefined
@@ -77,6 +106,8 @@ export function BalanceAdjustmentListSheet({
         const resolved = balances?.get(entry.id);
         const beforeMicros = resolved?.before ?? entry.balanceBeforeMicros;
         const afterMicros = resolved?.after ?? entry.balanceAfterMicros;
+        const investmentEntry = isInvestmentEntry(entry.entryType);
+        const flipTo = entry.entryType === "revaluation" ? "principal" : "revaluation";
         return (
           <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3" key={entry.id}>
             <div className="flex items-start justify-between gap-3">
@@ -86,6 +117,8 @@ export function BalanceAdjustmentListSheet({
                 </p>
                 <p className="mt-0.5 text-[12px] text-[var(--color-text-muted)]">
                   {formatDateLabel(entry.occurredAt)}
+                  {/* 投资流水的归类决定它算收益还是算本金，必须一眼看得见。 */}
+                  {investmentEntry ? ` · ${entryTypeLabel(entry.entryType, accountType)}` : null}
                 </p>
               </div>
               <MoneyText
@@ -109,6 +142,16 @@ export function BalanceAdjustmentListSheet({
                 </strong>
               </span>
             </div>
+            {investmentEntry && canReclassify ? (
+              <button
+                className="mt-3 text-[12px] font-semibold text-[var(--color-tint)] disabled:opacity-50"
+                disabled={reclassify.isPending}
+                onClick={() => reclassify.mutate({ entryId: entry.id, entryType: flipTo })}
+                type="button"
+              >
+                改判为「{entryTypeLabel(flipTo, accountType)}」
+              </button>
+            ) : null}
           </div>
         );
       })}

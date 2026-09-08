@@ -21,6 +21,7 @@ import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import { AccountsService } from "./accounts.service";
 import { AdjustAccountDto } from "./dto/adjust-account.dto";
+import { ReclassifyEntryDto } from "./dto/reclassify-entry.dto";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { CreateSubAccountDto } from "./dto/create-sub-account.dto";
 import { ReorderAccountsDto, ReorderSubAccountsDto } from "./dto/reorder-accounts.dto";
@@ -174,6 +175,25 @@ export class AccountsController {
     @Param("accountId") accountId: string,
   ): Promise<void> {
     await this.accounts.archive(ledgerId, accountId, (auth as SessionAuthContext).userId);
+  }
+
+  /** 投资流水改判（市值涨跌 ↔ 本金存取）。只换归类，金额与余额都不动。 */
+  @Patch(":accountId/entries/:entryId")
+  @ApiOkResponse()
+  reclassifyEntry(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("accountId") accountId: string,
+    @Param("entryId") entryId: string,
+    @Body() body: ReclassifyEntryDto,
+  ) {
+    return this.accounts.reclassifyEntry(
+      ledgerId,
+      accountId,
+      entryId,
+      (auth as SessionAuthContext).userId,
+      body.entryType,
+    );
   }
 
   @Post(":accountId/adjustments")

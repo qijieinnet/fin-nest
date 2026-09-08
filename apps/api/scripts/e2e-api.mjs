@@ -186,6 +186,7 @@ async function main() {
   await assertAccountPersonOwnership({ ledgerId: ledger.id, owner });
   await assertSubAccountOpeningEntry({ ledgerId: ledger.id, owner });
   await assertInvestmentDerivedCost({ ledgerId: ledger.id, owner });
+  await assertInvestmentPrincipalKind({ ledgerId: ledger.id, owner });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -224,6 +225,7 @@ async function main() {
           "transaction_crud",
           "balance_adjustment",
           "investment_derived_cost",
+          "investment_principal_kind",
           "attachment_auth",
           "reminder_summary",
           "batch_update",
@@ -645,6 +647,104 @@ async function assertInvestmentDerivedCost({ ledgerId, owner }) {
   // 非投资账户不带这一段。
   const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
   assert.equal(accounts.find((item) => item.id === cash.id).investment, null);
+}
+
+/**
+ * 投资账户改余额的两种归类，以及事后改判。
+ *
+ * 缺了「本金存取」时，用改余额记的资金进出会被一律算成亏损（生产库上真出现过：
+ * 卖出后钱转进没记账的卡，账面凭空多亏几万）。改判则是给存量数据的补救——
+ * 它只换 entry_type，**余额必须一动不动**，这是整个机制安全的前提。
+ */
+async function assertInvestmentPrincipalKind({ ledgerId, owner }) {
+  const token = owner.token;
+  const invest = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "invest", name: `E2E Principal ${stamp}`, balanceMicros: "100000000" },
+  });
+  const read = async () => {
+    const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
+    return accounts.find((item) => item.id === invest.id);
+  };
+
+  // kind=principal：余额涨到 150，但这 50 是本金投入，不是收益。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${invest.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "150000000", kind: "principal", note: "e2e 加仓" },
+  });
+  let current = await read();
+  assert.equal(current.balanceMicros, "150000000");
+  assert.equal(current.investment.gainMicros, "0");
+  assert.equal(current.investment.costMicros, "150000000");
+
+  // kind=revaluation（不传时的默认值）：这 30 才是收益。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${invest.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "180000000", note: "e2e 涨了" },
+  });
+  current = await read();
+  assert.equal(current.investment.gainMicros, "30000000");
+  assert.equal(current.investment.costMicros, "150000000");
+
+  const entries = await api("GET", `/ledgers/${ledgerId}/accounts/${invest.id}/entries`, { token });
+  const principal = entries.find((entry) => entry.entryType === "principal");
+  const reval = entries.find((entry) => entry.entryType === "revaluation");
+  assert.ok(principal && reval);
+  assert.equal(principal.amountDeltaMicros, "50000000");
+  assert.equal(reval.amountDeltaMicros, "30000000");
+
+  // 改判：把那笔收益改判成本金存取。金额不动，所以余额必须还是 180。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${invest.id}/entries/${reval.id}`, {
+    token,
+    expected: 200,
+    body: { entryType: "principal" },
+  });
+  current = await read();
+  assert.equal(current.balanceMicros, "180000000", "改判绝不能动余额");
+  assert.equal(current.investment.gainMicros, "0");
+  assert.equal(current.investment.costMicros, "180000000");
+
+  // 改判是可逆的，改回去数字要原样回来。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${invest.id}/entries/${reval.id}`, {
+    token,
+    expected: 200,
+    body: { entryType: "revaluation" },
+  });
+  current = await read();
+  assert.equal(current.balanceMicros, "180000000");
+  assert.equal(current.investment.gainMicros, "30000000");
+  assert.equal(current.investment.costMicros, "150000000");
+
+  // 边界：非投资账户的流水不可改判，普通记账流水也不可改判。
+  const savings = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Principal Cash ${stamp}`, balanceMicros: "10000000" },
+  });
+  await api("POST", `/ledgers/${ledgerId}/accounts/${savings.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "20000000" },
+  });
+  const savingsEntries = await api("GET", `/ledgers/${ledgerId}/accounts/${savings.id}/entries`, {
+    token,
+  });
+  // 储蓄账户的余额修改仍是 adjustment，没被 kind 影响。
+  assert.ok(savingsEntries.some((entry) => entry.entryType === "adjustment"));
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${savings.id}/entries/${savingsEntries[0].id}`, {
+    token,
+    expected: 400,
+    body: { entryType: "principal" },
+  });
+  // 非法目标类型被 DTO 拦下。
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${invest.id}/entries/${reval.id}`, {
+    token,
+    expected: 400,
+    body: { entryType: "transfer_in" },
+  });
 }
 
 async function assertAccountPersonOwnership({ ledgerId, owner }) {

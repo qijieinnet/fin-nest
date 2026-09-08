@@ -290,7 +290,14 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
   const openAdjustmentRecords = () =>
     push({
       title: "余额修改记录",
-      content: <BalanceAdjustmentListSheet accountType={account.type} entries={entries} />,
+      content: (
+        <BalanceAdjustmentListSheet
+          accountId={account.id}
+          accountType={account.type}
+          entries={entries}
+          ledgerId={ledgerId}
+        />
+      ),
     });
   const openEntryRecords = () =>
     push({
@@ -592,9 +599,11 @@ function SubAccountDetailPanel({
       title: "余额修改记录",
       content: (
         <BalanceAdjustmentListSheet
+          accountId={account.id}
           accountType={account.type}
           currentBalanceMicros={subAccount.balanceMicros}
           entries={entries}
+          ledgerId={ledgerId}
         />
       ),
     });

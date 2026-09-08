@@ -11,7 +11,11 @@ import {
 import { buildInvestmentSummary, indexRevaluationSums } from "./investment";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
-import { AdjustAccountDto } from "./dto/adjust-account.dto";
+import {
+  AdjustAccountDto,
+  INVESTMENT_ENTRY_KINDS,
+  type InvestmentEntryKind,
+} from "./dto/adjust-account.dto";
 import { CreateSubAccountDto } from "./dto/create-sub-account.dto";
 import { UpdateSubAccountDto } from "./dto/update-sub-account.dto";
 import { LedgersService } from "../ledgers/ledgers.service";
@@ -458,9 +462,12 @@ export class AccountsService {
           ledgerId,
           accountId,
           subAccountId: targetSubAccountId,
-          // 投资账户的余额修改就是「更新市值」，差额即收益，必须与储蓄账户的
-          // 「记错了纠错」区分开——本金/收益全靠这个类型推导（见 buildInvestmentSummary）。
-          entryType: account.type === "invest" ? "revaluation" : "adjustment",
+          // 投资账户的余额修改分两种，由调用方指定（不传按市值涨跌）：
+          //   revaluation 市值涨跌 → 进收益
+          //   principal   本金存取 → 进本金（卖出到没记账的卡这类没有对手方账户的场景）
+          // 其余账户一律 adjustment（记错了纠错），语义与投资账户不同，不能混用同一类型。
+          entryType:
+            account.type === "invest" ? (input.kind ?? "revaluation") : "adjustment",
           amountDeltaMicros: delta,
           adjustmentId: adjustment.id,
           note: input.note,
@@ -482,6 +489,61 @@ export class AccountsService {
       },
       { timeout: 20_000 },
     );
+  }
+
+  /**
+   * 把一条已有的投资流水在「市值涨跌」与「本金存取」之间改判。
+   *
+   * 这是全仓库唯一会修改已有 account_entries 行的地方，因此约束刻意收得很窄：
+   * 只有投资账户、只有这两个类型之间、只换 entry_type。**金额一个字节都不动**——
+   * 正因为 delta 不变，余额、账户余额曲线、净资产趋势（都按「当前值 − 之后所有 delta」
+   * 反推）全都不受影响，硬规则 3/4 想守住的东西一样没破。变的只是这笔差额落进
+   * 收益还是本金：收益 = Σ revaluation，本金 = 余额 − 收益。
+   *
+   * 不用「写一对补偿流水」的做法：那需要给流水表加一列来记谁改判了谁，还要算「有效类型」
+   * 才能支持改回去，且会在「余额修改记录」里多出两条金额相互抵消的行；而它想保住的审计
+   * 轨迹 audit_logs 已经记了。
+   */
+  async reclassifyEntry(
+    ledgerId: string,
+    accountId: string,
+    entryId: string,
+    userId: string,
+    entryType: InvestmentEntryKind,
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const account = await this.assertAccountInLedger(ledgerId, accountId);
+    if (account.type !== "invest") {
+      throw new AppError("ENTRY_RECLASSIFY_NOT_INVEST", "只有投资账户的流水可以改判", 400);
+    }
+    const entry = await this.prisma.client.accountEntry.findFirst({
+      where: { id: entryId, ledgerId, accountId },
+    });
+    if (!entry) throw new AppError("ACCOUNT_ENTRY_NOT_FOUND", "流水不存在", 404);
+    if (!INVESTMENT_ENTRY_KINDS.includes(entry.entryType as InvestmentEntryKind)) {
+      throw new AppError(
+        "ENTRY_RECLASSIFY_UNSUPPORTED",
+        "只有「市值涨跌」和「本金存取」两类流水可以互相改判",
+        400,
+      );
+    }
+    if (entry.entryType === entryType) return entry;
+
+    const updated = await this.prisma.client.accountEntry.update({
+      where: { id: entryId },
+      data: { entryType },
+    });
+    await this.audit.write({
+      source: "user",
+      actorUserId: userId,
+      ledgerId,
+      action: "account_entry.reclassify",
+      entityType: "account_entry",
+      entityId: entryId,
+      // 改判不动金额，记下前后类型就够复原这次操作。
+      metadata: { from: entry.entryType, to: entryType, amountDeltaMicros: entry.amountDeltaMicros.toString() },
+    });
+    return updated;
   }
 
   async applyEntry(tx: PrismaTransactionClient, input: AccountEntryInput) {

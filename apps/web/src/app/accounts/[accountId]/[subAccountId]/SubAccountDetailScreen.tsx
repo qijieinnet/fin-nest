@@ -185,9 +185,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
       title: "余额修改记录",
       content: (
         <BalanceAdjustmentListSheet
+          accountId={account.id}
           accountType={account.type}
           currentBalanceMicros={subAccount.balanceMicros}
           entries={entries}
+          ledgerId={ledgerId}
         />
       ),
     });

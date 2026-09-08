@@ -218,7 +218,8 @@ export function accountSubtitle(account: Account): string {
 
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   adjustment: "余额调整",
-  revaluation: "市值更新",
+  revaluation: "市值涨跌",
+  principal: "本金存取",
   opening: "初始余额",
   settlement: "历史收款 / 还款",
   expense: "支出",
@@ -233,11 +234,16 @@ export const ENTRY_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * 「余额修改记录」收录的流水类型。投资账户走 revaluation（市值更新），
- * 其余账户走 adjustment，两者都是用户手动改余额的产物，列表按同一入口展示。
+ * 「余额修改记录」收录的流水类型：都是用户手动改余额的产物，按同一入口展示。
+ * 投资账户走 revaluation（市值涨跌）/ principal（本金存取），其余账户走 adjustment。
  */
 export function isBalanceEditEntry(entryType: string): boolean {
-  return entryType === "adjustment" || entryType === "revaluation";
+  return entryType === "adjustment" || isInvestmentEntry(entryType);
+}
+
+/** 投资账户特有的两类余额修改，可互相改判（金额不变，只换归类）。 */
+export function isInvestmentEntry(entryType: string): boolean {
+  return entryType === "revaluation" || entryType === "principal";
 }
 
 export function entryTypeLabel(entryType: string, accountType: string): string {

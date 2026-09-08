@@ -232,7 +232,12 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     push({
       title: "余额修改记录",
       content: (
-        <BalanceAdjustmentListSheet accountType={account.type} entries={entries} />
+        <BalanceAdjustmentListSheet
+          accountId={account.id}
+          accountType={account.type}
+          entries={entries}
+          ledgerId={ledgerId}
+        />
       ),
     });
   };

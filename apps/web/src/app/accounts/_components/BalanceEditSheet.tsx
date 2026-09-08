@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useState } from "react";
-import { IconButton, Input } from "@/components/ui";
+import { IconButton, Input, Tabs } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
@@ -41,12 +41,15 @@ export function BalanceEditSheet({
   offsetMicros = "0",
   accountType,
 }: BalanceEditSheetProps) {
-  const isRevaluation = accountType === "invest";
+  const isInvest = accountType === "invest";
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
   const [balance, setBalance] = useState(initialBalance);
+  // 投资账户：这笔差额算收益还是算本金。默认市值涨跌——那是改余额的主要用途。
+  const [kind, setKind] = useState<"revaluation" | "principal">("revaluation");
+  const isRevaluation = isInvest && kind === "revaluation";
 
   const save = useMutation({
     mutationFn: async () => {
@@ -55,7 +58,7 @@ export function BalanceEditSheet({
       const balanceAfterMicros = (BigInt(parsed.amountMicros) + BigInt(offsetMicros)).toString();
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/adjustments`), {
         method: "POST",
-        body: { balanceAfterMicros, subAccountId },
+        body: { balanceAfterMicros, subAccountId, kind: isInvest ? kind : undefined },
         headers: { "idempotency-key": createClientId("adjust") },
       });
     },
@@ -64,7 +67,7 @@ export function BalanceEditSheet({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
-      showToast({ tone: "success", message: isRevaluation ? "市值已更新" : "余额已更新" });
+      showToast({ tone: "success", message: isInvest ? "已记录" : "余额已更新" });
       pop();
     },
   });
@@ -91,11 +94,21 @@ export function BalanceEditSheet({
           type="submit"
         />
       </div>
+      {isInvest ? (
+        <Tabs
+          items={[
+            { label: "市值涨跌", value: "revaluation" },
+            { label: "本金存取", value: "principal" },
+          ]}
+          onValueChange={(value) => setKind(value as "revaluation" | "principal")}
+          value={kind}
+        />
+      ) : null}
       <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
         <Input
           autoFocus
           inputMode="decimal"
-          label={isRevaluation ? "当前市值" : "余额"}
+          label={isInvest ? "当前市值" : "余额"}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
           prefix="¥"
@@ -103,9 +116,11 @@ export function BalanceEditSheet({
         />
       </div>
       <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-        {isRevaluation
-          ? "保存后会生成一条市值更新记录，差额记为投资收益。买入卖出请用转账，别在这里改。"
-          : "保存后会生成一条余额调整记录，差额自动记入资金变动。"}
+        {!isInvest
+          ? "保存后会生成一条余额调整记录，差额自动记入资金变动。"
+          : isRevaluation
+            ? "差额记为投资收益。买入卖出用「本金存取」，对手方账户在账本里时优先用转账。"
+            : "差额记为本金进出、不计收益。适合卖出后转到没记账的卡这类没有对手方账户的情况。"}
       </p>
     </form>
   );
