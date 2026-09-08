@@ -315,6 +315,49 @@ export class BackupService {
       quickTemplate: newIdMap(rows("quickTemplates")),
       pending: newIdMap(rows("autoPendingTransactions")),
     };
+    // 旧备份（51 号迁移之前导出的）在投资账户上还带着手填的 investmentCostMicros，
+    // 且市值更新记的是 adjustment。这里按与 51 号迁移完全相同的口径做一次归一化：
+    //   · 投资账户的 adjustment → revaluation
+    //   · 建账时填的本金与建账余额的差额 → 补一条 revaluation
+    // 只补「建账那一刻」的差额，不补「余额 − 本金」的全部差额，理由见 51 号迁移的注释：
+    // 建账之后的偏差多半是本金没跟着更新造成的，固化成收益反而是错的。
+    const legacyInvestAccountIds = new Set(
+      rows("accounts")
+        .filter((row) => row.type === "invest")
+        .map((row) => String(row.id)),
+    );
+    const legacyCreationGains = (() => {
+      const deltaByAccount = new Map<string, bigint>();
+      for (const row of rows("accountEntries")) {
+        const key = String(row.accountId);
+        if (!legacyInvestAccountIds.has(key)) continue;
+        deltaByAccount.set(key, (deltaByAccount.get(key) ?? 0n) + (bi(row.amountDeltaMicros) ?? 0n));
+      }
+      const defaultSubByAccount = new Map<string, string>();
+      for (const row of rows("subAccounts")) {
+        if (row.isDefault) defaultSubByAccount.set(String(row.accountId), String(row.id));
+      }
+      return rows("accounts")
+        .filter((row) => row.type === "invest" && row.investmentCostMicros != null)
+        .flatMap((row) => {
+          const key = String(row.id);
+          const legacyCost = bi(row.investmentCostMicros) ?? 0n;
+          const openingBalance =
+            (bi(row.balanceMicros) ?? 0n) - (deltaByAccount.get(key) ?? 0n);
+          const creationGain = openingBalance - legacyCost;
+          if (creationGain === 0n) return [];
+          return [
+            {
+              accountId: key,
+              subAccountId: defaultSubByAccount.get(key) ?? null,
+              creationGain,
+              legacyCost,
+              occurredAt: row.createdAt,
+            },
+          ];
+        });
+    })();
+
     const ref = (map: Map<string, string>, oldId: unknown): string | null => {
       if (oldId == null) return null;
       const mapped = map.get(String(oldId));
@@ -421,7 +464,6 @@ export class BackupService {
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
       sortOrder: Number(row.sortOrder ?? 0),
       creditLimitMicros: bi(row.creditLimitMicros),
-      investmentCostMicros: bi(row.investmentCostMicros),
       counterparty: row.counterparty ?? null,
       dueDate: dt(row.dueDate),
       billDay: row.billDay ?? null,
@@ -651,7 +693,11 @@ export class BackupService {
         ledgerId,
         accountId: ref(maps.account, row.accountId)!,
         subAccountId: ref(maps.subAccount, row.subAccountId),
-        entryType: row.entryType,
+        // 51 号迁移之后投资账户的市值更新记 revaluation，但备份文件没有版本号，
+        // 旧信封里它仍是 adjustment。不改判的话恢复出来收益归零、本金被撑成余额。
+        entryType: legacyInvestAccountIds.has(String(row.accountId)) && row.entryType === "adjustment"
+          ? "revaluation"
+          : row.entryType,
         amountDeltaMicros: bi(row.amountDeltaMicros) ?? 0n,
         balanceBeforeMicros: bi(row.balanceBeforeMicros) ?? 0n,
         balanceAfterMicros: bi(row.balanceAfterMicros) ?? 0n,
@@ -664,6 +710,32 @@ export class BackupService {
         createdAt: dt(row.createdAt) ?? undefined,
       }),
     );
+
+    // 旧备份的建账盈亏补记（口径同 51 号迁移）。放在 accountEntries 之后，
+    // 这样上面那批的 id 映射已经建好，这里只需要账户/子账户的映射。
+    if (legacyCreationGains.length > 0) {
+      counts.accountEntries += await createManyChunked(
+        tx.accountEntry,
+        legacyCreationGains,
+        (row) => ({
+          id: randomUUID(),
+          ledgerId,
+          accountId: ref(maps.account, row.accountId)!,
+          subAccountId: refLoose(maps.subAccount, row.subAccountId),
+          entryType: "revaluation",
+          amountDeltaMicros: row.creationGain,
+          balanceBeforeMicros: row.legacyCost,
+          balanceAfterMicros: row.legacyCost + row.creationGain,
+          transactionId: null,
+          adjustmentId: null,
+          relatedAccountId: null,
+          note: "恢复旧备份保留：建账时填写的投入本金与当时余额的差额",
+          occurredAt: dt(row.occurredAt) ?? new Date(),
+          createdBy: userId,
+          createdAt: undefined,
+        }),
+      );
+    }
 
     counts.transactionAccountRelations = await createManyChunked(
       tx.transactionAccountRelation,

@@ -11,7 +11,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { useSubAccountDetailModel } from "./_model/useSubAccountDetailModel";
 import { AccountBalanceCard } from "../../_components/AccountBalanceCard";
-import { accountGroupMeta } from "../../_components/account-utils";
+import { accountGroupMeta, investmentStatRows } from "../../_components/account-utils";
 import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
@@ -43,6 +43,20 @@ function DetailLinkRow({
       </span>
       <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
     </button>
+  );
+}
+
+function StatRow({ color, label, value }: { color?: string; label: string; value: string }) {
+  return (
+    <div className="flex min-h-[46px] items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none">
+      <span className="flex-1 text-sm text-[var(--color-text-secondary)]">{label}</span>
+      <span
+        className="text-sm font-semibold [font-variant-numeric:tabular-nums]"
+        style={{ color: color ?? "var(--color-text-primary)" }}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -119,6 +133,10 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const subAccountName = subAccount.name;
   const subAccountIcon = subAccount.icon ?? "💵";
   const subAccountBalance = BigInt(subAccount.balanceMicros);
+  const isInvest = account.type === "invest";
+  // 投资账户改余额＝更新市值，差额就是收益；其余账户是「记错了纠错」。
+  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
+  const investStats = investmentStatRows(subAccount.investment);
 
   const openBalanceEdit = () => {
     push({
@@ -128,10 +146,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           accountId={account.id}
           allowNegative={account.type !== "credit"}
           initialBalance={microsToInput(subAccountBalance.toString(), { decimalPlaces })}
+          accountType={account.type}
           ledgerId={ledgerId}
           offsetMicros="0"
           subAccountId={subAccount.id}
-          title={`修改余额 · ${subAccountName}`}
+          title={`${balanceEditLabel} · ${subAccountName}`}
         />
       ),
     });
@@ -224,6 +243,18 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
           subtitle={`子账户 · ${meta.name}`}
         />
 
+        {/*
+          投资子账户的本金/收益：后端按该子账户自己的流水推导（转入转出＝本金、更新市值＝收益），
+          所以每个标的都能单独看盈亏。空桶（没进出过钱也没更新过市值）不渲染这一段。
+        */}
+        {investStats.length > 0 ? (
+          <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
+            {investStats.map((stat) => (
+              <StatRow color={stat.color} key={stat.label} label={stat.label} value={stat.value} />
+            ))}
+          </section>
+        ) : null}
+
         <div className="mt-4">
           <NetWorthSwitchRow
             checked={subAccount.includeInNetWorth === false}
@@ -251,7 +282,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
             onClick={openBalanceEdit}
             type="button"
           >
-            修改余额
+            {balanceEditLabel}
           </button>
         </section>
       </main>

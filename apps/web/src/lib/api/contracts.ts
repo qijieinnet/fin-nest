@@ -301,7 +301,19 @@ export type SubAccount = {
   sortOrder: number;
   /** money 账户创建时自动生成的默认子账户：承接未指定子账户的记账，不可删除。 */
   isDefault: boolean;
+  /** 投资子账户的本金/收益，非投资账户下为 null。口径同 Account.investment。 */
+  investment: InvestmentSummary | null;
   archivedAt: string | null;
+};
+
+/**
+ * 投资账户的本金与收益，由后端按流水推导，**只读**——没有任何接口能直接写它。
+ * 收益 = Σ 市值重估流水（用户「更新市值」写下的差额）；本金 = 当前余额 − 收益。
+ * 全部赎回后 costMicros 可能为负（收回多于投入）。
+ */
+export type InvestmentSummary = {
+  costMicros: string;
+  gainMicros: string;
 };
 
 /** 账户上的归属人员快照（后端 join 出来的，含已归档人员，前端不必再查 /people）。 */
@@ -325,7 +337,8 @@ export type Account = {
   balanceMicros: string;
   includeInNetWorth: boolean;
   creditLimitMicros: string | null;
-  investmentCostMicros: string | null;
+  /** 投资账户的本金/收益（派生只读），非投资账户为 null。 */
+  investment: InvestmentSummary | null;
   counterparty: string | null;
   dueDate: string | null;
   billDay: number | null;

@@ -1,4 +1,4 @@
-import type { Account, AccountType, SubAccount } from "@/lib/api";
+import type { Account, AccountType, InvestmentSummary, SubAccount } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
 
 export type AccountGroupMeta = {
@@ -164,14 +164,51 @@ export function formatDateLabel(value: string | null | undefined): string {
   return value.slice(0, 10).replaceAll("-", ".");
 }
 
+export type StatRowData = { label: string; value: string; color?: string };
+
+// 账单约定：盈利（正）红、亏损（负）绿。
+const GAIN_COLOR = "var(--color-accent-expense)";
+const LOSS_COLOR = "var(--color-accent-income)";
+
+/**
+ * 投资账户/子账户的「本金 · 收益 · 收益率」三行，账户详情、桌面详情、子账户详情共用一份。
+ *
+ * 本金与收益都是后端按流水推导的只读值（见 InvestmentSummary），不再有「未设置」这个状态。
+ * 从没进出过钱、也没更新过市值的空桶（本金和收益都为 0）返回空数组：
+ * 一个恒为 0 的假指标比不显示更碍眼——投资账户的默认桶经常就是这种空桶。
+ */
+export function investmentStatRows(investment: InvestmentSummary | null): StatRowData[] {
+  if (!investment) return [];
+  const cost = BigInt(investment.costMicros);
+  const gain = BigInt(investment.gainMicros);
+  if (cost === 0n && gain === 0n) return [];
+
+  const abs = gain < 0n ? -gain : gain;
+  const color = gain >= 0n ? GAIN_COLOR : LOSS_COLOR;
+  const rows: StatRowData[] = [
+    { label: "本金", value: formatMoney(cost) },
+    { label: "收益", value: `${gain >= 0n ? "+" : "−"}${formatMoney(abs)}`, color },
+  ];
+  // 本金 ≤ 0（清仓后收回多于投入，或全部资金都是收益）时收益率没有意义，不展示。
+  if (cost > 0n) {
+    const rate = (Number(gain) / Number(cost)) * 100;
+    rows.push({
+      label: "收益率",
+      value: `${rate >= 0 ? "+" : "−"}${Math.abs(rate).toFixed(2)}%`,
+      color,
+    });
+  }
+  return rows;
+}
+
 /** 列表行的副标题：信用显示额度、投资显示收益、往来显示对方。 */
 export function accountSubtitle(account: Account): string {
   if (account.type === "credit") {
     return account.creditLimitMicros ? `额度 ${formatMoney(account.creditLimitMicros)}` : "";
   }
   if (account.type === "invest") {
-    if (!account.investmentCostMicros) return "";
-    const profit = accountTotalMicros(account) - BigInt(account.investmentCostMicros);
+    if (!account.investment) return "";
+    const profit = BigInt(account.investment.gainMicros);
     const abs = profit < 0n ? -profit : profit;
     return `收益 ${profit >= 0n ? "+" : "−"}${formatMoney(abs).replace("¥", "")}`;
   }
@@ -181,6 +218,7 @@ export function accountSubtitle(account: Account): string {
 
 export const ENTRY_TYPE_LABELS: Record<string, string> = {
   adjustment: "余额调整",
+  revaluation: "市值更新",
   opening: "初始余额",
   settlement: "历史收款 / 还款",
   expense: "支出",
@@ -193,6 +231,14 @@ export const ENTRY_TYPE_LABELS: Record<string, string> = {
   payable_decrease: "需归还减少",
   reversal: "冲正",
 };
+
+/**
+ * 「余额修改记录」收录的流水类型。投资账户走 revaluation（市值更新），
+ * 其余账户走 adjustment，两者都是用户手动改余额的产物，列表按同一入口展示。
+ */
+export function isBalanceEditEntry(entryType: string): boolean {
+  return entryType === "adjustment" || entryType === "revaluation";
+}
 
 export function entryTypeLabel(entryType: string, accountType: string): string {
   if (entryType === "settlement") return accountType === "receivable" ? "历史收款" : "历史还款";

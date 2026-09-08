@@ -266,7 +266,6 @@ model Account {
   // 同一分类内的手动排序序号，列表按其升序排列。
   sortOrder            Int       @default(0) @map("sort_order")
   creditLimitMicros    BigInt?   @map("credit_limit_micros")
-  investmentCostMicros BigInt?   @map("investment_cost_micros")
   counterparty         String?
   dueDate              DateTime? @map("due_date") @db.Date
   billDay              Int?      @map("bill_day") @db.SmallInt

@@ -13,6 +13,7 @@ function subAccount(overrides: Partial<SubAccount>): SubAccount {
     includeInNetWorth: true,
     sortOrder: 0,
     isDefault: false,
+    investment: null,
     archivedAt: null,
     ...overrides,
   };
@@ -30,7 +31,7 @@ function account(overrides: Partial<Account>): Account {
     balanceMicros: "0",
     includeInNetWorth: true,
     creditLimitMicros: null,
-    investmentCostMicros: null,
+    investment: null,
     counterparty: null,
     dueDate: null,
     billDay: null,

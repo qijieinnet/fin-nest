@@ -30,12 +30,6 @@ export class UpdateAccountDto {
   @Matches(/^(0|[1-9]\d*)$/)
   creditLimitMicros?: string;
 
-  @ApiPropertyOptional({ example: "100000000" })
-  @IsOptional()
-  @IsString()
-  @Matches(/^(0|[1-9]\d*)$/)
-  investmentCostMicros?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

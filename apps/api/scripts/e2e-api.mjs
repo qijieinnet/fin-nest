@@ -185,6 +185,7 @@ async function main() {
   await assertMultiAccountPersonCreatorFilter({ ledgerId: ledger.id, owner, category });
   await assertAccountPersonOwnership({ ledgerId: ledger.id, owner });
   await assertSubAccountOpeningEntry({ ledgerId: ledger.id, owner });
+  await assertInvestmentDerivedCost({ ledgerId: ledger.id, owner });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -198,6 +199,7 @@ async function main() {
   await assertNotificationChannels({ ledgerId: ledger.id, owner, requester });
   await assertPlanPeriodConfirm({ ledgerId: ledger.id, owner, category });
   await assertPlanPeriodBackupRestore({ owner });
+  await assertLegacyInvestBackupRestore({ owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
@@ -221,6 +223,7 @@ async function main() {
           "partial_patch",
           "transaction_crud",
           "balance_adjustment",
+          "investment_derived_cost",
           "attachment_auth",
           "reminder_summary",
           "batch_update",
@@ -233,6 +236,7 @@ async function main() {
           "notification_channels",
           "plan_period_confirm",
           "plan_period_backup_restore",
+          "legacy_invest_backup_restore",
           "feishu_db_constraints",
           ...(process.env.E2E_SYSTEM_BACKUP === "1" ? ["system_backup_restore"] : []),
         ],
@@ -543,6 +547,104 @@ async function assertSubAccountOpeningEntry({ ledgerId, owner }) {
   // 关键不变式：账户余额 = Σ流水 delta（账户开户余额为 0 时）。
   const sum = entries.reduce((acc, entry) => acc + BigInt(entry.amountDeltaMicros), 0n);
   assert.equal(sum.toString(), "1000000");
+}
+
+/**
+ * 投资账户的本金/收益全部由流水推导，没有可写字段：
+ *   收益 = Σ revaluation（「更新市值」写下的差额）；本金 = 当前余额 − 收益。
+ * 关键回归：往投资账户转入现金只该抬高本金、不该产生收益——旧的手填 investment_cost_micros
+ * 正是在这里失准（余额涨、本金不动，收益凭空虚高一笔）。
+ */
+async function assertInvestmentDerivedCost({ ledgerId, owner }) {
+  const token = owner.token;
+  const invest = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    // 建账余额落成 opening 流水，即初始本金 100。
+    body: { type: "invest", name: `E2E Invest ${stamp}`, balanceMicros: "100000000" },
+  });
+  const cash = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Invest Cash ${stamp}`, balanceMicros: "50000000" },
+  });
+
+  const readInvest = async () => {
+    const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
+    return accounts.find((item) => item.id === invest.id);
+  };
+
+  // 建账后：本金 = 建账余额，收益为 0。
+  let current = await readInvest();
+  assert.equal(current.investment.costMicros, "100000000");
+  assert.equal(current.investment.gainMicros, "0");
+
+  // 市值涨到 130：差额 30 全部记为收益，本金不动。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${invest.id}/adjustments`, {
+    token,
+    expected: 201,
+    idempotencyKey: `${stamp}-invest-reval`,
+    body: { balanceAfterMicros: "130000000", note: "e2e 市值更新" },
+  });
+  current = await readInvest();
+  assert.equal(current.balanceMicros, "130000000");
+  assert.equal(current.investment.gainMicros, "30000000");
+  assert.equal(current.investment.costMicros, "100000000");
+
+  // 该差额必须落成 revaluation 而不是 adjustment，否则会被算进「记错了纠错」。
+  const entries = await api("GET", `/ledgers/${ledgerId}/accounts/${invest.id}/entries`, { token });
+  const revaluations = entries.filter((entry) => entry.entryType === "revaluation");
+  assert.equal(revaluations.length, 1);
+  assert.equal(revaluations[0].amountDeltaMicros, "30000000");
+  assert.equal(entries.filter((entry) => entry.entryType === "adjustment").length, 0);
+
+  // 核心回归：转入 20 只抬高本金，收益纹丝不动。
+  await api("POST", `/ledgers/${ledgerId}/transactions`, {
+    token,
+    expected: 201,
+    body: {
+      type: "transfer",
+      grossAmountMicros: "20000000",
+      occurredOn: todayIso(),
+      currency: "CNY",
+      fromAccountId: cash.id,
+      toAccountId: invest.id,
+      note: "e2e 加仓",
+    },
+  });
+  current = await readInvest();
+  assert.equal(current.balanceMicros, "150000000");
+  assert.equal(current.investment.gainMicros, "30000000");
+  assert.equal(current.investment.costMicros, "120000000");
+
+  // 子账户粒度：命名子账户自己的本金/收益按它自己的流水算，与父账户口径一致。
+  const sub = await api("POST", `/ledgers/${ledgerId}/accounts/${invest.id}/sub-accounts`, {
+    token,
+    expected: 201,
+    body: { name: `E2E Fund ${stamp}`, balanceMicros: "10000000" },
+  });
+  await api("POST", `/ledgers/${ledgerId}/accounts/${invest.id}/adjustments`, {
+    token,
+    expected: 201,
+    idempotencyKey: `${stamp}-invest-sub-reval`,
+    body: { subAccountId: sub.id, balanceAfterMicros: "14000000", note: "e2e 子账户市值" },
+  });
+  current = await readInvest();
+  const subRow = current.subAccounts.find((item) => item.id === sub.id);
+  assert.equal(subRow.investment.gainMicros, "4000000");
+  assert.equal(subRow.investment.costMicros, "10000000");
+  // 父账户收益 = 各子账户收益之和（30 来自默认桶 + 4 来自命名子账户）。
+  assert.equal(current.investment.gainMicros, "34000000");
+  assert.equal(current.investment.costMicros, "130000000");
+  // 不变式：本金 + 收益 = 当前余额。
+  assert.equal(
+    (BigInt(current.investment.costMicros) + BigInt(current.investment.gainMicros)).toString(),
+    current.balanceMicros,
+  );
+
+  // 非投资账户不带这一段。
+  const accounts = await api("GET", `/ledgers/${ledgerId}/accounts`, { token });
+  assert.equal(accounts.find((item) => item.id === cash.id).investment, null);
 }
 
 async function assertAccountPersonOwnership({ ledgerId, owner }) {
@@ -2564,6 +2666,98 @@ async function assertPlanPeriodBackupRestore({ owner }) {
   assert.equal(progress.period.start, isoOf(lastMonthStart));
   assert.equal(progress.period.awaitingConfirm, true);
   assert.equal(progress.period.targetAmountMicros, "8000000");
+}
+
+/**
+ * 跨版本恢复：51 号迁移之前导出的备份，投资账户上还带着手填的 investmentCostMicros，
+ * 市值更新记的还是 adjustment。备份信封没有版本号，恢复路径必须自己认出并归一化，
+ * 否则旧账本恢复进来收益归零、本金被撑成余额（迁移只跑一次，救不了之后导入的数据）。
+ *
+ * 这里的做法是导出一份真备份、把它改回旧格式，再恢复回去——比手搓信封更贴近真实文件。
+ */
+async function assertLegacyInvestBackupRestore({ owner }) {
+  const token = owner.token;
+  const ledger = await api("POST", "/ledgers", {
+    token,
+    expected: 201,
+    body: { name: `E2E Legacy Invest ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(ledger.id);
+
+  // 甲：靠调整表达收益（旧格式里是 adjustment）。建账 100，调到 130。
+  const viaAdjust = await api("POST", `/ledgers/${ledger.id}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "invest", name: `Legacy Adjust ${stamp}`, balanceMicros: "100000000" },
+  });
+  await api("POST", `/ledgers/${ledger.id}/accounts/${viaAdjust.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "130000000" },
+  });
+  // 乙：建账就有盈亏（旧表单两个框填不同的数）。余额 130，本金 100，无流水。
+  await api("POST", `/ledgers/${ledger.id}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "invest", name: `Legacy Opening ${stamp}`, balanceMicros: "130000000" },
+  });
+
+  const exported = await fetch(`${baseUrl}/ledgers/${ledger.id}/export/json`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(exported.status, 200);
+  const envelope = JSON.parse(await exported.text());
+
+  // 把信封改回 51 号迁移之前的样子。
+  for (const account of envelope.data.accounts) {
+    if (account.type !== "invest") continue;
+    account.investmentCostMicros = "100000000";
+  }
+  let renamed = 0;
+  for (const entry of envelope.data.accountEntries) {
+    if (entry.entryType !== "revaluation") continue;
+    entry.entryType = "adjustment";
+    renamed += 1;
+  }
+  // 甲那条市值更新必须真的被改回去了，否则这个用例什么都没测到。
+  assert.equal(renamed, 1);
+
+  const form = new FormData();
+  form.append("confirmLedgerName", ledger.name);
+  form.append(
+    "file",
+    new Blob([JSON.stringify(envelope)], { type: "application/json" }),
+    "legacy-backup.json",
+  );
+  const restored = await fetch(`${baseUrl}/ledgers/${ledger.id}/import/json`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: form,
+  });
+  assert.equal(restored.status, 201, await restored.text());
+
+  const accounts = await api("GET", `/ledgers/${ledger.id}/accounts`, { token });
+  const byName = (name) => accounts.find((item) => item.name === name);
+
+  // 甲：adjustment 被改判成 revaluation，收益 30 保住，本金回到 100。
+  const adjusted = byName(`Legacy Adjust ${stamp}`);
+  assert.equal(adjusted.balanceMicros, "130000000");
+  assert.equal(adjusted.investment.gainMicros, "30000000");
+  assert.equal(adjusted.investment.costMicros, "100000000");
+
+  // 乙：建账盈亏被补成一条 revaluation，同样是本金 100、收益 30。
+  const opened = byName(`Legacy Opening ${stamp}`);
+  assert.equal(opened.balanceMicros, "130000000");
+  assert.equal(opened.investment.gainMicros, "30000000");
+  assert.equal(opened.investment.costMicros, "100000000");
+
+  // 不变式：本金 + 收益 = 余额。
+  for (const account of [adjusted, opened]) {
+    assert.equal(
+      (BigInt(account.investment.costMicros) + BigInt(account.investment.gainMicros)).toString(),
+      account.balanceMicros,
+    );
+  }
 }
 
 /** 记账提醒：随记账设置一起读写，周期配置不完整时拒绝开启。 */

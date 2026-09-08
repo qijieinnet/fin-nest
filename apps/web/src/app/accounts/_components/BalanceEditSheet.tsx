@@ -20,6 +20,11 @@ type BalanceEditSheetProps = {
   /** 是否允许输入负数余额；信用账户余额为“已用额度”，不允许负数。 */
   allowNegative?: boolean;
   /**
+   * 账户类型。投资账户改余额的语义是「更新市值」——差额会记成 revaluation 流水并计入收益，
+   * 所以文案要说清楚这一点，避免用户拿它当纠错工具用（那会凭空多出一笔收益）。
+   */
+  accountType?: string;
+  /**
    * 编辑默认桶余额时，接口按 subAccountId=null 调整“账户总余额”，
    * 需把命名子账户余额之和加回来，才能让默认桶变为输入值。默认 "0"。
    */
@@ -34,7 +39,9 @@ export function BalanceEditSheet({
   title,
   allowNegative = true,
   offsetMicros = "0",
+  accountType,
 }: BalanceEditSheetProps) {
+  const isRevaluation = accountType === "invest";
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
@@ -57,7 +64,7 @@ export function BalanceEditSheet({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
-      showToast({ tone: "success", message: "余额已更新" });
+      showToast({ tone: "success", message: isRevaluation ? "市值已更新" : "余额已更新" });
       pop();
     },
   });
@@ -88,7 +95,7 @@ export function BalanceEditSheet({
         <Input
           autoFocus
           inputMode="decimal"
-          label="余额"
+          label={isRevaluation ? "当前市值" : "余额"}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
           prefix="¥"
@@ -96,7 +103,9 @@ export function BalanceEditSheet({
         />
       </div>
       <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-        保存后会生成一条余额调整记录，差额自动记入资金变动。
+        {isRevaluation
+          ? "保存后会生成一条市值更新记录，差额记为投资收益。买入卖出请用转账，别在这里改。"
+          : "保存后会生成一条余额调整记录，差额自动记入资金变动。"}
       </p>
     </form>
   );

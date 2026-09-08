@@ -8,6 +8,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { isBalanceEditEntry } from "../../../_components/account-utils";
 
 /** 子账户详情视图模型：账户/子账户查询，删除、净资产开关 mutation，关联/调整记录派生。 */
 export function useSubAccountDetailModel(accountId: string, subAccountId: string) {
@@ -32,7 +33,7 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
     () => (entriesQuery.data ?? []).filter((entry) => entry.subAccountId === subAccountId),
     [entriesQuery.data, subAccountId],
   );
-  const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
+  const adjustmentEntries = entries.filter((entry) => isBalanceEditEntry(entry.entryType));
 
   const removeSub = useMutation({
     mutationFn: () =>

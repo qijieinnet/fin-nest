@@ -24,6 +24,7 @@ import {
   balanceLabel,
   formatDateLabel,
   formatMoney,
+  investmentStatRows,
   isLiability,
   isMoneyAccount,
   orderedSubAccountRows,
@@ -234,6 +235,9 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
   const canEditBalance = moneyAccount || isLend;
+  const isInvest = account.type === "invest";
+  // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
+  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
   const namedSubAccounts = account.subAccounts.filter((sub) => !sub.isDefault);
   const hasSplitSubAccounts = namedSubAccounts.length > 0;
   const hasMultipleSubAccounts = namedSubAccounts.length > 1;
@@ -265,9 +269,10 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
             subAccount ? subAccount.balanceMicros : account.balanceMicros,
             { decimalPlaces },
           )}
+          accountType={account.type}
           ledgerId={ledgerId}
           subAccountId={subAccount?.id}
-          title={subAccount ? `修改余额 · ${subAccount.name}` : "修改余额"}
+          title={subAccount ? `${balanceEditLabel} · ${subAccount.name}` : balanceEditLabel}
         />
       ),
     });
@@ -315,22 +320,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
     stats.push({ label: "账单日", value: account.billDay ? `每月 ${account.billDay} 日` : "—" });
     stats.push({ label: "还款日", value: account.repayDay ? `每月 ${account.repayDay} 日` : "—" });
   } else if (account.type === "invest") {
-    const cost = account.investmentCostMicros ? BigInt(account.investmentCostMicros) : null;
-    stats.push({ label: "本金", value: cost !== null ? formatMoney(cost) : "未设置" });
-    if (cost !== null) {
-      const profit = total - cost;
-      const abs = profit < 0n ? -profit : profit;
-      const color = profit >= 0n ? "var(--color-accent-expense)" : "var(--color-accent-income)";
-      stats.push({ label: "收益", value: `${profit >= 0n ? "+" : "−"}${formatMoney(abs)}`, color });
-      if (cost > 0n) {
-        const rate = (Number(profit) / Number(cost)) * 100;
-        stats.push({
-          label: "收益率",
-          value: `${rate >= 0 ? "+" : "−"}${Math.abs(rate).toFixed(2)}%`,
-          color,
-        });
-      }
-    }
+    stats.push(...investmentStatRows(account.investment));
   } else if (isLend) {
     stats.push({ label: "对方", value: account.counterparty ?? "—" });
     stats.push({
@@ -515,7 +505,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
       {canEditBalance && !hasSplitSubAccounts ? (
         <div className="mt-6">
           <Button block onClick={() => openBalanceEdit()} variant="secondary">
-            修改余额
+            {balanceEditLabel}
           </Button>
         </div>
       ) : null}
@@ -556,6 +546,10 @@ function SubAccountDetailPanel({
   const subAccountName = subAccount.name;
   const subAccountIcon = subAccount.icon ?? "💵";
   const subAccountBalance = BigInt(subAccount.balanceMicros);
+  const isInvest = account.type === "invest";
+  // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
+  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
+  const investStats = investmentStatRows(subAccount.investment);
 
   const openBalanceEdit = () =>
     push({
@@ -565,10 +559,11 @@ function SubAccountDetailPanel({
           accountId={account.id}
           allowNegative={account.type !== "credit"}
           initialBalance={microsToInput(subAccountBalance.toString(), { decimalPlaces })}
+          accountType={account.type}
           ledgerId={ledgerId}
           offsetMicros="0"
           subAccountId={subAccount.id}
-          title={`修改余额 · ${subAccountName}`}
+          title={`${balanceEditLabel} · ${subAccountName}`}
         />
       ),
     });
@@ -654,6 +649,29 @@ function SubAccountDetailPanel({
         subtitle={`子账户 · ${meta.name}`}
       />
 
+      {/*
+        投资子账户的本金/收益：后端按该子账户自己的流水推导，所以每个标的都能单独看盈亏。
+        空桶（没进出过钱也没更新过市值）不渲染这一段。
+      */}
+      {investStats.length > 0 ? (
+        <section className="mt-5 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
+          {investStats.map((stat) => (
+            <div
+              className="flex min-h-[46px] items-center gap-3 px-4 py-3 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)] last:shadow-none"
+              key={stat.label}
+            >
+              <span className="flex-1 text-sm text-[var(--color-text-secondary)]">{stat.label}</span>
+              <span
+                className="text-sm font-semibold [font-variant-numeric:tabular-nums]"
+                style={{ color: stat.color ?? "var(--color-text-primary)" }}
+              >
+                {stat.value}
+              </span>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       <div className="mt-4 flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
         <div className="min-w-0 flex-1">
           <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
@@ -680,7 +698,7 @@ function SubAccountDetailPanel({
 
       <div className="mt-6">
         <Button block onClick={openBalanceEdit} variant="secondary">
-          修改余额
+          {balanceEditLabel}
         </Button>
       </div>
     </div>

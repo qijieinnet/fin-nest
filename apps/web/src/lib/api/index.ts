@@ -100,6 +100,7 @@ export type {
   Insurance,
   InsuranceDetail,
   InsuranceInsuredPerson,
+  InvestmentSummary,
   ItemAsset,
   ItemDetail,
   ItemType,

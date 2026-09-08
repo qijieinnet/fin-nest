@@ -3,7 +3,12 @@
 import { useMemo } from "react";
 import { EmptyState, MoneyText } from "@/components/business";
 import type { AccountEntry } from "@/lib/api";
-import { entryTypeLabel, formatDateLabel, formatMoney } from "./account-utils";
+import {
+  entryTypeLabel,
+  formatDateLabel,
+  formatMoney,
+  isBalanceEditEntry,
+} from "./account-utils";
 
 type BalanceAdjustmentListSheetProps = {
   accountType: string;
@@ -48,7 +53,7 @@ export function BalanceAdjustmentListSheet({
   currentBalanceMicros,
   entries,
 }: BalanceAdjustmentListSheetProps) {
-  const adjustments = entries.filter((entry) => entry.entryType === "adjustment");
+  const adjustments = entries.filter((entry) => isBalanceEditEntry(entry.entryType));
   const balances = useMemo(
     () =>
       currentBalanceMicros === undefined

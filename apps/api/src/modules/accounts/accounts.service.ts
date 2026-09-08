@@ -8,6 +8,7 @@ import {
   PrismaService,
   PrismaTransactionClient,
 } from "@fin-nest/backend";
+import { buildInvestmentSummary, indexRevaluationSums } from "./investment";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
 import { AdjustAccountDto } from "./dto/adjust-account.dto";
@@ -65,7 +66,7 @@ export class AccountsService {
 
   async list(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const [accounts, subAccounts, people] = await Promise.all([
+    const [accounts, subAccounts, people, revaluationSums] = await Promise.all([
       this.prisma.client.account.findMany({
         where: { ledgerId, archivedAt: null },
         orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
@@ -79,13 +80,34 @@ export class AccountsService {
         where: { ledgerId },
         select: { id: true, name: true, icon: true, archivedAt: true },
       }),
+      // 只有投资账户会产生 revaluation，这里天然只捞到投资账户的行，不必先查账户再筛。
+      this.prisma.client.accountEntry.groupBy({
+        by: ["accountId", "subAccountId"],
+        where: { ledgerId, entryType: "revaluation" },
+        _sum: { amountDeltaMicros: true },
+      }),
     ]);
     const peopleById = new Map(people.map((person) => [person.id, person]));
+    const revaluation = indexRevaluationSums(revaluationSums);
     return accounts.map((account) => {
       const person = account.personId ? peopleById.get(account.personId) : undefined;
       return {
         ...account,
-        subAccounts: subAccounts.filter((subAccount) => subAccount.accountId === account.id),
+        investment: buildInvestmentSummary(
+          account.type,
+          account.balanceMicros,
+          revaluation.byAccount.get(account.id) ?? 0n,
+        ),
+        subAccounts: subAccounts
+          .filter((subAccount) => subAccount.accountId === account.id)
+          .map((subAccount) => ({
+            ...subAccount,
+            investment: buildInvestmentSummary(
+              account.type,
+              subAccount.balanceMicros,
+              revaluation.bySubAccount.get(subAccount.id) ?? 0n,
+            ),
+          })),
         person: person
           ? {
               id: person.id,
@@ -293,9 +315,6 @@ export class AccountsService {
               balanceMicros,
               includeInNetWorth: input.includeInNetWorth ?? true,
               creditLimitMicros: input.creditLimitMicros ? BigInt(input.creditLimitMicros) : null,
-              investmentCostMicros: input.investmentCostMicros
-                ? BigInt(input.investmentCostMicros)
-                : null,
               counterparty: input.counterparty,
               dueDate: input.dueDate ? parseDateOnly(input.dueDate) : null,
               billDay: input.billDay,
@@ -342,8 +361,6 @@ export class AccountsService {
         includeInNetWorth: input.includeInNetWorth,
         creditLimitMicros:
           input.creditLimitMicros === undefined ? undefined : BigInt(input.creditLimitMicros),
-        investmentCostMicros:
-          input.investmentCostMicros === undefined ? undefined : BigInt(input.investmentCostMicros),
         counterparty: input.counterparty,
         dueDate: input.dueDate === undefined ? undefined : parseDateOnly(input.dueDate),
         billDay: input.billDay,
@@ -441,7 +458,9 @@ export class AccountsService {
           ledgerId,
           accountId,
           subAccountId: targetSubAccountId,
-          entryType: "adjustment",
+          // 投资账户的余额修改就是「更新市值」，差额即收益，必须与储蓄账户的
+          // 「记错了纠错」区分开——本金/收益全靠这个类型推导（见 buildInvestmentSummary）。
+          entryType: account.type === "invest" ? "revaluation" : "adjustment",
           amountDeltaMicros: delta,
           adjustmentId: adjustment.id,
           note: input.note,

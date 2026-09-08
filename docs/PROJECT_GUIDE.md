@@ -83,14 +83,15 @@ AI 工具调用策略：每轮用户请求的首轮必须选择一个结构化�
 1. **金额**：一律 `*_micros BIGINT`（×1,000,000），TS 层用 `bigint`/数字字符串，**禁止 `number` 参与金额计算**；API 边界用正则 `/^(0|[1-9]\d*)$/` 校验金额字符串。
 2. **账本隔离**：每个 ledger-scoped service 公开方法第一行调 `LedgersService.assertMember/assertOwner`；所有查询 where 条件带 `ledgerId`。权限最终判定只在 API 层，前端只做展示优化。
 3. **余额变更唯一入口**：`AccountsService.applyEntry`——先 `SELECT ... FOR UPDATE` 锁账户行，再读余额、写 `account_entries`（含 before/after）。负债账户（credit/payable）通过 `orientForLiability` 自动翻转符号。
-4. **编辑/删除交易 = 反向流水**：不物理删除旧流水，`reverseEntries` 按账户+子账户净额写 `reversal` 分录（允许作用于已归档账户），再应用新影响。
-5. **有效金额口径**：`effective = gross - Σ关联金额`（关联合计不得超过原始金额）；列表/统计/预算/计划用有效金额，账户流水用原始金额。
-6. **幂等**：金额写操作（交易创建、账户创建/调整、子账户创建、快捷直接记账等）支持 `Idempotency-Key` 头；实现为「预留占位→执行→落响应」，keyHash 含 scope+userId，失败释放、5 分钟遗留占位可接管。
-7. **自动化不直接写账**：自动记账/快捷模板只能生成待确认或调用 `TransactionsService`；确认待确认用「带 status 条件的 updateMany」防并发双记。
-8. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
-9. **软删/归档优先**：交易/账本/保险/物品/订阅软删（`deletedAt`），分类/人员/账户/计划/物品类型/订阅分类归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
-10. **审计**：注册/改密/管理操作/交易增删改/恢复等写 `audit_logs`。
-11. **Worker 边界**：Worker 消费 `background_jobs`（`auto.schedule`、`file.delete`），并在每轮轮询里扫描订阅/保单的到期提醒、记账提醒与周期系统备份（各自 try，一边抛错不影响另一边；备份**等它跑完**再进 job 循环，甩手不管会让备份连同进程一起被停止信号砍在半路）、在 job 循环后统一派发推送（订阅提醒扫表、自动记账事件驱动，均不走 job 队列，见「提醒推送」），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。Web Push 的出站投递也在 worker 侧发生，因此 **worker 与 api 都要拿到 VAPID 环境变量**（api 用它下发公钥与发测试通知）。
+4. **投资账户的本金/收益是派生的，不是存的**：投资账户改余额写 `revaluation` 流水（其余账户仍是 `adjustment`），于是 `累计收益 = Σ revaluation`、`本金 = 当前余额 − 收益`，账户与子账户同一套推导（`accounts/investment.ts`，随 `/accounts` 列表返回）。没有任何接口能写本金——手填的旧字段 `investment_cost_micros` 已在 51 号迁移删除，因为它与余额天然会脱节（转入了钱但忘了改本金，收益就凭空虚高）。**存量数据有两条归一化路径且口径必须一致**：51 号迁移处理库里的旧数据，`BackupService` 的恢复路径处理旧备份（信封没有版本号，迁移只跑一次救不了之后导入的文件）。两处都只补「建账那一刻」的盈亏差额（旧建账表单的「当前余额」和「投入本金」是两个独立输入框，填不同的数是刻意的），不补建账之后的偏差（那是本金没跟着更新，属于本次要修掉的失准）。
+5. **编辑/删除交易 = 反向流水**：不物理删除旧流水，`reverseEntries` 按账户+子账户净额写 `reversal` 分录（允许作用于已归档账户），再应用新影响。
+6. **有效金额口径**：`effective = gross - Σ关联金额`（关联合计不得超过原始金额）；列表/统计/预算/计划用有效金额，账户流水用原始金额。
+7. **幂等**：金额写操作（交易创建、账户创建/调整、子账户创建、快捷直接记账等）支持 `Idempotency-Key` 头；实现为「预留占位→执行→落响应」，keyHash 含 scope+userId，失败释放、5 分钟遗留占位可接管。
+8. **自动化不直接写账**：自动记账/快捷模板只能生成待确认或调用 `TransactionsService`；确认待确认用「带 status 条件的 updateMany」防并发双记。
+9. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
+10. **软删/归档优先**：交易/账本/保险/物品/订阅软删（`deletedAt`），分类/人员/账户/计划/物品类型/订阅分类归档（`archivedAt`）；有关联数据禁硬删；账本软删后其所有子资源接口 404。
+11. **审计**：注册/改密/管理操作/交易增删改/恢复等写 `audit_logs`。
+12. **Worker 边界**：Worker 消费 `background_jobs`（`auto.schedule`、`file.delete`），并在每轮轮询里扫描订阅/保单的到期提醒、记账提醒与周期系统备份（各自 try，一边抛错不影响另一边；备份**等它跑完**再进 job 循环，甩手不管会让备份连同进程一起被停止信号砍在半路）、在 job 循环后统一派发推送（订阅提醒扫表、自动记账事件驱动，均不走 job 队列，见「提醒推送」），与 API 共享 `@fin-nest/backend` 与领域逻辑，不开 HTTP 端口。Web Push 的出站投递也在 worker 侧发生，因此 **worker 与 api 都要拿到 VAPID 环境变量**（api 用它下发公钥与发测试通知）。
 
 ## 5. 鉴权与安全基线
 

@@ -34,6 +34,7 @@ import {
   balanceLabel,
   formatDateLabel,
   formatMoney,
+  investmentStatRows,
   isLiability,
   isMoneyAccount,
   orderedSubAccountRows,
@@ -163,6 +164,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const displayTotal = accountVisibleTotalMicros(account);
   const settled = Boolean(account.settledAt) && total === 0n;
   const moneyAccount = isMoneyAccount(account.type);
+  const isInvest = account.type === "invest";
+  // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
+  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
   const canEditBalance = moneyAccount || isLend;
   // 命名子账户（默认子账户之外）：有命名子账户时才把账户视为“已拆分”，展示子账户列表。
   const namedSubAccounts = account.subAccounts.filter((sub) => !sub.isDefault);
@@ -194,9 +198,10 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             subAccount ? subAccount.balanceMicros : account.balanceMicros,
             { decimalPlaces },
           )}
+          accountType={account.type}
           ledgerId={ledgerId}
           subAccountId={subAccount?.id}
-          title={subAccount ? `修改余额 · ${subAccount.name}` : "修改余额"}
+          title={subAccount ? `${balanceEditLabel} · ${subAccount.name}` : balanceEditLabel}
         />
       ),
     });
@@ -250,23 +255,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     stats.push({ label: "账单日", value: account.billDay ? `每月 ${account.billDay} 日` : "—" });
     stats.push({ label: "还款日", value: account.repayDay ? `每月 ${account.repayDay} 日` : "—" });
   } else if (account.type === "invest") {
-    const cost = account.investmentCostMicros ? BigInt(account.investmentCostMicros) : null;
-    stats.push({ label: "本金", value: cost !== null ? formatMoney(cost) : "未设置" });
-    if (cost !== null) {
-      const profit = total - cost;
-      const abs = profit < 0n ? -profit : profit;
-      // 账单约定：盈利（正）红、亏损（负）绿。
-      const color = profit >= 0n ? "var(--color-accent-expense)" : "var(--color-accent-income)";
-      stats.push({ label: "收益", value: `${profit >= 0n ? "+" : "−"}${formatMoney(abs)}`, color });
-      if (cost > 0n) {
-        const rate = (Number(profit) / Number(cost)) * 100;
-        stats.push({
-          label: "收益率",
-          value: `${rate >= 0 ? "+" : "−"}${Math.abs(rate).toFixed(2)}%`,
-          color,
-        });
-      }
-    }
+    stats.push(...investmentStatRows(account.investment));
   } else if (isLend) {
     stats.push({ label: "对方", value: account.counterparty ?? "—" });
     stats.push({
@@ -284,7 +273,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     const actions: SwipeAction[] = [
       {
         icon: <Pencil size={18} />,
-        label: `修改${subAccount.name}余额`,
+        label: `${balanceEditLabel} · ${subAccount.name}`,
         onClick: () => openBalanceEdit(subAccount),
         tone: "neutral",
       },
@@ -467,7 +456,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
               onClick={() => openBalanceEdit()}
               type="button"
             >
-              修改余额
+              {balanceEditLabel}
             </button>
           </section>
         ) : null}

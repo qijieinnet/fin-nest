@@ -17,7 +17,7 @@ function account(overrides: Partial<Account> & Pick<Account, "id" | "type">): Ac
     balanceMicros: "0",
     includeInNetWorth: true,
     creditLimitMicros: null,
-    investmentCostMicros: null,
+    investment: null,
     counterparty: null,
     dueDate: null,
     billDay: null,

@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { isBalanceEditEntry } from "../../_components/account-utils";
 import { isLendAccount } from "../../_components/account-utils";
 
 /** 账户详情视图模型：账户/流水/关联记录查询，删除、净资产开关、子账户删除与排序 mutation。 */
@@ -34,7 +35,7 @@ export function useAccountDetailModel(accountId: string) {
   // 冲正（reversal）是编辑/删除交易产生的真实对冲流水，隐藏它会让资金变动记录里
   // 只剩被冲掉的原始流水，可见 delta 之和与余额对不上；子账户视图也是全量展示。
   const entries = entriesQuery.data ?? [];
-  const adjustmentEntries = entries.filter((entry) => entry.entryType === "adjustment");
+  const adjustmentEntries = entries.filter((entry) => isBalanceEditEntry(entry.entryType));
   const transactions = transactionsQuery.data ?? [];
 
   const invalidate = async () => {

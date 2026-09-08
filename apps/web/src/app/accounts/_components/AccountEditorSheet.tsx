@@ -184,7 +184,6 @@ export function AccountEditorSheet({
   const [icon, setIcon] = useState(subAccount?.icon ?? account?.icon ?? "💵");
   const [balance, setBalance] = useState("");
   const [creditLimit, setCreditLimit] = useState(() => microsToInput(account?.creditLimitMicros, { decimalPlaces }));
-  const [investCost, setInvestCost] = useState(() => microsToInput(account?.investmentCostMicros, { decimalPlaces }));
   const [counterparty, setCounterparty] = useState(account?.counterparty ?? "");
   const [dueDate, setDueDate] = useState(account?.dueDate?.slice(0, 10) ?? "");
   const [billDay, setBillDay] = useState(account?.billDay ? String(account.billDay) : "");
@@ -239,8 +238,6 @@ export function AccountEditorSheet({
 
       const limitParsed = creditLimit.trim() ? parseMoneyToMicros(creditLimit, { decimalPlaces }) : null;
       if (limitParsed && !limitParsed.ok) throw new Error("信用额度格式不正确");
-      const costParsed = investCost.trim() ? parseMoneyToMicros(investCost, { decimalPlaces }) : null;
-      if (costParsed && !costParsed.ok) throw new Error("投入本金格式不正确");
       const billDayValue = parseOptionalDay(billDay, "账单日");
       const repayDayValue = parseOptionalDay(repayDay, "还款日");
 
@@ -250,7 +247,6 @@ export function AccountEditorSheet({
         // null 表示清除归属；后端 undefined 才是「保持不变」。
         personId: personId ?? null,
         creditLimitMicros: type === "credit" ? limitParsed?.amountMicros : undefined,
-        investmentCostMicros: type === "invest" ? costParsed?.amountMicros : undefined,
         counterparty:
           type === "receivable" || type === "payable"
             ? counterparty.trim() || undefined
@@ -495,28 +491,19 @@ export function AccountEditorSheet({
           ) : null
         ) : null}
 
-        {!isSubAccountMode && type === "invest" ? (
+        {/*
+          投资账户没有「投入本金」输入框：本金和收益由流水推导（转入转出＝本金、更新市值＝收益），
+          手填只会与余额脱节。建账填的这笔余额会落成一条 opening 流水，即初始本金。
+        */}
+        {!isSubAccountMode && type === "invest" && !isEditing ? (
           <div className="transaction-form__card">
-            {!isEditing ? (
-              <>
-                <FieldRow
-                  inputMode="decimal"
-                  label="当前余额"
-                  onChange={(event) => setBalance(event.target.value)}
-                  placeholder="0.00"
-                  prefix="¥"
-                  value={balance}
-                />
-                <span className="transaction-form__divider" />
-              </>
-            ) : null}
             <FieldRow
               inputMode="decimal"
-              label="投入本金"
-              onChange={(event) => setInvestCost(event.target.value)}
+              label="当前市值"
+              onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
               prefix="¥"
-              value={investCost}
+              value={balance}
             />
           </div>
         ) : null}
