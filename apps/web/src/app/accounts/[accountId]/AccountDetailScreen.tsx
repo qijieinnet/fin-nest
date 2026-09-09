@@ -235,7 +235,6 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         <BalanceAdjustmentListSheet
           accountId={account.id}
           accountType={account.type}
-          entries={entries}
           ledgerId={ledgerId}
         />
       ),

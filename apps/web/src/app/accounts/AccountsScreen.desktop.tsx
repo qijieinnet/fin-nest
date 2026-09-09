@@ -294,7 +294,6 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
         <BalanceAdjustmentListSheet
           accountId={account.id}
           accountType={account.type}
-          entries={entries}
           ledgerId={ledgerId}
         />
       ),
@@ -601,9 +600,8 @@ function SubAccountDetailPanel({
         <BalanceAdjustmentListSheet
           accountId={account.id}
           accountType={account.type}
-          currentBalanceMicros={subAccount.balanceMicros}
-          entries={entries}
           ledgerId={ledgerId}
+          subAccountId={subAccount.id}
         />
       ),
     });

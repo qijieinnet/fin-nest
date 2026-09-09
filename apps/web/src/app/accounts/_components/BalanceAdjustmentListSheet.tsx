@@ -2,8 +2,10 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { EmptyState, MoneyText } from "@/components/business";
+import { EmptyState, LoadingState, MoneyText } from "@/components/business";
+import { Button } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type AccountEntry } from "@/lib/api";
+import { useAccountEntries, useAccounts } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useToast } from "@/providers";
 import {
@@ -14,20 +16,19 @@ import {
   isInvestmentEntry,
 } from "./account-utils";
 
+/**
+ * 本组件**自己取数**，不接收 entries 快照。
+ *
+ * SheetStack 存的是 push 时创建好的 React 元素，props 在元素里被冻结，父组件之后
+ * 再怎么刷新都传不进来。以前这里只读不写没暴露问题，加了「改判」之后就表现为
+ * 点完列表纹丝不动。同目录的 RelatedTransactionList 一直是自取数的，与之对齐。
+ */
 type BalanceAdjustmentListSheetProps = {
+  accountId: string;
   accountType: string;
-  /** 传入这两个才显示「改判」动作（投资账户专用）；纯展示场景可省略。 */
-  ledgerId?: string;
-  accountId?: string;
-  /** 该范围（账户 / 子账户）下的全部资金流水，组件内部再筛出调整记录 */
-  entries: AccountEntry[];
-  /**
-   * 该范围的当前余额。传入时用 delta 反推每笔调整的前后余额；
-   * 子账户视图必须传，因为 entry 上的 balanceBefore/AfterMicros 只记父账户总额。
-   * 账户视图**不要**传：创建带初始余额的子账户会直接 increment 父账户余额且不写 entry，
-   * 父账户的 delta 序列本就不完整，反推会整体偏掉子账户初始余额；账户视图用 entry 上的真值即可。
-   */
-  currentBalanceMicros?: bigint | string;
+  ledgerId: string;
+  /** 传入则只看该子账户的流水，并用它的余额反推前后值；不传是账户视图。 */
+  subAccountId?: string | null;
 };
 
 /**
@@ -58,31 +59,48 @@ function resolveBalances(entries: AccountEntry[], currentMicros: bigint) {
 export function BalanceAdjustmentListSheet({
   accountId,
   accountType,
-  currentBalanceMicros,
-  entries,
   ledgerId,
+  subAccountId,
 }: BalanceAdjustmentListSheetProps) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const entriesQuery = useAccountEntries(ledgerId, accountId);
+  const accountsQuery = useAccounts(ledgerId);
+
+  const entries = useMemo(() => {
+    const all = entriesQuery.data ?? [];
+    return subAccountId ? all.filter((entry) => entry.subAccountId === subAccountId) : all;
+  }, [entriesQuery.data, subAccountId]);
+
+  /**
+   * 子账户视图必须按余额反推每笔的前后值，因为 entry 上的 balanceBefore/AfterMicros
+   * 只记父账户总额。账户视图**不能**反推：创建带初始余额的子账户会直接 increment 父账户
+   * 余额且不写 entry，父账户的 delta 序列本就不完整，反推会整体偏掉子账户初始余额。
+   */
+  const currentBalanceMicros = useMemo(() => {
+    if (!subAccountId) return undefined;
+    const account = (accountsQuery.data ?? []).find((item) => item.id === accountId);
+    return account?.subAccounts.find((sub) => sub.id === subAccountId)?.balanceMicros;
+  }, [accountsQuery.data, accountId, subAccountId]);
+
   const adjustments = entries.filter((entry) => isBalanceEditEntry(entry.entryType));
 
   // 改判只换归类、不动金额，所以余额与净资产不受影响，刷新账户列表拿新的本金/收益即可。
   const reclassify = useMutation({
     mutationFn: ({ entryId, entryType }: { entryId: string; entryType: string }) =>
-      apiRequest(ledgerApiPath(ledgerId!, `/accounts/${accountId}/entries/${entryId}`), {
+      apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/entries/${entryId}`), {
         method: "PATCH",
         body: { entryType },
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId!, accountId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
       showToast({ tone: "success", message: "已改判" });
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });
-  const canReclassify = Boolean(ledgerId && accountId);
   const balances = useMemo(
     () =>
       currentBalanceMicros === undefined
@@ -90,6 +108,10 @@ export function BalanceAdjustmentListSheet({
         : resolveBalances(entries, BigInt(currentBalanceMicros)),
     [currentBalanceMicros, entries],
   );
+
+  if (entriesQuery.isPending || (subAccountId && accountsQuery.isPending)) {
+    return <LoadingState rows={3} title="加载余额修改记录" />;
+  }
 
   if (adjustments.length === 0) {
     return (
@@ -142,15 +164,18 @@ export function BalanceAdjustmentListSheet({
                 </strong>
               </span>
             </div>
-            {investmentEntry && canReclassify ? (
-              <button
-                className="mt-3 text-[12px] font-semibold text-[var(--color-tint)] disabled:opacity-50"
-                disabled={reclassify.isPending}
-                onClick={() => reclassify.mutate({ entryId: entry.id, entryType: flipTo })}
-                type="button"
-              >
-                改判为「{entryTypeLabel(flipTo, accountType)}」
-              </button>
+            {investmentEntry ? (
+              <div className="mt-3">
+                <Button
+                  disabled={reclassify.isPending}
+                  // 只让被点的那一条转圈，否则整页按钮一起转，看不出点了哪个。
+                  loading={reclassify.isPending && reclassify.variables?.entryId === entry.id}
+                  onClick={() => reclassify.mutate({ entryId: entry.id, entryType: flipTo })}
+                  variant="secondary"
+                >
+                  改判为「{entryTypeLabel(flipTo, accountType)}」
+                </Button>
+              </div>
             ) : null}
           </div>
         );

@@ -187,9 +187,8 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         <BalanceAdjustmentListSheet
           accountId={account.id}
           accountType={account.type}
-          currentBalanceMicros={subAccount.balanceMicros}
-          entries={entries}
           ledgerId={ledgerId}
+          subAccountId={subAccount.id}
         />
       ),
     });
