@@ -1212,6 +1212,7 @@ select:focus-visible {
   z-index: 61;
 }
 
+/* 有触点时 transform-origin 由 JS 内联为手指坐标；下面是键盘/程序触发的兜底。 */
 .ui-popover-menu--down.ui-popover-menu--end {
   transform-origin: top right;
 }
@@ -1228,10 +1229,11 @@ select:focus-visible {
   transform-origin: bottom left;
 }
 
+/* 原点已落在手指上，起始缩放收得更小，读起来才像「从触点长出来」。 */
 @keyframes ui-popover-menu-pop {
   from {
     opacity: 0;
-    transform: scale(0.92);
+    transform: scale(0.86);
   }
   to {
     opacity: 1;
@@ -1252,7 +1254,7 @@ select:focus-visible {
   }
   to {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scale(0.88);
   }
 }
 
