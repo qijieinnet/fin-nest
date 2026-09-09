@@ -1,6 +1,6 @@
 import { AppError } from "@fin-nest/backend";
 
-// AI 助手的联网搜索通道。可插拔适配三家服务商，由 SEARCH_PROVIDER 选择：
+// AI Agent 的联网搜索通道。可插拔适配三家服务商，由 SEARCH_PROVIDER 选择：
 //   bocha   博查 AI 搜索（国内直连，中文商品/行情结果好）
 //   tavily  Tavily（海外通用，面向 LLM 的检索 API）
 //   searxng 自建 SearXNG（零 key、查询不出自己的机器，最贴自部署）

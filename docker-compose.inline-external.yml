@@ -106,7 +106,7 @@ services:
       MINIO_BUCKET: fin-nest
       # 系统备份归档的落盘目录（容器内路径），与下面 volumes 的右侧保持一致。
       BACKUP_DIR: /data/backups
-      # AI 助手（可选）：三者都填才启用，留空则前端隐藏入口。
+      # AI Agent（可选）：三者都填才启用，留空则前端隐藏入口。
       # AI_BASE_URL: https://api.deepseek.com/v1
       # AI_API_KEY: sk-xxx
       # AI_MODEL: deepseek-chat

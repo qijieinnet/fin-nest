@@ -81,7 +81,7 @@ const EnvSchema = z.object({
   // 前者读列表/下载/恢复，后者写周期备份），备份文件就直接躺在宿主机上，重装系统也还在。
   BACKUP_DIR: z.string().min(1).default("./data/backups"),
 
-  // AI 助手（可选）：三者都配置时启用；未配置时 AI 相关端点返回未启用、前端隐藏入口。
+  // AI Agent（可选）：三者都配置时启用；未配置时 AI 相关端点返回未启用、前端隐藏入口。
   AI_BASE_URL: z.string().url().optional(),
   AI_API_KEY: z.string().min(1).optional(),
   AI_MODEL: z.string().min(1).optional(),
@@ -90,7 +90,7 @@ const EnvSchema = z.object({
   // 以 /responses 结尾走 Responses，其余按 chat。网关同时支持两者、但 base url 是 /v1 时才需显式指定。
   AI_PROTOCOL: z.enum(["chat", "responses"]).optional(),
 
-  // 联网搜索（可选，需先启用 AI 助手）：配置后 AI 多出 web_search 工具，可查商品行情、
+  // 联网搜索（可选，需先启用 AI Agent）：配置后 AI 多出 web_search 工具，可查商品行情、
   // 最新型号与价格等账本里没有的外部信息；未配置时该工具不下发，其余 AI 能力不受影响。
   // 刻意只支持「固定端点的搜索服务」而不做通用网页抓取：自部署常在家庭内网（NAS），
   // 放开任意 URL 抓取等于把 SSRF 打进内网。

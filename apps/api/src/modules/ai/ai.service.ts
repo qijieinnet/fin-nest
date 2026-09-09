@@ -747,7 +747,7 @@ export class AiService {
     signal?: AbortSignal,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    if (!this.llm) throw new AppError("AI_NOT_CONFIGURED", "AI 助手未配置", 400);
+    if (!this.llm) throw new AppError("AI_NOT_CONFIGURED", "AI Agent 未配置", 400);
     this.checkRateLimit(userId);
 
     const conversation = input.conversationId
@@ -2240,7 +2240,7 @@ export class AiService {
       payable: "需归还",
     };
     return [
-      "你叫小N，你是记账应用 Fin Nest 的 AI 助手，帮用户用自然语言记账、查询和分析。",
+      "你叫小N，你是记账应用 Fin Nest 的 AI Agent，帮用户用自然语言记账、查询和分析。",
       "",
       `今天是 ${todayKey()}，账本币种 ${context.currency}。`,
       "",

@@ -158,7 +158,7 @@ export function DesktopSidebar() {
             type="button"
           >
             <Sparkles size={20} />
-            <span>AI 助手</span>
+            <span>AI Agent</span>
           </button>
         </div>
       ) : null}

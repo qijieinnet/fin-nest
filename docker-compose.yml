@@ -52,12 +52,12 @@ x-app-env: &app-env
   # 系统备份归档的落盘目录（容器内路径）。api 与 worker 都要挂同一个宿主机目录：
   # worker 到点写入、api 负责列表/下载/恢复，只挂一边会出现「备份生成了但页面看不到」。
   BACKUP_DIR: /data/backups
-  # AI 助手（可选）：三者都配置时启用，未配置则相关端点返回未启用、前端隐藏入口。
+  # AI Agent（可选）：三者都配置时启用，未配置则相关端点返回未启用、前端隐藏入口。
   AI_BASE_URL: ${AI_BASE_URL:-}
   AI_API_KEY: ${AI_API_KEY:-}
   AI_MODEL: ${AI_MODEL:-}
   AI_PROTOCOL: ${AI_PROTOCOL:-}
-  # 联网搜索（可选，AI 助手的扩展能力）：填了 SEARCH_PROVIDER 才启用 web_search 工具。
+  # 联网搜索（可选，AI Agent的扩展能力）：填了 SEARCH_PROVIDER 才启用 web_search 工具。
   # bocha/tavily 需要 SEARCH_API_KEY；searxng 需要 SEARCH_BASE_URL 指向自建实例。
   SEARCH_PROVIDER: ${SEARCH_PROVIDER:-}
   SEARCH_API_KEY: ${SEARCH_API_KEY:-}

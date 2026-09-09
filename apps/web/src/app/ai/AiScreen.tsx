@@ -454,7 +454,7 @@ export function AiScreen() {
           ) : !aiEnabled ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
               <Sparkles className="text-[var(--color-text-muted)]" size={28} />
-              <p className="font-semibold text-[var(--color-text-primary)]">AI 助手未启用</p>
+              <p className="font-semibold text-[var(--color-text-primary)]">AI Agent 未启用</p>
               <p className="max-w-[280px] text-sm text-[var(--color-text-muted)]">
                 在服务端配置 AI_BASE_URL / AI_API_KEY / AI_MODEL 后即可使用自然语言记账与查询。
               </p>

@@ -1091,7 +1091,7 @@ export type AttachmentRecord = {
   };
 };
 
-// ---------- AI 助手 ----------
+// ---------- AI Agent ----------
 
 export type AiStatus = {
   enabled: boolean;

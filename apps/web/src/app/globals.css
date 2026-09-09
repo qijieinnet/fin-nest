@@ -5275,7 +5275,7 @@ select:focus-visible {
   gap: 2px;
 }
 
-/* 侧边栏底部固定区（AI 助手入口）：靠 margin-top:auto 沉底。 */
+/* 侧边栏底部固定区（AI Agent 入口）：靠 margin-top:auto 沉底。 */
 .desktop-sidebar__footer {
   margin-top: auto;
   padding-top: 12px;

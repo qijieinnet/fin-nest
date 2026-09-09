@@ -37,7 +37,7 @@ export function MoreScreen() {
   const insurancesQuery = useInsurances(currentLedger?.id ?? null);
   const itemsQuery = useItems(currentLedger?.id ?? null);
   const subscriptionsQuery = useSubscriptions(currentLedger?.id ?? null);
-  // 未配置飞书时隐藏入口，与 AI 助手同一处理。
+  // 未配置飞书时隐藏入口，与 AI Agent 同一处理。
   const feishuStatusQuery = useFeishuStatus();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
