@@ -8,7 +8,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
-import { isBalanceEditEntry } from "../../../_components/account-utils";
+import { defaultHandoverHint, isBalanceEditEntry } from "../../../_components/account-utils";
 
 /** 子账户详情视图模型：账户/子账户查询，删除、净资产开关 mutation，关联/调整记录派生。 */
 export function useSubAccountDetailModel(accountId: string, subAccountId: string) {
@@ -25,7 +25,6 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
 
   const account = (accountsQuery.data ?? []).find((item) => item.id === accountId) ?? null;
   const subAccount = account?.subAccounts.find((item) => item.id === subAccountId) ?? null;
-  const isDefaultSubAccount = Boolean(subAccount?.isDefault);
 
   const transactions = transactionsQuery.data ?? [];
   // 保持引用稳定：下游（余额卡曲线、调整记录反推）按 entries 做 useMemo。
@@ -65,7 +64,7 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
     if (removeSub.isPending || !subAccount) return;
     const accepted = await confirm({
       title: "删除子账户？",
-      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
+      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。${defaultHandoverHint(account, subAccount)}`,
       confirmText: "删除",
       tone: "danger",
     });
@@ -76,7 +75,6 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
     ledgerId,
     account,
     subAccount,
-    isDefaultSubAccount,
     isLoading: !ledgerId || accountsQuery.isPending,
     transactions,
     entries,

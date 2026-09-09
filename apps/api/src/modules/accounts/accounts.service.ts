@@ -276,16 +276,37 @@ export class AccountsService {
         where: { id: subAccountId, accountId, ledgerId, archivedAt: null },
       });
       if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
-      if (subAccount.isDefault) {
-        throw new AppError("SUB_ACCOUNT_DEFAULT_UNDELETABLE", "默认子账户不可删除", 400);
-      }
       if (subAccount.balanceMicros !== 0n) {
         throw new AppError("SUB_ACCOUNT_BALANCE_NOT_ZERO", "请先将子账户余额调整为 0 再归档", 400);
+      }
+      // 默认子账户可以删，但账户必须留下至少一个：它承接未指定子账户的记账，
+      // 一个不剩会让 findDefaultSubAccountId 返回 null，那些记账就没地方落，
+      // 「账户余额 = Σ子账户余额」也就断了。
+      const siblings = await tx.subAccount.findMany({
+        where: { accountId, ledgerId, archivedAt: null, id: { not: subAccountId } },
+        // 与 list/listSubAccounts 同一套排序，「删完排第一的那个」== 用户在界面上看到的第一个。
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        select: { id: true },
+      });
+      const successor = siblings[0];
+      if (!successor) {
+        throw new AppError(
+          "SUB_ACCOUNT_LAST_UNDELETABLE",
+          "账户至少要保留一个子账户，它承接未指定子账户的记账",
+          400,
+        );
       }
       await tx.subAccount.update({
         where: { id: subAccountId },
         data: { archivedAt: new Date(), updatedBy: userId },
       });
+      // 删掉的是默认桶就顺位给下一个，默认桶的角色不能随它一起消失。
+      if (subAccount.isDefault) {
+        await tx.subAccount.update({
+          where: { id: successor.id },
+          data: { isDefault: true, updatedBy: userId },
+        });
+      }
     });
   }
 

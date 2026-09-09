@@ -536,7 +536,7 @@ function SubAccountDetailPanel({
   const [menuOpen, setMenuOpen] = useState(false);
   const model = useSubAccountDetailModel(accountId, subAccountId);
   const accountModel = useAccountDetailModel(accountId);
-  const { account, subAccount, isDefaultSubAccount, transactions, entries, adjustmentEntries } =
+  const { account, subAccount, transactions, entries, adjustmentEntries } =
     model;
 
   // 子账户被删除后（父账户模型删除成功并刷新列表）自动关闭本弹层。
@@ -556,6 +556,8 @@ function SubAccountDetailPanel({
   // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
   const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
   const investStats = investmentStatRows(subAccount.investment);
+  // 账户至少要留一个子账户承接未指定子账户的记账，所以最后一个不给删。
+  const canDeleteSub = account.subAccounts.length > 1;
 
   const openBalanceEdit = () =>
     push({
@@ -608,7 +610,8 @@ function SubAccountDetailPanel({
 
   const subMenuGroups: MenuItem[][] = [
     [{ icon: <Pencil size={18} />, label: "编辑子账户", onSelect: openRename }],
-    ...(!isDefaultSubAccount
+    // 默认子账户也可删（角色顺位给下一个），只有账户仅剩这一个子账户时不给删。
+    ...(canDeleteSub
       ? [
           [
             {

@@ -187,6 +187,7 @@ async function main() {
   await assertSubAccountOpeningEntry({ ledgerId: ledger.id, owner });
   await assertInvestmentDerivedCost({ ledgerId: ledger.id, owner });
   await assertInvestmentPrincipalKind({ ledgerId: ledger.id, owner });
+  await assertDefaultSubAccountHandover({ ledgerId: ledger.id, owner });
 
   await assertAutoPendingSubscriptionLink({
     ledgerId: ledger.id,
@@ -226,6 +227,7 @@ async function main() {
           "balance_adjustment",
           "investment_derived_cost",
           "investment_principal_kind",
+          "default_sub_account_handover",
           "attachment_auth",
           "reminder_summary",
           "batch_update",
@@ -745,6 +747,86 @@ async function assertInvestmentPrincipalKind({ ledgerId, owner }) {
     expected: 400,
     body: { entryType: "transfer_in" },
   });
+}
+
+/**
+ * 默认子账户可删，删掉后默认角色顺位给「删完排第一的那个」；但最后一个子账户不能删。
+ *
+ * 默认桶承接所有未指定子账户的记账，一个不剩会让 findDefaultSubAccountId 返回 null，
+ * 那些记账就没地方落，「账户余额 = Σ子账户余额」也断了。
+ */
+async function assertDefaultSubAccountHandover({ ledgerId, owner }) {
+  const token = owner.token;
+  const account = await api("POST", `/ledgers/${ledgerId}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `E2E Handover ${stamp}`, balanceMicros: "0" },
+  });
+  const subs = () => api("GET", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts`, { token });
+
+  // 建账自带的默认桶。
+  let list = await subs();
+  assert.equal(list.length, 1);
+  const original = list[0];
+  assert.equal(original.isDefault, true);
+
+  // 再加两个命名子账户，并显式排序成 [甲, 默认, 乙]，好验证顺位取的是「排最前」而不是「最早建的」。
+  const first = await api("POST", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts`, {
+    token,
+    expected: 201,
+    body: { name: `E2E Handover A ${stamp}` },
+  });
+  const second = await api("POST", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts`, {
+    token,
+    expected: 201,
+    body: { name: `E2E Handover B ${stamp}` },
+  });
+  await api("PATCH", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts/reorder`, {
+    token,
+    expected: 200,
+    body: { ids: [first.id, original.id, second.id] },
+  });
+
+  // 删默认桶：角色交给排在最前的「甲」。
+  await api("DELETE", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts/${original.id}`, {
+    token,
+    expected: 200,
+  });
+  list = await subs();
+  assert.equal(list.length, 2);
+  const promoted = list.find((item) => item.id === first.id);
+  assert.equal(promoted.isDefault, true, "默认角色应顺位给排最前的子账户");
+  assert.equal(list.find((item) => item.id === second.id).isDefault, false);
+
+  // 未指定子账户的记账要落到新的默认桶上，顺位才算真的生效。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${account.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "1000000" },
+  });
+  list = await subs();
+  assert.equal(list.find((item) => item.id === first.id).balanceMicros, "1000000");
+
+  // 再删一个（先清零），只剩一个。
+  await api("POST", `/ledgers/${ledgerId}/accounts/${account.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { subAccountId: first.id, balanceAfterMicros: "0" },
+  });
+  await api("DELETE", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts/${first.id}`, {
+    token,
+    expected: 200,
+  });
+  list = await subs();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].isDefault, true, "顺位后仍必须有且只有一个默认桶");
+
+  // 最后一个删不掉。
+  await api("DELETE", `/ledgers/${ledgerId}/accounts/${account.id}/sub-accounts/${second.id}`, {
+    token,
+    expected: 400,
+  });
+  assert.equal((await subs()).length, 1);
 }
 
 async function assertAccountPersonOwnership({ ledgerId, owner }) {

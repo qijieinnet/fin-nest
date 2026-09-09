@@ -281,7 +281,9 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         onClick: () => openBalanceEdit(subAccount),
         tone: "neutral",
       },
-      ...(subAccount.isDefault
+      // 默认子账户也可删，删掉后默认角色顺位给列表里的下一个（后端做的）。
+      // 只有「这是最后一个子账户」才没得删——它得留着承接未指定子账户的记账。
+      ...(subAccountRows.length <= 1
         ? []
         : [
             {

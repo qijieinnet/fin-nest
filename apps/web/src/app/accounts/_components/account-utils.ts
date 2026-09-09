@@ -201,6 +201,20 @@ export function investmentStatRows(investment: InvestmentSummary | null): StatRo
   return rows;
 }
 
+/**
+ * 删除默认子账户时的提示：说清默认角色会顺位给谁。
+ *
+ * 默认桶承接所有「没指定子账户」的记账，而界面上并没有标出哪个是默认桶
+ * （名字可改、位置可拖），所以这句话是用户唯一一次被告知这件事的机会。
+ * 顺位规则与后端一致：删除后按 sortOrder 排在最前的那个。
+ */
+export function defaultHandoverHint(account: Account | null, subAccount: SubAccount): string {
+  if (!subAccount.isDefault || !account) return "";
+  const successor = orderedSubAccountRows(account).find((row) => row.id !== subAccount.id);
+  if (!successor) return "";
+  return `\n\n「${subAccount.name}」是当前承接「未指定子账户」记账的默认子账户，删除后这个角色会交给「${successor.name}」。`;
+}
+
 /** 列表行的副标题：信用显示额度、投资显示收益、往来显示对方。 */
 export function accountSubtitle(account: Account): string {
   if (account.type === "credit") {

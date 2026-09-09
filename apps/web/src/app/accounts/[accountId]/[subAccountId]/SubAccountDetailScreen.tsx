@@ -94,7 +94,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const [menuOpen, setMenuOpen] = useState(false);
 
   const model = useSubAccountDetailModel(accountId, subAccountId);
-  const { ledgerId, account, subAccount, isDefaultSubAccount, transactions, entries, adjustmentEntries } =
+  const { ledgerId, account, subAccount, transactions, entries, adjustmentEntries } =
     model;
 
   const goBack = () => {
@@ -137,6 +137,8 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   // 投资账户改余额＝更新市值，差额就是收益；其余账户是「记错了纠错」。
   const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
   const investStats = investmentStatRows(subAccount.investment);
+  // 账户至少要留一个子账户承接未指定子账户的记账，所以最后一个不给删。
+  const canDeleteSub = account.subAccounts.length > 1;
 
   const openBalanceEdit = () => {
     push({
@@ -196,7 +198,8 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
   const subMenuGroups: MenuItem[][] = [
     [{ icon: <Pencil size={18} />, label: "编辑子账户", onSelect: openRename }],
-    ...(!isDefaultSubAccount
+    // 默认子账户也可删（角色顺位给下一个），只有账户仅剩这一个子账户时不给删。
+    ...(canDeleteSub
       ? [
           [
             {

@@ -13,7 +13,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
-import { isBalanceEditEntry } from "../../_components/account-utils";
+import { defaultHandoverHint, isBalanceEditEntry } from "../../_components/account-utils";
 import { isLendAccount } from "../../_components/account-utils";
 
 /** 账户详情视图模型：账户/流水/关联记录查询，删除、净资产开关、子账户删除与排序 mutation。 */
@@ -125,7 +125,7 @@ export function useAccountDetailModel(accountId: string) {
     if (removeSub.isPending) return;
     const accepted = await confirm({
       title: "删除子账户？",
-      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。`,
+      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。${defaultHandoverHint(account, subAccount)}`,
       confirmText: "删除",
       tone: "danger",
     });
