@@ -90,6 +90,21 @@ const EnvSchema = z.object({
   // 以 /responses 结尾走 Responses，其余按 chat。网关同时支持两者、但 base url 是 /v1 时才需显式指定。
   AI_PROTOCOL: z.enum(["chat", "responses"]).optional(),
 
+  // 联网搜索（可选，需先启用 AI 助手）：配置后 AI 多出 web_search 工具，可查商品行情、
+  // 最新型号与价格等账本里没有的外部信息；未配置时该工具不下发，其余 AI 能力不受影响。
+  // 刻意只支持「固定端点的搜索服务」而不做通用网页抓取：自部署常在家庭内网（NAS），
+  // 放开任意 URL 抓取等于把 SSRF 打进内网。
+  //   bocha   = 博查 AI 搜索（国内直连，中文商品/价格结果好），需 SEARCH_API_KEY
+  //   tavily  = Tavily（海外通用），需 SEARCH_API_KEY
+  //   searxng = 自建 SearXNG（零 key、查询不外泄），需 SEARCH_BASE_URL 指向实例，
+  //             且实例的 settings.yml 要开启 `search.formats: [html, json]`
+  SEARCH_PROVIDER: z.enum(["bocha", "tavily", "searxng"]).optional(),
+  SEARCH_API_KEY: z.string().min(1).optional(),
+  // 覆盖搜索端点；searxng 必填（自建实例地址），bocha/tavily 不填走各自官方端点。
+  SEARCH_BASE_URL: z.string().url().optional(),
+  // 单次搜索回传给模型的条数上限。调大会线性推高上下文与 token 成本。
+  SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
+
   // 飞书机器人（可选）：两者都配置时启用，走长连接（WSClient），不需要公网回调地址，
   // 因而也不需要 Encrypt Key / Verification Token。未配置时整个飞书模块不注册、不建连接。
   FEISHU_APP_ID: z.string().min(1).optional(),

@@ -14,6 +14,8 @@ import {
   shouldDisableThinking,
 } from "../dist/modules/ai/llm-client.js";
 import { periodSeriesBuckets } from "../dist/modules/stats/stats.service.js";
+import { WebSearchClient } from "../dist/modules/ai/web-search.js";
+import { todayKey } from "@fin-nest/backend";
 import { transactionOrderBy } from "../dist/modules/transactions/transactions.service.js";
 
 test("AI money parsing follows ledger precision", () => {
@@ -709,4 +711,275 @@ test("AI transaction query gives the card every row but the model only a sample"
   assert.equal(result.count, 120);
   assert.ok(result.transactionsNote.includes("共 120 笔"));
   assert.ok(result.transactionsNote.includes("仅列前 20 笔"));
+});
+
+// --- 联网搜索 -----------------------------------------------------------------
+
+test("web search stays disabled until its provider is fully configured", () => {
+  assert.equal(WebSearchClient.fromConfig({ SEARCH_MAX_RESULTS: 5 }).client, null);
+  // 配了一半是最容易踩的坑：工具静默消失，所以要给出可读的原因。
+  const halfBocha = WebSearchClient.fromConfig({
+    SEARCH_PROVIDER: "bocha",
+    SEARCH_MAX_RESULTS: 5,
+  });
+  assert.equal(halfBocha.client, null);
+  assert.match(halfBocha.reason, /SEARCH_API_KEY/);
+  const halfSearxng = WebSearchClient.fromConfig({
+    SEARCH_PROVIDER: "searxng",
+    SEARCH_MAX_RESULTS: 5,
+  });
+  assert.equal(halfSearxng.client, null);
+  assert.match(halfSearxng.reason, /SEARCH_BASE_URL/);
+  // searxng 自建实例不需要 key。
+  assert.ok(
+    WebSearchClient.fromConfig({
+      SEARCH_PROVIDER: "searxng",
+      SEARCH_BASE_URL: "http://searxng:8080",
+      SEARCH_MAX_RESULTS: 5,
+    }).client,
+  );
+});
+
+test("bocha search results are normalized, sanitized and capped", async () => {
+  const { client } = WebSearchClient.fromConfig({
+    SEARCH_PROVIDER: "bocha",
+    SEARCH_API_KEY: "sk-test",
+    SEARCH_MAX_RESULTS: 2,
+  });
+  const originalFetch = globalThis.fetch;
+  let requestUrl;
+  let requestInit;
+  globalThis.fetch = async (url, init) => {
+    requestUrl = url;
+    requestInit = init;
+    return new Response(
+      JSON.stringify({
+        data: {
+          webPages: {
+            value: [
+              {
+                name: "iPhone 17 Pro 售价",
+                url: "https://example.com/a",
+                // 控制字符换成空格：搜索结果是外部文本，不能让它伪造对话结构。
+                summary: "官网\n5999 元 起",
+                siteName: "example.com",
+                datePublished: "2026-09-01T00:00:00Z",
+              },
+              // 非 http(s) 链接直接丢弃，不能递给模型再转述给用户。
+              { name: "钓鱼", url: "javascript:alert(1)", summary: "x" },
+              { name: "第三条", url: "https://example.com/c", summary: "c" },
+              { name: "第四条", url: "https://example.com/d", summary: "d" },
+            ],
+          },
+        },
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    const results = await client.search("iPhone 17 Pro 售价");
+    assert.equal(requestUrl, "https://api.bochaai.com/v1/web-search");
+    assert.equal(requestInit.headers.authorization, "Bearer sk-test");
+    assert.equal(JSON.parse(requestInit.body).count, 2);
+    // SEARCH_MAX_RESULTS 是硬上限：结果多也只回这么多，token 成本可控。
+    assert.equal(results.length, 2);
+    assert.equal(results[0].url, "https://example.com/a");
+    assert.equal(results[0].snippet, "官网 5999 元 起");
+    assert.equal(results[0].publishedAt, "2026-09-01");
+    assert.equal(results[1].url, "https://example.com/c");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("searxng search asks its own instance for json", async () => {
+  const { client } = WebSearchClient.fromConfig({
+    SEARCH_PROVIDER: "searxng",
+    // 只填实例根地址是最常见的写法，要能自己补出 /search。
+    SEARCH_BASE_URL: "http://searxng:8080/",
+    SEARCH_MAX_RESULTS: 5,
+  });
+  const originalFetch = globalThis.fetch;
+  let requestUrl;
+  globalThis.fetch = async (url) => {
+    requestUrl = url;
+    return new Response(
+      JSON.stringify({ results: [{ title: "t", url: "https://e.com", content: "c" }] }),
+      { headers: { "content-type": "application/json" } },
+    );
+  };
+  try {
+    const results = await client.search("小米 17 价格");
+    const parsed = new URL(requestUrl);
+    assert.equal(parsed.origin + parsed.pathname, "http://searxng:8080/search");
+    assert.equal(parsed.searchParams.get("format"), "json");
+    assert.equal(parsed.searchParams.get("q"), "小米 17 价格");
+    assert.equal(results[0].snippet, "c");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("web search tool reports honestly when the deployment has no provider", async () => {
+  const service = Object.create(AiService.prototype);
+  service.search = null;
+  const result = await service.runWebSearchTool({ query: "最新款手机" });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /未配置联网搜索/);
+});
+
+// --- 花钱决策分析 -------------------------------------------------------------
+
+function purchaseAnalysisService() {
+  const service = Object.create(AiService.prototype);
+  // 物品的 purchase_date 是 date-only 列（UTC 零点），已用天数因此是整数天：
+  // 用 Date.now() 造样本会带上当天时刻，把 400 天算成 399 天。
+  const daysAgo = (days) => new Date(Date.parse(`${todayKey()}T00:00:00.000Z`) - days * 86_400_000);
+  service.assets = {
+    listItems: async () => [
+      {
+        id: "item-1",
+        name: "iPhone 13",
+        typeId: "type-1",
+        purchasePriceMicros: 4_000_000_000n,
+        consumablesMicros: "500000000",
+        purchaseDate: daysAgo(400),
+        expectedYears: 3,
+        scrappedAt: null,
+        scrapDate: null,
+        sellPriceMicros: null,
+        note: null,
+      },
+      { id: "item-2", name: "洗碗机", typeId: null, purchasePriceMicros: 3_000_000_000n },
+    ],
+    listItemTypes: async () => [{ id: "type-1", name: "手机" }],
+    listSubscriptions: async () => [
+      { terminatedAt: null, priceMicros: 30_000_000n, billingCycle: "monthly" },
+      { terminatedAt: null, priceMicros: 1_200_000_000n, billingCycle: "yearly" },
+      { terminatedAt: null, priceMicros: 99_000_000n, billingCycle: "custom" },
+      { terminatedAt: new Date(), priceMicros: 50_000_000n, billingCycle: "monthly" },
+    ],
+  };
+  service.accounts = {
+    list: async () => [
+      {
+        id: "acc-1",
+        type: "savings",
+        balanceMicros: 10_000_000_000n,
+        includeInNetWorth: true,
+        personId: null,
+        subAccounts: [],
+      },
+      {
+        id: "acc-2",
+        type: "credit",
+        balanceMicros: 2_000_000_000n,
+        includeInNetWorth: true,
+        personId: null,
+        subAccounts: [],
+      },
+    ],
+  };
+  service.stats = {
+    periodSeries: async () => ({
+      granularity: "month",
+      points: [
+        { label: "2026/4", expenseMicros: "3000000000", incomeMicros: "8000000000" },
+        { label: "2026/5", expenseMicros: "3000000000", incomeMicros: "8000000000" },
+        { label: "2026/6", expenseMicros: "3000000000", incomeMicros: "8000000000" },
+        { label: "2026/7", expenseMicros: "3000000000", incomeMicros: "8000000000" },
+        { label: "2026/8", expenseMicros: "3000000000", incomeMicros: "8000000000" },
+        // 当月未过完，必须排除在月均之外。
+        { label: "2026/9", expenseMicros: "500000000", incomeMicros: "0" },
+      ],
+    }),
+  };
+  service.plans = {
+    getBudgetProgress: async () => ({
+      enabled: true,
+      month: "2026-09",
+      total: {
+        budgetMicros: "5000000000",
+        usedMicros: "1000000000",
+        remainingMicros: "4000000000",
+        percent: 20,
+      },
+      categories: [],
+    }),
+  };
+  service.transactions = {
+    list: async () => [
+      {
+        occurredOn: new Date("2025-08-01T00:00:00.000Z"),
+        effectiveAmountMicros: 4_000_000_000n,
+        categoryId: "cat-1",
+        note: "换手机",
+      },
+    ],
+  };
+  return service;
+}
+
+const PURCHASE_CONTEXT = {
+  ledgerId: "ledger-1",
+  userId: "user-1",
+  currency: "CNY",
+  amountDecimalPlaces: 2,
+  categories: [{ id: "cat-1", name: "数码", type: "expense", subcategories: [] }],
+  accounts: [],
+  people: [],
+  transactionCreators: [],
+  quickTemplates: [],
+  acctRequired: false,
+  personRequired: false,
+  outstandingDrafts: [],
+};
+
+test("purchase analysis aggregates the facts a spending decision needs", async () => {
+  const service = purchaseAnalysisService();
+  const result = await service.runPurchaseAnalysisTool({ keyword: "手机" }, PURCHASE_CONTEXT);
+
+  assert.equal(result.ok, true);
+  // 关键词命中物品类型（"手机"）即算同类旧物，不必名字里带这两个字。
+  assert.equal(result.matchedItems.length, 1);
+  const [phone] = result.matchedItems;
+  assert.equal(phone.name, "iPhone 13");
+  assert.equal(phone.usedDays, 400);
+  assert.equal(phone.totalCostYuan, "4500");
+  // 日均持有成本 =（购入价 + 耗材）/ 已用天数，换与不换最直观的比较口径。
+  assert.equal(phone.dailyCostYuan, "11.25");
+  assert.equal(phone.usagePercent, 36.5);
+
+  // 月均排除当月（未过完），否则每次都被低估。
+  assert.equal(result.spending.avgMonthlyExpenseYuan, "3000");
+  assert.equal(result.spending.avgMonthlyIncomeYuan, "8000");
+  assert.equal(result.spending.avgMonthlySurplusYuan, "5000");
+  assert.equal(result.spending.months.length, 6);
+
+  // 可动用现金只认储蓄账户；信用账户记为负债。
+  assert.equal(result.balances.cashYuan, "10000");
+  assert.equal(result.balances.totalLiabilitiesYuan, "2000");
+  assert.equal(result.balances.netWorthYuan, "8000");
+
+  assert.equal(result.budget.remainingYuan, "4000");
+  // 订阅折成月成本：月付 30 + 年付 1200/12；自定义周期折不出来，只报个数。
+  assert.equal(result.fixedCommitments.monthlySubscriptionCostYuan, "130");
+  assert.equal(result.fixedCommitments.customCycleCount, 1);
+  assert.equal(result.fixedCommitments.activeSubscriptions, 3);
+
+  // 档案缺失时的兜底线索：备注里提到关键词的历史支出。
+  assert.equal(result.pastPurchases[0].amountYuan, "4000");
+  assert.equal(result.pastPurchases[0].category, "数码");
+});
+
+test("purchase analysis says archives are empty instead of asserting the user owns nothing", async () => {
+  const service = purchaseAnalysisService();
+  const result = await service.runPurchaseAnalysisTool(
+    { keyword: "投影仪", monthsBack: 3 },
+    PURCHASE_CONTEXT,
+  );
+  assert.equal(result.matchedItems.length, 0);
+  assert.match(result.matchedItemsNote, /没有匹配/);
+  // monthsBack 下限 6：跨度 ≤120 天时 periodSeries 会退化成周/日桶，拿不到月均。
+  assert.equal(result.spending.monthsBack, 6);
 });

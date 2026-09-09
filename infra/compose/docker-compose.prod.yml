@@ -39,6 +39,12 @@ x-app-env: &app-env
   AI_API_KEY: ${AI_API_KEY:-}
   AI_MODEL: ${AI_MODEL:-}
   AI_PROTOCOL: ${AI_PROTOCOL:-}
+  # 联网搜索（可选，AI 助手的扩展能力）：填了 SEARCH_PROVIDER 才启用 web_search 工具。
+  # bocha/tavily 需要 SEARCH_API_KEY；searxng 需要 SEARCH_BASE_URL 指向自建实例。
+  SEARCH_PROVIDER: ${SEARCH_PROVIDER:-}
+  SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+  SEARCH_BASE_URL: ${SEARCH_BASE_URL:-}
+  SEARCH_MAX_RESULTS: ${SEARCH_MAX_RESULTS:-5}
   # 飞书机器人（可选）：两者需同时配置，只配一半会启动报错。
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}

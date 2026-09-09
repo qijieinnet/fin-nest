@@ -1098,6 +1098,8 @@ export type AiStatus = {
   model: string | null;
   /** 实际生效的上游协议；`enabled` 为假时为 null。 */
   protocol: "chat" | "responses" | null;
+  /** 实际生效的联网搜索服务商；未配置 SEARCH_* 时为 null（AI 其余能力不受影响）。 */
+  webSearch: "bocha" | "tavily" | "searxng" | null;
 };
 
 export type AiConversationSummary = {
