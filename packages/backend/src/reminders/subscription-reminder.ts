@@ -1,10 +1,15 @@
 /**
  * 订阅到期提醒的日期口径。api（红点、自动确认续费）与 worker（推送调度）必须用同一份，
  * 因此放在共享包里；前端 `subscription-utils.ts` 的 `reminderDateKey` 是它的镜像实现。
+ *
+ * 只认用户配置的提醒档位，**没有默认提醒**：未配置 = 不提醒。
  */
 
-/** 到期提醒默认提前窗口（天），按计费周期区分；与前端 dueSoonWindowDays 保持一致。 */
-export function dueSoonWindowDays(billingCycle: string | null): number {
+/**
+ * 自动确认续费的匹配窗口（天），按计费周期区分。仅在**未配置提醒**时兜底使用——
+ * 它不是提醒，只决定「续费日前多少天内的关联支出算作本期续费」。
+ */
+export function renewalMatchWindowDays(billingCycle: string | null): number {
   switch (billingCycle) {
     case "weekly":
       return 2;
@@ -51,34 +56,15 @@ export type SubscriptionReminderFields = {
 };
 
 /**
- * 到期提醒日期（UTC-midnight）：续费日往前推提前量；显式配置了 remindLeadValue/Unit 则用之，
- * 否则按计费周期回退默认窗口。无续费日返回 null。
- *
- * 提醒改为多档时这里返回数组，届时两个调用方都要取**最早那一档**：
- * `autoConfirmedRenewalDate` 拿它当关联支出的匹配窗口起点（取晚了会漏判自动续费），
- * 前端「即将到期」标签同理。
+ * 到期提醒日期（UTC-midnight）：续费日往前推提前量（镜像列，即最早那一档）。
+ * 未配置提醒或无续费日返回 null。
  */
 export function subscriptionReminderDate(sub: SubscriptionReminderFields): Date | null {
   if (!sub.nextRenewalDate) return null;
-  if (sub.remindLeadValue && sub.remindLeadUnit) {
-    return shiftDateByUnit(
-      sub.nextRenewalDate,
-      -sub.remindLeadValue,
-      sub.remindLeadUnit as "day" | "week" | "month" | "year",
-    );
-  }
-  return shiftDateByUnit(sub.nextRenewalDate, -dueSoonWindowDays(sub.billingCycle), "day");
-}
-
-/**
- * 提醒档位标识，用于 `Notification.dedupeKey` 的提前量段。
- *
- * 单档时它恒定，看着像废字段——但少了它，多档提醒的「提前 7 天」和「提前 1 天」会算出
- * 同一个 dedupeKey，第二条直接被唯一约束吞掉。现在带上，扩展时不需要迁移历史键。
- */
-export function subscriptionLeadKey(sub: SubscriptionReminderFields): string {
-  if (sub.remindLeadValue && sub.remindLeadUnit) {
-    return `${sub.remindLeadValue}${sub.remindLeadUnit.slice(0, 1)}`;
-  }
-  return `default${dueSoonWindowDays(sub.billingCycle)}d`;
+  if (!sub.remindLeadValue || !sub.remindLeadUnit) return null;
+  return shiftDateByUnit(
+    sub.nextRenewalDate,
+    -sub.remindLeadValue,
+    sub.remindLeadUnit as "day" | "week" | "month" | "year",
+  );
 }

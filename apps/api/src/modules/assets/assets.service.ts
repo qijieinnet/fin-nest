@@ -6,6 +6,8 @@ import {
   PrismaService,
   ReminderTargetsService,
   ReminderTargetSummary,
+  renewalMatchWindowDays,
+  shiftDateByUnit,
   sortSchedules,
   subscriptionReminderDate,
   todayKey,
@@ -86,9 +88,10 @@ function advanceRenewalDate(date: Date, billingCycle: string | null): Date | nul
 }
 
 /**
- * 自动确认续费：订阅已到提醒日、计费周期可推算、且当前续费周期内存在「有效金额 ≥ 单期费用」
+ * 自动确认续费：订阅已到匹配窗口起点、计费周期可推算、且当前续费周期内存在「有效金额 ≥ 单期费用」
  * 的关联支出时，返回顺延一个周期后的续费日；否则 null。
- * 关联支出限定在单周期窗口 [提醒日, 下次续费日+一个周期)，保证同一笔支出只推进一次、不越期累推。
+ * 关联支出限定在单周期窗口 [窗口起点, 下次续费日+一个周期)，保证同一笔支出只推进一次、不越期累推。
+ * 窗口起点取提醒日（最早那一档）；未配置提醒时按计费周期回退——这只是匹配口径，不会因此产生提醒。
  */
 function autoConfirmedRenewalDate(
   subscription: {
@@ -107,9 +110,15 @@ function autoConfirmedRenewalDate(
   if (!subscription.priceMicros || subscription.priceMicros <= 0n) return null;
   const next = advanceRenewalDate(subscription.nextRenewalDate, subscription.billingCycle);
   if (!next) return null; // 自定义/未知周期无法自动推算
-  const remindOn = subscriptionReminderDate(subscription);
-  if (!remindOn || today.getTime() < remindOn.getTime()) return null; // 尚未到提醒日
-  const windowStart = remindOn.getTime();
+  const windowFrom =
+    subscriptionReminderDate(subscription) ??
+    shiftDateByUnit(
+      subscription.nextRenewalDate,
+      -renewalMatchWindowDays(subscription.billingCycle),
+      "day",
+    );
+  if (today.getTime() < windowFrom.getTime()) return null; // 尚未到匹配窗口
+  const windowStart = windowFrom.getTime();
   const windowEnd = next.getTime();
   const price = subscription.priceMicros;
   const paid = linkedTransactions.some(

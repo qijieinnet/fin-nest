@@ -1697,8 +1697,8 @@ export class AiService {
     const labels: Record<string, string> = {
       autoPending: "自动记账待确认",
       joinRequests: "加入申请待审批",
-      insuranceDue: "保险 30 天内到期",
-      subscriptionDue: "订阅 30 天内续费",
+      insuranceDue: "保险已到提醒日",
+      subscriptionDue: "订阅已到提醒日",
       planOverLimit: "计划超限",
       planPendingConfirm: "计划周期待确认",
       budgetOverLimit: "预算超支",

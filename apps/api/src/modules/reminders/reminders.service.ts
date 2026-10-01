@@ -3,13 +3,14 @@ import {
   currentMonthKey,
   monthRange,
   parseDateOnly,
+  insuranceReminderDate,
   PrismaService,
+  subscriptionReminderDate,
   todayKey,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
 import { LedgersService } from "../ledgers/ledgers.service";
 import {
-  addDays,
   dateKey,
   indexPlanPeriods,
   lastConfirmedPeriodStart,
@@ -40,7 +41,6 @@ export class RemindersService {
   async summary(ledgerId: string, userId: string): Promise<ReminderSummary> {
     const role = await this.ledgers.assertMember(ledgerId, userId);
     const today = parseDateOnly(todayKey());
-    const dueEnd = addDays(today, 31);
     const month = currentMonthKey();
     const { start: monthStart, end: monthEnd } = monthRange(month);
 
@@ -59,22 +59,8 @@ export class RemindersService {
       role === "owner"
         ? this.prisma.client.ledgerJoinRequest.count({ where: { ledgerId, status: "pending" } })
         : 0,
-      this.prisma.client.insurance.count({
-        where: {
-          ledgerId,
-          deletedAt: null,
-          terminatedAt: null,
-          endDate: { gte: today, lt: dueEnd },
-        },
-      }),
-      this.prisma.client.subscription.count({
-        where: {
-          ledgerId,
-          deletedAt: null,
-          terminatedAt: null,
-          nextRenewalDate: { gte: today, lt: dueEnd },
-        },
-      }),
+      this.countInsurancesDue(ledgerId, today),
+      this.countSubscriptionsDue(ledgerId, today),
       this.prisma.client.plan.findMany({ where: { ledgerId, archivedAt: null } }),
       this.prisma.client.planPeriod.findMany({ where: { ledgerId } }),
       this.prisma.client.budgetSetting.findUnique({ where: { ledgerId } }),
@@ -106,6 +92,53 @@ export class RemindersService {
       budgetOverLimit,
     });
     return { total: Object.values(items).reduce((sum, count) => sum + count, 0), items };
+  }
+
+  /**
+   * 保单只按用户配置的提醒计红点（镜像列 = 最早那一档）：已到提醒日、尚未过到期日。
+   * 没配提醒的保单不计——不存在默认提醒。
+   */
+  private async countInsurancesDue(ledgerId: string, today: Date): Promise<number> {
+    const rows = await this.prisma.client.insurance.findMany({
+      where: {
+        ledgerId,
+        deletedAt: null,
+        terminatedAt: null,
+        remindLeadValue: { not: null },
+        endDate: { gte: today },
+      },
+      select: { endDate: true, remindLeadValue: true, remindLeadUnit: true },
+    });
+    return rows.filter((row) => {
+      const remindOn = insuranceReminderDate(row);
+      return remindOn !== null && remindOn.getTime() <= today.getTime();
+    }).length;
+  }
+
+  /**
+   * 订阅只按用户配置的提醒计红点（镜像列 = 最早那一档）：已到提醒日、尚未过续费日。
+   * 没配提醒的订阅不计——不存在默认提醒。
+   */
+  private async countSubscriptionsDue(ledgerId: string, today: Date): Promise<number> {
+    const rows = await this.prisma.client.subscription.findMany({
+      where: {
+        ledgerId,
+        deletedAt: null,
+        terminatedAt: null,
+        remindLeadValue: { not: null },
+        nextRenewalDate: { gte: today },
+      },
+      select: {
+        nextRenewalDate: true,
+        billingCycle: true,
+        remindLeadValue: true,
+        remindLeadUnit: true,
+      },
+    });
+    return rows.filter((row) => {
+      const remindOn = subscriptionReminderDate(row);
+      return remindOn !== null && remindOn.getTime() <= today.getTime();
+    }).length;
   }
 
   private async countPlansOverLimit(

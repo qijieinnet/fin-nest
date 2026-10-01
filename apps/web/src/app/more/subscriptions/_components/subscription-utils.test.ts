@@ -29,8 +29,8 @@ describe("reminderDateKey", () => {
       reminderDateKey(base({ nextRenewalDate: "2026-01-01", remindLeadValue: 1, remindLeadUnit: "year" })),
     ).toBe("2025-01-01");
   });
-  it("default fallback window by cycle (monthly=7d)", () => {
-    expect(reminderDateKey(base({ nextRenewalDate: "2026-03-10" }))).toBe("2026-03-03");
+  it("no default reminder when none configured", () => {
+    expect(reminderDateKey(base({ nextRenewalDate: "2026-03-10" }))).toBeNull();
   });
   it("null without renewal date", () => {
     expect(reminderDateKey(base({}))).toBeNull();
@@ -51,6 +51,10 @@ describe("due predicates (frozen today = 2026-07-14)", () => {
       isReminderDue(base({ nextRenewalDate: "2026-12-01", remindLeadValue: 1, remindLeadUnit: "day" })),
     ).toBe(false);
   });
+  it("never due without a configured reminder", () => {
+    freeze();
+    expect(isReminderDue(base({ nextRenewalDate: "2026-07-14" }))).toBe(false);
+  });
   it("terminated never due", () => {
     freeze();
     expect(
@@ -64,6 +68,16 @@ describe("due predicates (frozen today = 2026-07-14)", () => {
     const due = { nextRenewalDate: "2026-07-15", remindLeadValue: 3, remindLeadUnit: "day" };
     expect(renewalReminderDue(base({ billingCycle: "custom", ...due }))).toBe(false);
     expect(renewalReminderDue(base({ billingCycle: "monthly", ...due }))).toBe(true);
+  });
+  it("renewal confirmable on renewal date even without a reminder", () => {
+    freeze();
+    expect(renewalReminderDue(base({ nextRenewalDate: "2026-07-14" }))).toBe(true);
+    expect(renewalReminderDue(base({ nextRenewalDate: "2026-07-01" }))).toBe(true);
+    expect(renewalReminderDue(base({ nextRenewalDate: "2026-07-15" }))).toBe(false);
+    expect(renewalReminderDue(base({ billingCycle: "custom", nextRenewalDate: "2026-07-14" }))).toBe(false);
+    expect(
+      renewalReminderDue(base({ terminatedAt: "2026-01-01", nextRenewalDate: "2026-07-14" })),
+    ).toBe(false);
   });
 });
 

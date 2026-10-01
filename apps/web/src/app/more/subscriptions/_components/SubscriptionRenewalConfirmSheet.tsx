@@ -18,7 +18,7 @@ type SubscriptionRenewalConfirmSheetProps = {
   ledgerId: string;
 };
 
-/** 已到提醒日、可自动推算续费日的订阅，按续费日先后排序。 */
+/** 已到提醒日或续费日、可自动推算续费日的订阅，按续费日先后排序。 */
 export function dueRenewalSubscriptions(subscriptions: Subscription[]): Subscription[] {
   return subscriptions
     .filter((subscription) => renewalReminderDue(subscription))

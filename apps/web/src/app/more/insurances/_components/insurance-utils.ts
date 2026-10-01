@@ -53,9 +53,6 @@ export const REMIND_UNIT_OPTIONS = [
 
 export type RemindUnit = (typeof REMIND_UNIT_OPTIONS)[number]["value"];
 
-/** 未显式配置提醒时的默认提前天数（保单到期日往前推）。 */
-const DEFAULT_REMIND_WINDOW_DAYS = 30;
-
 export function remindUnitLabel(unit: string | null | undefined): string {
   return REMIND_UNIT_OPTIONS.find((item) => item.value === unit)?.label ?? "";
 }
@@ -95,16 +92,14 @@ function shiftDateKey(dateKey: string, amount: number, unit: RemindUnit): string
 type ReminderFields = Pick<Insurance, "endDate" | "remindLeadValue" | "remindLeadUnit">;
 
 /**
- * 提醒日期（`YYYY-MM-DD`）：到期日往前推「提前量」。
- * 显式配置了 remindLeadValue/Unit 则用之，否则回退到默认提前窗口。无到期日返回 null。
+ * 提醒日期（`YYYY-MM-DD`）：到期日往前推「提前量」（最早那一档）。
+ * 没有默认提醒：未配置提醒或无到期日返回 null。
  */
 export function reminderDateKey(insurance: ReminderFields): string | null {
   if (!insurance.endDate) return null;
+  if (!insurance.remindLeadValue || !insurance.remindLeadUnit) return null;
   const base = insurance.endDate.slice(0, 10);
-  if (insurance.remindLeadValue && insurance.remindLeadUnit) {
-    return shiftDateKey(base, -insurance.remindLeadValue, insurance.remindLeadUnit);
-  }
-  return shiftDateKey(base, -DEFAULT_REMIND_WINDOW_DAYS, "day");
+  return shiftDateKey(base, -insurance.remindLeadValue, insurance.remindLeadUnit);
 }
 
 /** 是否已到（或过）提醒日期：未终止、有到期日、今天 ≥ 提醒日。 */

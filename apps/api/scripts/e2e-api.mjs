@@ -2115,7 +2115,18 @@ async function seedReminderData({ ledgerId, owner, requester, account, category,
   await api("POST", `/ledgers/${ledgerId}/insurances`, {
     token: owner.token,
     expected: 201,
-    body: { type: "medical", name: `E2E Insurance ${stamp}`, endDate: addDaysIso(7) },
+    // 没有默认提醒：只有配了档位、且已到提醒日的保单才计红点。
+    body: {
+      type: "medical",
+      name: `E2E Insurance ${stamp}`,
+      endDate: addDaysIso(7),
+      reminders: [{ leadValue: 30, leadUnit: "day", remindTime: "09:00" }],
+    },
+  });
+  await api("POST", `/ledgers/${ledgerId}/insurances`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "medical", name: `E2E Insurance No Reminder ${stamp}`, endDate: addDaysIso(7) },
   });
   const invite = await api("POST", `/ledgers/${ledgerId}/invites`, {
     token: owner.token,

@@ -119,38 +119,20 @@ export type SubscriptionStatus = {
   tone: "active" | "dueSoon" | "terminated";
 };
 
-/** 未显式配置提醒时的默认提前天数，按计费周期区分；自定义/未知周期用 2 天。 */
-export function dueSoonWindowDays(cycle: string | null): number {
-  switch (cycle) {
-    case "weekly":
-      return 2;
-    case "monthly":
-      return 7;
-    case "quarterly":
-      return 14;
-    case "yearly":
-      return 14;
-    default:
-      return 2;
-  }
-}
-
 type ReminderFields = Pick<
   Subscription,
   "nextRenewalDate" | "billingCycle" | "remindLeadValue" | "remindLeadUnit"
 >;
 
 /**
- * 提醒日期（`YYYY-MM-DD`）：续费日往前推「提前量」。
- * 显式配置了 remindLeadValue/Unit 则用之，否则按计费周期回退到默认窗口。无续费日返回 null。
+ * 提醒日期（`YYYY-MM-DD`）：续费日往前推「提前量」（最早那一档）。
+ * 没有默认提醒：未配置提醒或无续费日返回 null。
  */
 export function reminderDateKey(subscription: ReminderFields): string | null {
   if (!subscription.nextRenewalDate) return null;
+  if (!subscription.remindLeadValue || !subscription.remindLeadUnit) return null;
   const base = subscription.nextRenewalDate.slice(0, 10);
-  if (subscription.remindLeadValue && subscription.remindLeadUnit) {
-    return shiftDateKey(base, -subscription.remindLeadValue, subscription.remindLeadUnit);
-  }
-  return shiftDateKey(base, -dueSoonWindowDays(subscription.billingCycle), "day");
+  return shiftDateKey(base, -subscription.remindLeadValue, subscription.remindLeadUnit);
 }
 
 /** 是否已到（或过）提醒日期：未退订、有续费日、今天 ≥ 提醒日。 */
@@ -163,11 +145,17 @@ export function isReminderDue(
   return todayKey() >= reminderKey;
 }
 
-/** 是否可进入「确认续费」列表：已到提醒日 + 计费周期可自动推算。 */
+/**
+ * 是否可进入「确认续费」列表 / 显示「确认续订」：计费周期可自动推算，且已到提醒日**或已到续费日**。
+ * 手动续订资格与提醒配置分开判断——没配提醒（或清空了提醒）的订阅到了续费日也必须能推进。
+ */
 export function renewalReminderDue(
   subscription: Pick<Subscription, "terminatedAt"> & ReminderFields,
 ): boolean {
-  return isReminderDue(subscription) && ADVANCEABLE_CYCLES.has(subscription.billingCycle ?? "");
+  if (subscription.terminatedAt) return false;
+  if (!ADVANCEABLE_CYCLES.has(subscription.billingCycle ?? "")) return false;
+  if (isReminderDue(subscription)) return true;
+  return !!subscription.nextRenewalDate && todayKey() >= subscription.nextRenewalDate.slice(0, 10);
 }
 
 export function subscriptionStatus(
