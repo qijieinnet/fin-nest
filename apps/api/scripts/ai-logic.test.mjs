@@ -15,7 +15,13 @@ import {
 } from "../dist/modules/ai/llm-client.js";
 import { periodSeriesBuckets } from "../dist/modules/stats/stats.service.js";
 import { WebSearchClient } from "../dist/modules/ai/web-search.js";
-import { todayKey } from "@fin-nest/backend";
+import {
+  IdempotencyService,
+  readRevokedIdempotency,
+  revokedIdempotencyResponse,
+  todayKey,
+} from "@fin-nest/backend";
+import { Prisma } from "@fin-nest/db";
 import { transactionOrderBy } from "../dist/modules/transactions/transactions.service.js";
 
 test("AI money parsing follows ledger precision", () => {
@@ -1158,9 +1164,15 @@ test("history replay keeps a placeholder instead of resending images", () => {
   );
 });
 
-function draftEditService({ cards, duplicateMicros = null }) {
+function draftEditService({
+  cards,
+  duplicateMicros = null,
+  transactionRow = null,
+  idempotencyRecord = null,
+}) {
   const service = Object.create(AiService.prototype);
-  const state = { cards: structuredClone(cards), writes: 0 };
+  // idempotencyRecord：卡片入账幂等键的现有记录（{ response }），null = 还没有。
+  const state = { cards: structuredClone(cards), writes: 0, idempotencyRecord };
   const message = {
     id: "msg-1",
     conversationId: "conv-1",
@@ -1173,6 +1185,13 @@ function draftEditService({ cards, duplicateMicros = null }) {
   service.buildLedgerContext = async () => draftContext();
   const tx = {
     $queryRaw: async () => [],
+    idempotencyKey: {
+      createMany: async ({ data }) => {
+        if (state.idempotencyRecord) return { count: 0 };
+        state.idempotencyRecord = { response: data[0].response };
+        return { count: 1 };
+      },
+    },
     aiMessage: {
       findFirst: async () => ({ ...message, cards: structuredClone(state.cards) }),
       update: async ({ data }) => {
@@ -1184,12 +1203,22 @@ function draftEditService({ cards, duplicateMicros = null }) {
   };
   service.prisma = {
     client: {
-      aiMessage: { findFirst: async () => ({ id: "msg-1", conversationId: "conv-1" }) },
+      aiMessage: {
+        findFirst: async () => ({
+          id: "msg-1",
+          conversationId: "conv-1",
+          cards: structuredClone(state.cards),
+        }),
+        findFirstOrThrow: async () => ({ ...message, cards: structuredClone(state.cards) }),
+      },
+      idempotencyKey: { findUnique: async () => state.idempotencyRecord },
       transaction: {
-        findFirst: async ({ where }) =>
-          duplicateMicros !== null && where.grossAmountMicros === duplicateMicros
+        findFirst: async ({ where }) => {
+          if (transactionRow && where.id === transactionRow.id) return transactionRow;
+          return duplicateMicros !== null && where.grossAmountMicros === duplicateMicros
             ? { id: "tx-dup", note: null }
-            : null,
+            : null;
+        },
       },
       $transaction: async (fn) => fn(tx),
     },
@@ -1314,6 +1343,261 @@ test("editing drafts is all-or-nothing and refuses settled cards", async () => {
     /已确认或已作废/,
   );
   assert.equal(settled.state.writes, 0);
+});
+
+test("editing drafts keeps the pre-rounding amount read from the image", async () => {
+  const { service } = draftEditService({
+    cards: [
+      { ...proposedDraft({ grossAmountMicros: "9000000" }), originalAmountMicros: "8700000" },
+    ],
+  });
+  const result = await service.updateDraftCards("ledger-1", "msg-1", "user-1", {
+    drafts: [
+      {
+        cardIndex: 0,
+        draft: {
+          type: "expense",
+          grossAmountMicros: "9000000",
+          occurredOn: "2026-09-30",
+          categoryId: "cat-food",
+          accountId: "acc-cmb",
+        },
+      },
+    ],
+  });
+  assert.equal(result.cards[0].originalAmountMicros, "8700000");
+  assert.equal(result.cards[0].draft.accountName, "招行信用卡");
+});
+
+test("confirming a card syncs its content from the transaction actually created", async () => {
+  const transactionRow = {
+    id: "tx-1",
+    type: "expense",
+    grossAmountMicros: 30_000_000n,
+    occurredOn: new Date("2026-09-29T00:00:00Z"),
+    categoryId: "cat-food",
+    subcategoryId: "sub-lunch",
+    personId: null,
+    accountId: null,
+    subAccountId: null,
+    fromAccountId: null,
+    fromSubAccountId: null,
+    toAccountId: null,
+    toSubAccountId: null,
+    note: "改过的备注",
+  };
+  const { service, state } = draftEditService({ cards: [proposedDraft()], transactionRow });
+  const result = await service.updateCardState("ledger-1", "msg-1", "user-1", {
+    cardIndex: 0,
+    status: "confirmed",
+    transactionId: "tx-1",
+  });
+  const [card] = result.cards;
+  assert.equal(state.writes, 1);
+  assert.equal(card.status, "confirmed");
+  assert.equal(card.transactionId, "tx-1");
+  assert.equal(card.draft.grossAmountMicros, "30000000");
+  assert.equal(card.draft.occurredOn, "2026-09-29");
+  assert.equal(card.draft.subcategoryName, "午餐");
+  assert.equal(card.draft.note, "改过的备注");
+  assert.equal(card.draft.currency, "CNY");
+});
+
+test("loading a conversation heals cards whose transaction exists but write-back was lost", async () => {
+  const transactionRow = {
+    id: "tx-1",
+    type: "expense",
+    grossAmountMicros: 10_000_000n,
+    occurredOn: new Date("2026-09-30T00:00:00Z"),
+    categoryId: null,
+    subcategoryId: null,
+    personId: null,
+    accountId: null,
+    subAccountId: null,
+    fromAccountId: null,
+    fromSubAccountId: null,
+    toAccountId: null,
+    toSubAccountId: null,
+    note: null,
+  };
+  const { service, state } = draftEditService({
+    cards: [proposedDraft(), proposedDraft()],
+    transactionRow,
+  });
+  const { hashIdempotencyKey } = await import("@fin-nest/backend");
+  const healedHash = hashIdempotencyKey("transaction.create:ledger-1", "ai-card-msg-1-1", "user-1");
+  service.prisma.client.idempotencyKey = {
+    findMany: async ({ where }) =>
+      where.keyHash.in.includes(healedHash)
+        ? [{ keyHash: healedHash, response: { id: "tx-1" } }]
+        : [],
+    findUnique: async () => ({ response: { id: "tx-1" } }),
+  };
+  service.prisma.client.aiMessage.findMany = async () => [
+    {
+      id: "msg-1",
+      role: "assistant",
+      content: "",
+      cards: structuredClone(state.cards),
+      createdAt: new Date(),
+    },
+  ];
+  service.loadMessageImages = async () => new Map();
+  service.logger = { warn: () => undefined, log: () => undefined };
+
+  const result = await service.getConversation("ledger-1", "conv-1", "user-1");
+  const [first, second] = result.messages[0].cards;
+  assert.equal(first.status, "proposed");
+  assert.equal(second.status, "confirmed");
+  assert.equal(second.transactionId, "tx-1");
+});
+
+test("a card whose transaction already exists cannot be voided and is confirmed instead", async () => {
+  const transactionRow = {
+    id: "tx-1",
+    type: "expense",
+    grossAmountMicros: 10_000_000n,
+    occurredOn: new Date("2026-09-30T00:00:00Z"),
+    categoryId: null,
+    subcategoryId: null,
+    personId: null,
+    accountId: null,
+    subAccountId: null,
+    fromAccountId: null,
+    fromSubAccountId: null,
+    toAccountId: null,
+    toSubAccountId: null,
+    note: null,
+  };
+  const { service, state } = draftEditService({
+    cards: [proposedDraft()],
+    transactionRow,
+    idempotencyRecord: { response: { id: "tx-1" } },
+  });
+  await assert.rejects(
+    service.updateCardState("ledger-1", "msg-1", "user-1", { cardIndex: 0, status: "superseded" }),
+    /已确认或已作废/,
+  );
+  assert.equal(state.cards[0].status, "confirmed");
+  assert.equal(state.cards[0].transactionId, "tx-1");
+});
+
+test("voiding races safely with a confirmation through the card's idempotency key", async () => {
+  // 入账请求执行中（占位 response=null）：作废被拒，卡片保持待确认。
+  const inFlight = draftEditService({
+    cards: [proposedDraft()],
+    idempotencyRecord: { response: null },
+  });
+  await assert.rejects(
+    inFlight.service.updateCardState("ledger-1", "msg-1", "user-1", {
+      cardIndex: 0,
+      status: "superseded",
+    }),
+    /正在入账/,
+  );
+  assert.equal(inFlight.state.cards[0].status, "proposed");
+
+  // 作废先拿到 key：卡片作废，key 存成「已撤销」，随后的入账请求不会执行。
+  const voided = draftEditService({ cards: [proposedDraft()] });
+  const result = await voided.service.updateCardState("ledger-1", "msg-1", "user-1", {
+    cardIndex: 0,
+    status: "superseded",
+  });
+  assert.equal(result.cards[0].status, "superseded");
+  assert.deepEqual(readRevokedIdempotency(voided.state.idempotencyRecord.response), {
+    code: "AI_CARD_SUPERSEDED",
+    message: "该草稿已作废，无法入账",
+  });
+});
+
+test("a revoked idempotency key refuses to run instead of replaying", async () => {
+  let ran = false;
+  const service = new IdempotencyService({
+    client: {
+      idempotencyKey: {
+        create: async () => {
+          throw new Prisma.PrismaClientKnownRequestError("dup", {
+            code: "P2002",
+            clientVersion: "test",
+          });
+        },
+        findUnique: async () => ({
+          response: revokedIdempotencyResponse("AI_CARD_SUPERSEDED", "该草稿已作废，无法入账"),
+          createdAt: new Date(),
+        }),
+      },
+    },
+  });
+  await assert.rejects(
+    service.run(
+      { scope: "transaction.create:ledger-1", key: "ai-card-msg-1-0", userId: "u" },
+      async () => {
+        ran = true;
+      },
+    ),
+    (error) => error.code === "AI_CARD_SUPERSEDED" && error.statusCode === 409,
+  );
+  assert.equal(ran, false);
+});
+
+test("an image turn keeps the drafts it already made when a later round fails", async () => {
+  const service = Object.create(AiService.prototype);
+  const persisted = [];
+  const draftCard = proposedDraft();
+  let calls = 0;
+  service.ledgers = { assertMember: async () => undefined };
+  service.llm = {};
+  service.visionLlm = {
+    chat: async () => {
+      calls++;
+      if (calls === 1) {
+        return {
+          content: "",
+          toolCalls: [
+            {
+              id: "c1",
+              type: "function",
+              function: { name: "draft_transaction", arguments: "{}" },
+            },
+          ],
+        };
+      }
+      throw new Error("upstream timeout");
+    },
+  };
+  service.tools = [];
+  service.checkRateLimit = () => undefined;
+  service.assertChatImages = () => undefined;
+  service.loadMessageImages = async () => new Map();
+  service.files = { storeWithOwner: async () => undefined };
+  service.buildLedgerContext = async () => draftContext();
+  service.collectOutstandingDrafts = () => [];
+  service.buildSystemPrompt = () => "system";
+  service.executeTool = async (_call, _context, cards) => {
+    cards.push(structuredClone(draftCard));
+    return "{}";
+  };
+  service.logger = { warn: () => undefined, log: () => undefined };
+  service.prisma = {
+    client: {
+      aiConversation: {
+        create: async () => ({ id: "conv-1", title: "t" }),
+        update: async () => undefined,
+      },
+      aiMessage: {
+        findMany: async () => [],
+        create: async ({ data }) => {
+          persisted.push(data);
+          return { ...data, id: data.id ?? "msg-a", createdAt: new Date() };
+        },
+      },
+    },
+  };
+  const image = { mimetype: "image/jpeg", size: 10, buffer: Buffer.alloc(1) };
+  const result = await service.chat("ledger-1", "user-1", { content: "" }, [image]);
+  assert.equal(result.message.cards.length, 1);
+  assert.match(result.message.content, /识别中途出错/);
+  assert.equal(persisted.at(-1).role, "assistant");
 });
 
 test("image turns are rejected when no vision model is configured", () => {

@@ -30,7 +30,7 @@ export function TransactionFormDesktop({
   model,
   openCreateItemSheet,
 }: TransactionFormRenderProps & { formId?: string }) {
-  const { type, isPendingMode, basicFieldsOnly } = model;
+  const { type, isPendingMode } = model;
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
   const primaryRelationHint =
@@ -144,7 +144,7 @@ export function TransactionFormDesktop({
         ) : null}
       </div>
 
-      {!basicFieldsOnly && type !== "transfer" ? (
+      {!isPendingMode && type !== "transfer" ? (
         <div className="transaction-form-desktop__advanced">
           <RecoverablePayableEditor
             accountOptions={model.primaryRelationOpts}

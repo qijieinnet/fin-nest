@@ -6,6 +6,7 @@ import {
   dateKey,
   hashIdempotencyKey,
   parseDateOnly,
+  revokedIdempotencyResponse,
   PrismaService,
   todayKey,
 } from "@fin-nest/backend";
@@ -540,6 +541,52 @@ const WEB_SEARCH_TOOL: LlmTool = {
   },
 };
 
+/** 草稿卡入账所用幂等键（前端 ai-card-<messageId>-<cardIndex>）在交易创建作用域下的哈希。 */
+function aiCardKeyHash(ledgerId: string, messageId: string, cardIndex: number, userId: string) {
+  return hashIdempotencyKey(
+    `transaction.create:${ledgerId}`,
+    `ai-card-${messageId}-${cardIndex}`,
+    userId,
+  );
+}
+
+/** 草稿与实际交易的可编辑字段是否一致（直接确认的常见情形，免去重建账本上下文）。 */
+function draftMatchesTransaction(
+  draft: AiDraftFields,
+  transaction: {
+    type: string;
+    grossAmountMicros: bigint;
+    occurredOn: Date;
+    categoryId: string | null;
+    subcategoryId: string | null;
+    personId: string | null;
+    accountId: string | null;
+    subAccountId: string | null;
+    fromAccountId: string | null;
+    fromSubAccountId: string | null;
+    toAccountId: string | null;
+    toSubAccountId: string | null;
+    note: string | null;
+  },
+): boolean {
+  const same = (a: string | undefined, b: string | null) => (a ?? null) === (b || null);
+  return (
+    draft.type === transaction.type &&
+    draft.grossAmountMicros === transaction.grossAmountMicros.toString() &&
+    draft.occurredOn === dateKey(transaction.occurredOn) &&
+    same(draft.categoryId, transaction.categoryId) &&
+    same(draft.subcategoryId, transaction.subcategoryId) &&
+    same(draft.personId, transaction.personId) &&
+    same(draft.accountId, transaction.accountId) &&
+    same(draft.subAccountId, transaction.subAccountId) &&
+    same(draft.fromAccountId, transaction.fromAccountId) &&
+    same(draft.fromSubAccountId, transaction.fromSubAccountId) &&
+    same(draft.toAccountId, transaction.toAccountId) &&
+    same(draft.toSubAccountId, transaction.toSubAccountId) &&
+    same(draft.note, transaction.note)
+  );
+}
+
 @Injectable()
 export class AiService {
   private readonly config = loadConfig();
@@ -624,10 +671,13 @@ export class AiService {
   async getConversation(ledgerId: string, conversationId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
     const conversation = await this.assertConversation(ledgerId, conversationId, userId);
-    const messages = await this.prisma.client.aiMessage.findMany({
-      where: { conversationId: conversation.id },
-      orderBy: { createdAt: "asc" },
-    });
+    const loadMessages = () =>
+      this.prisma.client.aiMessage.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { createdAt: "asc" },
+      });
+    let messages = await loadMessages();
+    if (await this.reconcileDraftCards(ledgerId, userId, messages)) messages = await loadMessages();
     const images = await this.loadMessageImages(
       ledgerId,
       messages.filter((message) => message.role === "user").map((message) => message.id),
@@ -641,6 +691,52 @@ export class AiService {
       },
       messages: messages.map((message) => this.packMessage(message, images.get(message.id))),
     };
+  }
+
+  /**
+   * 补回写：交易已按卡片幂等键创建、但卡片状态没回写成功（网络中断/页面关闭）的草稿，
+   * 加载会话时据幂等记录补成已入账。否则卡片仍可编辑，再提交只会重放第一笔交易——
+   * 改动不生效，附件/关联还会挂到旧交易上。返回是否有卡片被补写。
+   */
+  private async reconcileDraftCards(
+    ledgerId: string,
+    userId: string,
+    messages: Array<{ id: string; role: string; cards: Prisma.JsonValue | null }>,
+  ): Promise<boolean> {
+    const pending = new Map<string, { messageId: string; cardIndex: number }>();
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      ((message.cards ?? []) as AiCard[]).forEach((card, cardIndex) => {
+        if (card.kind !== "transaction_draft" || card.status !== "proposed") return;
+        const keyHash = aiCardKeyHash(ledgerId, message.id, cardIndex, userId);
+        pending.set(keyHash, { messageId: message.id, cardIndex });
+      });
+    }
+    if (pending.size === 0) return false;
+    const records = await this.prisma.client.idempotencyKey.findMany({
+      where: { keyHash: { in: [...pending.keys()] } },
+      select: { keyHash: true, response: true },
+    });
+    let healed = false;
+    for (const record of records) {
+      const response = record.response as { id?: unknown } | null;
+      const target = pending.get(record.keyHash);
+      if (!target || !response || typeof response.id !== "string") continue;
+      try {
+        await this.updateCardState(ledgerId, target.messageId, userId, {
+          cardIndex: target.cardIndex,
+          status: "confirmed",
+          transactionId: response.id,
+        });
+        healed = true;
+      } catch (error) {
+        // 交易已被删除等情况：保持待确认，不影响会话加载。
+        this.logger.warn(
+          `AI 卡片补回写失败 message=${target.messageId} card=${target.cardIndex}: ${String(error)}`,
+        );
+      }
+    }
+    return healed;
   }
 
   async deleteConversation(
@@ -671,15 +767,18 @@ export class AiService {
     await this.ledgers.assertMember(ledgerId, userId);
     const preMessage = await this.prisma.client.aiMessage.findFirst({
       where: { id: messageId, ledgerId, role: "assistant" },
-      select: { id: true, conversationId: true },
+      select: { id: true, conversationId: true, cards: true },
     });
     if (!preMessage) throw new AppError("AI_MESSAGE_NOT_FOUND", "消息不存在", 404);
     await this.assertConversation(ledgerId, preMessage.conversationId, userId);
 
     // 手动作废：仅把 proposed 草稿置为 superseded，不入账、无需交易，与 AI 的 cancel_draft 同路。
     if (input.status === "superseded") {
-      const superseded = await this.supersedeDraftCard(ledgerId, messageId, input.cardIndex);
-      if (!superseded) {
+      const outcome = await this.supersedeDraftCard(ledgerId, messageId, input.cardIndex, userId);
+      if (outcome === "confirming") {
+        throw new AppError("AI_CARD_CONFIRMING", "该草稿正在入账，无法作废", 409);
+      }
+      if (outcome === "settled") {
         throw new AppError("AI_CARD_NOT_PROPOSED", "该草稿已确认或已作废，无法作废", 409);
       }
       const message = await this.prisma.client.aiMessage.findFirstOrThrow({
@@ -693,7 +792,22 @@ export class AiService {
     if (!transactionId) throw new AppError("AI_CARD_TRANSACTION_NOT_FOUND", "交易不存在", 400);
     const transaction = await this.prisma.client.transaction.findFirst({
       where: { id: transactionId, ledgerId, deletedAt: null },
-      select: { id: true },
+      select: {
+        id: true,
+        type: true,
+        grossAmountMicros: true,
+        occurredOn: true,
+        categoryId: true,
+        subcategoryId: true,
+        personId: true,
+        accountId: true,
+        subAccountId: true,
+        fromAccountId: true,
+        fromSubAccountId: true,
+        toAccountId: true,
+        toSubAccountId: true,
+        note: true,
+      },
     });
     if (!transaction) throw new AppError("AI_CARD_TRANSACTION_NOT_FOUND", "交易不存在", 400);
     // transactionId 必须确由本卡的幂等键（ai-card-<messageId>-<cardIndex>）创建：查到幂等记录时
@@ -705,6 +819,12 @@ export class AiService {
       userId,
       transactionId,
     );
+    // 用户可能在表单里改过再入账：卡片内容以实际交易为准，否则「已入账」卡片仍显示改前的金额/分类。
+    const preCard = ((preMessage.cards ?? []) as AiCard[])[input.cardIndex];
+    const syncedDraft =
+      preCard?.kind === "transaction_draft" && draftMatchesTransaction(preCard.draft, transaction)
+        ? null
+        : await this.draftFromTransaction(ledgerId, userId, transaction);
 
     const updated = await this.prisma.client.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ai_messages WHERE id = ${messageId}::uuid FOR UPDATE`;
@@ -727,6 +847,7 @@ export class AiService {
         ...card,
         status: "confirmed",
         transactionId,
+        ...(syncedDraft ? { draft: { ...syncedDraft, currency: card.draft.currency } } : {}),
       };
       return tx.aiMessage.update({
         where: { id: message.id },
@@ -799,7 +920,11 @@ export class AiService {
             409,
           );
         }
-        cards[patch.cardIndex] = patch.card;
+        // 取整前的图上原金额是识别事实，改草稿（尤其批量设置账户/人员）不能把它丢掉。
+        cards[patch.cardIndex] =
+          card.originalAmountMicros && patch.card.kind === "transaction_draft"
+            ? { ...patch.card, originalAmountMicros: card.originalAmountMicros }
+            : patch.card;
       }
       return tx.aiMessage.update({
         where: { id: message.id },
@@ -807,6 +932,52 @@ export class AiService {
       });
     });
     return this.packMessage(updated);
+  }
+
+  /** 由实际交易重建草稿字段（名称回填同 buildDraft）；建不出来时返回 null，调用方保留原草稿。 */
+  private async draftFromTransaction(
+    ledgerId: string,
+    userId: string,
+    transaction: {
+      type: string;
+      grossAmountMicros: bigint;
+      occurredOn: Date;
+      categoryId: string | null;
+      subcategoryId: string | null;
+      personId: string | null;
+      accountId: string | null;
+      subAccountId: string | null;
+      fromAccountId: string | null;
+      fromSubAccountId: string | null;
+      toAccountId: string | null;
+      toSubAccountId: string | null;
+      note: string | null;
+    },
+  ): Promise<AiDraftFields | null> {
+    const context = await this.buildLedgerContext(ledgerId, userId);
+    const built = this.buildDraft(
+      {
+        type: transaction.type,
+        micros: transaction.grossAmountMicros,
+        occurredOn: dateKey(transaction.occurredOn),
+        categoryId: transaction.categoryId ?? undefined,
+        subcategoryId: transaction.subcategoryId ?? undefined,
+        personId: transaction.personId ?? undefined,
+        accountId: transaction.accountId ?? undefined,
+        subAccountId: transaction.subAccountId ?? undefined,
+        fromAccountId: transaction.fromAccountId ?? undefined,
+        fromSubAccountId: transaction.fromSubAccountId ?? undefined,
+        toAccountId: transaction.toAccountId ?? undefined,
+        toSubAccountId: transaction.toSubAccountId ?? undefined,
+        note: transaction.note ?? undefined,
+      },
+      context,
+    );
+    if (!built.ok) {
+      this.logger.warn(`AI 卡片按交易同步草稿失败：${built.error}`);
+      return null;
+    }
+    return built.draft;
   }
 
   /** 幂等键存在时，校验其存量响应中的交易 id 与待确认的 transactionId 一致；记录缺失则不阻断。 */
@@ -817,11 +988,7 @@ export class AiService {
     userId: string,
     transactionId: string,
   ): Promise<void> {
-    const keyHash = hashIdempotencyKey(
-      `transaction.create:${ledgerId}`,
-      `ai-card-${messageId}-${cardIndex}`,
-      userId,
-    );
+    const keyHash = aiCardKeyHash(ledgerId, messageId, cardIndex, userId);
     const record = await this.prisma.client.idempotencyKey.findUnique({ where: { keyHash } });
     const response = record?.response as { id?: unknown } | null;
     if (response && typeof response.id === "string" && response.id !== transactionId) {
@@ -952,6 +1119,7 @@ export class AiService {
     // 各轮正文都保留（工具轮前的过渡语 + 末轮总结），持久化与流式所见一致。
     const cards: AiCard[] = [];
     const contentParts: string[] = [];
+    let interrupted = false;
     let rounds = 0;
     let promptTokens = 0;
     let completionTokens = 0;
@@ -974,8 +1142,17 @@ export class AiService {
           ? await llm.chatStream(messages, this.tools, onDelta, options)
           : await llm.chat(messages, this.tools, options);
       } catch (error) {
-        // 用户中止：保留已生成的部分照常持久化；其余错误照抛。
+        // 用户中止：保留已生成的部分照常持久化。
         if (signal?.aborted) break;
+        // 已经生成过卡片（识图续轮最常见：前几轮已出草稿，收尾/续识别超时）：落库已有部分并说明
+        // 中途出错，否则卡片随异常一起丢失、用户只能重新上传。没有卡片时照抛，走正常错误提示。
+        if (cards.length > 0) {
+          this.logger.warn(
+            `chat round ${round} failed after ${cards.length} cards: ${String(error)}`,
+          );
+          interrupted = true;
+          break;
+        }
         throw error;
       }
       rounds++;
@@ -1007,6 +1184,12 @@ export class AiService {
       `chat usage ledger=${ledgerId} user=${userId} rounds=${rounds} ` +
         `prompt_tokens=${promptTokens} completion_tokens=${completionTokens} cards=${cards.length}`,
     );
+    if (interrupted) {
+      const notice = "（识别中途出错，已生成的草稿可能不完整，请核对后补记或重新上传图片。）";
+      if (contentParts.length > 0) emit?.delta("\n\n");
+      emit?.delta(notice);
+      contentParts.push(notice);
+    }
     const content =
       contentParts.join("\n\n") ||
       (cards.length > 0
@@ -2248,12 +2431,16 @@ export class AiService {
             : "当前没有待确认的草稿可作废",
       };
     }
-    const superseded = await this.supersedeDraftCard(
+    const outcome = await this.supersedeDraftCard(
       context.ledgerId,
       target.messageId,
       target.cardIndex,
+      context.userId,
     );
-    if (!superseded) {
+    if (outcome === "confirming") {
+      return { ok: false as const, error: "该草稿正在入账，无法作废" };
+    }
+    if (outcome === "settled") {
       return { ok: false as const, error: "该草稿已确认或已作废，无法再作废" };
     }
     // 从本轮上下文移除，避免同一 ref 被重复作废。
@@ -2263,28 +2450,71 @@ export class AiService {
     return { ok: true as const, message: `已作废草稿 ${target.ref}（${target.summary}）` };
   }
 
-  /** 行锁下把指定草稿卡置为 superseded；已确认/已作废或卡片缺失时返回 false。 */
+  /**
+   * 行锁下把指定草稿卡置为 superseded。与入账互斥靠卡片的入账幂等键：同一事务里先占住这个 key
+   * （存成「已撤销」，之后用它创建交易直接 409），占到了才作废——入账与作废谁先拿到 key 谁赢，
+   * 不会留下「卡片已作废、交易实际存在」。
+   * - superseded：已作废
+   * - settled：卡片已确认/已作废/不存在；或交易已建出（回写丢了），此时顺手补成已入账
+   * - confirming：入账请求正在执行
+   */
   private async supersedeDraftCard(
     ledgerId: string,
     messageId: string,
     cardIndex: number,
-  ): Promise<boolean> {
-    return this.prisma.client.$transaction(async (tx) => {
+    userId: string,
+  ): Promise<"superseded" | "settled" | "confirming"> {
+    const keyHash = aiCardKeyHash(ledgerId, messageId, cardIndex, userId);
+    const outcome = await this.prisma.client.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ai_messages WHERE id = ${messageId}::uuid FOR UPDATE`;
       const message = await tx.aiMessage.findFirst({
         where: { id: messageId, ledgerId, role: "assistant" },
       });
-      if (!message) return false;
+      if (!message) return "settled" as const;
       const cards = (message.cards ?? []) as AiCard[];
       const card = cards[cardIndex];
-      if (!card || card.kind !== "transaction_draft" || card.status !== "proposed") return false;
+      if (!card || card.kind !== "transaction_draft" || card.status !== "proposed") {
+        return "settled" as const;
+      }
+      // createMany + skipDuplicates（ON CONFLICT DO NOTHING）：冲突不会让事务进入失败态。
+      const claimed = await tx.idempotencyKey.createMany({
+        data: [
+          {
+            keyHash,
+            scope: `transaction.create:${ledgerId}`,
+            userId,
+            response: revokedIdempotencyResponse("AI_CARD_SUPERSEDED", "该草稿已作废，无法入账"),
+          },
+        ],
+        skipDuplicates: true,
+      });
+      if (claimed.count === 0) return "taken" as const;
       cards[cardIndex] = { ...card, status: "superseded" };
       await tx.aiMessage.update({
         where: { id: message.id },
         data: { cards: cards as unknown as Prisma.InputJsonValue },
       });
-      return true;
+      return "superseded" as const;
     });
+    if (outcome !== "taken") return outcome;
+
+    // key 已被入账占用：交易已建出就补回写，还在执行就让调用方稍后再试。
+    const record = await this.prisma.client.idempotencyKey.findUnique({
+      where: { keyHash },
+      select: { response: true },
+    });
+    const response = record?.response as { id?: unknown } | null | undefined;
+    if (!response) return "confirming";
+    if (typeof response.id === "string") {
+      await this.updateCardState(ledgerId, messageId, userId, {
+        cardIndex,
+        status: "confirmed",
+        transactionId: response.id,
+      }).catch((error) =>
+        this.logger.warn(`AI 卡片作废前补回写失败 message=${messageId}: ${String(error)}`),
+      );
+    }
+    return "settled";
   }
 
   // ---------- 附图 ----------

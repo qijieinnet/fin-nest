@@ -3,7 +3,7 @@ import { Prisma } from "@fin-nest/db";
 import { AppError } from "../errors/app-error";
 import { PrismaService } from "../prisma/prisma.service";
 import { serializeBigInts } from "../serialization/bigint-serialize.interceptor";
-import { assertIdempotencyKey, hashIdempotencyKey } from "./idempotency";
+import { assertIdempotencyKey, hashIdempotencyKey, readRevokedIdempotency } from "./idempotency";
 
 export type IdempotencyContext = {
   /** Operation + resource scope, e.g. `transaction.create:<ledgerId>`. Keys are unique per scope. */
@@ -23,7 +23,7 @@ type Reservation<T> = { kind: "reserved" } | { kind: "replay"; response: T };
  * response) before `fn` runs, so a concurrent duplicate hits the unique constraint before any
  * side effect executes: it either replays the stored response or gets a 409 while the first
  * request is still in flight. On failure the reservation is released so the client can retry
- * with the same key.
+ * with the same key. A key stored as revokedIdempotencyResponse() never runs: it fails with 409.
  */
 @Injectable()
 export class IdempotencyService {
@@ -75,6 +75,8 @@ export class IdempotencyService {
 
     const existing = await this.prisma.client.idempotencyKey.findUnique({ where: { keyHash } });
     if (existing && existing.response !== null) {
+      const revoked = readRevokedIdempotency(existing.response);
+      if (revoked) throw new AppError(revoked.code, revoked.message, 409);
       return { kind: "replay", response: existing.response as T };
     }
     const staleBefore = new Date(Date.now() - STALE_RESERVATION_MS);

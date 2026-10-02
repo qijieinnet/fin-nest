@@ -80,6 +80,17 @@ const AiMarkdown = dynamic(
 const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
 // 与服务端 MAX_CHAT_IMAGES 一致。
 const MAX_IMAGES = 4;
+/** 交易已入账、卡片回写失败时的提示（本地已锁卡，服务端加载会话时补回写）。 */
+const CARD_SYNC_FAILED = "卡片状态同步失败，重新进入会话后会自动补上";
+/** 模型只出卡片、没出文字时服务端落的占位正文（同 apps/api 的 AI_CARDS_ONLY_PLACEHOLDER）。 */
+const AI_CARDS_ONLY_PLACEHOLDER = "已生成上面的卡片，请查看。";
+
+/** 用户消息是否附图（本地刚发出的看预览，持久化的看附件）。 */
+function hasImages(message: AiMessage | undefined) {
+  return (
+    message?.role === "user" && Boolean(message.localImageUrls?.length || message.images?.length)
+  );
+}
 
 type PendingImage = { id: string; blob: Blob; url: string };
 
@@ -157,6 +168,21 @@ export function AiScreen() {
   messagesRef.current = messages;
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const pendingImagesRef = useRef(pendingImages);
+  pendingImagesRef.current = pendingImages;
+  // 已发出图片的预览 URL：本地消息还在用，等它们被服务端消息替换（切换/新建会话）或离开页面时回收。
+  const sentImageUrlsRef = useRef<string[]>([]);
+  const releaseSentImages = useCallback(() => {
+    for (const url of sentImageUrlsRef.current) URL.revokeObjectURL(url);
+    sentImageUrlsRef.current = [];
+  }, []);
+  useEffect(
+    () => () => {
+      releaseSentImages();
+      for (const image of pendingImagesRef.current) URL.revokeObjectURL(image.url);
+    },
+    [releaseSentImages],
+  );
   const [compressing, setCompressing] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // 正在批量确认/作废的消息 id。
@@ -206,7 +232,12 @@ export function AiScreen() {
   const voidCard = useVoidAiCard(ledgerId);
   const updateDrafts = useUpdateAiDrafts(ledgerId);
   // 流式进行中的助手消息（未持久化）：delta 增量拼正文、card 事件实时追加；done 后替换为持久化消息。
-  const [streaming, setStreaming] = useState<{ content: string; cards: AiCard[] } | null>(null);
+  // withImages：带图的一轮（识别账单）草稿先不上屏，见下方流式渲染。
+  const [streaming, setStreaming] = useState<{
+    content: string;
+    cards: AiCard[];
+    withImages: boolean;
+  } | null>(null);
   const sending = streaming !== null;
 
   // 只在切换到「另一个」会话时才从服务端整体加载消息：done 后的 refetch / 窗口聚焦刷新
@@ -218,7 +249,9 @@ export function AiScreen() {
     if (loadedConversationRef.current === conversationData.conversation.id) return;
     loadedConversationRef.current = conversationData.conversation.id;
     setMessages(conversationData.messages);
-  }, [conversationData]);
+    // 服务端消息里的附图走附件接口，本地预览不再被引用。
+    releaseSentImages();
+  }, [conversationData, releaseSentImages]);
 
   // 去记一笔会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话 id，
   // 让用户回到原对话（消息从服务端重新加载），而不是空白的新对话。
@@ -268,6 +301,34 @@ export function AiScreen() {
       queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
     ]);
 
+  /**
+   * 交易已按卡片幂等键创建后回写卡片（失败重试一次）。仍失败时也必须在本地把卡片锁成已入账：
+   * 留着待确认的话，再编辑提交只会重放第一笔交易（改动不生效、附件/关联挂到旧交易上），
+   * 作废则留下「卡片已作废、交易实际存在」。服务端加载会话时按幂等记录补回写
+   * （AiService.reconcileDraftCards），作废接口也会拒绝已有交易的卡片。
+   */
+  const settleCard = async (
+    message: AiMessage,
+    cardIndex: number,
+    transactionId: string,
+  ): Promise<{ message: AiMessage; synced: boolean }> => {
+    const writeBack = () =>
+      updateCardState.mutateAsync({ messageId: message.id, cardIndex, transactionId });
+    try {
+      const updated = await writeBack().catch(writeBack);
+      applyUpdatedMessage(updated);
+      return { message: updated, synced: true };
+    } catch {
+      const card = message.cards?.[cardIndex];
+      if (!message.cards || card?.kind !== "transaction_draft") return { message, synced: false };
+      const cards = [...message.cards];
+      cards[cardIndex] = { ...card, status: "confirmed", transactionId };
+      const locked = { ...message, cards };
+      applyUpdatedMessage(locked);
+      return { message: locked, synced: false };
+    }
+  };
+
   const createTransactionForCard = async (message: AiMessage, cardIndex: number) => {
     const card = message.cards?.[cardIndex];
     if (!card || card.kind !== "transaction_draft") throw new Error("卡片不存在");
@@ -280,11 +341,7 @@ export function AiScreen() {
         headers: { "idempotency-key": aiCardIdempotencyKey(message.id, cardIndex) },
       },
     );
-    return updateCardState.mutateAsync({
-      messageId: message.id,
-      cardIndex,
-      transactionId: transaction.id,
-    });
+    return settleCard(message, cardIndex, transaction.id);
   };
 
   /**
@@ -296,6 +353,7 @@ export function AiScreen() {
     if (!current || batchBusyId) return;
     setBatchBusyId(messageId);
     let succeeded = 0;
+    let unsynced = 0;
     let firstError: string | null = null;
     let failed = 0;
     try {
@@ -303,9 +361,10 @@ export function AiScreen() {
         const card = current.cards?.[cardIndex];
         if (!card || card.kind !== "transaction_draft" || card.status !== "proposed") continue;
         try {
-          current = await createTransactionForCard(current, cardIndex);
-          applyUpdatedMessage(current);
+          const settled = await createTransactionForCard(current, cardIndex);
+          current = settled.message;
           succeeded++;
+          if (!settled.synced) unsynced++;
         } catch (error) {
           failed++;
           firstError ??= getApiErrorMessage(error, "入账失败");
@@ -314,13 +373,13 @@ export function AiScreen() {
     } finally {
       setBatchBusyId(null);
     }
-    if (failed === 0) {
+    if (failed === 0 && unsynced === 0) {
       showToast({ tone: "success", message: `已入账 ${succeeded} 笔` });
     } else {
-      showToast({
-        tone: "error",
-        message: `已入账 ${succeeded} 笔，${failed} 笔失败：${firstError}`,
-      });
+      const parts = [`已入账 ${succeeded} 笔`];
+      if (failed > 0) parts.push(`${failed} 笔失败：${firstError}`);
+      if (unsynced > 0) parts.push(`其中 ${unsynced} 笔${CARD_SYNC_FAILED}`);
+      showToast({ tone: "error", message: parts.join("，") });
     }
     if (succeeded > 0) await invalidateLedgerData();
   };
@@ -357,9 +416,12 @@ export function AiScreen() {
   const confirmDraft = useMutation({
     mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
       createTransactionForCard(message, cardIndex),
-    onSuccess: async (updatedMessage) => {
-      applyUpdatedMessage(updatedMessage);
-      showToast({ tone: "success", message: "已入账" });
+    onSuccess: async ({ synced }) => {
+      showToast(
+        synced
+          ? { tone: "success", message: "已入账" }
+          : { tone: "error", message: `已入账，但${CARD_SYNC_FAILED}` },
+      );
       await invalidateLedgerData();
     },
     onSettled: () => setConfirmingKey(null),
@@ -402,10 +464,12 @@ export function AiScreen() {
     speech.start();
   };
 
+  // 正在压缩、还没进列表的图片占用的名额：压缩期间仍可继续选图/粘贴，不预留会突破上限。
+  const reservedImagesRef = useRef(0);
   const addImages = async (files: File[]) => {
     const images = files.filter((file) => file.type.startsWith("image/") || !file.type);
     if (images.length === 0) return;
-    const room = MAX_IMAGES - pendingImages.length;
+    const room = MAX_IMAGES - pendingImages.length - reservedImagesRef.current;
     if (room <= 0) {
       showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张图片` });
       return;
@@ -413,15 +477,21 @@ export function AiScreen() {
     if (images.length > room) {
       showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张，已取前 ${room} 张` });
     }
+    const accepted = images.slice(0, room);
+    reservedImagesRef.current += accepted.length;
     setCompressing((count) => count + 1);
     try {
-      for (const file of images.slice(0, room)) {
+      for (const file of accepted) {
         try {
           const blob = await compressImageForUpload(file);
-          setPendingImages((prev) => [
-            ...prev,
-            { id: `${Date.now()}-${Math.random()}`, blob, url: URL.createObjectURL(blob) },
-          ]);
+          setPendingImages((prev) => {
+            // 兜底：预留之外的并发路径也不能让列表超过上限。
+            if (prev.length >= MAX_IMAGES) return prev;
+            return [
+              ...prev,
+              { id: `${Date.now()}-${Math.random()}`, blob, url: URL.createObjectURL(blob) },
+            ];
+          });
         } catch (error) {
           showToast({
             tone: "error",
@@ -430,6 +500,7 @@ export function AiScreen() {
         }
       }
     } finally {
+      reservedImagesRef.current -= accepted.length;
       setCompressing((count) => count - 1);
     }
   };
@@ -458,7 +529,8 @@ export function AiScreen() {
     if ((!content && images.length === 0) || sending || compressing > 0 || !ledgerId) return;
     if (speech.listening) speech.cancel();
     setInput("");
-    // 预览 URL 交给本地消息继续展示（不在这里回收）。
+    // 预览 URL 交给本地消息继续展示，登记后由 releaseSentImages 统一回收。
+    sentImageUrlsRef.current.push(...images.map((image) => image.url));
     setPendingImages([]);
     setMessages((prev) => [
       ...prev,
@@ -471,7 +543,7 @@ export function AiScreen() {
         createdAt: new Date().toISOString(),
       },
     ]);
-    setStreaming({ content: "", cards: [] });
+    setStreaming({ content: "", cards: [], withImages: images.length > 0 });
     const abort = new AbortController();
     abortRef.current = abort;
     void (async () => {
@@ -488,11 +560,13 @@ export function AiScreen() {
               setStreaming((prev) => ({
                 content: (prev?.content ?? "") + text,
                 cards: prev?.cards ?? [],
+                withImages: prev?.withImages ?? false,
               })),
             onCard: (card) =>
               setStreaming((prev) => ({
                 content: prev?.content ?? "",
                 cards: [...(prev?.cards ?? []), card],
+                withImages: prev?.withImages ?? false,
               })),
           },
           abort.signal,
@@ -562,6 +636,7 @@ export function AiScreen() {
   const startNewConversation = () => {
     setConversationId(null);
     setMessages([]);
+    releaseSentImages();
     setHistoryOpen(false);
   };
 
@@ -751,19 +826,22 @@ export function AiScreen() {
             </div>
           ) : (
             <div className="ai-thread">
-              {messages.map((message) => (
+              {messages.map((message, messageIndex) => (
                 <div className="ai-turn" key={message.id}>
                   {message.role === "user" && ledgerId ? (
                     <MessageImages ledgerId={ledgerId} message={message} />
                   ) : null}
                   {/* 有卡片时正文不展示（模型正文只是卡片的复述），避免信息重复。
-                      例外：多笔草稿（识别账单）的收尾总结会说明跳过了哪几笔，要保留。 */}
+                      例外：识别账单（上一条用户消息带图）或多笔草稿的收尾总结会说明跳过了哪几笔，
+                      要保留、放在卡片上方；但「只有卡片」的占位文案没有信息量，照样不展示。 */}
                   {message.content &&
                   !(
                     message.role === "assistant" &&
                     (message.cards?.length ?? 0) > 0 &&
-                    (message.cards?.filter((card) => card.kind === "transaction_draft").length ??
-                      0) < 2
+                    (message.content === AI_CARDS_ONLY_PLACEHOLDER ||
+                      ((message.cards?.filter((card) => card.kind === "transaction_draft").length ??
+                        0) < 2 &&
+                        !hasImages(messages[messageIndex - 1])))
                   ) ? (
                     <div
                       className={
@@ -782,25 +860,53 @@ export function AiScreen() {
                     : null}
                 </div>
               ))}
-              {streaming ? (
-                <div className="ai-turn">
-                  {/* 与持久化消息一致：出现卡片后不再展示正文增量。 */}
-                  {streaming.content && streaming.cards.length === 0 ? (
-                    <div className="ai-msg ai-msg--ai">
-                      <AiMarkdown content={streaming.content} />
-                    </div>
-                  ) : streaming.cards.length === 0 ? (
-                    <div className="ai-msg ai-msg--ai" aria-label="思考中">
-                      <span className="ai-typing">
-                        <span />
-                        <span />
-                        <span />
-                      </span>
-                    </div>
-                  ) : null}
-                  {renderCards(streaming.cards, null)}
-                </div>
-              ) : null}
+              {streaming
+                ? (() => {
+                    // 识别账单：草稿一笔笔到达，若边到边渲染会先冒出单卡、再变批量面板、最后才
+                    // 出总结文字。所以带图的一轮草稿先不上屏，只显示进度；结束后按「文字 → 待确认
+                    // 列表」一次性呈现（与持久化消息同一布局）。
+                    const draftCount = streaming.cards.filter(
+                      (card) => card.kind === "transaction_draft",
+                    ).length;
+                    const holdDrafts = streaming.withImages && draftCount > 0;
+                    const visibleCards = holdDrafts
+                      ? streaming.cards.filter((card) => card.kind !== "transaction_draft")
+                      : streaming.cards;
+                    // 与持久化消息一致：出现卡片后不再展示正文增量；识别账单的总结例外。
+                    const showContent =
+                      Boolean(streaming.content) && (holdDrafts || streaming.cards.length === 0);
+                    const typing = (label?: string) => (
+                      <div
+                        aria-label={label ?? "思考中"}
+                        className="ai-msg ai-msg--ai flex items-center gap-2"
+                      >
+                        <span className="ai-typing">
+                          <span />
+                          <span />
+                          <span />
+                        </span>
+                        {label ? (
+                          <span className="text-sm text-[var(--color-text-muted)]">{label}</span>
+                        ) : null}
+                      </div>
+                    );
+                    return (
+                      <div className="ai-turn">
+                        {showContent ? (
+                          <div className="ai-msg ai-msg--ai">
+                            <AiMarkdown content={streaming.content} />
+                          </div>
+                        ) : null}
+                        {holdDrafts
+                          ? typing(`已识别 ${draftCount} 笔，正在整理`)
+                          : !showContent && streaming.cards.length === 0
+                            ? typing()
+                            : null}
+                        {renderCards(visibleCards, null)}
+                      </div>
+                    );
+                  })()
+                : null}
               <div ref={bottomRef} />
             </div>
           )}
@@ -924,11 +1030,18 @@ export function AiScreen() {
       <AiDraftEditDrawer
         card={editingCard}
         editKey={editingDraft ? `${editingDraft.messageId}:${editingDraft.cardIndex}` : "none"}
+        idempotencyKey={
+          editingDraft ? aiCardIdempotencyKey(editingDraft.messageId, editingDraft.cardIndex) : ""
+        }
         onClose={() => setEditingDraft(null)}
-        onSave={async (draft) => {
+        onSaved={async (transaction) => {
           if (!editingDraft) return;
-          await saveDrafts(editingDraft.messageId, [{ cardIndex: editingDraft.cardIndex, draft }]);
-          showToast({ tone: "success", message: "草稿已更新" });
+          const message = messagesRef.current.find((item) => item.id === editingDraft.messageId);
+          setEditingDraft(null);
+          if (!message) return;
+          // 「已记一笔」与缓存刷新由表单负责，这里只回写卡片。
+          const { synced } = await settleCard(message, editingDraft.cardIndex, transaction.id);
+          if (!synced) showToast({ tone: "error", message: CARD_SYNC_FAILED });
         }}
         open={editingDraft !== null}
       />

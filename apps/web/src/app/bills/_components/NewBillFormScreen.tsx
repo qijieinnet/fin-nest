@@ -10,7 +10,6 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
-import type { DraftFormValue } from "./_model/useTransactionFormModel";
 import { TransactionFormFab } from "./TransactionFormFab";
 import { templateToSeed } from "./_model/template-seed";
 
@@ -49,8 +48,8 @@ type NewBillFormScreenProps = {
   title?: string;
   /** 表单上方的提示区（AI 草稿用来说明取整原值、疑似重复）。 */
   notice?: ReactNode;
-  /** 草稿模式：保存只改 AI 草稿、不入账；不提供快捷模板。 */
-  onSubmitDraft?: (draft: DraftFormValue) => Promise<void>;
+  /** 是否提供快捷模板入口（AI 草稿编辑时关掉：选模板会整个覆盖识别结果）。 */
+  quickTemplates?: boolean;
 };
 
 export function NewBillFormScreen({
@@ -62,7 +61,7 @@ export function NewBillFormScreen({
   notice,
   onClose,
   onSaved,
-  onSubmitDraft,
+  quickTemplates = true,
   templateId,
   title = "记一笔",
 }: NewBillFormScreenProps) {
@@ -214,7 +213,6 @@ export function NewBillFormScreen({
         onPendingChange={setSaving}
         onSaved={onSaved}
         onSubmitBlocked={handleSubmitBlockedChange}
-        onSubmitDraft={onSubmitDraft}
         seed={seed}
       />
     );
@@ -226,7 +224,7 @@ export function NewBillFormScreen({
           <header className="flex items-center justify-between gap-2 px-1 pb-2">
             <div className="flex items-center gap-1">
               {closeButton}
-              {onSubmitDraft ? null : quickButton}
+              {quickTemplates ? quickButton : null}
             </div>
             <h2 className="text-base font-bold text-[var(--color-text-primary)]">{title}</h2>
             {saveAction}
