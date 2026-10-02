@@ -570,6 +570,377 @@ select:focus-visible {
   animation: ai-msg-in var(--motion-duration-normal) var(--ease-out) backwards;
 }
 
+/* 用户消息附图：与用户气泡同侧（右对齐），缩略图沿用附件网格。 */
+.ai-msg-images {
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.ai-msg-images .biz-attachment-grid {
+  justify-content: flex-end;
+}
+
+/* 输入条上方的待发送图片：选图后先在这里预览，可移除。 */
+.ai-composer__images {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 10px;
+}
+
+.ai-composer__compressing {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.ai-composer__btn--attach:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 疑似重复提示：琥珀色小字，提示而非报错。 */
+.ai-draft-dup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #b26b00;
+}
+
+/* 多笔草稿批量面板（识别账单图片）：
+   §16 克制 — 一行只放「勾选 · 名称/金额 · 小标签」，细节进编辑 Sheet；底部单一主操作。
+   §1 响应 — 勾选圆点按压即时缩放；整行按压有轻微底色反馈。
+   §一致 — 编辑走与记一笔同款的 Sheet 与字段行，不在聊天流里展开大表单。 */
+.ai-batch {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ai-batch__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+
+.ai-batch__title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+.ai-batch__meta {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-batch__link {
+  flex-shrink: 0;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-tint);
+  cursor: pointer;
+}
+
+.ai-batch__link:disabled {
+  color: var(--color-disabled-text);
+  cursor: default;
+}
+
+/* 处理完：头部带一个对勾徽章，整卡折叠成摘要。 */
+.ai-batch__settled-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-tint) 14%, transparent);
+  color: var(--color-tint);
+}
+
+.ai-batch--settled .ai-batch__head {
+  padding-bottom: 14px;
+}
+
+.ai-batch__list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.ai-batch__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding-right: 12px;
+}
+
+/* 分隔线从文字起点开始（iOS 列表的内缩分隔线），不贯穿勾选列。 */
+.ai-batch__row + .ai-batch__row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 48px;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 勾选热区：整列 48px 宽，圆点本身只有 22px，手指不必瞄准。 */
+.ai-batch__check-hit {
+  display: flex;
+  flex-shrink: 0;
+  align-self: stretch;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-batch__check-hit:disabled {
+  cursor: default;
+}
+
+.ai-batch__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid rgba(0, 0, 0, 0.2);
+  border-radius: 999px;
+  color: var(--color-tint-contrast);
+  transition:
+    background var(--motion-duration-fast) var(--ease-out-soft),
+    border-color var(--motion-duration-fast) var(--ease-out-soft),
+    transform var(--motion-duration-press) var(--ease-out);
+}
+
+.ai-batch__check-hit:active .ai-batch__check {
+  transform: scale(0.86);
+}
+
+.ai-batch__check.is-checked {
+  border-color: var(--color-tint);
+  background: var(--color-tint);
+}
+
+/* 已处理的行：勾选列换成状态圆点（入账 = 品牌色对勾，作废 = 灰色减号）。 */
+.ai-batch__state {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 13px;
+  border-radius: 999px;
+}
+
+.ai-batch__state.is-confirmed {
+  background: color-mix(in srgb, var(--color-tint) 14%, transparent);
+  color: var(--color-tint);
+}
+
+.ai-batch__state.is-voided {
+  background: var(--color-control-fill-muted);
+  color: var(--color-text-muted);
+}
+
+.ai-batch__row-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 6px 10px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--motion-duration-fast) var(--ease-out-soft);
+}
+
+.ai-batch__row-body:not(:disabled):active {
+  background: var(--color-control-fill-muted);
+}
+
+.ai-batch__row-body:disabled {
+  cursor: default;
+}
+
+.ai-batch__row-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ai-batch__row-line--sub {
+  align-items: center;
+}
+
+.ai-batch__row-note {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 15px;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-batch__row-amount {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-batch__row-detail {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-batch__row-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.ai-batch__row.is-settled .ai-batch__row-note {
+  color: var(--color-text-secondary);
+}
+
+.ai-batch__row.is-voided .ai-batch__row-note,
+.ai-batch__row.is-voided .ai-batch__row-amount {
+  color: var(--color-text-muted) !important;
+  text-decoration: line-through;
+}
+
+.ai-batch__chevron {
+  flex-shrink: 0;
+  color: rgba(0, 0, 0, 0.22);
+}
+
+.ai-batch__tags {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+/* 行内小标签：只说「是什么」，原因与原值放进编辑面板。 */
+.ai-tag {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-control-fill-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.ai-tag--warn {
+  background: color-mix(in srgb, #f5a524 16%, transparent);
+  color: #a15c00;
+}
+
+.ai-tag--danger {
+  background: color-mix(in srgb, var(--color-accent-expense) 12%, transparent);
+  color: var(--color-accent-expense);
+}
+
+.ai-batch__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* 编辑 / 批量设置 Sheet 的内容栈。 */
+.ai-batch__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+
+/* 金额输入框是 34px 大字，按默认 size 的固有宽度会把网格撑出容器。 */
+.ai-batch__editor > * {
+  min-width: 0;
+}
+
+.ai-batch__editor .biz-amount {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ai-batch__notice {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--color-control-fill-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.ai-batch__notice--warn {
+  background: color-mix(in srgb, #f5a524 14%, transparent);
+  color: #8a4f00;
+}
+
+/* 草稿编辑抽屉：表单上方的提示（取整原值 / 疑似重复）。 */
+.ai-draft-drawer__notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.ai-batch__hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.ai-batch__error {
+  font-size: 13px;
+  color: var(--color-accent-expense);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-batch__check,
+  .ai-batch__row-body {
+    transition: none;
+  }
+  .ai-batch__check-hit:active .ai-batch__check {
+    transform: none;
+  }
+}
+
 /* 空态：柔和的引导，图标托在渐变徽章里（§16 克制 / §craft）。 */
 .ai-empty {
   display: flex;

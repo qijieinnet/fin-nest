@@ -47,7 +47,7 @@ export function TransactionFormMobile({
   onKeypadOpenChange?: (open: boolean) => void;
   onQuickTemplates?: () => void;
 }) {
-  const { type, isPendingMode } = model;
+  const { type, isPendingMode, basicFieldsOnly } = model;
   const keypadTabs = useKeypadTabs(model, { keypadOnly });
   const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
   const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
@@ -220,7 +220,7 @@ export function TransactionFormMobile({
       <div className="transaction-form__cards">
         {orderedFieldsForType(model.order, type).map(renderOrderedField)}
 
-        {!isPendingMode && type !== "transfer" ? (
+        {!basicFieldsOnly && type !== "transfer" ? (
           <>
             <RecoverablePayableEditor
               accountOptions={model.primaryRelationOpts}

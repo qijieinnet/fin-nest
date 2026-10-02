@@ -17,6 +17,7 @@ import type {
 
 export type {
   LlmCallOptions,
+  LlmContentPart,
   LlmMessage,
   LlmProtocol,
   LlmReply,

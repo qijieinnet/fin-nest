@@ -118,7 +118,14 @@ function buildInput(messages: LlmMessage[]): {
     input.push({
       type: "message",
       role: "user",
-      content: [{ type: "input_text", text: message.content }],
+      content:
+        typeof message.content === "string"
+          ? [{ type: "input_text", text: message.content }]
+          : message.content.map((part) =>
+              part.type === "text"
+                ? { type: "input_text", text: part.text }
+                : { type: "input_image", image_url: part.image_url.url },
+            ),
     });
   }
   return { instructions: instructions.join("\n\n"), input };

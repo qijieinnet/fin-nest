@@ -158,6 +158,10 @@ export function aiMessageCardStatePath(ledgerId: string, messageId: string): str
   return ledgerApiPath(ledgerId, `/ai/messages/${encodeURIComponent(messageId)}/card-state`);
 }
 
+export function aiMessageDraftsPath(ledgerId: string, messageId: string): string {
+  return ledgerApiPath(ledgerId, `/ai/messages/${encodeURIComponent(messageId)}/drafts`);
+}
+
 export const FEISHU_ENDPOINTS = {
   status: "/feishu/status",
   bindings: "/feishu/bindings",

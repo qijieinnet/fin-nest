@@ -1100,6 +1100,8 @@ export type AiStatus = {
   protocol: "chat" | "responses" | null;
   /** 实际生效的联网搜索服务商；未配置 SEARCH_* 时为 null（AI 其余能力不受影响）。 */
   webSearch: "bocha" | "tavily" | "searxng" | null;
+  /** 是否配置了识图模型（AI_VISION_MODEL）：为真才显示上传账单图片入口。 */
+  vision: boolean;
 };
 
 export type AiConversationSummary = {
@@ -1190,6 +1192,10 @@ export type AiCard =
       status: "proposed" | "confirmed" | "superseded";
       transactionId?: string;
       confirmationBlockedReason?: string;
+      /** 账本里同一天已有类型、金额相同的交易：只提示不阻断，批量面板默认不勾选。 */
+      possibleDuplicate?: { transactionId: string; note?: string };
+      /** 原始金额超出账本小数位、已四舍五入时的原值（micros），供对照截图核对。 */
+      originalAmountMicros?: string;
       draft: AiDraftFields;
     }
   | {
@@ -1251,7 +1257,28 @@ export type AiMessage = {
   role: "user" | "assistant";
   content: string;
   cards: AiCard[] | null;
+  /** 用户消息附图（经 /attachments/:id/content 取图）；旧消息/助手消息为空数组或缺省。 */
+  images?: Array<{ attachmentId: string }>;
+  /** 仅前端本地：刚发出、尚未持久化的消息附图预览（object URL）。 */
+  localImageUrls?: string[];
   createdAt: string;
+};
+
+/** PATCH /ai/messages/:id/drafts 的草稿字段（只传 id，名称由服务端回填）。 */
+export type AiDraftInput = {
+  type: "expense" | "income" | "transfer";
+  grossAmountMicros: string;
+  occurredOn: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  personId?: string;
+  accountId?: string;
+  subAccountId?: string;
+  fromAccountId?: string;
+  fromSubAccountId?: string;
+  toAccountId?: string;
+  toSubAccountId?: string;
+  note?: string;
 };
 
 export type AiConversationDetail = {

@@ -50,12 +50,18 @@ export function FieldCard({ children, className, label, onClick, value }: FieldC
 type CategorySelectRowProps = {
   onValueChange: (value: string | null) => void;
   options: CategoryOption[];
+  placeholder?: string;
   value: string | null;
 };
 
-export function CategorySelectRow({ onValueChange, options, value }: CategorySelectRowProps) {
+export function CategorySelectRow({
+  onValueChange,
+  options,
+  placeholder = "选择分类",
+  value,
+}: CategorySelectRowProps) {
   const [open, setOpen] = useState(false);
-  const displayValue = nestedOptionLabel(options, value, "选择分类");
+  const displayValue = nestedOptionLabel(options, value, placeholder);
 
   return (
     <>

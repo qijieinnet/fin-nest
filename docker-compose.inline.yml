@@ -137,6 +137,8 @@ services:
       # AI_MODEL: deepseek-chat
       # 上游协议，不填按 AI_BASE_URL 推断；网关只提供 Responses API 且 base url 是 /v1 时填 responses
       # AI_PROTOCOL: chat
+      # 识图模型（可选）：填了才能在聊天页上传账单截图批量记账；主模型本身能识图时填同一个名字
+      # AI_VISION_MODEL: deepseek-flash
       # 联网搜索（可选）：填了 SEARCH_PROVIDER 才启用，AI 才能查最新机型/售价等外部信息。
       # bocha（博查，国内直连）/ tavily 需要 SEARCH_API_KEY；
       # searxng（自建，零 key）改填 SEARCH_BASE_URL 指向实例，且实例要开启 json 输出。

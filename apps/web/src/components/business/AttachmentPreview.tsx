@@ -106,9 +106,10 @@ export function AttachmentPreview({
     };
   }, []);
 
+  // 拉到的缩略图按附件 id 入缓存，不随 effect 重跑而作废：StrictMode 双调或父组件重渲染
+  // 换了 items 引用时，进行中的请求会被下一轮当作「加载中」跳过，若这里再丢弃结果，缩略图就永远出不来。
   useEffect(() => {
     if (!onOpen) return;
-    let cancelled = false;
     for (const item of items) {
       if (
         !isImage(item) ||
@@ -121,7 +122,6 @@ export function AttachmentPreview({
       loadingPreviewIdsRef.current.add(item.id);
       void Promise.resolve(onOpen(item))
         .then((result) => {
-          if (cancelled) return;
           if (typeof result !== "string") return;
           if (result.startsWith("blob:")) {
             generatedUrlsRef.current.push(result);
@@ -133,9 +133,6 @@ export function AttachmentPreview({
           loadingPreviewIdsRef.current.delete(item.id);
         });
     }
-    return () => {
-      cancelled = true;
-    };
   }, [items, onOpen, previewUrls]);
 
   async function resolveUrl(item: AttachmentItem): Promise<string | null> {

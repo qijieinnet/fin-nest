@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, X, Zap } from "lucide-react";
-import { useCallback, useId, useRef, useState } from "react";
+import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { LoadingState } from "@/components/business";
 import { BottomSheet, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { apiRequest, ledgerApiPath, type QuickTemplate, type TransactionDetail } from "@/lib/api";
@@ -10,6 +10,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack } from "@/providers";
 import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
+import type { DraftFormValue } from "./_model/useTransactionFormModel";
 import { TransactionFormFab } from "./TransactionFormFab";
 import { templateToSeed } from "./_model/template-seed";
 
@@ -44,6 +45,12 @@ type NewBillFormScreenProps = {
   onClose?: () => void;
   onSaved?: (transaction: TransactionDetail) => void | Promise<void>;
   templateId?: string | null;
+  /** 页头标题，默认「记一笔」。 */
+  title?: string;
+  /** 表单上方的提示区（AI 草稿用来说明取整原值、疑似重复）。 */
+  notice?: ReactNode;
+  /** 草稿模式：保存只改 AI 草稿、不入账；不提供快捷模板。 */
+  onSubmitDraft?: (draft: DraftFormValue) => Promise<void>;
 };
 
 export function NewBillFormScreen({
@@ -52,9 +59,12 @@ export function NewBillFormScreen({
   hideHeader = false,
   idempotencyKeyOverride,
   initialSeed = null,
+  notice,
   onClose,
   onSaved,
+  onSubmitDraft,
   templateId,
+  title = "记一笔",
 }: NewBillFormScreenProps) {
   const router = useAppRouter();
   const { ledgerId } = useLedger();
@@ -204,6 +214,7 @@ export function NewBillFormScreen({
         onPendingChange={setSaving}
         onSaved={onSaved}
         onSubmitBlocked={handleSubmitBlockedChange}
+        onSubmitDraft={onSubmitDraft}
         seed={seed}
       />
     );
@@ -215,13 +226,16 @@ export function NewBillFormScreen({
           <header className="flex items-center justify-between gap-2 px-1 pb-2">
             <div className="flex items-center gap-1">
               {closeButton}
-              {quickButton}
+              {onSubmitDraft ? null : quickButton}
             </div>
-            <h2 className="text-base font-bold text-[var(--color-text-primary)]">记一笔</h2>
+            <h2 className="text-base font-bold text-[var(--color-text-primary)]">{title}</h2>
             {saveAction}
           </header>
         )}
-        <div className="sheet-form-scroll flex-1">{body}</div>
+        <div className="sheet-form-scroll flex-1">
+          {notice}
+          {body}
+        </div>
         <BottomSheet
           className="ui-bottom-sheet--sheet-form"
           onClose={() => setQuickOpen(false)}

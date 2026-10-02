@@ -39,6 +39,7 @@ x-app-env: &app-env
   AI_API_KEY: ${AI_API_KEY:-}
   AI_MODEL: ${AI_MODEL:-}
   AI_PROTOCOL: ${AI_PROTOCOL:-}
+  AI_VISION_MODEL: ${AI_VISION_MODEL:-}
   # 联网搜索（可选，AI Agent的扩展能力）：填了 SEARCH_PROVIDER 才启用 web_search 工具。
   # bocha/tavily 需要 SEARCH_API_KEY；searxng 需要 SEARCH_BASE_URL 指向自建实例。
   SEARCH_PROVIDER: ${SEARCH_PROVIDER:-}

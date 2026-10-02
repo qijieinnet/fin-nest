@@ -92,7 +92,15 @@ export type UseTransactionFormModelParams = {
   onOccurredOnChange?: (occurredOn: string) => void;
   pending?: AutoPendingTransaction;
   seed?: TransactionSeed;
+  /**
+   * 草稿模式（AI 识别的记账草稿）：提交不入账，把基础字段交回调用方去改草稿。
+   * 与待确认模式一样只编辑基础字段（不含关联/附件/资产，草稿存不下），但类型可以三选一。
+   */
+  onSubmitDraft?: (draft: DraftFormValue) => Promise<void>;
 };
+
+/** 草稿模式的提交结果：基础字段 + 类型。 */
+export type DraftFormValue = PendingPatchBody & { type: TransactionType };
 
 async function uploadAttachment(ledgerId: string, transactionId: string, item: PendingAttachment) {
   await uploadAttachmentFile(ledgerId, "transaction", transactionId, item.file);
@@ -108,6 +116,7 @@ export function useTransactionFormModel({
   onPendingChange,
   onSaved,
   onSubmitBlocked,
+  onSubmitDraft,
   pending,
   seed,
 }: UseTransactionFormModelParams) {
@@ -117,6 +126,9 @@ export function useTransactionFormModel({
   const isEdit = Boolean(initial);
   // 待确认模式下不涉及关联/附件/资产（后端待确认更新接口不支持），提交=保存+确认。
   const isPendingMode = Boolean(pending);
+  const isDraftMode = Boolean(onSubmitDraft);
+  // 只编辑基础字段：待确认 / 草稿都不支持关联、附件、资产。
+  const basicFieldsOnly = isPendingMode || isDraftMode;
 
   const settingQuery = useRecordSetting(ledgerId);
   const categoriesQuery = useCategories(ledgerId);
@@ -149,7 +161,9 @@ export function useTransactionFormModel({
     initial?.type ?? pending?.type ?? seed?.type ?? "expense",
   );
   const [amount, setAmount] = useState(() =>
-    seedAmountMicros ? microsToInput(seedAmountMicros, { decimalPlaces, omitZeroFraction: false }) : "",
+    seedAmountMicros
+      ? microsToInput(seedAmountMicros, { decimalPlaces, omitZeroFraction: false })
+      : "",
   );
   const [occurredOn, setOccurredOn] = useState(
     initial?.occurredOn?.slice(0, 10) ??
@@ -416,6 +430,10 @@ export function useTransactionFormModel({
 
   const mutation = useMutation({
     mutationFn: async (payload: TransactionInput | PendingPatchBody) => {
+      if (isDraftMode) {
+        await onSubmitDraft!({ ...(payload as PendingPatchBody), type });
+        return null;
+      }
       if (isPendingMode) {
         // 先保存修改到待确认，再调确认接口生成正式交易。
         await apiRequest(ledgerApiPath(ledgerId, `/auto-pending-transactions/${pending!.id}`), {
@@ -439,6 +457,8 @@ export function useTransactionFormModel({
           });
     },
     onSuccess: async (transaction) => {
+      // 草稿模式没有交易产生，关闭与提示由调用方负责。
+      if (!transaction) return;
       setSavedCount((current) => current + 1);
       if (isPendingMode) {
         await Promise.all([
@@ -491,7 +511,8 @@ export function useTransactionFormModel({
       }
       if (onSaved) await onSaved(transaction);
       else router.back();
-    },  });
+    },
+  });
 
   useEffect(() => {
     onCanSubmitChange?.(!validationMessage && !mutation.isPending);
@@ -543,7 +564,7 @@ export function useTransactionFormModel({
       showToast({ tone: "error", message: validationMessage });
       return;
     }
-    const result = isPendingMode
+    const result = basicFieldsOnly
       ? buildPendingPatch({
           type,
           amount,
@@ -647,6 +668,7 @@ export function useTransactionFormModel({
     // 加载态
     isLoading,
     isPendingMode,
+    basicFieldsOnly,
     ledgerId,
     // 顶部字段
     type,

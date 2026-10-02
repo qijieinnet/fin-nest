@@ -10,8 +10,14 @@ export type LlmToolCall = {
   function: { name: string; arguments: string };
 };
 
+/** user 消息的多段内容：文字 + 图片（data URL）。仅 user 消息允许带图（DeepSeek 等上游的硬约束）。 */
+export type LlmContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export type LlmMessage =
-  | { role: "system" | "user"; content: string }
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | LlmContentPart[] }
   | {
       role: "assistant";
       content: string | null;

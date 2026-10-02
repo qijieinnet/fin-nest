@@ -8,14 +8,14 @@ import type { AiCard, AiDraftFields } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
 import { useLedger } from "@/providers";
 
-const TYPE_LABEL: Record<string, string> = {
+export const TYPE_LABEL: Record<string, string> = {
   expense: "支出",
   income: "收入",
   transfer: "转账",
 };
 
 // 金额配色与账单行一致（TransactionRow / desktop-amount 同款翻转）：支出绿色 / 收入红色 / 转账黄色。
-const TYPE_COLOR: Record<string, string> = {
+export const TYPE_COLOR: Record<string, string> = {
   expense: "var(--color-accent-income)",
   income: "var(--color-accent-expense)",
   transfer: "var(--color-accent-transfer)",
@@ -38,8 +38,13 @@ function currencySymbol(currency = "CNY"): string {
   return known[currency] ?? `${currency} `;
 }
 
-function amount(micros: string, currency?: string): string {
+export function amount(micros: string, currency?: string): string {
   return formatMicros(micros, { currencySymbol: currencySymbol(currency) });
+}
+
+/** 取整前的原金额：不能按账本精度格式化（只记整数的账本会把 19.90 显示成 20，失去对照意义）。 */
+export function originalAmount(micros: string, currency?: string): string {
+  return formatMicros(micros, { currencySymbol: currencySymbol(currency), decimalPlaces: 2 });
 }
 
 type TrendAmountUnit = "yuan" | "thousand" | "tenThousand";
@@ -65,7 +70,7 @@ function compactTrendValue(micros: bigint, unit: TrendAmountUnit): string {
   return `${sign}${(value + 500_000n) / 1_000_000n}`;
 }
 
-function useCardCurrency(currency?: string): string {
+export function useCardCurrency(currency?: string): string {
   const { currentLedger } = useLedger();
   return currency ?? currentLedger?.currency ?? "CNY";
 }
@@ -142,6 +147,17 @@ export function TransactionDraftCard({
           {amount(draft.grossAmountMicros, currency)}
         </span>
       </div>
+      {card.originalAmountMicros && card.status === "proposed" ? (
+        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+          原金额 {originalAmount(card.originalAmountMicros, currency)}，已按账本精度四舍五入
+        </p>
+      ) : null}
+      {card.possibleDuplicate && card.status === "proposed" ? (
+        <p className="ai-draft-dup mt-2">
+          疑似重复：当天已有一笔相同金额
+          {card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : ""}
+        </p>
+      ) : null}
       <div className="mt-3 flex flex-col gap-1.5">
         <DraftRow label="日期" value={draft.occurredOn} />
         <DraftRow label="分类" value={categoryText} />

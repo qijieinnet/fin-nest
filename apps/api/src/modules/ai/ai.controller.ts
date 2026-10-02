@@ -1,5 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
-import { ApiBearerAuth, ApiOkResponse, ApiProduces, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import { ApiBearerAuth, ApiConsumes, ApiOkResponse, ApiProduces, ApiTags } from "@nestjs/swagger";
 import { AppError } from "@fin-nest/backend";
 import type { Response } from "express";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
@@ -9,12 +24,21 @@ import { AiService } from "./ai.service";
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
+import { UpdateDraftCardsDto } from "./dto/update-draft-cards.dto";
+
+// 聊天附图走 multipart 字段 images（JSON 请求体不受影响，飞书等调用方照旧）。
+// 张数/大小的业务上限在 service 里校验并给出中文提示，这里的 multer 限制只是防超大请求的硬闸。
+const chatImagesInterceptor = FilesInterceptor("images", 8, {
+  limits: { fileSize: 16 * 1024 * 1024 },
+});
 
 @ApiTags("ai")
 @ApiBearerAuth()
 @UseGuards(SessionAuthGuard)
 @Controller("ledgers/:ledgerId/ai")
 export class AiController {
+  private readonly logger = new Logger(AiController.name);
+
   constructor(private readonly ai: AiService) {}
 
   @Get("status")
@@ -55,13 +79,16 @@ export class AiController {
   }
 
   @Post("chat")
+  @UseInterceptors(chatImagesInterceptor)
+  @ApiConsumes("application/json", "multipart/form-data")
   @ApiOkResponse()
   chat(
     @CurrentAuth() auth: AuthContext,
     @Param("ledgerId") ledgerId: string,
     @Body() body: ChatRequestDto,
+    @UploadedFiles() images: Express.Multer.File[] | undefined,
   ) {
-    return this.ai.chat(ledgerId, (auth as SessionAuthContext).userId, body);
+    return this.ai.chat(ledgerId, (auth as SessionAuthContext).userId, body, images ?? []);
   }
 
   /**
@@ -69,12 +96,15 @@ export class AiController {
    * 头已发出后异常无法走全局过滤器，统一以 error 事件收尾。
    */
   @Post("chat/stream")
+  @UseInterceptors(chatImagesInterceptor)
+  @ApiConsumes("application/json", "multipart/form-data")
   @ApiProduces("text/event-stream")
   @ApiOkResponse()
   async chatStream(
     @CurrentAuth() auth: AuthContext,
     @Param("ledgerId") ledgerId: string,
     @Body() body: ChatRequestDto,
+    @UploadedFiles() images: Express.Multer.File[] | undefined,
     @Res() response: Response,
   ) {
     response.setHeader("content-type", "text/event-stream; charset=utf-8");
@@ -108,9 +138,12 @@ export class AiController {
           card: (card) => emit("card", { card }),
         },
         abort.signal,
+        images ?? [],
       );
       emit("done", result);
     } catch (error) {
+      // 头已发出、全局过滤器接不到，非业务异常在这里留痕，否则前端只看到一句「出错了」无从排查。
+      if (!(error instanceof AppError)) this.logger.error(error);
       emit("error", {
         message: error instanceof AppError ? error.message : "AI 服务出错，请稍后重试",
       });
@@ -129,5 +162,16 @@ export class AiController {
     @Body() body: UpdateCardStateDto,
   ) {
     return this.ai.updateCardState(ledgerId, messageId, (auth as SessionAuthContext).userId, body);
+  }
+
+  @Patch("messages/:messageId/drafts")
+  @ApiOkResponse()
+  updateDraftCards(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("messageId") messageId: string,
+    @Body() body: UpdateDraftCardsDto,
+  ) {
+    return this.ai.updateDraftCards(ledgerId, messageId, (auth as SessionAuthContext).userId, body);
   }
 }

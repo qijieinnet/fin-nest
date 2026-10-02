@@ -3,6 +3,7 @@ import { AccountsModule } from "../accounts/accounts.module";
 import { AssetsModule } from "../assets/assets.module";
 import { AuthModule } from "../auth/auth.module";
 import { AutomationModule } from "../automation/automation.module";
+import { FilesModule } from "../files/files.module";
 import { LedgersModule } from "../ledgers/ledgers.module";
 import { PlansModule } from "../plans/plans.module";
 import { RecordsModule } from "../records/records.module";
@@ -24,6 +25,7 @@ import { AiService } from "./ai.service";
     AssetsModule,
     AutomationModule,
     RemindersModule,
+    FilesModule,
   ],
   controllers: [AiController],
   providers: [AiService],

@@ -36,6 +36,15 @@ export type AiDraftFields = {
   note?: string;
 };
 
+/**
+ * 疑似重复：账本里同一天已有一笔类型、金额都相同的交易。只做提示、不阻断确认——
+ * 同一天两杯同价咖啡是真实存在的；批量面板据此默认不勾选，由用户自己判断。
+ */
+export type AiDraftDuplicate = {
+  transactionId: string;
+  note?: string;
+};
+
 export type AiTransactionRow = {
   occurredOn: string;
   type: string;
@@ -93,6 +102,9 @@ export type AiCard =
       status: "proposed" | "confirmed" | "superseded";
       transactionId?: string;
       confirmationBlockedReason?: string;
+      possibleDuplicate?: AiDraftDuplicate;
+      /** 原始金额超出账本小数位、已四舍五入时记下原值，供用户对照截图核对。 */
+      originalAmountMicros?: string;
       draft: AiDraftFields;
     }
   | {

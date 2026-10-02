@@ -13,6 +13,7 @@ import {
   aiConversationPath,
   aiConversationsPath,
   aiMessageCardStatePath,
+  aiMessageDraftsPath,
   aiStatusPath,
   apiRequest,
   buildApiUrl,
@@ -21,6 +22,7 @@ import {
   type AiChatResult,
   type AiConversationDetail,
   type AiConversationSummary,
+  type AiDraftInput,
   type AiMessage,
   type AiStatus,
 } from "@/lib/api";
@@ -83,23 +85,37 @@ export type AiStreamHandlers = {
 
 /**
  * 流式聊天（SSE over POST）：正文增量与卡片实时回调，结束返回与非流式同构的最终结果。
- * apiRequest 只支持 JSON 整包，这里手写 fetch + 流读取。
+ * apiRequest 只支持 JSON 整包，这里手写 fetch + 流读取。带图时改用 multipart（字段 images），
+ * content-type 交给浏览器带 boundary。
  */
 export async function streamAiChat(
   ledgerId: string,
-  input: { conversationId?: string; content: string },
+  input: { conversationId?: string; content: string; images?: Blob[] },
   handlers: AiStreamHandlers,
   signal?: AbortSignal,
 ): Promise<AiChatResult> {
   const token = getSessionToken();
+  const images = input.images ?? [];
+  let body: BodyInit;
+  const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+  if (images.length > 0) {
+    const form = new FormData();
+    if (input.conversationId) form.append("conversationId", input.conversationId);
+    form.append("content", input.content);
+    images.forEach((image, index) => form.append("images", image, `bill-${index + 1}.jpg`));
+    body = form;
+  } else {
+    headers["content-type"] = "application/json";
+    body = JSON.stringify({
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      content: input.content,
+    });
+  }
   const response = await fetch(buildApiUrl(aiChatStreamPath(ledgerId)), {
     method: "POST",
     credentials: "same-origin",
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(input),
+    headers,
+    body,
     signal,
   });
   if (!response.ok || !response.body) {
@@ -222,6 +238,24 @@ export function useVoidAiCard(ledgerId: string | null) {
           cardIndex: input.cardIndex,
           status: "superseded",
         },
+      }),
+  });
+}
+
+/**
+ * 修改同一条消息里的若干张待确认草稿（行内编辑 / 批量设置）。服务端整体校验、全部通过才落库，
+ * 返回更新后的消息。错误由调用方就地提示（如行内编辑区），故不弹全局 toast。
+ */
+export function useUpdateAiDrafts(ledgerId: string | null) {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (input: {
+      messageId: string;
+      drafts: Array<{ cardIndex: number; draft: AiDraftInput }>;
+    }) =>
+      apiRequest<AiMessage>(aiMessageDraftsPath(ledgerId!, input.messageId), {
+        method: "PATCH",
+        body: { drafts: input.drafts },
       }),
   });
 }

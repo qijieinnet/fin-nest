@@ -89,6 +89,10 @@ const EnvSchema = z.object({
   // responses = OpenAI Responses API /responses。不配时按 AI_BASE_URL 末段推断：
   // 以 /responses 结尾走 Responses，其余按 chat。网关同时支持两者、但 base url 是 /v1 时才需显式指定。
   AI_PROTOCOL: z.enum(["chat", "responses"]).optional(),
+  // 识图模型（可选）：配置后聊天页可上传账单截图/小票批量生成记账草稿。带图的那一轮改用此模型，
+  // 复用同一 AI_BASE_URL/AI_API_KEY/协议；纯文字轮次仍走 AI_MODEL。主模型本身支持识图时
+  // （如 DeepSeek 的 deepseek-flash、gpt-4o）填同一个名字即可。未配置时前端隐藏上传入口。
+  AI_VISION_MODEL: z.string().min(1).optional(),
 
   // 联网搜索（可选，需先启用 AI Agent）：配置后 AI 多出 web_search 工具，可查商品行情、
   // 最新型号与价格等账本里没有的外部信息；未配置时该工具不下发，其余 AI 能力不受影响。

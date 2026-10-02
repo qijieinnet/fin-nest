@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp,
   ChevronLeft,
   History,
+  ImagePlus,
   Mic,
   MoreHorizontal,
   NotebookPen,
@@ -15,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { LoadingState } from "@/components/business";
+import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
 import {
   BottomSheet,
   IconButton,
@@ -26,10 +27,11 @@ import {
 import {
   aiConversationsPath,
   apiRequest,
+  createAuthorizedObjectUrl,
+  getApiErrorMessage,
   ledgerApiPath,
   type AiCard,
   type AiConversationSummary,
-  type AiDraftFields,
   type AiMessage,
   type TransactionDetail,
   type TransactionInput,
@@ -41,16 +43,13 @@ import {
   useInfiniteAiConversations,
   useDeleteAiConversation,
   useUpdateAiCardState,
+  useUpdateAiDrafts,
   useVoidAiCard,
   patchAiConversationMessage,
 } from "@/lib/data/ai";
-import {
-  AI_ACTIVE_CONVERSATION_KEY,
-  AI_DRAFT_SEED_KEY,
-  aiCardIdempotencyKey,
-  type AiDraftHandoff,
-} from "@/lib/data/ai-draft-handoff";
-import { usePeople } from "@/lib/data/records";
+import { AI_ACTIVE_CONVERSATION_KEY, aiCardIdempotencyKey } from "@/lib/data/ai-draft-handoff";
+import { useAccounts, useCategories, usePeople } from "@/lib/data/records";
+import { compressImageForUpload } from "@/lib/image/compress-image";
 import { useSpeechInput } from "@/lib/hooks/useSpeechInput";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
@@ -64,6 +63,12 @@ import {
   TransactionDraftCard,
   TransactionsCard,
 } from "./_components/AiCards";
+import {
+  AiDraftBatchPanel,
+  type DraftEntry,
+  type DraftPatch,
+} from "./_components/AiDraftBatchPanel";
+import { AiDraftEditDrawer } from "./_components/AiDraftEditDrawer";
 
 // react-markdown + remark-gfm 体积较大（压缩前约 170K），动态拆出：AI 页外壳先渲染，
 // 消息区渲染时才加载；空闲预取 /ai 路由时也不必连带下载它。
@@ -73,6 +78,47 @@ const AiMarkdown = dynamic(
 );
 
 const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
+// 与服务端 MAX_CHAT_IMAGES 一致。
+const MAX_IMAGES = 4;
+
+type PendingImage = { id: string; blob: Blob; url: string };
+
+/**
+ * 用户消息附图：本地刚发出的用 object URL，历史消息按附件 id 鉴权取图。
+ * items/onOpen 必须稳定：AttachmentPreview 以它们为依赖异步拉缩略图，聊天页频繁重渲染
+ * （流式增量）若每次都给新引用，进行中的拉取会被判为过期丢弃，缩略图就一直出不来。
+ */
+function MessageImages({ ledgerId, message }: { ledgerId: string; message: AiMessage }) {
+  const { localImageUrls, images } = message;
+  const items = useMemo<AttachmentItem[]>(
+    () =>
+      localImageUrls?.length
+        ? localImageUrls.map((url, index) => ({
+            id: `${message.id}-local-${index}`,
+            name: `图片 ${index + 1}`,
+            contentType: "image/jpeg",
+            url,
+          }))
+        : (images ?? []).map((image, index) => ({
+            id: image.attachmentId,
+            name: `图片 ${index + 1}`,
+            contentType: "image/jpeg",
+          })),
+    [message.id, localImageUrls, images],
+  );
+  const openImage = useCallback(
+    (item: AttachmentItem) =>
+      item.url ??
+      createAuthorizedObjectUrl(ledgerApiPath(ledgerId, `/attachments/${item.id}/content`)),
+    [ledgerId],
+  );
+  if (items.length === 0) return null;
+  return (
+    <div className="ai-msg-images">
+      <AttachmentPreview items={items} onOpen={openImage} variant="grid" />
+    </div>
+  );
+}
 
 function draftToTransactionInput(
   draft: Extract<AiCard, { kind: "transaction_draft" }>["draft"],
@@ -103,9 +149,20 @@ export function AiScreen() {
   const ledgerId = currentLedger?.id ?? null;
 
   const aiStatusQuery = useAiStatus(ledgerId);
+  const visionEnabled = aiStatusQuery.data?.vision === true;
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AiMessage[]>([]);
+  // 批量确认/作废是逐笔串行的异步流程，循环里要读到最新消息（卡片状态随每笔回写而变）。
+  const messagesRef = useRef<AiMessage[]>([]);
+  messagesRef.current = messages;
   const [input, setInput] = useState("");
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [compressing, setCompressing] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 正在批量确认/作废的消息 id。
+  const [batchBusyId, setBatchBusyId] = useState<string | null>(null);
+  const categoriesQuery = useCategories(ledgerId);
+  const accountsQuery = useAccounts(ledgerId);
   // 输入框随内容自动增高：先归零测量 scrollHeight，再钳到 CSS max-height。
   // 未超上限时隐藏滚动条（否则空行/单行会因亚像素取整误显），超出后才允许内部滚动。
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -147,6 +204,7 @@ export function AiScreen() {
   const deleteConversation = useDeleteAiConversation(ledgerId);
   const updateCardState = useUpdateAiCardState(ledgerId);
   const voidCard = useVoidAiCard(ledgerId);
+  const updateDrafts = useUpdateAiDrafts(ledgerId);
   // 流式进行中的助手消息（未持久化）：delta 增量拼正文、card 事件实时追加；done 后替换为持久化消息。
   const [streaming, setStreaming] = useState<{ content: string; cards: AiCard[] } | null>(null);
   const sending = streaming !== null;
@@ -162,7 +220,7 @@ export function AiScreen() {
     setMessages(conversationData.messages);
   }, [conversationData]);
 
-  // 去记一笔/编辑草稿会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话 id，
+  // 去记一笔会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话 id，
   // 让用户回到原对话（消息从服务端重新加载），而不是空白的新对话。
   const activeRestoredRef = useRef(false);
   useEffect(() => {
@@ -191,40 +249,118 @@ export function AiScreen() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, streaming]);
 
-  const confirmDraft = useMutation({
-    mutationFn: async ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) => {
-      const card = message.cards?.[cardIndex];
-      if (!card || card.kind !== "transaction_draft") throw new Error("卡片不存在");
-      const transaction = await apiRequest<TransactionDetail>(
-        ledgerApiPath(ledgerId!, "/transactions"),
-        {
-          method: "POST",
-          body: draftToTransactionInput(card.draft),
-          // 幂等键与卡片一一对应：重复点击/失败重试不会重复入账。
-          headers: { "idempotency-key": aiCardIdempotencyKey(message.id, cardIndex) },
-        },
-      );
-      return updateCardState.mutateAsync({
-        messageId: message.id,
-        cardIndex,
-        transactionId: transaction.id,
-      });
-    },
-    onSuccess: async (updatedMessage) => {
-      setMessages((prev) =>
-        prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
-      );
-      // 同步会话详情缓存，离开再返回时恢复的卡片仍显示「已记账」。
-      if (conversationId) {
-        patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
+  /** 一条消息被更新（卡片确认/作废/改草稿）后同步本地列表与会话详情缓存。 */
+  const applyUpdatedMessage = (updatedMessage: AiMessage) => {
+    setMessages((prev) =>
+      prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
+    );
+    // 同步会话详情缓存，离开再返回时恢复的卡片仍是最新状态。
+    if (conversationId) {
+      patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
+    }
+  };
+
+  const invalidateLedgerData = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
+    ]);
+
+  const createTransactionForCard = async (message: AiMessage, cardIndex: number) => {
+    const card = message.cards?.[cardIndex];
+    if (!card || card.kind !== "transaction_draft") throw new Error("卡片不存在");
+    const transaction = await apiRequest<TransactionDetail>(
+      ledgerApiPath(ledgerId!, "/transactions"),
+      {
+        method: "POST",
+        body: draftToTransactionInput(card.draft),
+        // 幂等键与卡片一一对应：重复点击/失败重试不会重复入账。
+        headers: { "idempotency-key": aiCardIdempotencyKey(message.id, cardIndex) },
+      },
+    );
+    return updateCardState.mutateAsync({
+      messageId: message.id,
+      cardIndex,
+      transactionId: transaction.id,
+    });
+  };
+
+  /**
+   * 批量确认：逐笔按各自幂等键入账并回写卡片，一笔失败不影响其它笔；失败的保持待确认，
+   * 用户可改完再点一次，已成功的不会重复入账。
+   */
+  const confirmDraftsBatch = async (messageId: string, cardIndexes: number[]) => {
+    let current = messagesRef.current.find((message) => message.id === messageId);
+    if (!current || batchBusyId) return;
+    setBatchBusyId(messageId);
+    let succeeded = 0;
+    let firstError: string | null = null;
+    let failed = 0;
+    try {
+      for (const cardIndex of cardIndexes) {
+        const card = current.cards?.[cardIndex];
+        if (!card || card.kind !== "transaction_draft" || card.status !== "proposed") continue;
+        try {
+          current = await createTransactionForCard(current, cardIndex);
+          applyUpdatedMessage(current);
+          succeeded++;
+        } catch (error) {
+          failed++;
+          firstError ??= getApiErrorMessage(error, "入账失败");
+        }
       }
+    } finally {
+      setBatchBusyId(null);
+    }
+    if (failed === 0) {
+      showToast({ tone: "success", message: `已入账 ${succeeded} 笔` });
+    } else {
+      showToast({
+        tone: "error",
+        message: `已入账 ${succeeded} 笔，${failed} 笔失败：${firstError}`,
+      });
+    }
+    if (succeeded > 0) await invalidateLedgerData();
+  };
+
+  const voidDraftsBatch = async (messageId: string, cardIndexes: number[]) => {
+    if (batchBusyId) return;
+    setBatchBusyId(messageId);
+    let voided = 0;
+    let firstError: string | null = null;
+    try {
+      for (const cardIndex of cardIndexes) {
+        try {
+          applyUpdatedMessage(await voidCard.mutateAsync({ messageId, cardIndex }));
+          voided++;
+        } catch (error) {
+          firstError ??= getApiErrorMessage(error, "作废失败");
+        }
+      }
+    } finally {
+      setBatchBusyId(null);
+    }
+    showToast(
+      firstError
+        ? { tone: "error", message: `已作废 ${voided} 笔，其余失败：${firstError}` }
+        : { tone: "success", message: `已作废 ${voided} 笔` },
+    );
+  };
+
+  const saveDrafts = async (messageId: string, drafts: DraftPatch[]) => {
+    if (drafts.length === 0) return;
+    applyUpdatedMessage(await updateDrafts.mutateAsync({ messageId, drafts }));
+  };
+
+  const confirmDraft = useMutation({
+    mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
+      createTransactionForCard(message, cardIndex),
+    onSuccess: async (updatedMessage) => {
+      applyUpdatedMessage(updatedMessage);
       showToast({ tone: "success", message: "已入账" });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
-        queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
-      ]);
+      await invalidateLedgerData();
     },
     onSettled: () => setConfirmingKey(null),
   });
@@ -233,12 +369,7 @@ export function AiScreen() {
     mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
       voidCard.mutateAsync({ messageId: message.id, cardIndex }),
     onSuccess: (updatedMessage) => {
-      setMessages((prev) =>
-        prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
-      );
-      if (conversationId) {
-        patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
-      }
+      applyUpdatedMessage(updatedMessage);
       showToast({ tone: "success", message: "已作废" });
     },
     // 错误提示交给全局 onError 统一处理（内层 voidCard 已 suppress），避免重复。
@@ -271,11 +402,64 @@ export function AiScreen() {
     speech.start();
   };
 
+  const addImages = async (files: File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/") || !file.type);
+    if (images.length === 0) return;
+    const room = MAX_IMAGES - pendingImages.length;
+    if (room <= 0) {
+      showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张图片` });
+      return;
+    }
+    if (images.length > room) {
+      showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张，已取前 ${room} 张` });
+    }
+    setCompressing((count) => count + 1);
+    try {
+      for (const file of images.slice(0, room)) {
+        try {
+          const blob = await compressImageForUpload(file);
+          setPendingImages((prev) => [
+            ...prev,
+            { id: `${Date.now()}-${Math.random()}`, blob, url: URL.createObjectURL(blob) },
+          ]);
+        } catch (error) {
+          showToast({
+            tone: "error",
+            message: error instanceof Error ? error.message : "图片处理失败",
+          });
+        }
+      }
+    } finally {
+      setCompressing((count) => count - 1);
+    }
+  };
+
+  const pendingImageItems = useMemo<AttachmentItem[]>(
+    () =>
+      pendingImages.map((image, index) => ({
+        id: image.id,
+        name: `图片 ${index + 1}`,
+        contentType: "image/jpeg",
+        url: image.url,
+      })),
+    [pendingImages],
+  );
+
+  const removePendingImage = (id: string) =>
+    setPendingImages((prev) => {
+      const target = prev.find((image) => image.id === id);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((image) => image.id !== id);
+    });
+
   const handleSend = (raw?: string) => {
     const content = (raw ?? input).trim();
-    if (!content || sending || !ledgerId) return;
+    const images = raw === undefined ? pendingImages : [];
+    if ((!content && images.length === 0) || sending || compressing > 0 || !ledgerId) return;
     if (speech.listening) speech.cancel();
     setInput("");
+    // 预览 URL 交给本地消息继续展示（不在这里回收）。
+    setPendingImages([]);
     setMessages((prev) => [
       ...prev,
       {
@@ -283,6 +467,7 @@ export function AiScreen() {
         role: "user",
         content,
         cards: null,
+        ...(images.length > 0 ? { localImageUrls: images.map((image) => image.url) } : {}),
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -293,7 +478,11 @@ export function AiScreen() {
       try {
         const result = await streamAiChat(
           ledgerId,
-          { ...(conversationId ? { conversationId } : {}), content },
+          {
+            ...(conversationId ? { conversationId } : {}),
+            content,
+            images: images.map((image) => image.blob),
+          },
           {
             onDelta: (text) =>
               setStreaming((prev) => ({
@@ -356,26 +545,19 @@ export function AiScreen() {
     })();
   };
 
-  const handleEdit = (messageId: string, cardIndex: number, draft: AiDraftFields) => {
-    if (!conversationId) {
-      showToast({ tone: "error", message: "会话尚未保存，请稍后重试" });
-      return;
-    }
-    const handoff: AiDraftHandoff = {
-      version: 1,
-      conversationId,
-      messageId,
-      cardIndex,
-      draft,
-    };
-    try {
-      sessionStorage.setItem(AI_DRAFT_SEED_KEY, JSON.stringify(handoff));
-    } catch {
-      showToast({ tone: "error", message: "打开编辑失败，请重试" });
-      return;
-    }
-    router.push(`${routes.billNew}?aiDraft=1`);
-  };
+  // 正在编辑的草稿：单卡「编辑」与批量面板点行共用同一个全屏抽屉，不切路由。
+  const [editingDraft, setEditingDraft] = useState<{ messageId: string; cardIndex: number } | null>(
+    null,
+  );
+  const handleEdit = (messageId: string, cardIndex: number) =>
+    setEditingDraft({ messageId, cardIndex });
+  const editingCard = (() => {
+    if (!editingDraft) return null;
+    const card = messages.find((message) => message.id === editingDraft.messageId)?.cards?.[
+      editingDraft.cardIndex
+    ];
+    return card?.kind === "transaction_draft" && card.status === "proposed" ? card : null;
+  })();
 
   const startNewConversation = () => {
     setConversationId(null);
@@ -393,10 +575,90 @@ export function AiScreen() {
 
   // 输入栏按钮：生成中只显示停止；录音中显示「录音」按钮（点它暂停录音）；有内容则同时显示发送
   // （点发送会先停录音再发）。故录音且有内容时录音与发送并存，用户可二选一。
-  const hasInput = input.trim().length > 0;
+  const hasInput = input.trim().length > 0 || pendingImages.length > 0;
   const showStop = sending;
   const showMic = !sending && speech.supported && (speech.listening || !hasInput);
   const showSend = !sending && (hasInput || !speech.supported);
+
+  const categories = categoriesQuery.data ?? [];
+  const accounts = accountsQuery.data ?? [];
+
+  /**
+   * 渲染一条助手消息的卡片：草稿 ≥2 笔时合并成批量面板（放在第一张草稿的位置），
+   * 其余卡片照常逐张渲染。streaming 时消息尚未持久化，草稿只展示不可操作。
+   */
+  const renderCards = (cards: AiCard[], message: AiMessage | null) => {
+    const keyPrefix = message?.id ?? "streaming";
+    const drafts: DraftEntry[] = [];
+    cards.forEach((card, cardIndex) => {
+      if (card.kind === "transaction_draft") drafts.push({ card, cardIndex });
+    });
+    const useBatch = drafts.length >= 2;
+    return cards.map((card, cardIndex) => {
+      const key = `${keyPrefix}:${cardIndex}`;
+      if (card.kind === "transaction_draft") {
+        if (useBatch) {
+          if (cardIndex !== drafts[0]!.cardIndex) return null;
+          return (
+            <AiDraftBatchPanel
+              accounts={accounts}
+              people={peopleQuery.data ?? []}
+              busy={message !== null && batchBusyId === message.id}
+              categories={categories}
+              disabled={message === null}
+              entries={drafts}
+              key={`${keyPrefix}:batch`}
+              onConfirm={(indexes) => message && void confirmDraftsBatch(message.id, indexes)}
+              onEdit={(index) => message && handleEdit(message.id, index)}
+              onSave={(patches) => (message ? saveDrafts(message.id, patches) : Promise.resolve())}
+              onVoid={(indexes) => message && void voidDraftsBatch(message.id, indexes)}
+            />
+          );
+        }
+        if (!message) {
+          return (
+            <TransactionDraftCard
+              card={card}
+              confirming={false}
+              disabled
+              key={key}
+              onConfirm={() => {}}
+            />
+          );
+        }
+        return (
+          <TransactionDraftCard
+            card={card}
+            confirming={confirmingKey === key && confirmDraft.isPending}
+            key={key}
+            onConfirm={() => {
+              setConfirmingKey(key);
+              confirmDraft.mutate({ message, cardIndex });
+            }}
+            onEdit={() => handleEdit(message.id, cardIndex)}
+            onVoid={() => {
+              setVoidingKey(key);
+              voidDraft.mutate({ message, cardIndex });
+            }}
+            voiding={voidingKey === key && voidDraft.isPending}
+          />
+        );
+      }
+      if (card.kind === "transactions") {
+        return <TransactionsCard card={card} key={key} />;
+      }
+      if (card.kind === "stats_period") {
+        return <StatsPeriodCard card={card} key={key} />;
+      }
+      if (card.kind === "account_balances") {
+        return <AccountBalancesCard card={card} key={key} />;
+      }
+      if (card.kind === "budget_progress") {
+        return <BudgetProgressCard card={card} key={key} />;
+      }
+      return <StatsMonthCard card={card} key={key} />;
+    });
+  };
 
   return (
     <MobileAppShell>
@@ -468,7 +730,11 @@ export function AiScreen() {
               </div>
               <div>
                 <p className="ai-empty__title">我们先从哪里开始呢？</p>
-                <p className="ai-empty__hint">记账草稿需要你确认后才会入账</p>
+                <p className="ai-empty__hint">
+                  {visionEnabled
+                    ? "可以直接上传账单截图批量记账，草稿需要你确认后才会入账"
+                    : "记账草稿需要你确认后才会入账"}
+                </p>
               </div>
               {/* <div className="flex flex-col gap-2">
                 {SUGGESTIONS.map((suggestion) => (
@@ -487,10 +753,23 @@ export function AiScreen() {
             <div className="ai-thread">
               {messages.map((message) => (
                 <div className="ai-turn" key={message.id}>
-                  {/* 有卡片时正文不展示（模型正文只是卡片的复述），避免信息重复。 */}
+                  {message.role === "user" && ledgerId ? (
+                    <MessageImages ledgerId={ledgerId} message={message} />
+                  ) : null}
+                  {/* 有卡片时正文不展示（模型正文只是卡片的复述），避免信息重复。
+                      例外：多笔草稿（识别账单）的收尾总结会说明跳过了哪几笔，要保留。 */}
                   {message.content &&
-                  !(message.role === "assistant" && (message.cards?.length ?? 0) > 0) ? (
-                    <div className={message.role === "user" ? "ai-msg ai-msg--user" : "ai-msg ai-msg--ai"}>
+                  !(
+                    message.role === "assistant" &&
+                    (message.cards?.length ?? 0) > 0 &&
+                    (message.cards?.filter((card) => card.kind === "transaction_draft").length ??
+                      0) < 2
+                  ) ? (
+                    <div
+                      className={
+                        message.role === "user" ? "ai-msg ai-msg--user" : "ai-msg ai-msg--ai"
+                      }
+                    >
                       {message.role === "assistant" ? (
                         <AiMarkdown content={message.content} />
                       ) : (
@@ -499,41 +778,7 @@ export function AiScreen() {
                     </div>
                   ) : null}
                   {message.role === "assistant" && message.cards
-                    ? message.cards.map((card, cardIndex) => {
-                        const key = `${message.id}:${cardIndex}`;
-                        if (card.kind === "transaction_draft") {
-                          return (
-                            <TransactionDraftCard
-                              card={card}
-                              confirming={confirmingKey === key && confirmDraft.isPending}
-                              key={key}
-                              onConfirm={() => {
-                                setConfirmingKey(key);
-                                confirmDraft.mutate({ message, cardIndex });
-                              }}
-                              onEdit={() => handleEdit(message.id, cardIndex, card.draft)}
-                              onVoid={() => {
-                                setVoidingKey(key);
-                                voidDraft.mutate({ message, cardIndex });
-                              }}
-                              voiding={voidingKey === key && voidDraft.isPending}
-                            />
-                          );
-                        }
-                        if (card.kind === "transactions") {
-                          return <TransactionsCard card={card} key={key} />;
-                        }
-                        if (card.kind === "stats_period") {
-                          return <StatsPeriodCard card={card} key={key} />;
-                        }
-                        if (card.kind === "account_balances") {
-                          return <AccountBalancesCard card={card} key={key} />;
-                        }
-                        if (card.kind === "budget_progress") {
-                          return <BudgetProgressCard card={card} key={key} />;
-                        }
-                        return <StatsMonthCard card={card} key={key} />;
-                      })
+                    ? renderCards(message.cards, message)
                     : null}
                 </div>
               ))}
@@ -553,33 +798,7 @@ export function AiScreen() {
                       </span>
                     </div>
                   ) : null}
-                  {streaming.cards.map((card, cardIndex) => {
-                    const key = `streaming:${cardIndex}`;
-                    if (card.kind === "transaction_draft") {
-                      return (
-                        <TransactionDraftCard
-                          card={card}
-                          confirming={false}
-                          disabled
-                          key={key}
-                          onConfirm={() => {}}
-                        />
-                      );
-                    }
-                    if (card.kind === "transactions") {
-                      return <TransactionsCard card={card} key={key} />;
-                    }
-                    if (card.kind === "stats_period") {
-                      return <StatsPeriodCard card={card} key={key} />;
-                    }
-                    if (card.kind === "account_balances") {
-                      return <AccountBalancesCard card={card} key={key} />;
-                    }
-                    if (card.kind === "budget_progress") {
-                      return <BudgetProgressCard card={card} key={key} />;
-                    }
-                    return <StatsMonthCard card={card} key={key} />;
-                  })}
+                  {renderCards(streaming.cards, null)}
                 </div>
               ) : null}
               <div ref={bottomRef} />
@@ -589,9 +808,48 @@ export function AiScreen() {
 
         {aiEnabled ? (
           <div className="ai-composer">
+            {pendingImages.length > 0 || compressing > 0 ? (
+              <div className="ai-composer__images">
+                <AttachmentPreview
+                  items={pendingImageItems}
+                  onRemove={removePendingImage}
+                  variant="grid"
+                />
+                {compressing > 0 ? (
+                  <span className="ai-composer__compressing">处理图片中…</span>
+                ) : null}
+              </div>
+            ) : null}
+            {visionEnabled ? (
+              <input
+                accept="image/*"
+                className="hidden"
+                multiple
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  // 清空以便再次选择同一张图也能触发 change。
+                  event.target.value = "";
+                  void addImages(files);
+                }}
+                ref={fileInputRef}
+                type="file"
+              />
+            ) : null}
             {/* 录音/发送/停止钮视觉上落在输入框内：外层胶囊持材质与边框，textarea 去边框透明、
                 按钮靠底对齐（多行时钮固定在底部，apple-design §16 简洁 + §12 材质）。 */}
             <div className="ai-composer__field">
+              {visionEnabled ? (
+                <button
+                  aria-label="上传账单图片"
+                  className="ai-composer__btn ai-composer__btn--mic ai-composer__btn--attach"
+                  disabled={sending || pendingImages.length >= MAX_IMAGES}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="上传账单图片"
+                  type="button"
+                >
+                  <ImagePlus size={20} />
+                </button>
+              ) : null}
               <textarea
                 ref={inputRef}
                 className="ai-composer__input"
@@ -600,13 +858,28 @@ export function AiScreen() {
                   if (speech.listening) speech.stop();
                   setInput(event.target.value);
                 }}
+                onPaste={(event) => {
+                  if (!visionEnabled) return;
+                  const files = Array.from(event.clipboardData.files).filter((file) =>
+                    file.type.startsWith("image/"),
+                  );
+                  if (files.length === 0) return;
+                  event.preventDefault();
+                  void addImages(files);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     handleSend();
                   }
                 }}
-                placeholder={speech.listening ? "正在聆听…" : "请输入"}
+                placeholder={
+                  speech.listening
+                    ? "正在聆听…"
+                    : pendingImages.length > 0
+                      ? "补充说明（可选）"
+                      : "请输入"
+                }
                 rows={1}
                 value={input}
               />
@@ -635,7 +908,7 @@ export function AiScreen() {
                 <button
                   aria-label="发送"
                   className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
-                  disabled={!hasInput}
+                  disabled={!hasInput || compressing > 0}
                   onClick={() => handleSend()}
                   title="发送"
                   type="button"
@@ -647,6 +920,18 @@ export function AiScreen() {
           </div>
         ) : null}
       </main>
+
+      <AiDraftEditDrawer
+        card={editingCard}
+        editKey={editingDraft ? `${editingDraft.messageId}:${editingDraft.cardIndex}` : "none"}
+        onClose={() => setEditingDraft(null)}
+        onSave={async (draft) => {
+          if (!editingDraft) return;
+          await saveDrafts(editingDraft.messageId, [{ cardIndex: editingDraft.cardIndex, draft }]);
+          showToast({ tone: "success", message: "草稿已更新" });
+        }}
+        open={editingDraft !== null}
+      />
 
       <BottomSheet
         className="ui-bottom-sheet--edge-scroll"
@@ -691,7 +976,8 @@ export function AiScreen() {
                       deleteConversation.mutate(conversation.id, {
                         onSuccess: () => {
                           if (conversation.id === conversationId) startNewConversation();
-                        },                      });
+                        },
+                      });
                     }}
                   />
                 </div>
