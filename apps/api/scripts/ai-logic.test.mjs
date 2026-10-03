@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AiService } from "../dist/modules/ai/ai.service.js";
 import { yuanToMicros } from "../dist/modules/ai/ai-money.js";
+import { cleanBillNote } from "../dist/modules/ai/ai-bill-note.js";
 import {
   isTrendRequested,
   isValidDateKey,
@@ -29,6 +30,29 @@ test("AI money parsing follows ledger precision", () => {
   assert.equal(yuanToMicros("88.501", 2), null);
   assert.equal(yuanToMicros("88", 0), 88_000_000n);
   assert.equal(yuanToMicros("88.1", 0), null);
+});
+
+test("bill image notes drop payment-channel words and unidentifiable truncated names", () => {
+  // 纯通道/交易类型词：不写备注
+  assert.equal(cleanBillNote("代付"), undefined);
+  assert.equal(cleanBillNote("消费"), undefined);
+  assert.equal(cleanBillNote("微信支付"), undefined);
+  assert.equal(cleanBillNote("  "), undefined);
+  assert.equal(cleanBillNote(undefined), undefined);
+  // 截断后剩下的部分区分不出是谁：不写备注
+  assert.equal(cleanBillNote("微信支付-Man…"), undefined);
+  assert.equal(cleanBillNote("美团支付，广州…"), undefined);
+  assert.equal(cleanBillNote("网银在线，京东…"), undefined);
+  // 截断但名称足够区分：保留，去掉省略号
+  assert.equal(cleanBillNote("湛江隔水蒸鸭津…"), "湛江隔水蒸鸭津");
+  assert.equal(cleanBillNote("深圳金拱门食品..."), "深圳金拱门食品");
+  assert.equal(cleanBillNote("微信支付(湛江隔水蒸…"), "湛江隔水蒸");
+  assert.equal(cleanBillNote("微信支付-深圳金拱门…"), "深圳金拱门");
+  // 未截断：只去通道词，商户名原样保留
+  assert.equal(cleanBillNote("伊滋味牛肉面"), "伊滋味牛肉面");
+  assert.equal(cleanBillNote("广东移动"), "广东移动");
+  assert.equal(cleanBillNote("天天返现,消费…"), "天天返现");
+  assert.equal(cleanBillNote("微信支付-湛江"), "湛江");
 });
 
 test("AI date validation rejects normalized calendar dates", () => {
