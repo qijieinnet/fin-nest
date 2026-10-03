@@ -467,7 +467,7 @@ select:focus-visible {
 .ai-thread {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
   padding-top: 8px;
 }
 
@@ -491,22 +491,20 @@ select:focus-visible {
 
 .ai-msg--user {
   align-self: flex-end;
+  max-width: 82%;
   border-bottom-right-radius: 7px;
   background: var(--color-tint);
   color: #fff;
   box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--color-tint) 72%, transparent);
 }
 
+/* AI 回复不套气泡：正文直接铺在页面上（与主流 AI 对话一致），信息靠排版而非容器区分；
+   卡片承担结构化结果，文字与卡片之间不再出现「气泡套卡片」的双层框。 */
 .ai-msg--ai {
-  align-self: flex-start;
-  /* max-width: 92%; */
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  border-bottom-left-radius: 7px;
-  background: var(--color-bg-surface);
+  align-self: stretch;
+  padding: 2px 2px;
+  line-height: 1.65;
   color: var(--color-text-primary);
-  box-shadow:
-    0 6px 18px -14px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 /* 气泡入场：轻微上浮淡入，非手势驱动，用关键帧安全（§1/§8）。 */
@@ -941,44 +939,283 @@ select:focus-visible {
   }
 }
 
-/* 空态：柔和的引导，图标托在渐变徽章里（§16 克制 / §craft）。 */
+/* 空态：问候 + 能力入口。入口贴近输入条（拇指区），点一下把示例填进输入框而非直接发送，
+   用户可改完再发（§16 克制 / §一致：入口用 iOS 分组列表同款）。 */
 .ai-empty {
   display: flex;
-  height: 100%;
+  min-height: 100%;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  text-align: center;
-  padding-bottom: 8vh;
+  justify-content: flex-end;
+  gap: 28px;
+  padding: 24px 0 8px;
+}
+
+.ai-empty__intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 4px;
+  animation: ai-msg-in var(--motion-duration-normal) var(--ease-out) backwards;
 }
 
 .ai-empty__badge {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 22px;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 6px;
+  border-radius: 16px;
   color: var(--color-tint-contrast);
   background: linear-gradient(160deg, #16a6ff, var(--color-tint-strong));
   box-shadow:
-    0 14px 30px -14px color-mix(in srgb, var(--color-tint-strong) 70%, transparent),
+    0 12px 26px -12px color-mix(in srgb, var(--color-tint-strong) 70%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .ai-empty__title {
-  font-size: 19px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 750;
+  line-height: 1.25;
   letter-spacing: -0.02em;
   color: var(--color-text-primary);
 }
 
 .ai-empty__hint {
-  margin-top: 6px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--color-text-muted);
+}
+
+.ai-starters {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 20px;
+  background: var(--color-bg-surface);
+  box-shadow:
+    0 6px 20px -14px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  animation: ai-msg-in var(--motion-duration-normal) var(--ease-out) 60ms backwards;
+}
+
+.ai-starter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 12px 10px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--motion-duration-fast) var(--ease-out-soft);
+}
+
+.ai-starter:active {
+  background: var(--color-control-fill-muted);
+}
+
+/* 内缩分隔线从文字起点开始（iOS 分组列表）。 */
+.ai-starter + .ai-starter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 60px;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.ai-starter__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--ai-starter-color) 14%, white);
+  color: var(--ai-starter-color);
+}
+
+.ai-starter__body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ai-starter__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ai-starter__example {
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-starter__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary, rgba(0, 0, 0, 0.25));
+}
+
+/* 记账草稿卡：头部「分类图标 · 名称/日期 · 金额/状态」，与账单行同一阅读顺序；
+   已入账/已作废折叠成仅头部的一行摘要，长会话里不再被大卡片刷屏。 */
+.ai-draft__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ai-draft__title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-draft__meta {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-draft__amount {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-draft__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.ai-draft__status.is-confirmed {
+  color: var(--color-tint);
+}
+
+.ai-draft__status.is-proposed {
+  color: #b26b00;
+}
+
+.ai-draft__details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--color-control-fill-muted);
+}
+
+.ai-draft--settled {
+  padding-block: 12px;
+}
+
+.ai-draft--settled .ai-draft__amount {
+  font-size: 16px;
+}
+
+/* 历史会话：按天分组，组标题小字，行内只留标题与时间。 */
+.ai-history__group + .ai-history__group {
+  margin-top: 10px;
+}
+
+.ai-history__label {
+  padding: 6px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.ai-history__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 14px;
+}
+
+.ai-history__item.is-active {
+  background: var(--color-control-fill-muted);
+}
+
+.ai-history__open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-history__title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 15px;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-history__time {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.ai-history__delete {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.ai-history__delete:active {
+  background: var(--color-control-fill-muted);
+}
+
+/* 导航标题为会话名，过长截断。 */
+.ai-nav .navigation-bar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

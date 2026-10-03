@@ -1,19 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp,
   ChevronLeft,
+  ChevronRight,
   History,
   ImagePlus,
   Mic,
   MoreHorizontal,
   NotebookPen,
+  PenLine,
+  PieChart,
   Plus,
   Sparkles,
   Square,
+  Target,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
@@ -77,7 +82,70 @@ const AiMarkdown = dynamic(
   { loading: () => null },
 );
 
-const SUGGESTIONS = ["昨天午饭花了 45", "这个月吃饭花了多少钱？", "看看上个月的收支统计"];
+/** 空态能力入口：点一下把示例填进输入框（不直接发送），用户改完再发。 */
+const STARTERS = [
+  {
+    icon: PenLine,
+    color: "var(--color-tint)",
+    title: "说一句就记账",
+    example: "昨天午饭 32，微信付的",
+  },
+  { icon: PieChart, color: "oklch(0.7 0.16 25)", title: "查花销", example: "这个月吃饭花了多少？" },
+  {
+    icon: Wallet,
+    color: "oklch(0.68 0.14 160)",
+    title: "看资产",
+    example: "我现在总资产还有多少？",
+  },
+  { icon: Target, color: "oklch(0.7 0.15 60)", title: "看预算", example: "这个月预算还剩多少？" },
+];
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return "夜深了";
+  if (hour < 11) return "早上好";
+  if (hour < 13) return "中午好";
+  if (hour < 18) return "下午好";
+  return "晚上好";
+}
+
+/** 历史会话按更新时间分组：今天 / 昨天 / 近 7 天 / 更早。 */
+function groupConversations(conversations: AiConversationSummary[]) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const day = 86_400_000;
+  const groups: { label: string; items: AiConversationSummary[] }[] = [];
+  for (const conversation of conversations) {
+    const updated = new Date(conversation.updatedAt).getTime();
+    const label =
+      updated >= startOfToday.getTime()
+        ? "今天"
+        : updated >= startOfToday.getTime() - day
+          ? "昨天"
+          : updated >= startOfToday.getTime() - 6 * day
+            ? "近 7 天"
+            : "更早";
+    const last = groups.at(-1);
+    if (last?.label === label) last.items.push(conversation);
+    else groups.push({ label, items: [conversation] });
+  }
+  return groups;
+}
+
+function conversationTime(updatedAt: string): string {
+  const date = new Date(updatedAt);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const hm = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  // 今天/昨天两组的组标题已给出日期，行内只需时刻。
+  if (date.getTime() >= startOfToday.getTime() - 86_400_000) return hm;
+  const md = `${date.getMonth() + 1}月${date.getDate()}日`;
+  return date.getFullYear() === startOfToday.getFullYear() ? md : `${date.getFullYear()}/${md}`;
+}
 // 与服务端 MAX_CHAT_IMAGES 一致。
 const MAX_IMAGES = 4;
 /** 交易已入账、卡片回写失败时的提示（本地已锁卡，服务端加载会话时补回写）。 */
@@ -657,6 +725,25 @@ export function AiScreen() {
 
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
+  // 草稿卡头部的分类 emoji：子分类没有独立图标，沿用一级分类的。
+  const categoryIcons = useMemo(
+    () => new Map((categoriesQuery.data ?? []).map((category) => [category.id, category.icon])),
+    [categoriesQuery.data],
+  );
+  const conversationTitle = conversationId
+    ? (conversationQuery.data?.conversation.title ?? null)
+    : null;
+
+  const fillStarter = (text: string) => {
+    setInput(text);
+    // 等输入框按新内容撑开后再聚焦，光标落在末尾便于直接修改。
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(text.length, text.length);
+    });
+  };
 
   /**
    * 渲染一条助手消息的卡片：草稿 ≥2 笔时合并成批量面板（放在第一张草稿的位置），
@@ -694,6 +781,7 @@ export function AiScreen() {
           return (
             <TransactionDraftCard
               card={card}
+              categoryIcon={card.draft.categoryId ? categoryIcons.get(card.draft.categoryId) : null}
               confirming={false}
               disabled
               key={key}
@@ -704,6 +792,7 @@ export function AiScreen() {
         return (
           <TransactionDraftCard
             card={card}
+            categoryIcon={card.draft.categoryId ? categoryIcons.get(card.draft.categoryId) : null}
             confirming={confirmingKey === key && confirmDraft.isPending}
             key={key}
             onConfirm={() => {
@@ -773,7 +862,7 @@ export function AiScreen() {
               />
             </div>
           }
-          className="mb-0!"
+          className="ai-nav mb-0!"
           leading={
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
@@ -781,7 +870,7 @@ export function AiScreen() {
               onClick={() => router.back()}
             />
           }
-          title=""
+          title={conversationTitle ?? "AI Agent"}
           variant="inline"
         />
 
@@ -800,29 +889,56 @@ export function AiScreen() {
             <LoadingState rows={3} title="加载会话" />
           ) : messages.length === 0 ? (
             <div className="ai-empty">
-              <div className="ai-empty__badge">
-                <Sparkles size={30} strokeWidth={2.1} />
-              </div>
-              <div>
-                <p className="ai-empty__title">我们先从哪里开始呢？</p>
-                <p className="ai-empty__hint">
-                  {visionEnabled
-                    ? "可以直接上传账单截图批量记账，草稿需要你确认后才会入账"
-                    : "记账草稿需要你确认后才会入账"}
+              <div className="ai-empty__intro">
+                <span className="ai-empty__badge">
+                  <Sparkles size={24} strokeWidth={2.1} />
+                </span>
+                <p className="ai-empty__title" suppressHydrationWarning>
+                  {greeting()}，想记点什么？
                 </p>
+                <p className="ai-empty__hint">一句话记账、查账，草稿经你确认才入账。</p>
               </div>
-              {/* <div className="flex flex-col gap-2">
-                {SUGGESTIONS.map((suggestion) => (
+              <div className="ai-starters">
+                {visionEnabled ? (
                   <button
-                    className="rounded-full border border-black/[0.08] bg-[var(--color-bg-surface)] px-4 py-2 text-sm text-[var(--color-text-secondary)]"
-                    key={suggestion}
-                    onClick={() => handleSend(suggestion)}
+                    className="ai-starter"
+                    onClick={() => fileInputRef.current?.click()}
                     type="button"
                   >
-                    {suggestion}
+                    <span
+                      className="ai-starter__icon"
+                      style={{ "--ai-starter-color": "oklch(0.62 0.17 290)" } as CSSProperties}
+                    >
+                      <ImagePlus size={18} />
+                    </span>
+                    <span className="ai-starter__body">
+                      <span className="ai-starter__title">识别账单截图</span>
+                      <span className="ai-starter__example">上传支付记录截图，批量生成草稿</span>
+                    </span>
+                    <ChevronRight className="ai-starter__chevron" size={18} />
+                  </button>
+                ) : null}
+                {STARTERS.map(({ icon: Icon, color, title, example }) => (
+                  <button
+                    className="ai-starter"
+                    key={title}
+                    onClick={() => fillStarter(example)}
+                    type="button"
+                  >
+                    <span
+                      className="ai-starter__icon"
+                      style={{ "--ai-starter-color": color } as CSSProperties}
+                    >
+                      <Icon size={18} />
+                    </span>
+                    <span className="ai-starter__body">
+                      <span className="ai-starter__title">{title}</span>
+                      <span className="ai-starter__example">{example}</span>
+                    </span>
+                    <ChevronRight className="ai-starter__chevron" size={18} />
                   </button>
                 ))}
-              </div> */}
+              </div>
             </div>
           ) : (
             <div className="ai-thread">
@@ -1052,7 +1168,7 @@ export function AiScreen() {
         open={historyOpen}
         title="历史会话"
       >
-        <div className="flex flex-col gap-1 pb-4">
+        <div className="flex flex-col pb-4">
           {conversationsQuery.isPending ? (
             <LoadingState rows={3} title="加载会话" />
           ) : conversations.length === 0 ? (
@@ -1061,38 +1177,46 @@ export function AiScreen() {
             </p>
           ) : (
             <>
-              {conversations.map((conversation) => (
-                <div className="flex items-center gap-1" key={conversation.id}>
-                  <button
-                    className={`min-w-0 flex-1 rounded-[14px] px-3 py-3 text-left ${
-                      conversation.id === conversationId
-                        ? "bg-[var(--color-control-fill-muted,rgba(0,0,0,0.05))]"
-                        : ""
-                    }`}
-                    onClick={() => {
-                      setConversationId(conversation.id);
-                      setHistoryOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <p className="truncate text-[15px] text-[var(--color-text-primary)]">
-                      {conversation.title ?? "未命名会话"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                      {new Date(conversation.updatedAt).toLocaleString("zh-CN")}
-                    </p>
-                  </button>
-                  <IconButton
-                    icon={<Trash2 size={18} />}
-                    label="删除会话"
-                    onClick={() => {
-                      deleteConversation.mutate(conversation.id, {
-                        onSuccess: () => {
-                          if (conversation.id === conversationId) startNewConversation();
-                        },
-                      });
-                    }}
-                  />
+              {groupConversations(conversations).map((group) => (
+                <div className="ai-history__group" key={group.label}>
+                  <p className="ai-history__label">{group.label}</p>
+                  {group.items.map((conversation) => (
+                    <div
+                      className={`ai-history__item${conversation.id === conversationId ? " is-active" : ""}`}
+                      key={conversation.id}
+                    >
+                      <button
+                        className="ai-history__open"
+                        onClick={() => {
+                          setConversationId(conversation.id);
+                          setHistoryOpen(false);
+                        }}
+                        type="button"
+                      >
+                        <span className="ai-history__title">
+                          {conversation.title ?? "未命名会话"}
+                        </span>
+                        <span className="ai-history__time">
+                          {conversationTime(conversation.updatedAt)}
+                        </span>
+                      </button>
+                      <button
+                        aria-label="删除会话"
+                        className="ai-history__delete"
+                        onClick={() => {
+                          deleteConversation.mutate(conversation.id, {
+                            onSuccess: () => {
+                              if (conversation.id === conversationId) startNewConversation();
+                            },
+                          });
+                        }}
+                        title="删除会话"
+                        type="button"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               ))}
               {hasNextPage ? (

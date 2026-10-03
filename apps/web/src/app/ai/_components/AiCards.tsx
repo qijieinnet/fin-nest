@@ -85,9 +85,25 @@ function DraftRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
-/** 记账草稿卡：展示 AI 解析结果，用户点确认才真正入账。 */
+/** 草稿日期的短文案：今天/昨天/前天，同年省略年份。 */
+export function shortDate(occurredOn: string): string {
+  const [year, month, day] = occurredOn.split("-");
+  if (!year || !month || !day) return occurredOn;
+  const target = new Date(Number(year), Number(month) - 1, Number(day));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  if (diffDays === 2) return "前天";
+  const md = `${Number(month)}月${Number(day)}日`;
+  return Number(year) === today.getFullYear() ? md : `${year}年${md}`;
+}
+
+/** 记账草稿卡：展示 AI 解析结果，用户点确认才真正入账。已入账/已作废折叠成一行摘要。 */
 export function TransactionDraftCard({
   card,
+  categoryIcon,
   confirming,
   voiding = false,
   disabled = false,
@@ -96,6 +112,8 @@ export function TransactionDraftCard({
   onVoid,
 }: {
   card: Extract<AiCard, { kind: "transaction_draft" }>;
+  /** 分类 emoji（按 categoryId 从账本分类查得）；缺省按类型兜底。 */
+  categoryIcon?: string | null;
   confirming: boolean;
   /** 正在作废该草稿，按钮 loading 态并防连点。 */
   voiding?: boolean;
@@ -119,64 +137,108 @@ export function TransactionDraftCard({
           ? `${draft.accountName} · ${draft.subAccountName}`
           : draft.accountName
         : undefined;
-  const categoryText = draft.categoryName
-    ? draft.subcategoryName
-      ? `${draft.categoryName} · ${draft.subcategoryName}`
-      : draft.categoryName
-    : undefined;
+  const title =
+    draft.subcategoryName ??
+    draft.categoryName ??
+    (draft.type === "transfer" ? "转账" : (draft.note ?? TYPE_LABEL[draft.type] ?? draft.type));
+  const meta = [
+    shortDate(draft.occurredOn),
+    draft.type === "transfer"
+      ? accountText
+      : draft.subcategoryName && draft.categoryName
+        ? draft.categoryName
+        : null,
+    draft.personName,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const settled = confirmed || superseded;
+  const icon =
+    categoryIcon || (draft.type === "transfer" ? "🔁" : draft.type === "income" ? "💰" : null);
 
   return (
-    <div className={`ai-card${superseded ? " opacity-60" : ""}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span
-          className="rounded-full px-2.5 py-0.5 text-xs font-bold"
-          style={{
-            backgroundColor: "var(--color-control-fill-muted, rgba(0,0,0,0.05))",
-            color: TYPE_COLOR[draft.type],
-          }}
-        >
-          {TYPE_LABEL[draft.type] ?? draft.type}
-        </span>
-        <span
-          className="text-[20px] font-bold"
-          style={{
-            color: TYPE_COLOR[draft.type],
-            textDecoration: superseded ? "line-through" : undefined,
-          }}
-        >
-          {amount(draft.grossAmountMicros, currency)}
-        </span>
+    <div className={`ai-card ai-draft${settled ? " ai-draft--settled" : ""}`}>
+      <div className="ai-draft__head">
+        <CategoryIcon color={TYPE_COLOR[draft.type]} icon={icon ?? undefined} />
+        <div className="min-w-0 flex-1">
+          <p className="ai-draft__title">{title}</p>
+          <p className="ai-draft__meta">{meta}</p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className="ai-draft__amount"
+            style={{
+              color: superseded ? "var(--color-text-muted)" : TYPE_COLOR[draft.type],
+              textDecoration: superseded ? "line-through" : undefined,
+            }}
+          >
+            {amount(draft.grossAmountMicros, currency)}
+          </span>
+          {confirmed ? (
+            <span className="ai-draft__status is-confirmed">
+              <Check size={12} strokeWidth={3} />
+              已记账
+            </span>
+          ) : superseded ? (
+            <span className="ai-draft__status">已作废</span>
+          ) : (
+            <span className="ai-draft__status is-proposed">待确认</span>
+          )}
+        </div>
       </div>
-      {card.originalAmountMicros && card.status === "proposed" ? (
-        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-          原金额 {originalAmount(card.originalAmountMicros, currency)}，已按账本精度四舍五入
-        </p>
-      ) : null}
-      {card.possibleDuplicate && card.status === "proposed" ? (
-        <p className="ai-draft-dup mt-2">
-          疑似重复：当天已有一笔相同金额
-          {card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : ""}
-        </p>
-      ) : null}
-      <div className="mt-3 flex flex-col gap-1.5">
-        <DraftRow label="日期" value={draft.occurredOn} />
-        <DraftRow label="分类" value={categoryText} />
-        <DraftRow label="账户" value={accountText} />
-        <DraftRow label="人员" value={draft.personName} />
-        <DraftRow label="备注" value={draft.note} />
-      </div>
-      <div className="mt-3">
-        {confirmed ? (
-          <Button block disabled icon={<Check size={16} />} variant="secondary">
-            已记账
-          </Button>
-        ) : superseded ? (
-          <p className="text-center text-xs text-[var(--color-text-muted)]">已作废（已被更正）</p>
-        ) : card.confirmationBlockedReason ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-xs text-[var(--color-text-muted)]">
-              {card.confirmationBlockedReason}
+      {settled ? null : (
+        <>
+          {card.originalAmountMicros ? (
+            <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+              原金额 {originalAmount(card.originalAmountMicros, currency)}，已按账本精度四舍五入
             </p>
+          ) : null}
+          {card.possibleDuplicate ? (
+            <p className="ai-draft-dup mt-2">
+              疑似重复：当天已有一笔相同金额
+              {card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : ""}
+            </p>
+          ) : null}
+          {(accountText && draft.type !== "transfer") || (draft.note && draft.note !== title) ? (
+            <div className="ai-draft__details">
+              {draft.type === "transfer" ? null : <DraftRow label="账户" value={accountText} />}
+              <DraftRow label="备注" value={draft.note !== title ? draft.note : undefined} />
+            </div>
+          ) : null}
+        </>
+      )}
+      {settled ? null : (
+        <div className="mt-3">
+          {card.confirmationBlockedReason ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-[var(--color-text-muted)]">
+                {card.confirmationBlockedReason}
+              </p>
+              <div className="flex gap-2">
+                {onVoid ? (
+                  <Button
+                    className="flex-1"
+                    disabled={disabled || confirming || voiding}
+                    loading={voiding}
+                    onClick={onVoid}
+                    variant="secondary"
+                  >
+                    作废
+                  </Button>
+                ) : null}
+                {onEdit ? (
+                  <Button
+                    className="flex-1"
+                    disabled={disabled || confirming || voiding}
+                    onClick={onEdit}
+                    variant="secondary"
+                  >
+                    编辑
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
             <div className="flex gap-2">
               {onVoid ? (
                 <Button
@@ -199,42 +261,18 @@ export function TransactionDraftCard({
                   编辑
                 </Button>
               ) : null}
+              <Button
+                className="flex-[2]"
+                disabled={disabled || voiding}
+                loading={confirming}
+                onClick={onConfirm}
+              >
+                确认入账
+              </Button>
             </div>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            {onVoid ? (
-              <Button
-                className="flex-1"
-                disabled={disabled || confirming || voiding}
-                loading={voiding}
-                onClick={onVoid}
-                variant="secondary"
-              >
-                作废
-              </Button>
-            ) : null}
-            {onEdit ? (
-              <Button
-                className="flex-1"
-                disabled={disabled || confirming || voiding}
-                onClick={onEdit}
-                variant="secondary"
-              >
-                编辑
-              </Button>
-            ) : null}
-            <Button
-              className="flex-[2]"
-              disabled={disabled || voiding}
-              loading={confirming}
-              onClick={onConfirm}
-            >
-              确认入账
-            </Button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
