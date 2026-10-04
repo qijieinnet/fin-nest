@@ -189,6 +189,8 @@ type PeriodStatsToolArgs = {
 };
 
 type ChatEmitter = {
+  /** 本轮用户消息落库后立即下发：连接中途断开时前端凭它（及 requestId）恢复结果。 */
+  start?: (info: { conversationId: string; userMessageId: string }) => void;
   delta: (text: string) => void;
   card: (card: AiCard) => void;
 };
@@ -543,6 +545,14 @@ const WEB_SEARCH_TOOL: LlmTool = {
 };
 
 /** 草稿卡入账所用幂等键（前端 ai-card-<messageId>-<cardIndex>）在交易创建作用域下的哈希。 */
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function duplicateRequestError(): AppError {
+  return new AppError("AI_DUPLICATE_REQUEST", "这条消息已经发送过了", 409);
+}
+
 function aiCardKeyHash(ledgerId: string, messageId: string, cardIndex: number, userId: string) {
   return hashIdempotencyKey(
     `transaction.create:${ledgerId}`,
@@ -1021,6 +1031,10 @@ export class AiService {
     return this.runChat(ledgerId, userId, input, images, emit, signal);
   }
 
+  async assertLedgerMember(ledgerId: string, userId: string): Promise<void> {
+    await this.ledgers.assertMember(ledgerId, userId);
+  }
+
   private async runChat(
     ledgerId: string,
     userId: string,
@@ -1039,6 +1053,8 @@ export class AiService {
     // 带图的这一轮整轮都走识图模型：后续工具续轮的上下文里仍带着这张图。
     const llm = images.length > 0 ? this.visionLlm! : this.llm;
     this.checkRateLimit(userId);
+    // 同一 requestId 只跑一轮：重试/双击的重复提交在建会话前就拒掉（并发漏网的由唯一索引兜底）。
+    if (input.requestId) await this.assertRequestIdUnused(ledgerId, input.requestId);
 
     const conversation = input.conversationId
       ? await this.assertConversation(ledgerId, input.conversationId, userId)
@@ -1066,40 +1082,88 @@ export class AiService {
       ledgerId,
       role: "user",
       content: userContent,
+      requestId: input.requestId ?? null,
     };
-    if (images.length > 0) {
-      // 消息行与附图同事务落库：要么一起出现，要么都不出现。
-      await this.files.storeWithOwner(
-        ledgerId,
-        userId,
-        { type: "ai_message", id: userMessageData.id },
-        images,
-        (tx) => tx.aiMessage.create({ data: userMessageData }),
-      );
-    } else {
-      await this.prisma.client.aiMessage.create({ data: userMessageData });
+    try {
+      if (images.length > 0) {
+        // 消息行与附图同事务落库：要么一起出现，要么都不出现。
+        await this.files.storeWithOwner(
+          ledgerId,
+          userId,
+          { type: "ai_message", id: userMessageData.id },
+          images,
+          (tx) => tx.aiMessage.create({ data: userMessageData }),
+        );
+      } else {
+        await this.prisma.client.aiMessage.create({ data: userMessageData });
+      }
+    } catch (error) {
+      if (isUniqueViolation(error)) throw duplicateRequestError();
+      throw error;
     }
+    emit?.start?.({ conversationId: conversation.id, userMessageId: userMessageData.id });
 
+    // 用户消息已落库后的任何失败都要落一条 failed 助手消息：流式连接可能早已断开，
+    // 前端只能靠会话里出现「这一轮的回复」（reply_to_id）拿到确定终态，否则会一直等。
+    const outcome = { replied: false };
+    try {
+      return await this.completeChat(
+        { ledgerId, userId, userContent, images, llm, emit, signal },
+        { conversation, history, historyImages, userMessageId: userMessageData.id },
+        outcome,
+      );
+    } catch (error) {
+      if (!outcome.replied) {
+        await this.persistFailedReply(ledgerId, conversation.id, userMessageData.id, error);
+      }
+      throw error;
+    }
+  }
+
+  /** runChat 用户消息落库之后的部分：组上下文、工具循环、落库助手回复（outcome.replied 标记已落库）。 */
+  private async completeChat(
+    run: {
+      ledgerId: string;
+      userId: string;
+      userContent: string;
+      images: UploadedAttachmentFile[];
+      llm: LlmClient;
+      emit?: ChatEmitter;
+      signal?: AbortSignal;
+    },
+    round: {
+      conversation: { id: string; title: string | null };
+      history: Prisma.AiMessageGetPayload<object>[];
+      historyImages: Map<string, string[]>;
+      userMessageId: string;
+    },
+    outcome: { replied: boolean },
+  ) {
+    const { ledgerId, userId, userContent, images, llm, emit, signal } = run;
+    const { conversation, history, historyImages } = round;
     const context = await this.buildLedgerContext(ledgerId, userId);
     // 待确认草稿快照：让模型知道之前生成过哪些未确认草稿，并能按编号作废/更正。
     context.outstandingDrafts = this.collectOutstandingDrafts(history);
     const messages: LlmMessage[] = [
       { role: "system", content: this.buildSystemPrompt(context) },
-      ...history.map<LlmMessage>((message) =>
-        message.role === "user"
-          ? {
-              role: "user",
-              content: this.replayUserContent(
-                message.content,
-                historyImages.get(message.id)?.length ?? 0,
-              ),
-            }
-          : {
-              role: "assistant",
-              // 历史 assistant 消息带卡片时，把卡片摘要拼进正文，模型才有「刚才那笔」的上下文。
-              content: this.replayAssistantContent(message),
-            },
-      ),
+      // 出错轮次的说明文字是给用户看的，不回放给模型。
+      ...history
+        .filter((message) => !(message.role === "assistant" && message.failed))
+        .map<LlmMessage>((message) =>
+          message.role === "user"
+            ? {
+                role: "user",
+                content: this.replayUserContent(
+                  message.content,
+                  historyImages.get(message.id)?.length ?? 0,
+                ),
+              }
+            : {
+                role: "assistant",
+                // 历史 assistant 消息带卡片时，把卡片摘要拼进正文，模型才有「刚才那笔」的上下文。
+                content: this.replayAssistantContent(message),
+              },
+        ),
       {
         role: "user",
         content:
@@ -1205,9 +1269,11 @@ export class AiService {
         ledgerId,
         role: "assistant",
         content,
+        replyToId: round.userMessageId,
         ...(cards.length > 0 ? { cards: cards as unknown as Prisma.InputJsonValue } : {}),
       },
     });
+    outcome.replied = true;
     // @updatedAt 需要一次显式 update 才会刷新，用于会话列表按最近活跃排序。
     await this.prisma.client.aiConversation.update({
       where: { id: conversation.id },
@@ -1219,6 +1285,111 @@ export class AiService {
       title: conversation.title,
       message: this.packMessage(assistantMessage),
     };
+  }
+
+  /** 本轮出错时落一条 failed 助手消息（见 runChat）；落库本身失败只记日志，不掩盖原错误。 */
+  private async persistFailedReply(
+    ledgerId: string,
+    conversationId: string,
+    userMessageId: string,
+    error: unknown,
+  ): Promise<void> {
+    const reason = error instanceof AppError ? error.message : "AI 服务出错，请稍后重试";
+    try {
+      await this.prisma.client.aiMessage.create({
+        data: {
+          conversationId,
+          ledgerId,
+          role: "assistant",
+          content: `（${reason}）`,
+          replyToId: userMessageId,
+          failed: true,
+        },
+      });
+      await this.prisma.client.aiConversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      });
+    } catch (persistError) {
+      this.logger.warn(`AI 出错轮次落库失败 message=${userMessageId}: ${String(persistError)}`);
+    }
+  }
+
+  /**
+   * 同一 requestId 只能跑一轮（流式端点在发头前调用，重复提交得到真正的 HTTP 409）。
+   * 调用方须已校验账本成员；查询限定本账本，跨账本撞 id 由唯一索引在落库时兜底。
+   */
+  async assertRequestIdUnused(ledgerId: string, requestId: string): Promise<void> {
+    const existing = await this.prisma.client.aiMessage.findFirst({
+      where: { requestId, ledgerId },
+      select: { id: true },
+    });
+    if (existing) throw duplicateRequestError();
+  }
+
+  /**
+   * 按客户端 requestId 查一轮流式聊天的状态（断连恢复用）。只认本人、本账本的轮次。
+   * - running：仍在进行（按进程内登记表判断）
+   * - done：已有本轮回复（含出错说明 failed、停止生成），assistantMessageId 精确指向它
+   * - lost：用户消息已落库但无回复且不在运行（如 API 重启），不会再有结果
+   * - unknown：还没落库用户消息（请求未到达/仍在上传/被取消在登记前）
+   *
+   * isRunning 是函数而非快照：查库前后各取一次，任一次在运行即视为 running。
+   * 查库前取 → 覆盖「查完回复之后才收尾释放」；查库后取 → 覆盖「查库期间才登记并落用户消息」。
+   * 收尾顺序是先落回复再释放登记，所以两次都不在运行且无回复时才能断定 lost。
+   */
+  async getChatRunStatus(
+    ledgerId: string,
+    userId: string,
+    requestId: string,
+    isRunning: () => boolean,
+  ) {
+    const runningBefore = isRunning();
+    await this.ledgers.assertMember(ledgerId, userId);
+    const found = await this.prisma.client.aiMessage.findFirst({
+      where: { requestId, ledgerId, role: "user" },
+      select: { id: true, conversationId: true },
+    });
+    const owned =
+      found &&
+      (await this.prisma.client.aiConversation.count({
+        where: { id: found.conversationId, ledgerId, userId, deletedAt: null },
+      })) > 0;
+    const userMessage = owned ? found : null;
+    if (!userMessage) {
+      return { state: runningBefore || isRunning() ? ("running" as const) : ("unknown" as const) };
+    }
+    const base = { conversationId: userMessage.conversationId, userMessageId: userMessage.id };
+    const reply = await this.findRunReply(ledgerId, userMessage.conversationId, userMessage.id);
+    if (reply) {
+      return {
+        state: "done" as const,
+        ...base,
+        assistantMessageId: reply.id,
+        failed: reply.failed,
+      };
+    }
+    if (runningBefore || isRunning()) return { state: "running" as const, ...base };
+    // 两次判断都不在运行：一整轮可能恰好夹在两次判断之间跑完（回复在上面的查询之后才落库）。
+    // 收尾顺序是「先落回复、再释放登记」，此刻已不在运行，回复若存在必已可见——再查一次才下 lost。
+    const lateReply = await this.findRunReply(ledgerId, base.conversationId, base.userMessageId);
+    if (lateReply) {
+      return {
+        state: "done" as const,
+        ...base,
+        assistantMessageId: lateReply.id,
+        failed: lateReply.failed,
+      };
+    }
+    return { state: "lost" as const, ...base };
+  }
+
+  private findRunReply(ledgerId: string, conversationId: string, userMessageId: string) {
+    return this.prisma.client.aiMessage.findFirst({
+      where: { replyToId: userMessageId, ledgerId, conversationId, role: "assistant" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, failed: true },
+    });
   }
 
   // ---------- 工具执行 ----------

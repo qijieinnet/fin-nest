@@ -154,6 +154,14 @@ export function aiChatStreamPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/ai/chat/stream");
 }
 
+export function aiChatStreamRunPath(ledgerId: string, requestId: string): string {
+  return ledgerApiPath(ledgerId, `/ai/chat/stream/${encodeURIComponent(requestId)}`);
+}
+
+export function aiChatStreamCancelPath(ledgerId: string, requestId: string): string {
+  return ledgerApiPath(ledgerId, `/ai/chat/stream/${encodeURIComponent(requestId)}/cancel`);
+}
+
 export function aiMessageCardStatePath(ledgerId: string, messageId: string): string {
   return ledgerApiPath(ledgerId, `/ai/messages/${encodeURIComponent(messageId)}/card-state`);
 }

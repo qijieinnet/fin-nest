@@ -1292,12 +1292,37 @@ export type AiChatResult = {
   message: AiMessage;
 };
 
+export type AiChatStreamStart = {
+  conversationId: string;
+  userMessageId: string;
+};
+
+/**
+ * GET /ai/chat/stream/:requestId：按客户端 requestId 查一轮流式聊天的状态（断连恢复用）。
+ * running 进行中（落库用户消息前 ids 为空）；done 已有本轮回复（failed=出错说明）；
+ * lost 用户消息已落库但不会再有回复（如 API 重启）；unknown 用户消息尚未落库。
+ */
+export type AiChatRunStatus =
+  | { state: "running"; conversationId?: string; userMessageId?: string }
+  | {
+      state: "done";
+      conversationId: string;
+      userMessageId: string;
+      assistantMessageId: string;
+      failed: boolean;
+    }
+  | { state: "lost"; conversationId: string; userMessageId: string }
+  | { state: "unknown" };
+
 /** POST /ai/chat/stream 的 SSE 事件（event 名 → data 结构）。 */
 export type AiChatStreamEvents = {
+  /** 用户消息已落库；连接中途断开时凭它从会话详情恢复本轮结果。 */
+  start: AiChatStreamStart;
   delta: { text: string };
   card: { card: AiCard };
   done: AiChatResult;
-  error: { message: string };
+  /** code：AppError 的业务码（如 AI_DUPLICATE_REQUEST），非业务异常为 AI_INTERNAL_ERROR。 */
+  error: { message: string; code?: string };
 };
 
 // --- 飞书机器人（可选启用，见 docs/FEISHU_BOT_PLAN.md）---

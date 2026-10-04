@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import { IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 
 /**
  * 聊天请求。流式端点同时接受 JSON 与 multipart（字段 images[] 附账单图片），
@@ -16,4 +16,11 @@ export class ChatRequestDto {
   @IsString()
   @MaxLength(4000)
   content?: string;
+
+  @ApiPropertyOptional({
+    description: "客户端生成的本轮请求 id（流式端点用）：显式停止时凭它调取消接口",
+  })
+  @IsOptional()
+  @IsUUID()
+  requestId?: string;
 }

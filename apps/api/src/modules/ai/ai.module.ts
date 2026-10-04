@@ -10,6 +10,7 @@ import { RecordsModule } from "../records/records.module";
 import { RemindersModule } from "../reminders/reminders.module";
 import { StatsModule } from "../stats/stats.module";
 import { TransactionsModule } from "../transactions/transactions.module";
+import { AiChatRuns } from "./ai-chat-runs";
 import { AiController } from "./ai.controller";
 import { AiService } from "./ai.service";
 
@@ -28,7 +29,7 @@ import { AiService } from "./ai.service";
     FilesModule,
   ],
   controllers: [AiController],
-  providers: [AiService],
+  providers: [AiService, AiChatRuns],
   // 飞书机器人复用同一套对话与工具调用能力（见 docs/FEISHU_BOT_PLAN.md）。
   exports: [AiService],
 })

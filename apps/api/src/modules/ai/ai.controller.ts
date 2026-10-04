@@ -5,6 +5,7 @@ import {
   Get,
   Logger,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -20,6 +21,7 @@ import type { Response } from "express";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { CurrentAuth } from "../auth/current-auth.decorator";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
+import { AiChatRuns } from "./ai-chat-runs";
 import { AiService } from "./ai.service";
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
@@ -39,7 +41,10 @@ const chatImagesInterceptor = FilesInterceptor("images", 8, {
 export class AiController {
   private readonly logger = new Logger(AiController.name);
 
-  constructor(private readonly ai: AiService) {}
+  constructor(
+    private readonly ai: AiService,
+    private readonly runs: AiChatRuns,
+  ) {}
 
   @Get("status")
   @ApiOkResponse()
@@ -92,8 +97,9 @@ export class AiController {
   }
 
   /**
-   * 流式聊天（SSE over POST）：事件 delta{text} / card{card} / done{chat 同构结果} / error{message}。
-   * 头已发出后异常无法走全局过滤器，统一以 error 事件收尾。
+   * 流式聊天（SSE over POST）：事件 start{conversationId,userMessageId} / delta{text} / card{card} /
+   * done{chat 同构结果} / error{message,code}。头已发出后异常无法走全局过滤器，统一以 error 事件收尾；
+   * 发头之前的拒绝（重复 requestId → 409）走正常 HTTP 错误响应。
    */
   @Post("chat/stream")
   @UseInterceptors(chatImagesInterceptor)
@@ -107,37 +113,45 @@ export class AiController {
     @UploadedFiles() images: Express.Multer.File[] | undefined,
     @Res() response: Response,
   ) {
-    response.setHeader("content-type", "text/event-stream; charset=utf-8");
-    response.setHeader("cache-control", "no-cache, no-transform");
-    response.setHeader("connection", "keep-alive");
-    // 关闭 Nginx 等反代的缓冲，保证增量实时到达浏览器。
-    response.setHeader("x-accel-buffering", "no");
-    response.flushHeaders();
+    // 客户端断开不中止：iOS 切到别的 App 会掐断请求，本轮照常跑完落库，前端回来后按 requestId 查轮次状态恢复。
+    // 只有显式停止（POST chat/stream/:requestId/cancel）才中止，已生成部分由 service 照常持久化。
+    const userId = (auth as SessionAuthContext).userId;
+    let run: ReturnType<AiChatRuns["register"]> | null = null;
+    if (body.requestId) {
+      // 发头前：先校验账本成员（权限先行），再拒绝本账本内的重复提交——客户端拿到真正的
+      // HTTP 403/409（409 据此转去恢复原轮次）。跨账本的同 id 由唯一索引兜底。
+      await this.ai.assertLedgerMember(ledgerId, userId);
+      await this.ai.assertRequestIdUnused(ledgerId, body.requestId);
+      run = this.runs.register(ledgerId, userId, body.requestId);
+    }
 
-    // 客户端断开（点停止/关页面）即中止上游 LLM 调用，已生成部分由 service 照常持久化。
-    const abort = new AbortController();
-    response.on("close", () => {
-      if (!response.writableFinished) abort.abort();
-    });
     const emit = (event: string, data: unknown) => {
       if (response.destroyed || response.writableEnded) return;
       response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-    // 周期心跳（SSE 注释帧）：思维链模型首 token 前可能长时间静默，防中间代理按空闲掐断连接。
-    const heartbeat = setInterval(() => {
-      if (response.destroyed || response.writableEnded) return;
-      response.write(`: ping\n\n`);
-    }, 15_000);
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     try {
+      response.setHeader("content-type", "text/event-stream; charset=utf-8");
+      response.setHeader("cache-control", "no-cache, no-transform");
+      response.setHeader("connection", "keep-alive");
+      // 关闭 Nginx 等反代的缓冲，保证增量实时到达浏览器。
+      response.setHeader("x-accel-buffering", "no");
+      response.flushHeaders();
+      // 周期心跳（SSE 注释帧）：思维链模型首 token 前可能长时间静默，防中间代理按空闲掐断连接。
+      heartbeat = setInterval(() => {
+        if (response.destroyed || response.writableEnded) return;
+        response.write(`: ping\n\n`);
+      }, 15_000);
       const result = await this.ai.chatStream(
         ledgerId,
-        (auth as SessionAuthContext).userId,
+        userId,
         body,
         {
+          start: (info) => emit("start", info),
           delta: (text) => emit("delta", { text }),
           card: (card) => emit("card", { card }),
         },
-        abort.signal,
+        run?.signal,
         images ?? [],
       );
       emit("done", result);
@@ -146,11 +160,41 @@ export class AiController {
       if (!(error instanceof AppError)) this.logger.error(error);
       emit("error", {
         message: error instanceof AppError ? error.message : "AI 服务出错，请稍后重试",
+        code: error instanceof AppError ? error.code : "AI_INTERNAL_ERROR",
       });
     } finally {
-      clearInterval(heartbeat);
+      run?.release();
+      if (heartbeat) clearInterval(heartbeat);
       response.end();
     }
+  }
+
+  /** 断连恢复：按 requestId 查一轮流式聊天的状态（running/done/lost/unknown，见 service）。 */
+  @Get("chat/stream/:requestId")
+  @ApiOkResponse()
+  chatRunStatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("requestId", new ParseUUIDPipe()) requestId: string,
+  ) {
+    const userId = (auth as SessionAuthContext).userId;
+    // 传函数而非快照：service 在查库之后再判断是否仍在运行，避免与刚登记的轮次竞态误判 lost。
+    return this.ai.getChatRunStatus(ledgerId, userId, requestId, () =>
+      this.runs.isRunning(ledgerId, userId, requestId),
+    );
+  }
+
+  /** 显式停止一轮流式聊天（只能停本人在该账本的）。该轮已结束或从未开始时静默成功。 */
+  @Post("chat/stream/:requestId/cancel")
+  @ApiOkResponse()
+  async cancelChatStream(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Param("requestId", new ParseUUIDPipe()) requestId: string,
+  ) {
+    await this.ai.assertLedgerMember(ledgerId, (auth as SessionAuthContext).userId);
+    this.runs.cancel(ledgerId, (auth as SessionAuthContext).userId, requestId);
+    return { ok: true };
   }
 
   @Post("messages/:messageId/card-state")

@@ -987,10 +987,17 @@ model AiMessage {
   // assistant 消息携带的结构化卡片数组（记账草稿/查询结果等），前端按 kind 渲染；
   // 草稿卡确认后回写 status/transactionId，历史回放时显示「已记账」。
   cards          Json?    @db.JsonB
+  // 用户消息：客户端生成的本轮请求 id（流式端点），断连后前端凭它查轮次状态；唯一以防重复提交。
+  requestId      String?  @unique @map("request_id")
+  // 助手消息：回复的是哪条用户消息，恢复时据此精确认领本轮回复。
+  replyToId      String?  @map("reply_to_id") @db.Uuid
+  // 助手消息：本轮出错（正文为给用户看的错误说明），不回放给模型。
+  failed         Boolean  @default(false)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([conversationId, createdAt])
+  @@index([replyToId])
   @@map("ai_messages")
 }
 

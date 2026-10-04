@@ -21,29 +21,33 @@ import {
   Wallet,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { AttachmentPreview, LoadingState, type AttachmentItem } from "@/components/business";
+import {
+  AttachmentPreview,
+  EmptyState,
+  LoadingState,
+  type AttachmentItem,
+} from "@/components/business";
 import {
   BottomSheet,
+  Button,
   IconButton,
   MobileAppShell,
   NavigationBar,
   PopoverMenu,
 } from "@/components/ui";
 import {
-  aiConversationsPath,
   apiRequest,
   createAuthorizedObjectUrl,
   getApiErrorMessage,
   ledgerApiPath,
   type AiCard,
+  type AiConversationDetail,
   type AiConversationSummary,
   type AiMessage,
   type TransactionDetail,
   type TransactionInput,
 } from "@/lib/api";
 import {
-  streamAiChat,
-  useAiConversation,
   useAiStatus,
   useInfiniteAiConversations,
   useDeleteAiConversation,
@@ -52,6 +56,7 @@ import {
   useVoidAiCard,
   patchAiConversationMessage,
 } from "@/lib/data/ai";
+import { fetchConsistentConversationDetail } from "@/lib/data/ai-chat-run";
 import { AI_ACTIVE_CONVERSATION_KEY, aiCardIdempotencyKey } from "@/lib/data/ai-draft-handoff";
 import { useAccounts, useCategories, usePeople } from "@/lib/data/records";
 import { compressImageForUpload } from "@/lib/image/compress-image";
@@ -60,6 +65,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
+import { useAiChatRounds } from "./useAiChatRounds";
 import {
   AccountBalancesCard,
   BudgetProgressCard,
@@ -148,6 +154,19 @@ function conversationTime(updatedAt: string): string {
 }
 // 与服务端 MAX_CHAT_IMAGES 一致。
 const MAX_IMAGES = 4;
+/** 打开会话时首次加载的放弃时限（见 fetchConsistentConversationDetail 的 giveUpAfterMs）。 */
+const FIRST_LOAD_GIVE_UP_MS = 20_000;
+
+/** 卡片所属会话（账本 + 会话 id）。 */
+type ConversationTarget = { ledgerId: string; conversationId: string };
+
+let viewTokenSeq = 0;
+/** 新对话视图的临时 key（不与会话 id 冲突）。 */
+function newViewToken(): string {
+  viewTokenSeq += 1;
+  return `new:${viewTokenSeq}`;
+}
+
 /** 交易已入账、卡片回写失败时的提示（本地已锁卡，服务端加载会话时补回写）。 */
 const CARD_SYNC_FAILED = "卡片状态同步失败，重新进入会话后会自动补上";
 /** 模型只出卡片、没出文字时服务端落的占位正文（同 apps/api 的 AI_CARDS_ONLY_PLACEHOLDER）。 */
@@ -275,7 +294,6 @@ export function AiScreen() {
   // 正在作废的草稿卡（"messageId:cardIndex"），同上。
   const [voidingKey, setVoidingKey] = useState<string | null>(null);
 
-  const conversationQuery = useAiConversation(ledgerId, conversationId);
   const conversationsQuery = useInfiniteAiConversations(historyOpen ? ledgerId : null);
   const conversations = conversationsQuery.data?.pages.flat() ?? [];
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = conversationsQuery;
@@ -299,51 +317,200 @@ export function AiScreen() {
   const updateCardState = useUpdateAiCardState(ledgerId);
   const voidCard = useVoidAiCard(ledgerId);
   const updateDrafts = useUpdateAiDrafts(ledgerId);
-  // 流式进行中的助手消息（未持久化）：delta 增量拼正文、card 事件实时追加；done 后替换为持久化消息。
-  // withImages：带图的一轮（识别账单）草稿先不上屏，见下方流式渲染。
-  const [streaming, setStreaming] = useState<{
-    content: string;
-    cards: AiCard[];
-    withImages: boolean;
+  // 当前视图：已有会话时是会话 id；新对话视图用一个临时 key，每次「新建对话」都换一个，
+  // 这样旧的新对话轮次（还没拿到会话 id）不会串到用户刚新建的空白页上。
+  const [newViewKey, setNewViewKey] = useState(newViewToken);
+  const viewKey = conversationId ?? newViewKey;
+  const viewKeyRef = useRef(viewKey);
+  viewKeyRef.current = viewKey;
+  // 轮次回调都要核对账本：切换账本后，旧账本迟到的结果不能改动当前页面。
+  const ledgerIdRef = useRef(ledgerId);
+  ledgerIdRef.current = ledgerId;
+  const isCurrentView = (round: { ledgerId: string }, key: string) =>
+    round.ledgerId === ledgerIdRef.current && key === viewKeyRef.current;
+
+  // 当前视图的消息已从哪个会话整体加载过：只在打开「另一个」会话时才整体加载一次，
+  // 之后由轮次收尾（settle）与卡片回写更新，避免本地临时内容被整屏替换（视觉上像刷新）。
+  const loadedConversationRef = useRef<string | null>(null);
+  // 会话首次加载状态（加载中/失败/重试）与标题。
+  const [conversationLoad, setConversationLoad] = useState<{
+    id: string;
+    status: "loading" | "error";
   } | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [conversationTitles, setConversationTitles] = useState<Record<string, string | null>>({});
+  const rememberTitle = (detail: AiConversationDetail) =>
+    setConversationTitles((prev) => ({
+      ...prev,
+      [detail.conversation.id]: detail.conversation.title,
+    }));
+
+  // 会话的本地更新版本（见 useAiChatRounds 的 conversationVersion）：防恢复拉到的旧详情覆盖新状态。
+  const conversationVersionsRef = useRef(new Map<string, number>());
+  const bumpConversation = (id: string) =>
+    conversationVersionsRef.current.set(id, (conversationVersionsRef.current.get(id) ?? 0) + 1);
+
+  /**
+   * 打开会话的首次加载：与轮次收尾共用 fetchConsistentConversationDetail（拉取前后会话本地版本
+   * 一致才返回，卡片更新/轮次收尾会递增版本），页面只有这一个详情加载入口，旧快照不会上屏。
+   * 加载期间若轮次收尾已整体上屏更新的详情（loadedRef 已指向该会话），这次结果直接丢弃。
+   */
+  useEffect(() => {
+    if (!ledgerId || !conversationId) return;
+    if (loadedConversationRef.current === conversationId) return;
+    const target = conversationId;
+    const controller = new AbortController();
+    setConversationLoad({ id: target, status: "loading" });
+    fetchConsistentConversationDetail(ledgerId, target, {
+      signal: controller.signal,
+      version: () => conversationVersionsRef.current.get(target) ?? 0,
+      // 打开会话时网络持续不通，20 秒后就给出「重试」，不必等轮次收尾那样的 2 分钟。
+      giveUpAfterMs: FIRST_LOAD_GIVE_UP_MS,
+    })
+      .then((detail) => {
+        if (controller.signal.aborted) return;
+        if (!detail) {
+          setConversationLoad({ id: target, status: "error" });
+          return;
+        }
+        setConversationLoad(null);
+        rememberTitle(detail);
+        queryClient.setQueryData(queryKeys.aiConversation(ledgerId, target), detail);
+        if (loadedConversationRef.current === target) return;
+        loadedConversationRef.current = target;
+        setMessages(detail.messages);
+        // 服务端消息里的附图走附件接口，本地预览不再被引用。
+        releaseSentImages();
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setConversationLoad({ id: target, status: "error" });
+      });
+    return () => controller.abort();
+    // rememberTitle/queryClient 稳定或无需触发重载；loadAttempt 用于「重试」。
+  }, [ledgerId, conversationId, loadAttempt, queryClient, releaseSentImages]);
+
+  const rounds = useAiChatRounds(ledgerId, {
+    onConversation: (previous, nextConversationId) => {
+      // 用户还停在发送时的新对话视图上：跟随切到刚建好的会话。先记 loadedRef 再设 id，
+      // 随后的详情请求返回时不整体覆盖本地消息（防「刷新感」）。
+      if (isCurrentView(previous, previous.viewKey) && previous.viewKey !== nextConversationId) {
+        loadedConversationRef.current = nextConversationId;
+        // ref 同步改：start 与 done 可能在同一批数据里到达，done 的回调不能还看到旧视图。
+        viewKeyRef.current = nextConversationId;
+        setConversationId(nextConversationId);
+      }
+    },
+    onFinished: (round, result) => {
+      // 本轮结束：会话详情是唯一来源（hook 保证拉取前后会话没有本地更新、期间不能发新消息），
+      // 当前视图直接整体上屏；不在该会话就只更新缓存，下次打开即是最新。
+      const target = result.conversationId;
+      bumpConversation(target);
+      queryClient.setQueryData(queryKeys.aiConversation(round.ledgerId, target), result.detail);
+      rememberTitle(result.detail);
+      if (isCurrentView(round, target)) {
+        // 先记 loadedRef：在途的首次加载（可能是本轮完成前的旧快照）随后返回时不会再覆盖。
+        loadedConversationRef.current = target;
+        setMessages(result.detail.messages);
+        releaseSentImages();
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.aiConversations(round.ledgerId) });
+    },
+    onDiscarded: (round) => {
+      if (!isCurrentView(round, round.viewKey) || !round.localMessageId) return;
+      // 撤回的本地消息若带图，立即回收其预览 URL（不必等切会话/卸载）。
+      const discarded = messagesRef.current.find((message) => message.id === round.localMessageId);
+      const urls = discarded?.localImageUrls ?? [];
+      if (urls.length > 0) {
+        for (const url of urls) URL.revokeObjectURL(url);
+        sentImageUrlsRef.current = sentImageUrlsRef.current.filter((url) => !urls.includes(url));
+      }
+      setMessages((prev) => prev.filter((message) => message.id !== round.localMessageId));
+      // 文字还给输入框，方便直接重发（图片需重新选择）。
+      setInput((current) => current || round.userContent);
+    },
+    notify: (tone, message) => showToast({ tone, message }),
+    conversationVersion: (id) => conversationVersionsRef.current.get(id) ?? 0,
+  });
+  // 当前视图里进行中的那一轮（未持久化）：delta 增量拼正文、card 实时追加，结束后换成持久化消息。
+  // withImages：带图的一轮（识别账单）草稿先不上屏，见下方流式渲染。
+  const streaming = rounds.roundForView(viewKey);
   const sending = streaming !== null;
 
-  // 只在切换到「另一个」会话时才从服务端整体加载消息：done 后的 refetch / 窗口聚焦刷新
-  // 若无条件覆盖本地列表，会因本地临时 id 被替换导致整屏重挂载（视觉上像刷新）。
-  const loadedConversationRef = useRef<string | null>(null);
-  const conversationData = conversationQuery.data;
-  useEffect(() => {
-    if (!conversationData) return;
-    if (loadedConversationRef.current === conversationData.conversation.id) return;
-    loadedConversationRef.current = conversationData.conversation.id;
-    setMessages(conversationData.messages);
-    // 服务端消息里的附图走附件接口，本地预览不再被引用。
+  /**
+   * 打开某个会话：先丢掉它的详情缓存再切换。消息只在首次加载时整体上屏（loadedRef），
+   * 若先拿到的是过期缓存（例如轮次在后台完成前拉的），随后的新数据会被挡住；
+   * 从服务端重新拉一次最稳妥。
+   */
+  const openConversation = (id: string) => {
+    // 按会话 id 匹配（不依赖 ledgerId：重挂载恢复时账本可能还没加载出来）。
+    queryClient.removeQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        return (
+          key[0] === "ledger" && key[2] === "ai" && key[3] === "conversations" && key[4] === id
+        );
+      },
+    });
+    loadedConversationRef.current = null;
+    setEditingDraft(null);
+    // 清掉上一个视图的本地消息：加载完成前屏上不留旧内容，也不能在旧列表上继续发送（见 conversationReady）。
+    setMessages([]);
     releaseSentImages();
-  }, [conversationData, releaseSentImages]);
+    setConversationId(id);
+  };
 
-  // 去记一笔会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话 id，
+  // 切换账本：当前会话属于旧账本，回到新对话视图（旧账本的轮次在后台照常收尾）。
+  const viewLedgerRef = useRef(ledgerId);
+  useEffect(() => {
+    if (viewLedgerRef.current === ledgerId) return;
+    const switched = viewLedgerRef.current !== null;
+    viewLedgerRef.current = ledgerId;
+    if (!switched) return;
+    setNewViewKey(newViewToken());
+    setConversationId(null);
+    setMessages([]);
+    loadedConversationRef.current = null;
+    setEditingDraft(null);
+    releaseSentImages();
+  }, [ledgerId, releaseSentImages]);
+
+  // 去记一笔会离开本页（router.push），返回时组件重挂载。恢复上次活跃会话，
   // 让用户回到原对话（消息从服务端重新加载），而不是空白的新对话。
+  // 记录带上所属账本：在别的页面切了账本再回来，不能恢复出旧账本的会话。
+  // 等账本确定后再恢复（首帧账本可能还在加载）。
   const activeRestoredRef = useRef(false);
   useEffect(() => {
-    if (activeRestoredRef.current) return;
+    if (activeRestoredRef.current || !ledgerId) return;
     activeRestoredRef.current = true;
     try {
-      const saved = sessionStorage.getItem(AI_ACTIVE_CONVERSATION_KEY);
-      if (saved) setConversationId(saved);
+      const raw = sessionStorage.getItem(AI_ACTIVE_CONVERSATION_KEY);
+      const saved = raw
+        ? (JSON.parse(raw) as { ledgerId?: string; conversationId?: string })
+        : null;
+      if (saved?.conversationId && saved.ledgerId === ledgerId) {
+        openConversation(saved.conversationId);
+      }
     } catch {
-      // 读取失败按新对话处理
+      // 读取失败（含旧版只存会话 id 的纯字符串）按新对话处理
     }
-  }, []);
-  // 恢复完成后再持久化，避免首帧的 null 覆盖掉已存会话 id。
+    // 只在账本首次确定时恢复一次（activeRestoredRef 把关），openConversation 不必进依赖。
+  }, [ledgerId]);
+  // 恢复完成后再持久化，避免首帧的 null 覆盖掉已存会话。
   useEffect(() => {
-    if (!activeRestoredRef.current) return;
+    if (!activeRestoredRef.current || !ledgerId) return;
     try {
-      if (conversationId) sessionStorage.setItem(AI_ACTIVE_CONVERSATION_KEY, conversationId);
-      else sessionStorage.removeItem(AI_ACTIVE_CONVERSATION_KEY);
+      if (conversationId) {
+        sessionStorage.setItem(
+          AI_ACTIVE_CONVERSATION_KEY,
+          JSON.stringify({ ledgerId, conversationId }),
+        );
+      } else {
+        sessionStorage.removeItem(AI_ACTIVE_CONVERSATION_KEY);
+      }
     } catch {
       // 持久化失败不影响使用
     }
-  }, [conversationId]);
+  }, [conversationId, ledgerId]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -351,22 +518,31 @@ export function AiScreen() {
   }, [messages.length, streaming]);
 
   /** 一条消息被更新（卡片确认/作废/改草稿）后同步本地列表与会话详情缓存。 */
-  const applyUpdatedMessage = (updatedMessage: AiMessage) => {
+  /** 卡片操作发起时所在的会话（操作完成时用户可能已切走，回写必须认这个而不是「当前会话」）。 */
+  const currentTarget = (): ConversationTarget | null =>
+    ledgerId && conversationId ? { ledgerId, conversationId } : null;
+
+  /**
+   * 卡片更新回写：版本号与详情缓存始终记到卡片所属会话（target）——递增版本让该会话进行中的
+   * 收尾弃用旧快照（见 useAiChatRounds.conversationVersion）；只有 target 仍是当前视图才改屏上消息。
+   */
+  const applyUpdatedMessage = (updatedMessage: AiMessage, target: ConversationTarget) => {
+    bumpConversation(target.conversationId);
+    patchAiConversationMessage(queryClient, target.ledgerId, target.conversationId, updatedMessage);
+    if (target.ledgerId !== ledgerIdRef.current || target.conversationId !== viewKeyRef.current) {
+      return;
+    }
     setMessages((prev) =>
       prev.map((message) => (message.id === updatedMessage.id ? updatedMessage : message)),
     );
-    // 同步会话详情缓存，离开再返回时恢复的卡片仍是最新状态。
-    if (conversationId) {
-      patchAiConversationMessage(queryClient, ledgerId!, conversationId, updatedMessage);
-    }
   };
 
-  const invalidateLedgerData = () =>
+  const invalidateLedgerData = (targetLedgerId: string) =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "transactions"] }),
-      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
-      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
-      queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", targetLedgerId, "transactions"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", targetLedgerId, "accounts"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", targetLedgerId, "budget-progress"] }),
+      queryClient.invalidateQueries({ queryKey: ["ledger", targetLedgerId, "stats"] }),
     ]);
 
   /**
@@ -379,12 +555,18 @@ export function AiScreen() {
     message: AiMessage,
     cardIndex: number,
     transactionId: string,
+    target: ConversationTarget,
   ): Promise<{ message: AiMessage; synced: boolean }> => {
     const writeBack = () =>
-      updateCardState.mutateAsync({ messageId: message.id, cardIndex, transactionId });
+      updateCardState.mutateAsync({
+        ledgerId: target.ledgerId,
+        messageId: message.id,
+        cardIndex,
+        transactionId,
+      });
     try {
       const updated = await writeBack().catch(writeBack);
-      applyUpdatedMessage(updated);
+      applyUpdatedMessage(updated, target);
       return { message: updated, synced: true };
     } catch {
       const card = message.cards?.[cardIndex];
@@ -392,16 +574,20 @@ export function AiScreen() {
       const cards = [...message.cards];
       cards[cardIndex] = { ...card, status: "confirmed", transactionId };
       const locked = { ...message, cards };
-      applyUpdatedMessage(locked);
+      applyUpdatedMessage(locked, target);
       return { message: locked, synced: false };
     }
   };
 
-  const createTransactionForCard = async (message: AiMessage, cardIndex: number) => {
+  const createTransactionForCard = async (
+    message: AiMessage,
+    cardIndex: number,
+    target: ConversationTarget,
+  ) => {
     const card = message.cards?.[cardIndex];
     if (!card || card.kind !== "transaction_draft") throw new Error("卡片不存在");
     const transaction = await apiRequest<TransactionDetail>(
-      ledgerApiPath(ledgerId!, "/transactions"),
+      ledgerApiPath(target.ledgerId, "/transactions"),
       {
         method: "POST",
         body: draftToTransactionInput(card.draft),
@@ -409,7 +595,7 @@ export function AiScreen() {
         headers: { "idempotency-key": aiCardIdempotencyKey(message.id, cardIndex) },
       },
     );
-    return settleCard(message, cardIndex, transaction.id);
+    return settleCard(message, cardIndex, transaction.id, target);
   };
 
   /**
@@ -418,7 +604,8 @@ export function AiScreen() {
    */
   const confirmDraftsBatch = async (messageId: string, cardIndexes: number[]) => {
     let current = messagesRef.current.find((message) => message.id === messageId);
-    if (!current || batchBusyId) return;
+    const target = currentTarget();
+    if (!current || !target || batchBusyId) return;
     setBatchBusyId(messageId);
     let succeeded = 0;
     let unsynced = 0;
@@ -429,7 +616,7 @@ export function AiScreen() {
         const card = current.cards?.[cardIndex];
         if (!card || card.kind !== "transaction_draft" || card.status !== "proposed") continue;
         try {
-          const settled = await createTransactionForCard(current, cardIndex);
+          const settled = await createTransactionForCard(current, cardIndex, target);
           current = settled.message;
           succeeded++;
           if (!settled.synced) unsynced++;
@@ -449,18 +636,22 @@ export function AiScreen() {
       if (unsynced > 0) parts.push(`其中 ${unsynced} 笔${CARD_SYNC_FAILED}`);
       showToast({ tone: "error", message: parts.join("，") });
     }
-    if (succeeded > 0) await invalidateLedgerData();
+    if (succeeded > 0) await invalidateLedgerData(target.ledgerId);
   };
 
   const voidDraftsBatch = async (messageId: string, cardIndexes: number[]) => {
-    if (batchBusyId) return;
+    const target = currentTarget();
+    if (batchBusyId || !target) return;
     setBatchBusyId(messageId);
     let voided = 0;
     let firstError: string | null = null;
     try {
       for (const cardIndex of cardIndexes) {
         try {
-          applyUpdatedMessage(await voidCard.mutateAsync({ messageId, cardIndex }));
+          applyUpdatedMessage(
+            await voidCard.mutateAsync({ ledgerId: target.ledgerId, messageId, cardIndex }),
+            target,
+          );
           voided++;
         } catch (error) {
           firstError ??= getApiErrorMessage(error, "作废失败");
@@ -477,37 +668,57 @@ export function AiScreen() {
   };
 
   const saveDrafts = async (messageId: string, drafts: DraftPatch[]) => {
-    if (drafts.length === 0) return;
-    applyUpdatedMessage(await updateDrafts.mutateAsync({ messageId, drafts }));
+    const target = currentTarget();
+    if (drafts.length === 0 || !target) return;
+    applyUpdatedMessage(
+      await updateDrafts.mutateAsync({ ledgerId: target.ledgerId, messageId, drafts }),
+      target,
+    );
   };
 
   const confirmDraft = useMutation({
-    mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
-      createTransactionForCard(message, cardIndex),
-    onSuccess: async ({ synced }) => {
+    mutationFn: ({
+      message,
+      cardIndex,
+      target,
+    }: {
+      message: AiMessage;
+      cardIndex: number;
+      target: ConversationTarget;
+    }) => createTransactionForCard(message, cardIndex, target),
+    onSuccess: async ({ synced }, { target }) => {
       showToast(
         synced
           ? { tone: "success", message: "已入账" }
           : { tone: "error", message: `已入账，但${CARD_SYNC_FAILED}` },
       );
-      await invalidateLedgerData();
+      await invalidateLedgerData(target.ledgerId);
     },
     onSettled: () => setConfirmingKey(null),
   });
 
   const voidDraft = useMutation({
-    mutationFn: ({ message, cardIndex }: { message: AiMessage; cardIndex: number }) =>
-      voidCard.mutateAsync({ messageId: message.id, cardIndex }),
-    onSuccess: (updatedMessage) => {
-      applyUpdatedMessage(updatedMessage);
+    mutationFn: ({
+      message,
+      cardIndex,
+      target,
+    }: {
+      message: AiMessage;
+      cardIndex: number;
+      target: ConversationTarget;
+    }) => voidCard.mutateAsync({ ledgerId: target.ledgerId, messageId: message.id, cardIndex }),
+    // 用发起时的 target（mutation 变量），而不是完成时闭包里的当前会话。
+    onSuccess: (updatedMessage, { target }) => {
+      applyUpdatedMessage(updatedMessage, target);
       showToast({ tone: "success", message: "已作废" });
     },
     // 错误提示交给全局 onError 统一处理（内层 voidCard 已 suppress），避免重复。
     onSettled: () => setVoidingKey(null),
   });
 
-  const abortRef = useRef<AbortController | null>(null);
-  const handleStop = () => abortRef.current?.abort();
+  const handleStop = () => {
+    if (streaming) void rounds.stop(streaming.requestId);
+  };
 
   // 语音输入：录音开始时记住已有文本，转写结果实时拼在其后（中文无需分隔符）。
   const speechBaseRef = useRef("");
@@ -594,16 +805,25 @@ export function AiScreen() {
   const handleSend = (raw?: string) => {
     const content = (raw ?? input).trim();
     const images = raw === undefined ? pendingImages : [];
-    if ((!content && images.length === 0) || sending || compressing > 0 || !ledgerId) return;
+    if (
+      (!content && images.length === 0) ||
+      sending ||
+      !conversationReady ||
+      compressing > 0 ||
+      !ledgerId
+    ) {
+      return;
+    }
     if (speech.listening) speech.cancel();
     setInput("");
     // 预览 URL 交给本地消息继续展示，登记后由 releaseSentImages 统一回收。
     sentImageUrlsRef.current.push(...images.map((image) => image.url));
     setPendingImages([]);
+    const localMessageId = `local-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
       {
-        id: `local-${Date.now()}`,
+        id: localMessageId,
         role: "user",
         content,
         cards: null,
@@ -611,88 +831,34 @@ export function AiScreen() {
         createdAt: new Date().toISOString(),
       },
     ]);
-    setStreaming({ content: "", cards: [], withImages: images.length > 0 });
-    const abort = new AbortController();
-    abortRef.current = abort;
-    void (async () => {
-      try {
-        const result = await streamAiChat(
-          ledgerId,
-          {
-            ...(conversationId ? { conversationId } : {}),
-            content,
-            images: images.map((image) => image.blob),
-          },
-          {
-            onDelta: (text) =>
-              setStreaming((prev) => ({
-                content: (prev?.content ?? "") + text,
-                cards: prev?.cards ?? [],
-                withImages: prev?.withImages ?? false,
-              })),
-            onCard: (card) =>
-              setStreaming((prev) => ({
-                content: prev?.content ?? "",
-                cards: [...(prev?.cards ?? []), card],
-                withImages: prev?.withImages ?? false,
-              })),
-          },
-          abort.signal,
-        );
-        setMessages((prev) => [...prev, result.message]);
-        if (!conversationId) {
-          // 先记录 loadedRef 再设 id：随后的详情请求返回时不整体覆盖本地消息（防「刷新感」）。
-          loadedConversationRef.current = result.conversationId;
-          setConversationId(result.conversationId);
-        }
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.aiConversations(ledgerId),
-        });
-      } catch (error) {
-        if (abort.signal.aborted) {
-          // 主动停止：服务端会把已生成部分照常持久化，稍等后从服务端恢复该会话，
-          // 使卡片拿到真实 messageId 可以确认；首条消息即停止时从列表取最新会话。
-          setTimeout(() => {
-            loadedConversationRef.current = null;
-            if (conversationId) {
-              void queryClient.invalidateQueries({
-                queryKey: queryKeys.aiConversation(ledgerId, conversationId),
-              });
-            } else {
-              void (async () => {
-                try {
-                  const list = await apiRequest<AiConversationSummary[]>(
-                    aiConversationsPath(ledgerId),
-                  );
-                  if (list[0]) setConversationId(list[0].id);
-                } catch {
-                  // 恢复失败不打扰用户，重进会话可见
-                }
-              })();
-            }
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.aiConversations(ledgerId),
-            });
-          }, 400);
-        } else {
-          showToast({
-            tone: "error",
-            message: error instanceof Error ? error.message : "发送失败，请重试",
-          });
-        }
-      } finally {
-        abortRef.current = null;
-        setStreaming(null);
-      }
-    })();
+    rounds.send({
+      viewKey,
+      conversationId,
+      content,
+      images: images.map((image) => image.blob),
+      localMessageId,
+    });
   };
 
   // 正在编辑的草稿：单卡「编辑」与批量面板点行共用同一个全屏抽屉，不切路由。
-  const [editingDraft, setEditingDraft] = useState<{ messageId: string; cardIndex: number } | null>(
-    null,
-  );
-  const handleEdit = (messageId: string, cardIndex: number) =>
-    setEditingDraft({ messageId, cardIndex });
+  // target：打开抽屉时所在的会话，保存后回写卡片认它（见 applyUpdatedMessage）。
+  // message：打开时的消息快照——保存成功时用户可能已切走，当前列表里找不到原消息也要能回写。
+  // token：每次打开递增，保存回调只关闭「自己那次」打开的抽屉（迟到的回调不能关掉后来打开的）。
+  const [editingDraft, setEditingDraft] = useState<{
+    messageId: string;
+    cardIndex: number;
+    target: ConversationTarget;
+    message: AiMessage;
+    token: number;
+  } | null>(null);
+  const editTokenRef = useRef(0);
+  const handleEdit = (messageId: string, cardIndex: number) => {
+    const target = currentTarget();
+    const message = messagesRef.current.find((item) => item.id === messageId);
+    if (!target || !message) return;
+    editTokenRef.current += 1;
+    setEditingDraft({ messageId, cardIndex, target, message, token: editTokenRef.current });
+  };
   const editingCard = (() => {
     if (!editingDraft) return null;
     const card = messages.find((message) => message.id === editingDraft.messageId)?.cards?.[
@@ -702,8 +868,12 @@ export function AiScreen() {
   })();
 
   const startNewConversation = () => {
+    setNewViewKey(newViewToken());
     setConversationId(null);
     setMessages([]);
+    // 清空后必须重置：否则再从历史打开刚才那个会话时会被当成「已加载」而跳过，显示空白。
+    loadedConversationRef.current = null;
+    setEditingDraft(null);
     releaseSentImages();
     setHistoryOpen(false);
   };
@@ -713,13 +883,24 @@ export function AiScreen() {
   // 会话（消息就在屏上），此时后台详情请求 pending 不应再盖骨架；从历史切到未加载的会话才显示。
   const loadingConversation =
     Boolean(conversationId) &&
-    conversationQuery.isPending &&
+    conversationLoad?.id === conversationId &&
+    conversationLoad.status === "loading" &&
     loadedConversationRef.current !== conversationId;
+  // 已有会话在首次加载完成前不能发送：首次加载会整体替换消息列表，期间发出的本地消息会被冲掉。
+  // 用「已加载」而不是 isPending 判断——加载失败时同样不能发送（可新建对话或重新打开）。
+  const conversationReady = !conversationId || loadedConversationRef.current === conversationId;
+  // 首次加载失败：给出重试入口（否则只能新建对话或切走再切回）。
+  const conversationLoadFailed =
+    Boolean(conversationId) &&
+    !conversationReady &&
+    conversationLoad?.id === conversationId &&
+    conversationLoad.status === "error";
 
   // 输入栏按钮：生成中只显示停止；录音中显示「录音」按钮（点它暂停录音）；有内容则同时显示发送
   // （点发送会先停录音再发）。故录音且有内容时录音与发送并存，用户可二选一。
   const hasInput = input.trim().length > 0 || pendingImages.length > 0;
-  const showStop = sending;
+  // 同步结果阶段（服务端已出结论、正在拉详情）没有可停止的生成：不显示停止，发送仍禁用。
+  const showStop = sending && streaming?.phase !== "syncing";
   const showMic = !sending && speech.supported && (speech.listening || !hasInput);
   const showSend = !sending && (hasInput || !speech.supported);
 
@@ -730,9 +911,7 @@ export function AiScreen() {
     () => new Map((categoriesQuery.data ?? []).map((category) => [category.id, category.icon])),
     [categoriesQuery.data],
   );
-  const conversationTitle = conversationId
-    ? (conversationQuery.data?.conversation.title ?? null)
-    : null;
+  const conversationTitle = conversationId ? (conversationTitles[conversationId] ?? null) : null;
 
   const fillStarter = (text: string) => {
     setInput(text);
@@ -796,13 +975,17 @@ export function AiScreen() {
             confirming={confirmingKey === key && confirmDraft.isPending}
             key={key}
             onConfirm={() => {
+              const target = currentTarget();
+              if (!target) return;
               setConfirmingKey(key);
-              confirmDraft.mutate({ message, cardIndex });
+              confirmDraft.mutate({ message, cardIndex, target });
             }}
             onEdit={() => handleEdit(message.id, cardIndex)}
             onVoid={() => {
+              const target = currentTarget();
+              if (!target) return;
               setVoidingKey(key);
-              voidDraft.mutate({ message, cardIndex });
+              voidDraft.mutate({ message, cardIndex, target });
             }}
             voiding={voidingKey === key && voidDraft.isPending}
           />
@@ -887,7 +1070,18 @@ export function AiScreen() {
             </div>
           ) : loadingConversation ? (
             <LoadingState rows={3} title="加载会话" />
-          ) : messages.length === 0 ? (
+          ) : conversationLoadFailed ? (
+            <EmptyState
+              action={
+                <Button onClick={() => setLoadAttempt((n) => n + 1)} variant="primary">
+                  重试
+                </Button>
+              }
+              message="网络不稳定或会话已不可用，可以重试，或新建对话。"
+              title="会话加载失败"
+            />
+          ) : messages.length === 0 && !streaming ? (
+            // 有进行中的轮次时（例如会话刚建、首次加载拿到空详情）不显示欢迎页，让轮次进度照常可见。
             <div className="ai-empty">
               <div className="ai-empty__intro">
                 <span className="ai-empty__badge">
@@ -1013,11 +1207,17 @@ export function AiScreen() {
                             <AiMarkdown content={streaming.content} />
                           </div>
                         ) : null}
-                        {holdDrafts
-                          ? typing(`已识别 ${draftCount} 笔，正在整理`)
-                          : !showContent && streaming.cards.length === 0
-                            ? typing()
-                            : null}
+                        {streaming.phase === "syncing"
+                          ? typing("正在同步结果…")
+                          : streaming.phase === "stopping"
+                            ? typing("正在停止…")
+                            : streaming.phase === "recovering"
+                              ? typing("连接中断，AI 仍在后台处理，完成后自动显示")
+                              : holdDrafts
+                                ? typing(`已识别 ${draftCount} 笔，正在整理`)
+                                : !showContent && streaming.cards.length === 0
+                                  ? typing()
+                                  : null}
                         {renderCards(visibleCards, null)}
                       </div>
                     );
@@ -1130,7 +1330,7 @@ export function AiScreen() {
                 <button
                   aria-label="发送"
                   className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
-                  disabled={!hasInput || compressing > 0}
+                  disabled={!hasInput || !conversationReady || compressing > 0}
                   onClick={() => handleSend()}
                   title="发送"
                   type="button"
@@ -1152,11 +1352,13 @@ export function AiScreen() {
         onClose={() => setEditingDraft(null)}
         onSaved={async (transaction) => {
           if (!editingDraft) return;
-          const message = messagesRef.current.find((item) => item.id === editingDraft.messageId);
-          setEditingDraft(null);
-          if (!message) return;
+          const { cardIndex, target, message: snapshot, token } = editingDraft;
+          // 仍在原会话就用最新的消息，否则用打开时的快照（回写按 target 记到所属会话）。
+          const message =
+            messagesRef.current.find((item) => item.id === editingDraft.messageId) ?? snapshot;
+          setEditingDraft((current) => (current?.token === token ? null : current));
           // 「已记一笔」与缓存刷新由表单负责，这里只回写卡片。
-          const { synced } = await settleCard(message, editingDraft.cardIndex, transaction.id);
+          const { synced } = await settleCard(message, cardIndex, transaction.id, target);
           if (!synced) showToast({ tone: "error", message: CARD_SYNC_FAILED });
         }}
         open={editingDraft !== null}
@@ -1188,7 +1390,7 @@ export function AiScreen() {
                       <button
                         className="ai-history__open"
                         onClick={() => {
-                          setConversationId(conversation.id);
+                          if (conversation.id !== conversationId) openConversation(conversation.id);
                           setHistoryOpen(false);
                         }}
                         type="button"
