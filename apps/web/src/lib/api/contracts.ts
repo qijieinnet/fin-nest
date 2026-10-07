@@ -1116,6 +1116,8 @@ export type AiDraftFields = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;
   occurredOn: string;
+  /** 交易时分 HH:mm：识图时图上有时间才有，仅展示（交易本身只存日期）。 */
+  occurredTime?: string;
   /** 新卡片会写入；旧历史卡片缺省时按 CNY 展示。 */
   currency?: string;
   categoryId?: string;
@@ -1269,6 +1271,7 @@ export type AiDraftInput = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;
   occurredOn: string;
+  occurredTime?: string;
   categoryId?: string;
   subcategoryId?: string;
   personId?: string;

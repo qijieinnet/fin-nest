@@ -24,3 +24,17 @@ export function isValidMonthKey(value: string): boolean {
 export function isTrendRequested(value: unknown): value is true {
   return value === true;
 }
+
+/**
+ * 规整时分为 HH:mm：接受「9:05」「09:05」「09:05:33」；非法或缺省返回 undefined。
+ * 模型从账单图片抄出来的时间格式不一，看不懂就当没有，不因时间写错让整笔草稿失败。
+ */
+export function normalizeTimeKey(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+  if (!match) return undefined;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return undefined;
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}

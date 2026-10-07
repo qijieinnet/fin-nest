@@ -4,9 +4,17 @@ import { AiService } from "../dist/modules/ai/ai.service.js";
 import { yuanToMicros } from "../dist/modules/ai/ai-money.js";
 import { cleanBillNote } from "../dist/modules/ai/ai-bill-note.js";
 import {
+  accountTailOf,
+  matchAccountByTail,
+  normalizeAccountTail,
+  pickSubAccountForTail,
+  selectedAccountTail,
+} from "../dist/modules/ai/ai-account-tail.js";
+import {
   isTrendRequested,
   isValidDateKey,
   isValidMonthKey,
+  normalizeTimeKey,
 } from "../dist/modules/ai/ai-validation.js";
 import {
   LlmClient,
@@ -55,10 +63,169 @@ test("bill image notes drop payment-channel words and unidentifiable truncated n
   assert.equal(cleanBillNote("微信支付-湛江"), "湛江");
 });
 
+test("AI account tail is read from account names and model input", () => {
+  assert.equal(accountTailOf("招行信用卡(8899)"), "8899");
+  assert.equal(accountTailOf("建行 6217000012345678"), "5678");
+  assert.equal(accountTailOf("工行 尾号1234"), "1234");
+  assert.equal(accountTailOf("余额宝"), undefined);
+  assert.equal(accountTailOf("招行 123"), undefined);
+  assert.equal(normalizeAccountTail("**8899"), "8899");
+  assert.equal(normalizeAccountTail("尾号 8899"), "8899");
+  assert.equal(normalizeAccountTail("88"), undefined);
+});
+
+test("AI account tail match prefers unique sub-account, then account", () => {
+  const money = new Set(["savings", "credit", "invest"]);
+  const accounts = [
+    { id: "a1", name: "招行信用卡(8899)", type: "credit", subAccounts: [{ id: "s1", name: "默认" }] },
+    { id: "a2", name: "招行信用卡(1234)", type: "credit", subAccounts: [] },
+    {
+      id: "a3",
+      name: "工商银行",
+      type: "savings",
+      subAccounts: [
+        { id: "s3", name: "储蓄卡 5678" },
+        { id: "s4", name: "储蓄卡 0001" },
+      ],
+    },
+    { id: "a4", name: "借给小王(0001)", type: "receivable", subAccounts: [] },
+    { id: "a5", name: "中行(4321)", type: "savings", subAccounts: [] },
+    { id: "a6", name: "农行(4321)", type: "savings", subAccounts: [] },
+  ];
+  assert.deepEqual(matchAccountByTail(accounts, "8899", money), { accountId: "a1" });
+  assert.deepEqual(matchAccountByTail(accounts, "5678", money), {
+    accountId: "a3",
+    subAccountId: "s3",
+  });
+  // 非资金账户不参与匹配，只剩子账户那一个。
+  assert.deepEqual(matchAccountByTail(accounts, "0001", money), {
+    accountId: "a3",
+    subAccountId: "s4",
+  });
+  assert.equal(matchAccountByTail(accounts, "4321", money), undefined);
+  assert.equal(matchAccountByTail(accounts, "9999", money), undefined);
+  assert.equal(selectedAccountTail(accounts, "a2", undefined), "1234");
+  assert.equal(selectedAccountTail(accounts, "a3", "s3"), "5678");
+  assert.equal(selectedAccountTail(accounts, "a3", undefined), undefined);
+});
+
+test("AI account tail picks a sub-account that does not conflict with the tail", () => {
+  const account = {
+    id: "a",
+    name: "招行8899",
+    type: "credit",
+    subAccounts: [
+      { id: "s1", name: "另一张卡1234", isDefault: true },
+      { id: "s2", name: "日常", isDefault: false },
+    ],
+  };
+  assert.deepEqual(pickSubAccountForTail(account, "8899", "s1"), { ok: true, subAccountId: "s2" });
+  assert.deepEqual(pickSubAccountForTail(account, "8899", "s2"), { ok: true, subAccountId: "s2" });
+  assert.deepEqual(
+    pickSubAccountForTail({ ...account, subAccounts: [account.subAccounts[0]] }, "8899", undefined),
+    { ok: false },
+  );
+  assert.deepEqual(pickSubAccountForTail({ ...account, subAccounts: [] }, "8899", undefined), {
+    ok: true,
+  });
+});
+
+test("AI draft tool never binds a draft to an account whose tail conflicts", () => {
+  const service = Object.create(AiService.prototype);
+  const build = (args, context) => {
+    const tailed = service.applyAccountTails(args, context);
+    if (!tailed.ok) return tailed;
+    return service.buildDraft(
+      { ...tailed.args, micros: 1000000n, occurredOn: "2026-10-07" },
+      context,
+    );
+  };
+  const base = { categories: [], people: [], personRequired: false, currency: "CNY" };
+  const only8899 = {
+    ...base,
+    acctRequired: true,
+    accounts: [
+      {
+        id: "a",
+        name: "招行8899",
+        type: "credit",
+        subAccounts: [{ id: "s", name: "默认", isDefault: true }],
+      },
+    ],
+  };
+  // 图上尾号 9999 对不上：即使记账设置要求账户，也不自动补成 8899，留空让卡片显示缺账户。
+  const mismatched = build({ type: "expense", accountId: "a", accountTail: "9999" }, only8899);
+  assert.equal(mismatched.ok, true);
+  assert.equal(mismatched.draft.accountId, undefined);
+  const card = service.draftCard("proposed", mismatched.draft, null, null, true);
+  assert.equal(card.confirmationBlockedReason, "未匹配到分类和账户，请先编辑补充");
+  // 模型按提示词对不上就不传 accountId：同样不能被默认账户补上。
+  const omitted = build({ type: "expense", accountTail: "9999" }, only8899);
+  assert.equal(omitted.draft.accountId, undefined);
+  // 模型挑的账户名称没写尾号：保留模型的选择。
+  const untailed = build(
+    { type: "expense", accountId: "b", accountTail: "9999" },
+    {
+      ...only8899,
+      accounts: [
+        ...only8899.accounts,
+        { id: "b", name: "工商银行", type: "savings", subAccounts: [] },
+      ],
+    },
+  );
+  assert.equal(untailed.draft.accountId, "b");
+  // 模型参数里混进 noDefaultAccount 也不生效。
+  const normal = build({ type: "expense", noDefaultAccount: true }, only8899);
+  assert.equal(normal.draft.accountId, "a");
+
+  // 父账户尾号命中，但模型选的（默认）子账户名上是另一个尾号：换到不冲突的子账户。
+  const mixedSubs = {
+    ...base,
+    acctRequired: false,
+    accounts: [
+      {
+        id: "a",
+        name: "招行8899",
+        type: "credit",
+        subAccounts: [
+          { id: "s1", name: "另一张卡1234", isDefault: true },
+          { id: "s2", name: "日常", isDefault: false },
+        ],
+      },
+    ],
+  };
+  const picked = build(
+    { type: "expense", accountId: "a", subAccountId: "s1", accountTail: "8899" },
+    mixedSubs,
+  );
+  assert.equal(picked.draft.subAccountId, "s2");
+  // 子账户全是别的尾号：不落到 1234 上，清空账户。
+  const onlyConflicting = {
+    ...mixedSubs,
+    accounts: [{ ...mixedSubs.accounts[0], subAccounts: [mixedSubs.accounts[0].subAccounts[0]] }],
+  };
+  const cleared = build({ type: "expense", accountId: "a", accountTail: "8899" }, onlyConflicting);
+  assert.equal(cleared.draft.accountId, undefined);
+  // 转账一端对不上：直接报错让模型跳过。
+  const transfer = build(
+    { type: "transfer", fromAccountId: "a", toAccountId: "a", fromAccountTail: "9999" },
+    only8899,
+  );
+  assert.equal(transfer.ok, false);
+});
+
 test("AI date validation rejects normalized calendar dates", () => {
   assert.equal(isValidDateKey("2024-02-29"), true);
   assert.equal(isValidDateKey("2026-02-29"), false);
   assert.equal(isValidDateKey("2026-02-30"), false);
+});
+
+test("AI draft time is normalized to HH:mm or dropped", () => {
+  assert.equal(normalizeTimeKey("9:05"), "09:05");
+  assert.equal(normalizeTimeKey("21:30:59"), "21:30");
+  assert.equal(normalizeTimeKey("24:00"), undefined);
+  assert.equal(normalizeTimeKey("下午3点"), undefined);
+  assert.equal(normalizeTimeKey(undefined), undefined);
 });
 
 test("AI month validation requires a real calendar month", () => {

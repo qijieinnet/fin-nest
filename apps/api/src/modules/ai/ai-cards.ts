@@ -14,6 +14,8 @@ export type AiDraftFields = {
   type: "expense" | "income" | "transfer";
   grossAmountMicros: string;
   occurredOn: string;
+  /** 交易时分 HH:mm：仅识图时图上有时间才写，用于待确认列表展示与核对；交易本身只存日期。 */
+  occurredTime?: string;
   currency?: string;
   categoryId?: string;
   categoryName?: string;

@@ -31,6 +31,11 @@ export class AiDraftInputDto {
   @IsString()
   occurredOn!: string;
 
+  @ApiPropertyOptional({ description: "HH:mm，识图草稿的交易时分（仅展示）" })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  occurredTime?: string;
+
   @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() subcategoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() personId?: string;

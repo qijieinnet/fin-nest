@@ -125,7 +125,7 @@ function draftStatusNote(card: Extract<AiCard, { kind: "transaction_draft" }>): 
 function draftFields(draft: AiDraftFields, ctx: CardRenderContext): string[] {
   const fields = [
     `**金额**\n${formatMicros(draft.grossAmountMicros, ctx.decimalPlaces, draft.currency ?? ctx.currency)}`,
-    `**日期**\n${draft.occurredOn}`,
+    `**日期**\n${draft.occurredOn}${draft.occurredTime ? ` ${draft.occurredTime}` : ""}`,
   ];
 
   if (draft.type === "transfer") {

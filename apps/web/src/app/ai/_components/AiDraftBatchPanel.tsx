@@ -41,6 +41,7 @@ export function draftToInput(draft: AiDraftFields): AiDraftInput {
     type: draft.type,
     grossAmountMicros: draft.grossAmountMicros,
     occurredOn: draft.occurredOn,
+    ...(draft.occurredTime ? { occurredTime: draft.occurredTime } : {}),
     ...(draft.categoryId ? { categoryId: draft.categoryId } : {}),
     ...(draft.subcategoryId ? { subcategoryId: draft.subcategoryId } : {}),
     ...(draft.personId ? { personId: draft.personId } : {}),
@@ -82,9 +83,24 @@ function isSelectable(card: DraftCard): boolean {
   return card.status === "proposed";
 }
 
-/** 默认勾选：能直接确认（不缺分类）且不疑似重复的待确认草稿。 */
+/** 默认勾选：能直接确认（不缺分类/账户）且不疑似重复的待确认草稿。 */
 function isDefaultSelected(card: DraftCard): boolean {
   return isSelectable(card) && !card.confirmationBlockedReason && !card.possibleDuplicate;
+}
+
+/** 不可确认的原因标签：缺分类（收支没分类）/ 缺账户（卡尾号对不上，服务端没自动补账户）。 */
+function blockedTag(card: DraftCard): string {
+  const reason = card.confirmationBlockedReason ?? "";
+  const lacksCategory = card.draft.type !== "transfer" && !card.draft.categoryId;
+  const lacksAccount = reason.includes("账户");
+  if (lacksCategory && lacksAccount) return "缺分类和账户";
+  return lacksAccount ? "缺账户" : "缺分类";
+}
+
+/** 底部按钮的汇总说法：都缺同一样就点名，混着缺就笼统说「信息不全」。 */
+function blockedText(entries: DraftEntry[]): string {
+  const tags = new Set(entries.map((entry) => blockedTag(entry.card)));
+  return tags.size === 1 ? [...tags][0]! : "信息不全";
 }
 
 function categoryText(draft: AiDraftFields): string | undefined {
@@ -137,7 +153,7 @@ function selectionTotals(entries: DraftEntry[]) {
  * 多笔草稿的批量面板（识别账单图片 / 一句话记多笔）。
  * - 左侧圆点勾选，点行其余部分打开全屏编辑抽屉（复用记一笔表单，不切路由），
  *   不在聊天流里展开大表单；
- * - 行内只放小标签（缺分类 / 疑似重复 / 已取整），细节进编辑面板看；
+ * - 行内只放小标签（缺分类 / 缺账户 / 疑似重复 / 已取整），细节进编辑面板看；
  * - 底部只有一个主操作「确认入账 N 笔」，批量设置与作废收进「⋯」菜单；
  * - 全部处理完后折叠成一行摘要，历史消息里不再铺一长串灰色行。
  * 每笔仍按各自的幂等键单独入账（由外层编排），某一笔失败不影响其它笔，重试也不会重复入账。
@@ -177,7 +193,7 @@ export function AiDraftBatchPanel({
   const [settledExpanded, setSettledExpanded] = useState(false);
 
   // 新流入的草稿按默认规则补勾；已确认/已作废的从选中里剔除；
-  // 编辑后从「缺分类」变成可确认的，也补勾上（用户刚修好它，多半就是要记）。
+  // 编辑后从「缺分类/缺账户」变成可确认的，也补勾上（用户刚修好它，多半就是要记）。
   const entryKey = entries
     .map((e) => `${e.cardIndex}:${e.card.status}:${e.card.confirmationBlockedReason ? 1 : 0}`)
     .join(",");
@@ -339,7 +355,7 @@ export function AiDraftBatchPanel({
             onClick={() => onConfirm(selectedEntries.map((entry) => entry.cardIndex))}
           >
             {blockedSelected.length > 0
-              ? `${blockedSelected.length} 笔缺分类，点开补充`
+              ? `${blockedSelected.length} 笔${blockedText(blockedSelected)}，点开补充`
               : selectedEntries.length > 0
                 ? `确认入账 ${selectedEntries.length} 笔`
                 : "勾选要入账的草稿"}
@@ -379,11 +395,16 @@ function DraftRowItem({
   const proposed = card.status === "proposed";
   const voided = card.status === "superseded";
   const blocked = proposed && Boolean(card.confirmationBlockedReason);
+  const category = categoryText(draft);
+  // 没备注时标题用分类顶上（没分类再用记账类型），副行就不再重复分类。
+  const title = draft.note || category || TYPE_LABEL[draft.type] || draft.type;
   // 人员紧跟日期：行宽不够时省略号先吃掉末尾的账户，人员始终看得到。
   const detail = [
-    shortDate(draft.occurredOn),
+    draft.occurredTime
+      ? `${shortDate(draft.occurredOn)} ${draft.occurredTime}`
+      : shortDate(draft.occurredOn),
     draft.personName,
-    categoryText(draft) ?? (draft.type === "transfer" ? undefined : "未分类"),
+    draft.note ? (category ?? (draft.type === "transfer" ? undefined : "未分类")) : undefined,
     accountText(draft),
   ]
     .filter(Boolean)
@@ -420,9 +441,7 @@ function DraftRowItem({
         type="button"
       >
         <span className="ai-batch__row-line">
-          <span className="ai-batch__row-note">
-            {draft.note || TYPE_LABEL[draft.type] || draft.type}
-          </span>
+          <span className="ai-batch__row-note">{title}</span>
           <span className="ai-batch__row-amount" style={{ color: TYPE_COLOR[draft.type] }}>
             {draft.type === "expense" ? "-" : draft.type === "income" ? "+" : ""}
             {amount(draft.grossAmountMicros, currency)}
@@ -432,7 +451,7 @@ function DraftRowItem({
           <span className="ai-batch__row-detail">{detail}</span>
           {proposed ? (
             <span className="ai-batch__tags">
-              {blocked ? <span className="ai-tag ai-tag--danger">缺分类</span> : null}
+              {blocked ? <span className="ai-tag ai-tag--danger">{blockedTag(card)}</span> : null}
               {card.possibleDuplicate ? (
                 <span className="ai-tag ai-tag--warn">疑似重复</span>
               ) : null}

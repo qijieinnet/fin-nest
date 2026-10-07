@@ -142,7 +142,9 @@ export function TransactionDraftCard({
     draft.categoryName ??
     (draft.type === "transfer" ? "转账" : (draft.note ?? TYPE_LABEL[draft.type] ?? draft.type));
   const meta = [
-    shortDate(draft.occurredOn),
+    draft.occurredTime
+      ? `${shortDate(draft.occurredOn)} ${draft.occurredTime}`
+      : shortDate(draft.occurredOn),
     draft.type === "transfer"
       ? accountText
       : draft.subcategoryName && draft.categoryName
