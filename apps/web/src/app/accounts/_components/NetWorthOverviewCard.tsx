@@ -102,21 +102,13 @@ export function NetWorthOverviewCard({
 
   return (
     <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">净资产</p>
-          <p className="mt-1.5 flex items-baseline gap-0.5">
-            <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
-            <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-              {formatMicros(netMicros, { currencySymbol: "", decimalPlaces })}
-            </span>
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-          <TrendRangeSelect onChange={setRange} value={range} />
+      {/* 金额单独占一行：六位数净资产在 375 宽下与右侧范围选择 / 涨幅挤在一行会重叠。 */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex min-w-0 items-baseline gap-2">
+          <span className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">净资产</span>
           {hasTrend ? (
-            <p
-              className="text-[12.5px] font-semibold [font-variant-numeric:tabular-nums]"
+            <span
+              className="truncate text-[12.5px] font-semibold [font-variant-numeric:tabular-nums]"
               style={{ color: deltaColor }}
             >
               {delta === 0n ? "" : delta > 0n ? "+" : "−"}
@@ -125,10 +117,19 @@ export function NetWorthOverviewCard({
                 decimalPlaces,
                 trimTrailingZeros: true,
               })}
-            </p>
+            </span>
           ) : null}
+        </p>
+        <div className="shrink-0">
+          <TrendRangeSelect onChange={setRange} value={range} />
         </div>
       </div>
+      <p className="mt-1.5 flex items-baseline gap-0.5">
+        <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
+        <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
+          {formatMicros(netMicros, { currencySymbol: "", decimalPlaces })}
+        </span>
+      </p>
 
       <div className="mt-3.5 flex gap-7">
         <div>

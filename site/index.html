@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fin Nest · 自部署的家庭记账</title>
+<meta name="description" content="自部署的个人 / 家庭记账应用：AI Agent 一句话记账、花钱前先算账；手机、电脑、飞书都能用，数据留在你自己的服务器。">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Fin Nest · 账记在自己家里，AI 帮你算清楚">
+<meta property="og:description" content="自部署的个人 / 家庭记账应用：一句话记账、花钱前先算账，数据留在你自己的服务器。">
+<meta property="og:url" content="https://qijieinnet.github.io/fin-nest/">
+<meta property="og:image" content="https://qijieinnet.github.io/fin-nest/assets/banner.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* 布局：左文右机的开场 → 两段 AI 场景（文字与手机交替）→ 横向滚动的手机画廊 → 桌面端切换 → 功能清单 → 部署命令。
+   配色取自应用本身：暖灰底、深墨绿文字、iOS 蓝强调、Logo 的紫→蓝→青渐变只用在品牌处。 */
+:root {
+  --bg: #ededec;
+  --surface: #f8f8f7;
+  --ink: #1d2523;
+  --ink-2: #4f5b57;
+  --muted: #8a9690;
+  --line: rgba(29, 37, 35, 0.1);
+  --tint: #0a84ff;
+  --tint-soft: rgba(10, 132, 255, 0.12);
+  --expense: #34a853;
+  --income: #e5484d;
+  --code-bg: #1d2523;
+  --code-fg: #e8ecea;
+  --phone-edge: #1d2523;
+  --brand: linear-gradient(120deg, #7259d9 0%, #4b68d5 52%, #2698c1 100%);
+  --f-display: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121615; --surface: #1b2120; --ink: #e9eeec; --ink-2: #b3bfbb; --muted: #7f8c87;
+    --line: rgba(233, 238, 236, 0.12); --tint: #3d9bff; --tint-soft: rgba(61, 155, 255, 0.16);
+    --code-bg: #0b0e0d; --code-fg: #e8ecea; --phone-edge: #000; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121615; --surface: #1b2120; --ink: #e9eeec; --ink-2: #b3bfbb; --muted: #7f8c87;
+  --line: rgba(233, 238, 236, 0.12); --tint: #3d9bff; --tint-soft: rgba(61, 155, 255, 0.16);
+  --code-bg: #0b0e0d; --code-fg: #e8ecea; --phone-edge: #000; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-inline: 24px; }
+@media (max-width: 520px) { .wrap { padding-inline: 16px; } }
+a { color: var(--tint); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--tint); outline-offset: 3px; border-radius: 8px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+p { margin: 0; }
+
+/* 顶栏 */
+.top { display: flex; align-items: center; justify-content: space-between; padding-block: 22px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--ink); text-decoration: none; }
+.brand img { width: 34px; height: 34px; border-radius: 9px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.gh { font-size: 14px; font-weight: 500; color: var(--ink); text-decoration: none; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+
+/* 开场 */
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; align-items: center; padding-block: 40px 72px; }
+.eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0.08em; color: var(--muted); }
+.hero h1 { font-size: clamp(38px, 5.6vw, 66px); font-weight: 900; line-height: 1.12; margin-top: 14px; }
+.hero h1 .grad { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { margin-top: 22px; font-size: 18px; color: var(--ink-2); max-width: 32em; }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; padding: 12px 22px; border-radius: 999px; text-decoration: none; }
+.btn.primary { background: var(--tint); color: #fff; }
+.btn.ghost { color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 30px; font-size: 13.5px; color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 700; font-family: var(--f-mono); }
+
+/* 手机外框 */
+.phone { width: 100%; max-width: 300px; aspect-ratio: 390 / 844; border-radius: 44px; padding: 9px; background: var(--phone-edge); box-shadow: 0 30px 60px -20px rgba(29,37,35,.35), 0 12px 24px -12px rgba(29,37,35,.25); }
+.phone img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; border-radius: 36px; background: #ededec; }
+.stage { position: relative; display: flex; justify-content: center; min-height: 560px; }
+.stage .back { position: absolute; left: 4%; top: 46px; max-width: 250px; transform: rotate(-5deg); opacity: .95; }
+.stage .front { position: relative; margin-left: 30%; max-width: 290px; }
+@media (max-width: 860px) {
+  .hero { grid-template-columns: 1fr; padding-block: 16px 48px; }
+  .stage { min-height: 0; }
+  .stage .back { display: none; }
+  .stage .front { margin-left: 0; max-width: 270px; }
+}
+
+/* 场景段落 */
+section.scene { padding-block: 64px; border-top: 1px solid var(--line); }
+.scene-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.scene-grid.flip > .copy { order: 2; }
+.scene h2 { font-size: clamp(28px, 3.6vw, 42px); font-weight: 900; line-height: 1.2; }
+.scene .kicker { font-size: 13px; font-weight: 700; color: var(--tint); letter-spacing: .06em; margin-bottom: 12px; }
+.scene .copy > p { margin-top: 18px; color: var(--ink-2); max-width: 30em; }
+.scene .phone { max-width: 290px; margin: 0 auto; }
+@media (max-width: 860px) {
+  .scene-grid { grid-template-columns: 1fr; gap: 36px; }
+  .scene-grid.flip > .copy { order: 0; }
+}
+
+/* 一句话记账：三步 */
+.steps { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 14px; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; align-items: start; counter-increment: s; }
+.steps li::before { content: counter(s); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 14px var(--f-mono); color: var(--tint); background: var(--tint-soft); }
+.steps strong { display: block; font-size: 16px; }
+.steps span { color: var(--ink-2); font-size: 15px; }
+.bubble { display: inline-block; margin-top: 6px; padding: 8px 14px; border-radius: 18px 18px 4px 18px; background: var(--tint); color: #fff; font-size: 14.5px; }
+
+/* 决策清单 */
+.ledger { margin-top: 26px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.ledger div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 13px 18px; font-size: 15px; }
+.ledger div + div { border-top: 1px solid var(--line); }
+.ledger dt { color: var(--ink-2); }
+.ledger dd { margin: 0; font-family: var(--f-mono); font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.ledger-cap { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.redline { margin-top: 20px; font-size: 14px; color: var(--ink-2); padding-left: 14px; border-left: 3px solid var(--income); }
+
+/* 飞书：两台手机并排，后一台略微下沉 */
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; max-width: 520px; margin: 0 auto; width: 100%; }
+.duo .phone { max-width: none; border-radius: 38px; padding: 8px; }
+.duo .phone img { border-radius: 31px; }
+.duo .phone + .phone { margin-top: 48px; }
+@media (max-width: 520px) { .duo { gap: 12px; } .duo .phone { border-radius: 28px; padding: 6px; } .duo .phone img { border-radius: 23px; } .duo .phone + .phone { margin-top: 28px; } }
+
+/* 画廊 */
+.gallery-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+.gallery-head p { color: var(--muted); font-size: 14px; }
+.strip { display: grid; grid-auto-flow: column; grid-auto-columns: 220px; gap: 26px; overflow-x: auto; padding: 34px 4px 20px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+.strip figure { margin: 0; scroll-snap-align: start; }
+.strip .phone { max-width: none; border-radius: 34px; padding: 7px; box-shadow: 0 18px 36px -18px rgba(29,37,35,.4); }
+.strip .phone img { border-radius: 28px; }
+.strip figcaption { margin-top: 14px; font-size: 14.5px; font-weight: 700; }
+.strip figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 2px; }
+
+/* 桌面端 */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 24px; }
+.tabs button { font: 500 14px var(--f-body); padding: 7px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.browser { margin-top: 20px; border-radius: 16px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 30px 70px -30px rgba(29,37,35,.4); }
+.browser .bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.browser .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.browser .bar code { margin-left: 12px; font: 500 12px var(--f-mono); color: var(--muted); }
+.browser img { display: block; width: 100%; height: auto; aspect-ratio: 1440 / 900; object-fit: cover; object-position: top; }
+
+/* 功能清单 */
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 34px; background: var(--line); border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); }
+.features article { background: var(--surface); padding: 24px 24px 26px; }
+.features h3 { font-size: 17px; font-weight: 700; letter-spacing: 0; }
+.features p { margin-top: 8px; font-size: 14.5px; color: var(--ink-2); line-height: 1.65; }
+@media (max-width: 860px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+
+/* 部署 */
+.deploy { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 48px; align-items: start; }
+.deploy ul { margin: 20px 0 0; padding-left: 1.1em; color: var(--ink-2); display: grid; gap: 6px; font-size: 15px; }
+.term { position: relative; border-radius: 16px; background: var(--code-bg); color: var(--code-fg); min-width: 0; }
+.term pre { margin: 0; padding: 22px 22px 24px; overflow-x: auto; font: 500 13.5px/1.85 var(--f-mono); }
+.term .c { color: #7f8c87; }
+.term .p { color: #6cb6ff; user-select: none; }
+.copy-btn { position: absolute; top: 12px; right: 12px; font: 500 12px var(--f-body); padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: var(--code-fg); cursor: pointer; }
+@media (max-width: 860px) { .deploy { grid-template-columns: 1fr; gap: 28px; } }
+
+footer { padding-block: 40px 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage .front { animation: rise .8s cubic-bezier(.2,.8,.2,1) both; }
+  .stage .back { animation: rise-tilt 1s .12s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes rise { from { transform: translateY(18px); } to { transform: none; } }
+  @keyframes rise-tilt { from { transform: translateY(26px) rotate(-2deg); } to { transform: rotate(-5deg); } }
+}
+</style>
+<style>body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="https://github.com/qijieinnet/fin-nest" target="_blank" rel="noopener"><img src="assets/logo.svg" alt="">Fin Nest</a>
+    <a class="gh" href="https://github.com/qijieinnet/fin-nest" target="_blank" rel="noopener">GitHub ↗</a>
+  </header>
+
+  <section class="hero">
+    <div>
+      <p class="eyebrow">自部署 · 个人与家庭记账 · MIT 开源</p>
+      <h1>账记在自己家里，<br><span class="grad">AI 帮你算清楚。</span></h1>
+      <p class="lede">手机、电脑、飞书里随手记一笔。一个 AI Agent 帮你记账、查账，想买点什么时翻出你自己的账本，算给你看这钱花不花得起。数据全部留在你自己的 NAS 或服务器上。</p>
+      <div class="ctas">
+        <a class="btn primary" href="https://github.com/qijieinnet/fin-nest" target="_blank" rel="noopener">在 GitHub 查看</a>
+        <a class="btn ghost" href="#deploy">一条命令部署</a>
+      </div>
+      <div class="facts">
+        <span><b>1</b> 个对外端口</span>
+        <span><b>amd64 / arm64</b> 镜像</span>
+        <span>金额以 <b>micros</b> 整数存储</span>
+      </div>
+    </div>
+    <div class="stage" aria-label="手机界面预览">
+      <div class="phone back"><img src="assets/screens/mobile-bills.png" alt="账单首页：本月支出、收入、结余与预算进度"></div>
+      <div class="phone front"><img src="assets/screens/mobile-ai.png" alt="AI Agent 首页：识别账单截图、一句话记账、查花销、看资产、看预算"></div>
+    </div>
+  </section>
+</div>
+
+<section class="scene">
+  <div class="wrap scene-grid">
+    <div class="copy">
+      <p class="kicker">AI Agent · 记账</p>
+      <h2>说一句话就记好，<br>你点确认才入账。</h2>
+      <p>AI 不能直接改你的账本。它只生成一张草稿卡片，分类、账户、日期都替你填好，你看一眼没问题再点确认。手快点了两下，也只会记成一笔。</p>
+      <ol class="steps">
+        <li><div><strong>你说</strong><span class="bubble">昨天在山姆买菜 328，刷的招行信用卡</span></div></li>
+        <li><div><strong>它出草稿</strong><span>食品生鲜 / 超市 · 招行信用卡 · 昨天 · ¥328.00</span></div></li>
+        <li><div><strong>你确认</strong><span>金额换算和账户校验由后端完成，不靠模型说了算。</span></div></li>
+      </ol>
+    </div>
+    <div class="phone"><img src="assets/screens/mobile-ai-1.png" alt="AI 生成的记账草稿卡片，带作废、编辑、确认入账三个按钮" loading="lazy"></div>
+  </div>
+</section>
+
+<section class="scene">
+  <div class="wrap scene-grid flip">
+    <div class="copy">
+      <p class="kicker">AI Agent · 花钱决策</p>
+      <h2>想换手机之前，<br>先翻一遍自己的账。</h2>
+      <p>问它「iPhone 13 Pro 用了快四年，想换 17 Pro，该换吗」，它会把这些数一次查齐，再给你一句结论：</p>
+      <dl class="ledger">
+        <div><dt>旧机已用 / 预期寿命</dt><dd>4.02 年 / 4 年</dd></div>
+        <div><dt>旧机日均持有成本</dt><dd>¥5.51</dd></div>
+        <div><dt>8999 元占可动用现金</dt><dd>4%</dd></div>
+        <div><dt>本月预算剩余</dt><dd>¥7,097.24</dd></div>
+      </dl>
+      <p class="ledger-cap">以上为演示账本中 AI 的真实回答。可接入博查、Tavily 或自建 SearXNG 联网查价。</p>
+      <p class="redline">不做投资顾问，不给股票、基金、保险的买卖建议，只帮你量入为出。</p>
+    </div>
+    <div class="phone"><img src="assets/screens/mobile-ai-2.png" alt="AI 关于是否换手机的分析回答" loading="lazy"></div>
+  </div>
+</section>
+
+<section class="scene">
+  <div class="wrap scene-grid">
+    <div class="copy">
+      <p class="kicker">飞书机器人</p>
+      <h2>在飞书里聊着天，<br>账就记好了。</h2>
+      <p>私聊机器人说「昨天吃饭花了 200 元」，回来一张卡片，点「确认入账」就落库。问「上周支出」，直接给你一张分类柱状图。和网页上是同一个 AI Agent，两边重复点也不会记成两笔。</p>
+      <p>订阅续费、保单到期、待确认的自动记账也会推到飞书，卡片上的按钮当场就能处理。机器人走长连接，家里的 NAS 不用做端口映射。</p>
+    </div>
+    <div class="duo">
+      <div class="phone"><img src="assets/screens/feishu-1.png" alt="飞书中一句话记账，机器人返回带作废和确认入账按钮的卡片" loading="lazy"></div>
+      <div class="phone"><img src="assets/screens/feishu-2.png" alt="飞书中询问上周支出，机器人返回分类柱状图" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<section class="scene">
+  <div class="wrap">
+    <div class="gallery-head">
+      <h2>手机上像原生 App</h2>
+      <p>可添加到主屏幕、收推送通知；向右滑动查看更多</p>
+    </div>
+    <div class="strip" tabindex="0" aria-label="手机界面截图">
+      <figure><div class="phone"><img src="assets/screens/mobile-bills.png" alt="账单" loading="lazy"></div><figcaption>账单<span>按天分组，预算进度一眼可见</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-stats.png" alt="统计" loading="lazy"></div><figcaption>统计<span>分类占比、下钻、趋势</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-accounts.png" alt="账户与净资产" loading="lazy"></div><figcaption>账户与净资产<span>储蓄、信用、投资，带净资产曲线</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-budget.png" alt="计划" loading="lazy"></div><figcaption>计划<span>按金额或次数设上限、定目标</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-subscriptions.png" alt="订阅" loading="lazy"></div><figcaption>订阅<span>续费日前提醒，续不续你定</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-items.png" alt="物品" loading="lazy"></div><figcaption>物品<span>买入价、已用年限、日均成本</span></figcaption></figure>
+      <figure><div class="phone"><img src="assets/screens/mobile-insurances.png" alt="保险" loading="lazy"></div><figcaption>保险<span>保额保费、被保人、到期提醒</span></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="scene">
+  <div class="wrap">
+    <h2>电脑上是侧边栏布局，同一套账本</h2>
+    <div class="tabs" role="tablist" aria-label="桌面端页面">
+      <button role="tab" aria-selected="true" data-src="assets/screens/desktop-bills.png" data-url="/bills" id="tab-bills">账单</button>
+      <button role="tab" aria-selected="false" data-src="assets/screens/desktop-stats.png" data-url="/stats" id="tab-stats">统计</button>
+      <button role="tab" aria-selected="false" data-src="assets/screens/desktop-accounts.png" data-url="/accounts" id="tab-accounts">账户</button>
+      <button role="tab" aria-selected="false" data-src="assets/screens/desktop-ai-1.png" data-url="/ai" id="tab-ai">AI Agent</button>
+      <button role="tab" aria-selected="false" data-src="assets/screens/desktop-subscriptions.png" data-url="/more/subscriptions" id="tab-subs">订阅</button>
+    </div>
+    <div class="browser">
+      <div class="bar"><i></i><i></i><i></i><code id="url">fin.your-nas.local/bills</code></div>
+      <img id="desk" src="assets/screens/desktop-bills.png" alt="桌面端账单页面" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<section class="scene">
+  <div class="wrap">
+    <h2>家里的钱，常用的都在</h2>
+    <div class="features">
+      <article><h3>Face ID 应用锁</h3><p>打开就要 Face ID / Touch ID 才能看账，其它设备回退输入密码。在飞书里打开默认免验证。</p></article>
+      <article><h3>只选人，不选渠道</h3><p>提醒配给谁，走飞书还是手机通知由接收人自己决定。一条提醒最多 5 档提前量，处理过一次就不再打扰。</p></article>
+      <article><h3>iPhone 收通知</h3><p>网页添加到主屏幕就能收推送，不需要 Apple 开发者账号，也不用上架。</p></article>
+      <article><h3>多人协作</h3><p>多账本、多成员，邀请码加入、创建者审批。账户可标归属人，净资产能按家里的人分开看。</p></article>
+      <article><h3>自动记账</h3><p>房租、话费配成规则，到期生成一条待确认；常记的账做成快捷模板，一键记账。</p></article>
+      <article><h3>数据是你的</h3><p>Excel 导入导出；整站定时备份成一个 zip，含数据库、附件和每个账本的 Excel，换机器直接传回去恢复。</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="scene" id="deploy">
+  <div class="wrap deploy">
+    <div>
+      <h2>部署到自己的 NAS</h2>
+      <p style="margin-top:18px;color:var(--ink-2)">一份 compose 拉起数据库、对象存储、迁移、API、Worker 和网页，对外只开 4001 一个端口。</p>
+      <ul>
+        <li>群晖、威联通、TrueNAS、Portainer 可直接粘贴内联版 compose</li>
+        <li>AI、飞书、推送都是可选项，不配就不出现</li>
+        <li>模型可接 DeepSeek、通义、OpenAI 或本地 Ollama</li>
+      </ul>
+    </div>
+    <div class="term">
+      <button class="copy-btn" type="button" id="copy">复制</button>
+<pre id="cmd"><span class="c"># 下载 docker-compose.yml 和 .env.docker.example 到任意空目录</span>
+<span class="p">$ </span>cp .env.docker.example .env.docker
+<span class="c"># 改掉 POSTGRES_PASSWORD 和 MINIO_SECRET_KEY</span>
+<span class="p">$ </span>docker compose --env-file .env.docker up -d
+<span class="c"># 打开 http://&lt;你的主机&gt;:4001，第一个注册的人就是管理员</span></pre>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <footer>
+    <span>Fin Nest · MIT License · Next.js 16 · NestJS 11 · PostgreSQL 17</span>
+    <span>截图来自演示账本，人物与金额均为虚构</span>
+  </footer>
+</div>
+
+<script>
+  const tabs = document.querySelectorAll('[role="tab"]');
+  const desk = document.getElementById('desk');
+  const url = document.getElementById('url');
+  tabs.forEach((t) => t.addEventListener('click', () => {
+    tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+    desk.src = t.dataset.src;
+    desk.alt = '桌面端' + t.textContent + '页面';
+    url.textContent = 'fin.your-nas.local' + t.dataset.url;
+  }));
+  const btn = document.getElementById('copy');
+  btn.addEventListener('click', () => {
+    const text = 'cp .env.docker.example .env.docker\ndocker compose --env-file .env.docker up -d';
+    const done = () => { btn.textContent = '已复制'; setTimeout(() => (btn.textContent = '复制'), 1600); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(document.getElementById('cmd')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = '已选中，按 ⌘C'; };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
+  });
+</script>
+
+</body>
+</html>

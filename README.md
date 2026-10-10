@@ -14,7 +14,46 @@
 
 手机上像原生 App（可以添加到主屏幕、收通知），电脑上是侧边栏布局，同一套账本。一条 `docker compose` 命令部署到自己的 NAS 或 VPS，对外只开一个端口。
 
-> 界面预览可在此补充截图。将图片放入 `docs/assets/` 后，用 `![首页](docs/assets/home.png)` 引入即可。
+![Fin Nest](docs/assets/banner.jpg)
+
+<table>
+  <tr>
+    <td width="25%"><img src="docs/assets/screens/mobile-ai-1.png" alt="AI 记账草稿"></td>
+    <td width="25%"><img src="docs/assets/screens/mobile-ai-2.png" alt="AI 花钱决策"></td>
+    <td width="25%"><img src="docs/assets/screens/mobile-bills.png" alt="账单"></td>
+    <td width="25%"><img src="docs/assets/screens/mobile-accounts.png" alt="账户与净资产"></td>
+  </tr>
+  <tr>
+    <td align="center">一句话记账，确认才入账</td>
+    <td align="center">想买之前，先算一遍</td>
+    <td align="center">账单与预算</td>
+    <td align="center">账户与净资产</td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screens/mobile-stats.png" alt="统计"></td>
+    <td><img src="docs/assets/screens/mobile-budget.png" alt="计划"></td>
+    <td><img src="docs/assets/screens/mobile-subscriptions.png" alt="订阅"></td>
+    <td><img src="docs/assets/screens/mobile-items.png" alt="物品"></td>
+  </tr>
+  <tr>
+    <td align="center">统计</td>
+    <td align="center">计划</td>
+    <td align="center">订阅</td>
+    <td align="center">物品</td>
+  </tr>
+</table>
+
+<details>
+<summary>桌面端截图</summary>
+
+![桌面端账单](docs/assets/screens/desktop-bills.png)
+![桌面端统计](docs/assets/screens/desktop-stats.png)
+![桌面端账户](docs/assets/screens/desktop-accounts.png)
+![桌面端 AI Agent](docs/assets/screens/desktop-ai-1.png)
+
+</details>
+
+> 截图来自演示账本，人物与金额均为虚构。
 
 ---
 
@@ -125,6 +164,17 @@ DeepSeek、通义、OpenAI，或者家里自己跑的 Ollama 都可以，填好�
 ## 💬 飞书：把记账和提醒搬进聊天窗口
 
 > 可选功能，填好飞书自建应用的两项配置就启用。是**主动连出去**的长连接，不需要公网回调地址，家里的 NAS 不用做端口映射也能用。
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screens/feishu-1.png" alt="飞书里一句话记账"></td>
+    <td width="50%"><img src="docs/assets/screens/feishu-2.png" alt="飞书里查上周支出"></td>
+  </tr>
+  <tr>
+    <td align="center">一句话记账，卡片上确认入账</td>
+    <td align="center">问「上周支出」，直接出图</td>
+  </tr>
+</table>
 
 ### 绑定一次，之后就是聊天
 
