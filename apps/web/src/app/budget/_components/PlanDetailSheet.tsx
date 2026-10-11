@@ -14,6 +14,7 @@ import { PlanPeriodCard } from "./PlanPeriodCard";
 import { PlanPeriodConfirmSheet } from "./PlanPeriodConfirmSheet";
 import { PlanShareSheet } from "./PlanShareSheet";
 import { periodShortLabel } from "./plan-utils";
+import { t } from "@/lib/i18n";
 
 type PlanDetailSheetProps = {
   ledgerId: string;
@@ -92,7 +93,7 @@ export function PlanDetailSheet({
             ? [
                 {
                   icon: <RotateCcw size={18} />,
-                  label: "恢复计划",
+                  label: t("恢复计划"),
                   onSelect: () => onRestore(result.plan),
                 },
               ]
@@ -101,21 +102,21 @@ export function PlanDetailSheet({
             ? [
                 {
                   icon: <Ban size={18} />,
-                  label: "停止计划",
+                  label: t("停止计划"),
                   onSelect: () => onStop(result.plan),
                 },
               ]
             : []),
           {
             icon: <Edit3 size={18} />,
-            label: "编辑计划",
+            label: t("编辑计划"),
             onSelect: () => openEditor(result.plan),
           },
           ...(!result.plan.stoppedAt
             ? [
                 {
                   icon: <Share2 size={18} />,
-                  label: "分享本期数据",
+                  label: t("分享本期数据"),
                   onSelect: () => openShare(result.plan),
                 },
               ]
@@ -125,7 +126,7 @@ export function PlanDetailSheet({
           {
             danger: true,
             icon: <Trash2 size={18} />,
-            label: "删除计划",
+            label: t("删除计划"),
             onSelect: onDelete,
           },
         ],
@@ -135,7 +136,7 @@ export function PlanDetailSheet({
   return (
     <div className="flex flex-col gap-4 pb-2">
       <header className="sticky top-0 z-20 flex items-center gap-2 bg-[#ededec] pb-2 pt-1">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="min-w-0 flex-1 truncate text-[17px] font-semibold text-[var(--color-text-primary)]">
           {title}
         </h2>
@@ -145,7 +146,7 @@ export function PlanDetailSheet({
               items={[
                 {
                   icon: <Ellipsis size={22} />,
-                  label: "更多",
+                  label: t("更多"),
                   onClick: () => setMenuOpen((open) => !open),
                 },
               ]}
@@ -156,7 +157,7 @@ export function PlanDetailSheet({
       </header>
 
       {!result ? (
-        <LoadingState rows={4} title="加载计划" />
+        <LoadingState rows={4} title={t("加载计划")} />
       ) : (
         (() => {
           const { history, period, plan } = result;
@@ -168,7 +169,7 @@ export function PlanDetailSheet({
             <>
               <section className="flex flex-col gap-2">
                 <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                  本期
+                  {t("本期")}
                 </h3>
                 <PlanPeriodCard
                   nextPeriod={result.nextPeriod}
@@ -184,11 +185,11 @@ export function PlanDetailSheet({
 
               <section className="flex flex-col gap-2">
                 <h3 className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                  以往周期
+                  {t("以往周期")}
                 </h3>
                 {past.length === 0 ? (
                   <p className="rounded-[18px] border border-black/[0.06] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
-                    暂无以往周期
+                    {t("暂无以往周期")}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2.5">

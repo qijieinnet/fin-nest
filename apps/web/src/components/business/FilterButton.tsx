@@ -3,6 +3,7 @@
 import { IconButtonGroup, type IconButtonGroupItem } from "@/components/ui";
 import type { BusinessFilterValue } from "./filter-types";
 import { hasNonTimeFilters, periodLabel } from "./filter-utils";
+import { t } from "@/lib/i18n";
 
 /**
  * 筛选按钮的配置项：直接展示周期文字（无下拉图标），存在「时间」以外的筛选项时右上角显示蓝点。
@@ -16,7 +17,7 @@ export function filterButtonItem(
     dot: hasNonTimeFilters(value),
     dotTone: "brand",
     text: periodLabel(value),
-    label: "筛选",
+    label: t("筛选"),
     onClick: onOpen,
   };
 }

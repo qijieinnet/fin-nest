@@ -36,6 +36,7 @@ import {
   todayKey,
   todayPlusYearsKey,
 } from "./insurance-utils";
+import { t } from "@/lib/i18n";
 
 /** 新增一档提醒时的默认提前量：保单按 30 天。 */
 const DEFAULT_REMIND_LEAD_DAYS = 30;
@@ -72,7 +73,7 @@ function MultiSelectRow({
   const display = isEmpty
     ? emptyLabel
     : selectedLabels.length > 0
-      ? selectedLabels.join("、")
+      ? selectedLabels.join(t("、"))
       : placeholder;
   return (
     <div className="transaction-form__card transaction-form__picker-card">
@@ -163,7 +164,7 @@ function SelectRow({
         >
           <span>{label}</span>
           <strong>
-            {selected ? `${selected.icon ? `${selected.icon} ` : ""}${selected.label}` : "请选择"}
+            {selected ? `${selected.icon ? `${selected.icon} ` : ""}${selected.label}` : t("请选择")}
           </strong>
           <ChevronRight size={18} />
         </button>
@@ -225,7 +226,7 @@ function DateFieldRow({
         <button className="biz-date-picker" onClick={() => onChange(todayKey())} type="button">
           <span className="biz-date-popover__summary">
             <span>{label}</span>
-            <strong>未选择</strong>
+            <strong>{t("未选择")}</strong>
           </span>
         </button>
       </div>
@@ -340,7 +341,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         .filter((record) => !removedAttachmentIds.includes(record.id))
         .map<AttachmentItem>((record) => ({
           id: record.id,
-          name: record.file?.originalName ?? "附件",
+          name: record.file?.originalName ?? t("附件"),
           contentType: record.file?.mime ?? undefined,
         })),
     [existingAttachmentsQuery.data, removedAttachmentIds],
@@ -353,12 +354,12 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const save = useMutation({
     mutationFn: async () => {
       const coverageParsed = coverage.trim() ? parseMoneyToMicros(coverage, { decimalPlaces }) : null;
-      if (coverageParsed && !coverageParsed.ok) throw new Error("保额格式不正确");
+      if (coverageParsed && !coverageParsed.ok) throw new Error(t("保额格式不正确"));
       const premiumParsed = premium.trim() ? parseMoneyToMicros(premium, { decimalPlaces }) : null;
-      if (premiumParsed && !premiumParsed.ok) throw new Error("保费格式不正确");
+      if (premiumParsed && !premiumParsed.ok) throw new Error(t("保费格式不正确"));
       const periodsValue = periods.trim() ? Number.parseInt(periods, 10) : undefined;
       if (periodsValue !== undefined && (!Number.isFinite(periodsValue) || periodsValue < 1)) {
-        throw new Error("缴费期数需为正整数");
+        throw new Error(t("缴费期数需为正整数"));
       }
       // 关掉开关就提交空数组：后端据此清空所有档位与接收人（镜像列一并置空）。
       const reminderPayload = remindEnabled ? toReminderPayload(reminders) : [];
@@ -409,7 +410,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
           queryKey: queryKeys.attachments(ledgerId, "insurance", saved.id),
         }),
       ]);
-      showToast({ tone: "success", message: isEditing ? "保单已更新" : "保单已添加" });
+      showToast({ tone: "success", message: isEditing ? t("保单已更新") : t("保单已添加") });
       pop();
     },
   });
@@ -450,7 +451,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         ledgerApiPath(ledgerId, `/attachments/${item.id}/content`),
       );
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("无法打开附件")) });
     }
   }
 
@@ -471,14 +472,14 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
       }}
     >
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑保单" : "添加保单"}
+          {isEditing ? t("编辑保单") : t("添加保单")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存保单"
+          label={t("保存保单")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -489,61 +490,61 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
         <div className="transaction-form__cards">
           <div className="transaction-form__card">
             <FieldRow
-              label="保单名称"
+              label={t("保单名称")}
               maxLength={120}
               onChange={(event) => setName(event.target.value)}
-              placeholder="如：百万医疗险"
+              placeholder={t("如：百万医疗险")}
               value={name}
             />
           </div>
 
-          <SelectRow label="险种" onChange={setType} options={INSURANCE_TYPES} value={type} />
+          <SelectRow label={t("险种")} onChange={setType} options={INSURANCE_TYPES} value={type} />
 
           <div className="transaction-form__card">
             <FieldRow
-              label="保险公司"
+              label={t("保险公司")}
               maxLength={80}
               onChange={(event) => setInsurer(event.target.value)}
-              placeholder="如：平安保险"
+              placeholder={t("如：平安保险")}
               value={insurer}
             />
             <span className="transaction-form__divider" />
             <FieldRow
-              label="保单号"
+              label={t("保单号")}
               maxLength={80}
               onChange={(event) => setPolicyNo(event.target.value)}
-              placeholder="选填"
+              placeholder={t("选填")}
               value={policyNo}
             />
             <span className="transaction-form__divider" />
             <FieldRow
-              label="投保方式"
+              label={t("投保方式")}
               maxLength={40}
               onChange={(event) => setMethod(event.target.value)}
-              placeholder="线上自助 / 代理人"
+              placeholder={t("线上自助 / 代理人")}
               value={method}
             />
             <span className="transaction-form__divider" />
             <FieldRow
-              label="缴费方式"
+              label={t("缴费方式")}
               maxLength={40}
               onChange={(event) => setPaymentMethod(event.target.value)}
-              placeholder="银行卡自动扣款 / 支付宝"
+              placeholder={t("银行卡自动扣款 / 支付宝")}
               value={paymentMethod}
             />
           </div>
 
           <MultiSelectRow
-            emptyLabel="请先到人员管理添加"
-            label="被保人"
+            emptyLabel={t("请先到人员管理添加")}
+            label={t("被保人")}
             onToggle={toggleInsured}
             options={people.map((person) => ({ label: person.name, value: person.id }))}
-            placeholder="选择被保人（可多选）"
+            placeholder={t("选择被保人（可多选）")}
             values={insuredIds}
           />
 
           <SelectRow
-            label="缴费周期"
+            label={t("缴费周期")}
             onChange={setPremiumFreq}
             options={PREMIUM_FREQ_OPTIONS}
             value={premiumFreq}
@@ -552,7 +553,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="保额"
+              label={t("保额")}
               onChange={(event) => setCoverage(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -561,7 +562,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             <span className="transaction-form__divider" />
             <FieldRow
               inputMode="decimal"
-              label={freqIsSingle ? "保费" : premiumFreq === "month" ? "每月保费" : "每年保费"}
+              label={freqIsSingle ? t("保费") : premiumFreq === "month" ? t("每月保费") : t("每年保费")}
               onChange={(event) => setPremium(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -572,9 +573,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
                 <span className="transaction-form__divider" />
                 <FieldRow
                   inputMode="numeric"
-                  label="缴费期数"
+                  label={t("缴费期数")}
                   onChange={(event) => setPeriods(event.target.value)}
-                  placeholder="选填，如 20"
+                  placeholder={t("选填，如 20")}
                   value={periods}
                 />
               </>
@@ -583,7 +584,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
           {!freqIsSingle ? (
             <SelectRow
-              label="续费"
+              label={t("续费")}
               onChange={setRenewal}
               options={RENEWAL_OPTIONS}
               value={renewal}
@@ -591,9 +592,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
           ) : null}
 
           <div className="transaction-form__card">
-            <DateFieldRow label="生效日" onChange={setStartDate} value={startDate} />
+            <DateFieldRow label={t("生效日")} onChange={setStartDate} value={startDate} />
             <span className="transaction-form__divider" />
-            <DateFieldRow label="到期日" onChange={setEndDate} value={endDate} />
+            <DateFieldRow label={t("到期日")} onChange={setEndDate} value={endDate} />
           </div>
 
           <ReminderSchedulesEditor
@@ -604,11 +605,11 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             footer={
               endDate ? null : (
                 <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                  需设置「到期日」后提醒才会生效。
+                  {t("需设置「到期日」后提醒才会生效。")}
                 </p>
               )
             }
-            hint="到期日前提醒续保或缴费，可设多档"
+            hint={t("到期日前提醒续保或缴费，可设多档")}
             onChange={setReminders}
             onEnabledChange={setRemindEnabled}
             value={reminders}
@@ -624,21 +625,21 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             onRemove={removeAttachment}
           />
 
-          <LabeledCard label="保障内容">
+          <LabeledCard label={t("保障内容")}>
             <textarea
               className="min-h-[76px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
               onChange={(event) => setCoverageDesc(event.target.value)}
-              placeholder="选填，如 一般医疗+重疾医疗，0免赔…"
+              placeholder={t("选填，如 一般医疗+重疾医疗，0免赔…")}
               value={coverageDesc}
             />
           </LabeledCard>
 
-          <LabeledCard label="备注">
+          <LabeledCard label={t("备注")}>
             <textarea
               className="min-h-[52px] w-full resize-none bg-transparent text-[15px] leading-6 text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)]"
               maxLength={240}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="选填，如 含三者险 / 续保提醒…"
+              placeholder={t("选填，如 含三者险 / 续保提醒…")}
               value={note}
             />
           </LabeledCard>

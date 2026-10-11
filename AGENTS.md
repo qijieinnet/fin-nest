@@ -21,6 +21,7 @@
 7. 改后端响应结构时，同步更新前端手写契约 `apps/web/src/lib/api/contracts.ts`（无编译期保护，靠自查）。桌面端双 UI 后，改后端响应需同步检查三处：`contracts.ts` + 移动 UI + 桌面 UI。
 8. 迁移显式执行（`pnpm db:migrate`），禁止启动时自动迁移；软删/归档优先，有关联数据禁硬删。**新增表会自动进入系统备份**（表清单由 Prisma DMMF 现算）；只有运维台账类的表才登记进 `packages/backend/src/system-backup/table-registry.ts` 的排除名单，并写清理由。
 9. 前端弹出选择统一 `PopoverMenu + Menu`、弹层用 `Surface` 风格；允许按需引入 headless 行为库（白名单见 [`docs/DESKTOP_UI_PLAN.md`](docs/DESKTOP_UI_PLAN.md) §2 D3），**禁止**引入 AntD / MUI / Chakra 等带视觉体系的组件库或视觉特效类库。
+10. 界面文案一律走 i18n：组件里写 `t("中文原文")` 并在 `apps/web/src/lib/i18n/messages/en.ts` 补英文（漏补会 typecheck 失败）；模块级常量用 `localized({ label: msg("…") })`；不要写死 `"zh-CN"` 做日期格式化。后端新增中文 `AppError` 文案要同步补 `packages/backend/src/i18n/error-messages.en.ts`（`pnpm --filter @fin-nest/api test:i18n` 校验）。详见 [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) §3「多语言」。
 
 ## 验证
 

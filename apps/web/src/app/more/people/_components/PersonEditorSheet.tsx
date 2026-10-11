@@ -7,6 +7,7 @@ import { Button, IconButton } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type Person } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useConfirm, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type PersonEditorSheetProps = {
   ledgerId: string;
@@ -41,26 +42,26 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
     },
     onSuccess: async () => {
       await invalidatePeople();
-      showToast({ tone: "success", message: isEditing ? "人员已更新" : "人员已添加" });
+      showToast({ tone: "success", message: isEditing ? t("人员已更新") : t("人员已添加") });
       pop();
     },
   });
 
   const remove = useMutation({
     mutationFn: () => {
-      if (!person) throw new Error("缺少人员");
+      if (!person) throw new Error(t("缺少人员"));
       return apiRequest<void>(ledgerApiPath(ledgerId, `/people/${person.id}`), { method: "DELETE" });
     },
     onSuccess: async () => {
       await invalidatePeople();
-      showToast({ tone: "success", message: "人员已删除" });
+      showToast({ tone: "success", message: t("人员已删除") });
       pop();
     },
   });
 
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0 && (!person || trimmedName !== person.name) && !save.isPending;
-  const title = isEditing ? "编辑人员" : "新建人员";
+  const title = isEditing ? t("编辑人员") : t("新建人员");
 
   const submit = () => {
     if (canSubmit) save.mutate();
@@ -69,9 +70,9 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
   const handleDelete = async () => {
     if (!person || remove.isPending) return;
     const confirmed = await confirm({
-      title: `删除人员「${person.name}」？`,
-      message: "有关联账单时会保留历史记录并归档。",
-      confirmText: "删除",
+      title: t("删除人员「{name}」？", { name: person.name }),
+      message: t("有关联账单时会保留历史记录并归档。"),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (confirmed) remove.mutate();
@@ -80,12 +81,12 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存人员"
+          label={t("保存人员")}
           loading={save.isPending}
           onClick={submit}
           variant="primary"
@@ -94,7 +95,7 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
 
       <label className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-white px-4">
         <span className="shrink-0 text-[15px] font-medium text-[var(--color-text-primary)]">
-          人员名称
+          {t("人员名称")}
         </span>
         <input
           autoFocus
@@ -107,14 +108,14 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
               submit();
             }
           }}
-          placeholder="如：我、伴侣、室友"
+          placeholder={t("如：我、伴侣、室友")}
           value={name}
         />
       </label>
 
       {save.isError || remove.isError ? (
         <p className="text-sm text-[var(--color-accent-expense)]">
-          {getApiErrorMessage(save.error ?? remove.error, "操作失败，请稍后重试")}
+          {getApiErrorMessage(save.error ?? remove.error, t("操作失败，请稍后重试"))}
         </p>
       ) : null}
 
@@ -126,7 +127,7 @@ export function PersonEditorSheet({ ledgerId, person }: PersonEditorSheetProps) 
           onClick={handleDelete}
           variant="danger"
         >
-          {remove.isPending ? "删除中…" : "删除该人员"}
+          {remove.isPending ? t("删除中…") : t("删除该人员")}
         </Button>
       ) : null}
     </div>

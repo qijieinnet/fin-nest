@@ -1,4 +1,5 @@
 import { MONEY_MICROS_PER_UNIT } from "./micros";
+import { t } from "@/lib/i18n";
 
 export type ParseMoneyOptions = {
   allowNegative?: boolean;
@@ -26,22 +27,22 @@ export function parseMoneyToMicros(
   const cleaned = cleanMoneyInput(value, allowNegative);
 
   if (!cleaned || cleaned === "-" || cleaned === ".") {
-    return { error: "请输入金额", ok: false };
+    return { error: t("请输入金额"), ok: false };
   }
 
   const sign = cleaned.startsWith("-") ? -1n : 1n;
   if (sign < 0n && !allowNegative) {
-    return { error: "金额不能为负数", ok: false };
+    return { error: t("金额不能为负数"), ok: false };
   }
 
   const unsigned = sign < 0n ? cleaned.slice(1) : cleaned;
   if (!/^\d+(\.\d*)?$/.test(unsigned)) {
-    return { error: "金额格式不正确", ok: false };
+    return { error: t("金额格式不正确"), ok: false };
   }
 
   const [integerPart, fractionPart = ""] = unsigned.split(".");
   if (fractionPart.length > decimalPlaces) {
-    return { error: `最多支持 ${decimalPlaces} 位小数`, ok: false };
+    return { error: t("最多支持 {decimalPlaces} 位小数", { decimalPlaces }), ok: false };
   }
 
   const microsPerDisplayUnit = MONEY_MICROS_PER_UNIT / 10n ** BigInt(decimalPlaces);

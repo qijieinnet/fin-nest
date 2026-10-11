@@ -18,6 +18,7 @@ import { useAccounts, useCategories, useInfiniteTransactions } from "@/lib/data/
 import { useLedger, useSheetStack } from "@/providers";
 import { BillDetailScreen } from "../../bills/[transactionId]/BillDetailScreen";
 import { dayLabel, groupByDay } from "../../bills/_components/bill-utils";
+import { t } from "@/lib/i18n";
 
 function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   return {
@@ -81,13 +82,13 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
   };
 
   if (transactionsQuery.isPending) {
-    return <LoadingState rows={4} title="加载账单" />;
+    return <LoadingState rows={4} title={t("加载账单")} />;
   }
 
   if (groups.length === 0) {
     return (
       <div className="py-6">
-        <EmptyState title="暂无数据" />
+        <EmptyState title={t("暂无数据")} />
       </div>
     );
   }
@@ -113,9 +114,9 @@ export function CategoryBillsSheet({ filters }: { filters: TransactionListQuery 
 
       <div ref={sentinelRef} />
       {isFetchingNextPage ? (
-        <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">加载中…</p>
+        <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">{t("加载中…")}</p>
       ) : !hasNextPage ? (
-        <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">没有更多了</p>
+        <p className="pb-2 text-center text-xs text-[var(--color-text-muted)]">{t("没有更多了")}</p>
       ) : null}
     </div>
   );

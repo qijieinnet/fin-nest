@@ -1,5 +1,6 @@
 import type { ItemAsset, ItemType, Transaction } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { t } from "@/lib/i18n";
 
 /** 常用物品类型的推荐图标，未匹配的自定义类型用兜底图标。 */
 export const ITEM_TYPE_ICONS: Record<string, string> = {
@@ -77,9 +78,9 @@ export type ItemStatus = {
 export function itemStatus(
   item: Pick<ItemAsset, "purchaseDate" | "scrappedAt" | "scrapDate" | "expectedYears">,
 ): ItemStatus {
-  if (item.scrappedAt) return { key: "scrapped", label: "已报废", tone: "scrapped" };
-  if (itemReached(item)) return { key: "reached", label: "到达年限", tone: "reached" };
-  return { key: "active", label: "在用", tone: "active" };
+  if (item.scrappedAt) return { key: "scrapped", label: t("已报废"), tone: "scrapped" };
+  if (itemReached(item)) return { key: "reached", label: t("到达年限"), tone: "reached" };
+  return { key: "active", label: t("在用"), tone: "active" };
 }
 
 /** 耗材合计（微单位）：关联支出累加、关联收入抵减，与后端列表口径一致。 */

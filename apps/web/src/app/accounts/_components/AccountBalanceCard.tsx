@@ -10,6 +10,7 @@ import {
   isLiability,
 } from "./account-utils";
 import { TrendRangeSelect, type TrendRange } from "./TrendRangeSelect";
+import { formatMonthShort, t } from "@/lib/i18n";
 
 type ChartPoint = { label: string; showLabel: boolean; valueMicros: bigint };
 
@@ -86,7 +87,7 @@ function buildPoints(range: TrendRange, resolve: (timeMs: number) => bigint): Ch
           ? now.getTime()
           : new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1).getTime() - 1;
       points.push({
-        label: `${monthStart.getMonth() + 1}月`,
+        label: formatMonthShort(monthStart.getMonth() + 1),
         showLabel: count <= 6 ? true : offset % 2 === 0,
         valueMicros: resolve(boundary),
       });
@@ -236,7 +237,7 @@ export function AccountBalanceCard({
 
       <div className="mt-3">
         <svg
-          aria-label="资金变动曲线"
+          aria-label={t("资金变动曲线")}
           className="w-full"
           height={HEIGHT}
           preserveAspectRatio="none"

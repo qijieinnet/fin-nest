@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
+import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 
 /**
  * 聊天请求。流式端点同时接受 JSON 与 multipart（字段 images[] 附账单图片），
@@ -23,4 +23,12 @@ export class ChatRequestDto {
   @IsOptional()
   @IsUUID()
   requestId?: string;
+
+  @ApiPropertyOptional({
+    description: "用户界面语言（zh-CN / en），决定 AI 文字回复的语言；不传按中文",
+    enum: ["zh-CN", "en"],
+  })
+  @IsOptional()
+  @IsIn(["zh-CN", "en"])
+  locale?: "zh-CN" | "en";
 }

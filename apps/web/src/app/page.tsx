@@ -6,6 +6,7 @@ import { MobileAppShell } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
+import { t } from "@/lib/i18n";
 
 export default function HomePage() {
   const { status } = useAuth();
@@ -19,7 +20,7 @@ export default function HomePage() {
   return (
     <MobileAppShell>
       <main className="flex min-h-dvh items-center justify-center px-[var(--space-page-x)]">
-        <LoadingState rows={3} title="加载中" />
+        <LoadingState rows={3} title={t("加载中")} />
       </main>
     </MobileAppShell>
   );

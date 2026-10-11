@@ -8,6 +8,7 @@ import { cn } from "@/lib/format/class-names";
 import { CategorySelectionList } from "./CategorySelectionList";
 import { InlineHint } from "./InlineHint";
 import type { BusinessOption, CategoryOption } from "./business-types";
+import { t } from "@/lib/i18n";
 
 export function nestedOptionLabel(
   options: Array<{ id: string; label: string; parentId?: string; badge?: string }>,
@@ -57,7 +58,7 @@ type CategorySelectRowProps = {
 export function CategorySelectRow({
   onValueChange,
   options,
-  placeholder = "选择分类",
+  placeholder = t("选择分类"),
   value,
 }: CategorySelectRowProps) {
   const [open, setOpen] = useState(false);
@@ -66,7 +67,7 @@ export function CategorySelectRow({
   return (
     <>
       <button className="transaction-form__select-row" onClick={() => setOpen(true)} type="button">
-        <span>分类</span>
+        <span>{t("分类")}</span>
         <strong>{displayValue}</strong>
         <ChevronRight size={18} />
       </button>
@@ -79,10 +80,10 @@ export function CategorySelectRow({
         <div className="transaction-form__sheet-header">
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
+            label={t("关闭")}
             onClick={() => setOpen(false)}
           />
-          <h2>选择分类</h2>
+          <h2>{t("选择分类")}</h2>
           <span aria-hidden />
         </div>
         <CategorySelectionList
@@ -183,7 +184,7 @@ export function AccountSelectRow({
   label,
   onValueChange,
   options,
-  placeholder = "选择账户",
+  placeholder = t("选择账户"),
   value,
 }: AccountSelectRowProps) {
   const [open, setOpen] = useState(false);
@@ -213,14 +214,14 @@ export function AccountSelectRow({
         <div className="transaction-form__sheet-header">
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
+            label={t("关闭")}
             onClick={() => setOpen(false)}
           />
           <h2>{label}</h2>
           <span aria-hidden />
         </div>
         {options.length === 0 ? (
-          <p className="biz-muted">暂无可选账户</p>
+          <p className="biz-muted">{t("暂无可选账户")}</p>
         ) : (
           <AccountSelectionList
             onSelect={(option) => {

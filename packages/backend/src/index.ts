@@ -2,6 +2,7 @@ export * from "./platform.module";
 export * from "./dates/date-only";
 export * from "./errors/api-exception.filter";
 export * from "./errors/app-error";
+export * from "./i18n/translate-error";
 export * from "./prisma/prisma.module";
 export * from "./prisma/prisma.service";
 export * from "./transactions/database-transaction.service";

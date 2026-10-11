@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMounted } from "@/lib/hooks/useMounted";
+import { t } from "@/lib/i18n";
 
 export type DesktopDialogVariant = "modal" | "drawer";
 
@@ -113,7 +114,7 @@ export function DesktopDialog({
       {open ? (
         <div className={`desktop-dialog-root desktop-dialog-root--${variant}`}>
           <motion.button
-            aria-label="关闭"
+            aria-label={t("关闭")}
             className="desktop-dialog-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

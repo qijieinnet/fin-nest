@@ -11,6 +11,7 @@ import {
 } from "@/components/desktop/DesktopDialog";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { haptic } from "@/lib/haptics";
+import { t } from "@/lib/i18n";
 
 type SheetShellProps = {
   children: ReactNode;
@@ -67,7 +68,7 @@ export function SheetShell({
       {hideDefaultHeader ? null : (
         <div className="sheet-header">
           <h2>{title}</h2>
-          <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
+          <button aria-label={t("关闭")} className="sheet-close" onClick={onClose} type="button">
             <X size={18} />
           </button>
         </div>
@@ -93,7 +94,7 @@ export function SheetShell({
       {open ? (
         <div className="sheet-root">
           <motion.button
-            aria-label="关闭"
+            aria-label={t("关闭")}
             className="sheet-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ToggleCard } from "./TransactionFieldRows";
 import { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
+import { t } from "@/lib/i18n";
 
 export type AssetLinkOption = {
   description?: string;
@@ -60,7 +61,7 @@ export function AssetLinkCard({
           <p className="transaction-form__empty-text">{emptyText}</p>
           {onCreate ? (
             <Button icon={<Plus size={16} />} onClick={onCreate} type="button" variant="secondary">
-              {createLabel ?? `新建${label}`}
+              {createLabel ?? t("新建{label}", { label })}
             </Button>
           ) : null}
         </div>
@@ -72,14 +73,14 @@ export function AssetLinkCard({
             label={label}
             onValueChange={onSelect}
             options={options}
-            placeholder={`选择${label}`}
-            searchPlaceholder={`搜索${label}`}
+            placeholder={t("选择{label}", { label })}
+            searchPlaceholder={t("搜索{label}", { label })}
             value={selectedId}
           />
           {selectedId ? footer : null}
           {onCreate ? (
             <Button icon={<Plus size={16} />} onClick={onCreate} type="button" variant="secondary">
-              {createLabel ?? `新建${label}`}
+              {createLabel ?? t("新建{label}", { label })}
             </Button>
           ) : null}
         </div>

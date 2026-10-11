@@ -35,6 +35,7 @@ import {
   renewalReminderDue,
   subscriptionStatus,
 } from "./subscription-utils";
+import { t } from "@/lib/i18n";
 
 type SubscriptionDetailSheetProps = {
   categories: SubscriptionCategory[];
@@ -58,7 +59,7 @@ function toAttachmentItem(attachment: AttachmentRecord): AttachmentItem {
   return {
     contentType: attachment.file?.mime,
     id: attachment.id,
-    name: attachment.file?.originalName ?? `附件 ${attachment.id.slice(0, 6)}`,
+    name: attachment.file?.originalName ?? t("附件 {value}", { value: attachment.id.slice(0, 6) }),
     sizeBytes: attachment.file?.sizeBytes ? Number(attachment.file.sizeBytes) : undefined,
   };
 }
@@ -116,7 +117,7 @@ export function SubscriptionDetailSheet({
       ),
     onSuccess: async () => {
       await invalidateSubscription();
-      showToast({ tone: "success", message: "已确认续费，续费日已顺延" });
+      showToast({ tone: "success", message: t("已确认续费，续费日已顺延") });
       pop();
     },  });
 
@@ -128,7 +129,7 @@ export function SubscriptionDetailSheet({
       }),
     onSuccess: async () => {
       await invalidateSubscription();
-      showToast({ tone: "success", message: "已退订" });
+      showToast({ tone: "success", message: t("已退订") });
     },  });
 
   const resumeInternal = useMutation({
@@ -138,7 +139,7 @@ export function SubscriptionDetailSheet({
       }),
     onSuccess: async () => {
       await invalidateSubscription();
-      showToast({ tone: "success", message: "已恢复订阅" });
+      showToast({ tone: "success", message: t("已恢复订阅") });
     },  });
 
   const removeInternal = useMutation({
@@ -149,12 +150,12 @@ export function SubscriptionDetailSheet({
     onSuccess: async () => {
       await invalidateSubscription();
       setConfirmingDelete(false);
-      showToast({ tone: "success", message: "订阅已删除" });
+      showToast({ tone: "success", message: t("订阅已删除") });
       pop();
     },  });
 
   if (!subscription) {
-    return <LoadingState rows={5} title="加载订阅" />;
+    return <LoadingState rows={5} title={t("加载订阅")} />;
   }
 
   const openEditorInternal = () => {
@@ -174,7 +175,7 @@ export function SubscriptionDetailSheet({
   const resumingState = resuming || resumeInternal.isPending;
 
   const category = categories.find((entry) => entry.id === subscription.categoryId);
-  const categoryName = category?.name ?? "未分类";
+  const categoryName = category?.name ?? t("未分类");
   const status = subscriptionStatus(subscription);
   const monthly = monthlyCostMicros(subscription);
   const days = daysUntilRenewal(subscription);
@@ -184,21 +185,21 @@ export function SubscriptionDetailSheet({
   );
 
   const renewalText = subscription.terminatedAt
-    ? "已退订"
+    ? t("已退订")
     : days === null
-      ? "未设置"
+      ? t("未设置")
       : days < 0
-        ? `已过期 ${Math.abs(days)} 天`
+        ? t("已过期 {value} 天", { value: Math.abs(days) })
         : days === 0
-          ? "今天"
-          : `${days} 天后`;
+          ? t("今天")
+          : t("{days} 天后", { days });
 
   const openLinkedTransactions = () => {
     push({
-      title: "关联记账",
+      title: t("关联记账"),
       content: (
         <SubscriptionTransactionList
-          emptyText="还没有关联的记账，记账时打开「关联订阅」即可归入此订阅"
+          emptyText={t("还没有关联的记账，记账时打开「关联订阅」即可归入此订阅")}
           ledgerId={ledgerId}
           transactions={linked}
         />
@@ -215,7 +216,7 @@ export function SubscriptionDetailSheet({
         ledgerApiPath(ledgerId, `/attachments/${attachment.id}/content`),
       );
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "附件暂时无法预览") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("附件暂时无法预览")) });
     }
   }
 
@@ -244,54 +245,54 @@ export function SubscriptionDetailSheet({
 
       <section className="grid grid-cols-2 gap-3">
         <StatCell
-          label="单期费用"
+          label={t("单期费用")}
           value={subscription.priceMicros ? formatMoney(subscription.priceMicros) : "—"}
         />
-        <StatCell label="月均折算" value={monthly > 0n ? formatMoney(monthly) : "—"} />
-        <StatCell label="累计花费" value={formatMoney(subscription.totalExpenseMicros)} />
-        <StatCell label="下次续费" value={renewalText} />
+        <StatCell label={t("月均折算")} value={monthly > 0n ? formatMoney(monthly) : "—"} />
+        <StatCell label={t("累计花费")} value={formatMoney(subscription.totalExpenseMicros)} />
+        <StatCell label={t("下次续费")} value={renewalText} />
       </section>
 
       <section>
         <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-          订阅信息
+          {t("订阅信息")}
         </h3>
         <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
-          <DetailRow label="分类" value={categoryName} />
-          <DetailRow label="服务商" value={subscription.provider || "未填写"} />
-          <DetailRow label="套餐" value={subscription.planName || "未填写"} />
+          <DetailRow label={t("分类")} value={categoryName} />
+          <DetailRow label={t("服务商")} value={subscription.provider || t("未填写")} />
+          <DetailRow label={t("套餐")} value={subscription.planName || t("未填写")} />
           <DetailRow
-            label="费用"
-            value={subscription.priceMicros ? formatMoney(subscription.priceMicros) : "未填写"}
+            label={t("费用")}
+            value={subscription.priceMicros ? formatMoney(subscription.priceMicros) : t("未填写")}
           />
-          <DetailRow label="计费周期" value={billingCycleLabel(subscription.billingCycle)} />
-          <DetailRow label="续费方式" value={subscription.autoRenew ? "自动续费" : "手动续费"} />
-          <DetailRow label="支付方式" value={subscription.paymentMethod || "未填写"} />
+          <DetailRow label={t("计费周期")} value={billingCycleLabel(subscription.billingCycle)} />
+          <DetailRow label={t("续费方式")} value={subscription.autoRenew ? t("自动续费") : t("手动续费")} />
+          <DetailRow label={t("支付方式")} value={subscription.paymentMethod || t("未填写")} />
           <DetailRow
-            label="开通日"
-            value={subscription.startDate ? formatDateLabel(subscription.startDate) : "未设置"}
+            label={t("开通日")}
+            value={subscription.startDate ? formatDateLabel(subscription.startDate) : t("未设置")}
           />
           <DetailRow
-            label="下次续费日"
+            label={t("下次续费日")}
             value={
               subscription.nextRenewalDate
                 ? formatDateLabel(subscription.nextRenewalDate)
-                : "未设置"
+                : t("未设置")
             }
           />
           {subscription.reminders.length === 0 ? (
-            <DetailRow label="到期提醒" value="未设置" />
+            <DetailRow label={t("到期提醒")} value={t("未设置")} />
           ) : (
             subscription.reminders.map((reminder, index) => (
               <DetailRow
                 key={reminder.id}
-                label={subscription.reminders.length > 1 ? `第 ${index + 1} 次提醒` : "到期提醒"}
+                label={subscription.reminders.length > 1 ? t("第 {value} 次提醒", { value: index + 1 }) : t("到期提醒")}
                 value={reminderSummary(reminder)}
               />
             ))
           )}
           {subscription.terminatedAt ? (
-            <DetailRow label="退订时间" value={formatDateLabel(subscription.terminatedAt)} />
+            <DetailRow label={t("退订时间")} value={formatDateLabel(subscription.terminatedAt)} />
           ) : null}
         </div>
       </section>
@@ -299,7 +300,7 @@ export function SubscriptionDetailSheet({
       {subscription.note ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-            备注
+            {t("备注")}
           </h3>
           <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {subscription.note}
@@ -310,7 +311,7 @@ export function SubscriptionDetailSheet({
       {attachmentItems.length > 0 ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-            附件 · {attachmentItems.length} 个
+            {t("附件 · {length} 个", { length: attachmentItems.length })}
           </h3>
           <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
         </section>
@@ -318,7 +319,7 @@ export function SubscriptionDetailSheet({
 
       <section>
         <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-          关联记账
+          {t("关联记账")}
         </h3>
         <button
           className="flex min-h-[52px] w-full items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-left"
@@ -326,15 +327,15 @@ export function SubscriptionDetailSheet({
           type="button"
         >
           <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
-            关联记账
+            {t("关联记账")}
             {linked.length > 0 ? (
               <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
-                花费 {formatMoney(subscription.totalExpenseMicros)}
+                {t("花费 {value}", { value: formatMoney(subscription.totalExpenseMicros) })}
               </span>
             ) : null}
           </span>
           <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
-            {linked.length} 条
+            {t("{length} 条", { length: linked.length })}
           </span>
           <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
         </button>
@@ -349,7 +350,7 @@ export function SubscriptionDetailSheet({
             onClick={() => confirmRenewal.mutate()}
             variant="primary"
           >
-            确认续订
+            {t("确认续订")}
           </Button>
         ) : null}
         <Button
@@ -358,7 +359,7 @@ export function SubscriptionDetailSheet({
           onClick={handleEdit}
           variant="secondary"
         >
-          编辑订阅
+          {t("编辑订阅")}
         </Button>
         {subscription.terminatedAt ? (
           <Button
@@ -368,7 +369,7 @@ export function SubscriptionDetailSheet({
             onClick={handleResume}
             variant="secondary"
           >
-            {resumingState ? "处理中…" : "恢复订阅"}
+            {resumingState ? t("处理中…") : t("恢复订阅")}
           </Button>
         ) : (
           <Button
@@ -378,7 +379,7 @@ export function SubscriptionDetailSheet({
             onClick={handleTerminate}
             variant="secondary"
           >
-            {terminatingState ? "处理中…" : "退订"}
+            {terminatingState ? t("处理中…") : t("退订")}
           </Button>
         )}
         <Button
@@ -387,7 +388,7 @@ export function SubscriptionDetailSheet({
           onClick={handleDelete}
           variant="danger"
         >
-          删除订阅
+          {t("删除订阅")}
         </Button>
       </div>
 

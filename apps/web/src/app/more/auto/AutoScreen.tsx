@@ -40,9 +40,10 @@ import {
   transactionTypeLabel,
   transferAccountSummary,
 } from "./_components/auto-utils";
+import { t } from "@/lib/i18n";
 
 function sectionTitle(count: number): string {
-  return count > 0 ? `进行中 · ${count} 条规则` : "进行中";
+  return count > 0 ? t("进行中 · {count} 条规则", { count }) : t("进行中");
 }
 
 export function AutoScreen() {
@@ -109,7 +110,7 @@ export function AutoScreen() {
     onSuccess: async () => {
       await invalidateAutomation();
       if (stack.length > 0) pop();
-      showToast({ tone: "success", message: "自动记账已删除" });
+      showToast({ tone: "success", message: t("自动记账已删除") });
     },
   });
 
@@ -120,7 +121,7 @@ export function AutoScreen() {
       }),
     onSuccess: async () => {
       await invalidateAfterConfirm();
-      showToast({ tone: "success", message: "已确认入账" });
+      showToast({ tone: "success", message: t("已确认入账") });
     },
   });
 
@@ -132,7 +133,7 @@ export function AutoScreen() {
       }),
     onSuccess: async () => {
       await invalidateAfterConfirm();
-      showToast({ tone: "success", message: "待确认记录已全部入账" });
+      showToast({ tone: "success", message: t("待确认记录已全部入账") });
     },
   });
 
@@ -143,7 +144,7 @@ export function AutoScreen() {
       }),
     onSuccess: async () => {
       await invalidateAutomation();
-      showToast({ tone: "success", message: "已忽略这条待确认" });
+      showToast({ tone: "success", message: t("已忽略这条待确认") });
     },
   });
 
@@ -205,9 +206,11 @@ export function AutoScreen() {
           )
         : categorySummary(categories, rule.categoryId, rule.subcategoryId);
     await confirm({
-      title: "删除自动记账？",
-      message: `将停止并归档「${summary.name}」这条规则，已生成的待确认记录和历史账单不会自动删除。`,
-      confirmText: "删除",
+      title: t("删除自动记账？"),
+      message: t("将停止并归档「{name}」这条规则，已生成的待确认记录和历史账单不会自动删除。", {
+        name: summary.name,
+      }),
+      confirmText: t("删除"),
       onConfirm: () => deleteRule.mutateAsync(rule.id),
       tone: "danger",
     });
@@ -216,7 +219,7 @@ export function AutoScreen() {
   const openDetail = (rule: AutoRule) => {
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
-      title: "自动记账详情",
+      title: t("自动记账详情"),
       content: (
         <AutoRuleDetailSheet
           accounts={accounts}
@@ -251,18 +254,18 @@ export function AutoScreen() {
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
-        label: `编辑${summary.name}`,
+        label: t("编辑{name}", { name: summary.name }),
         onClick: () => openEditor(rule),
         tone: "neutral",
       },
       {
         icon: <Trash2 size={18} />,
-        label: `删除${summary.name}`,
+        label: t("删除{name}", { name: summary.name }),
         onClick: () => void requestDeleteRule(rule),
         tone: "danger",
       },
     ];
-    const nextLabel = rule.enabled ? formatDateLabel(rule.nextRunOn) : "已暂停";
+    const nextLabel = rule.enabled ? formatDateLabel(rule.nextRunOn) : t("已暂停");
 
     return (
       <SwipeActionRow actions={actions} key={rule.id}>
@@ -302,7 +305,7 @@ export function AutoScreen() {
           <Switch
             checked={rule.enabled}
             disabled={toggleRule.isPending}
-            label={`启用${summary.name}`}
+            label={t("启用{name}", { name: summary.name })}
             onCheckedChange={() => toggleRule.mutate(rule)}
           />
         </div>
@@ -318,31 +321,31 @@ export function AutoScreen() {
         action={
           <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
-            label="新建自动记账"
+            label={t("新建自动记账")}
             onClick={() => openEditor()}
           />
         }
-        description="按设定周期生成待确认记录，确认后才会正式入账"
+        description={t("按设定周期生成待确认记录，确认后才会正式入账")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
         navigationTitleAlign="left"
-        title="自动记账"
+        title={t("自动记账")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {loadingBase ? (
-            <LoadingState rows={5} title="加载自动记账" />
+            <LoadingState rows={5} title={t("加载自动记账")} />
           ) : (
             <>
               {pending.length > 0 ? (
                 <section className="flex flex-col gap-2">
                   <div className="flex items-center justify-between px-1 py-1">
                     <span className="text-[13px] font-semibold text-[var(--color-text-secondary)]">
-                      待确认 · {pending.length} 条
+                      {t("待确认 · {length} 条", { length: pending.length })}
                     </span>
                     <Button
                       className="!h-9 !px-3 !text-sm"
@@ -350,7 +353,7 @@ export function AutoScreen() {
                       onClick={() => confirmBatch.mutate(pending.map((item) => item.id))}
                       variant="primary"
                     >
-                      全部确认
+                      {t("全部确认")}
                     </Button>
                   </div>
                   <PendingTransactionList
@@ -373,14 +376,14 @@ export function AutoScreen() {
                 {rules.length > 0 ? (
                   <span className="text-xs text-[var(--color-text-muted)]">
                     {rules.length - activeRuleCount > 0
-                      ? `${rules.length - activeRuleCount} 条已暂停`
-                      : "全部启用"}
+                      ? t("{value} 条已暂停", { value: rules.length - activeRuleCount })
+                      : t("全部启用")}
                   </span>
                 ) : null}
               </div>
 
               {rulesQuery.isPending ? (
-                <LoadingState rows={4} title="加载自动记账规则" />
+                <LoadingState rows={4} title={t("加载自动记账规则")} />
               ) : rules.length === 0 ? (
                 <EmptyState
                   // action={
@@ -389,7 +392,7 @@ export function AutoScreen() {
                   //   </Button>
                   // }
                   message=""
-                  title="还没有自动记账"
+                  title={t("还没有自动记账")}
                 />
               ) : (
                 <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
@@ -398,11 +401,15 @@ export function AutoScreen() {
               )}
 
               {pendingQuery.isPending && !pending.length ? (
-                <p className="px-1 text-xs text-[var(--color-text-muted)]">正在检查待确认记录…</p>
+                <p className="px-1 text-xs text-[var(--color-text-muted)]">
+                  {t("正在检查待确认记录…")}
+                </p>
               ) : null}
 
               <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                自动记账只生成待确认记录，不会绕过账单确认。忽略某条待确认不会影响下一周期继续生成。
+                {t(
+                  "自动记账只生成待确认记录，不会绕过账单确认。忽略某条待确认不会影响下一周期继续生成。",
+                )}
               </p>
             </>
           )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { currentIntlLocale, t } from "@/lib/i18n";
 
 /**
  * lib.dom.d.ts 未收录 Web Speech API，这里声明用到的最小子集。
@@ -187,7 +188,7 @@ export interface UseSpeechInputOptions {
  *   Chrome 则是多条累积。onresult 里「已确定段落累加 + 临时段落拼接」两者都正确。
  */
 export function useSpeechInput({
-  lang = "zh-CN",
+  lang = currentIntlLocale(),
   phrases,
   onTranscript,
   onError,
@@ -399,8 +400,8 @@ export function useSpeechInput({
         }
         onErrorRef.current?.(
           code === "not-allowed" || code === "service-not-allowed"
-            ? "麦克风权限被拒绝，请在浏览器设置中允许使用麦克风"
-            : "语音识别失败，请重试或改用键盘输入",
+            ? t("麦克风权限被拒绝，请在浏览器设置中允许使用麦克风")
+            : t("语音识别失败，请重试或改用键盘输入"),
         );
       };
 
@@ -442,8 +443,8 @@ export function useSpeechInput({
             startupRetryRef.current = false;
             onErrorRef.current?.(
               isStandalonePwa()
-                ? "录音未能启动：系统麦克风可能被挂起，请上滑关闭应用后重新打开"
-                : "录音未能启动，请重试后再说话",
+                ? t("录音未能启动：系统麦克风可能被挂起，请上滑关闭应用后重新打开")
+                : t("录音未能启动，请重试后再说话"),
             );
             recognitionRef.current.abort();
           }
@@ -452,7 +453,7 @@ export function useSpeechInput({
         recognitionRef.current = null;
         clearWatchdog();
         setListening(false);
-        onErrorRef.current?.("语音识别启动失败，请重试");
+        onErrorRef.current?.(t("语音识别启动失败，请重试"));
       }
     },
     [lang, clearWatchdog, releasePrimeStream],

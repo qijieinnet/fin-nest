@@ -18,6 +18,7 @@ import { DeleteLedgerConfirmDialog } from "./DeleteLedgerConfirmDialog";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import { MembersSection } from "./MembersSection";
 import { ShareInviteSheet } from "./ShareInviteSheet";
+import { t } from "@/lib/i18n";
 
 export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
   const queryClient = useQueryClient();
@@ -33,7 +34,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
     mutationFn: () =>
       apiRequest<LedgerInvite>(ledgerInvitesPath(ledgerId), { method: "POST", body: {} }),
     onSuccess: (invite) => {
-      push({ title: "邀请码", content: <ShareInviteSheet invite={invite} /> });
+      push({ title: t("邀请码"), content: <ShareInviteSheet invite={invite} /> });
     },  });
 
   const deleteLedger = useMutation({
@@ -41,14 +42,14 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.ledgers });
       setLedgerPendingDelete(false);
-      showToast({ tone: "success", message: "账本已删除" });
+      showToast({ tone: "success", message: t("账本已删除") });
       pop();
     },  });
 
   if (!ledger) {
     return (
       <p className="py-6 text-center text-sm text-[var(--color-text-muted)]">
-        账本不存在或已删除。
+        {t("账本不存在或已删除。")}
       </p>
     );
   }
@@ -62,14 +63,14 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
     <>
       <div className="flex flex-col gap-5 pb-2">
         <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-          <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+          <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
           <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-            账本详情
+            {t("账本详情")}
           </h2>
           {isOwner ? (
             <IconButton
               icon={<Pencil size={20} strokeWidth={2.2} />}
-              label="编辑账本"
+              label={t("编辑账本")}
               onClick={() =>
                 push({ hideDefaultHeader: true, content: <CreateLedgerSheet ledger={ledger} /> })
               }
@@ -91,10 +92,10 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
               {ledger.name}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)]">
-              {isOwner ? "所有者" : "成员"} · {ledger.currency}
+              {isOwner ? t("所有者") : t("成员")} · {ledger.currency}
             </p>
             <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
-              金额小数位数 · {ledger.amountDecimalPlaces}
+              {t("金额小数位数 · {amountDecimalPlaces}", { amountDecimalPlaces: ledger.amountDecimalPlaces })}
             </p>
           </div>
         </header>
@@ -110,12 +111,12 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
                 className={whiteButtonClass}
                 onClick={() => {
                   setLedgerId(ledger.id);
-                  showToast({ tone: "success", message: `已切换到「${ledger.name}」` });
+                  showToast({ tone: "success", message: t("已切换到「{name}」", { name: ledger.name }) });
                   pop();
                 }}
                 variant="secondary"
               >
-                切换到此账本
+                {t("切换到此账本")}
               </Button>
             ) : null}
 
@@ -126,7 +127,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
                 onClick={() => createInvite.mutate()}
                 variant="secondary"
               >
-                {createInvite.isPending ? "生成中…" : "生成邀请码"}
+                {createInvite.isPending ? t("生成中…") : t("生成邀请码")}
               </Button>
             ) : null}
           </div>
@@ -140,7 +141,7 @@ export function LedgerDetailSheet({ ledgerId }: { ledgerId: string }) {
               onClick={() => setLedgerPendingDelete(true)}
               variant="danger"
             >
-              删除账本
+              {t("删除账本")}
             </Button>
           </div>
         ) : null}

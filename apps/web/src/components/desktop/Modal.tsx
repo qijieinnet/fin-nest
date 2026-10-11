@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/format/class-names";
 import { Surface } from "@/components/ui/Surface";
 import { DesktopDialog, type DesktopDialogVariant } from "./DesktopDialog";
+import { t } from "@/lib/i18n";
 
 type ModalProps = {
   children: ReactNode;
@@ -39,7 +40,7 @@ export function Modal({
         {hideDefaultHeader ? null : (
           <div className="sheet-header">
             <h2>{title}</h2>
-            <button aria-label="关闭" className="sheet-close" onClick={onClose} type="button">
+            <button aria-label={t("关闭")} className="sheet-close" onClick={onClose} type="button">
               <X size={18} />
             </button>
           </div>

@@ -34,6 +34,7 @@ async function main() {
   const owner = await register("owner");
   const requester = await register("requester");
   await assertPasswordVerify(owner.token);
+  await assertLocalePreference(owner.token);
   await assertAppLockFlow(owner.token, requester.token);
   await assertAdminUserSessions(owner, requester);
   const ledger = await api("POST", "/ledgers", {
@@ -1306,6 +1307,25 @@ async function assertAdminUserSessions(owner, requester) {
     where: { id: owner.userId },
     data: { isAdmin: before?.isAdmin ?? false },
   });
+}
+
+// 界面语言：账号级偏好存服务端（null = 跟随设备）；错误文案按 Accept-Language 翻译。
+async function assertLocalePreference(token) {
+  const initial = await api("GET", "/auth/me", { token });
+  assert.equal(initial.locale, null);
+  const updated = await api("PATCH", "/auth/me/preferences", { token, body: { locale: "en" } });
+  assert.equal(updated.locale, "en");
+  assert.equal((await api("GET", "/auth/me", { token })).locale, "en");
+  await api("PATCH", "/auth/me/preferences", { token, body: { locale: "fr" }, expected: 400 });
+  // 不传字段 = 保持不变；显式 null = 回到跟随设备。
+  assert.equal((await api("PATCH", "/auth/me/preferences", { token, body: {} })).locale, "en");
+  assert.equal((await api("PATCH", "/auth/me/preferences", { token, body: { locale: null } })).locale, null);
+
+  const zh = await api("GET", "/auth/me", { expected: 401 });
+  assert.equal(zh.message, "请先登录");
+  const en = await api("GET", "/auth/me", { expected: 401, headers: { "accept-language": "en-US,en;q=0.9" } });
+  assert.equal(en.message, "Please sign in first");
+  assert.equal(en.code, zh.code);
 }
 
 // 应用锁解锁用的密码校验：正确密码 204，错误密码 401，未登录 401。
@@ -3086,10 +3106,11 @@ async function countLedgerJobs(ledgerId, type) {
   return jobs.filter((job) => job.payload?.ledgerId === ledgerId).length;
 }
 
-async function api(method, url, { token, body, expected, idempotencyKey } = {}) {
+async function api(method, url, { token, body, expected, idempotencyKey, headers } = {}) {
   const response = await fetch(`${baseUrl}${url}`, {
     method,
     headers: {
+      ...headers,
       ...(body ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),

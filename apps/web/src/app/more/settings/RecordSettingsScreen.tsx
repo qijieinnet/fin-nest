@@ -19,6 +19,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { EntryReminderCard } from "./_components/EntryReminderCard";
 import { FieldSortList } from "./_components/FieldSortList";
+import { localized, msg, t } from "@/lib/i18n";
 
 /** PATCH 的入参：普通设置项按原样合并，记账提醒是部分字段的嵌套 patch。 */
 type SettingPatch = Partial<Omit<RecordSetting, "entryReminder">> & {
@@ -26,13 +27,13 @@ type SettingPatch = Partial<Omit<RecordSetting, "entryReminder">> & {
 };
 
 // 记账页面可调整展示/顺序的字段（type/amount 固定在顶部，不参与配置）。
-const FIELD_META: Record<string, { name: string; icon: string }> = {
-  category: { name: "分类", icon: "🏷️" },
-  account: { name: "账户", icon: "💳" },
-  date: { name: "日期", icon: "📅" },
-  person: { name: "人员", icon: "👥" },
-  note: { name: "备注", icon: "📝" },
-};
+const FIELD_META: Record<string, { name: string; icon: string }> = localized({
+  category: { name: msg("分类"), icon: "🏷️" },
+  account: { name: msg("账户"), icon: "💳" },
+  date: { name: msg("日期"), icon: "📅" },
+  person: { name: msg("人员"), icon: "👥" },
+  note: { name: msg("备注"), icon: "📝" },
+});
 const ORDERABLE_KEYS = ["category", "account", "date", "person", "note"];
 const TOGGLEABLE_KEYS = new Set(["account", "person", "note"]);
 const DEFAULT_ORDER = ["category", "account", "date", "person", "note"];
@@ -89,7 +90,7 @@ export function RecordSettingsScreen() {
       if (ledgerId && context?.previous) {
         queryClient.setQueryData(queryKeys.recordSetting(ledgerId), context.previous);
       }
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("保存失败")) });
     },
     onSettled: () => {
       if (ledgerId) queryClient.invalidateQueries({ queryKey: queryKeys.recordSetting(ledgerId) });
@@ -126,31 +127,31 @@ export function RecordSettingsScreen() {
   return (
     <MobileAppShell>
       <MobilePage
-        description="调整记账页面展示哪些字段、以什么顺序展示，以及必填校验。"
+        description={t("调整记账页面展示哪些字段、以什么顺序展示，以及必填校验。")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="记账设置"
+        title={t("记账设置")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {settingQuery.isPending || !setting ? (
-            <LoadingState rows={5} title="加载记账设置" />
+            <LoadingState rows={5} title={t("加载记账设置")} />
           ) : (
             <>
               <div className="flex items-end justify-between px-1">
                 <span className="text-[13px] font-semibold text-[var(--color-text-muted)]">
-                  字段
+                  {t("字段")}
                 </span>
                 <button
                   className="text-[15px] font-medium text-[var(--color-tint)]"
                   onClick={() => setSortMode((value) => !value)}
                   type="button"
                 >
-                  {sortMode ? "完成" : "排序"}
+                  {sortMode ? t("完成") : t("排序")}
                 </button>
               </div>
               {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
@@ -184,11 +185,17 @@ export function RecordSettingsScreen() {
                           {toggleable ? (
                             <Switch
                               checked={visible}
-                              label={`${visible ? "隐藏" : "显示"}${meta.name}`}
+                              label={
+                                visible
+                                  ? t("隐藏{name}", { name: meta.name })
+                                  : t("显示{name}", { name: meta.name })
+                              }
                               onCheckedChange={() => toggleVisible(key)}
                             />
                           ) : (
-                            <span className="text-xs text-[var(--color-text-muted)]">常驻</span>
+                            <span className="text-xs text-[var(--color-text-muted)]">
+                              {t("常驻")}
+                            </span>
                           )}
                         </li>
                       );
@@ -206,7 +213,7 @@ export function RecordSettingsScreen() {
               </button> */}
 
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                必填校验
+                {t("必填校验")}
               </span>
               {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
                 设为必填后，记账页面默认展开该字段。
@@ -214,62 +221,62 @@ export function RecordSettingsScreen() {
               <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
                 <div className="flex items-center gap-3 px-4 py-[15px] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)]">
                   <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
-                    账户必填
+                    {t("账户必填")}
                   </span>
                   <Switch
                     checked={setting.acctRequired}
-                    label="账户必填"
+                    label={t("账户必填")}
                     onCheckedChange={(checked) => update.mutate({ acctRequired: checked })}
                   />
                 </div>
                 <div className="flex items-center gap-3 px-4 py-[15px]">
                   <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
-                    人员必填
+                    {t("人员必填")}
                   </span>
                   <Switch
                     checked={setting.personRequired}
-                    label="人员必填"
+                    label={t("人员必填")}
                     onCheckedChange={(checked) => update.mutate({ personRequired: checked })}
                   />
                 </div>
               </section>
 
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                记账体验
+                {t("记账体验")}
               </span>
 
               <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
                 <div className="flex items-center gap-3 px-4 py-[15px]">
                   <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
-                    连续记账
+                    {t("连续记账")}
                     {/* <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
                       开启后，在新建记账页面提交后不自动关闭，并清空金额、备注等输入，保留日期、分类、人员，方便连续记账。
                     </p> */}
                   </span>
                   <Switch
                     checked={setting.continuousEntry}
-                    label="连续记账"
+                    label={t("连续记账")}
                     onCheckedChange={(checked) => update.mutate({ continuousEntry: checked })}
                   />
                 </div>
                 <span className="mx-4 block h-px bg-[var(--color-border-subtle)]" />
                 <div className="flex items-center gap-3 px-4 py-[15px]">
                   <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">
-                    自动展开金额键盘
+                    {t("自动展开金额键盘")}
                     <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                      进入记账页即弹出金额键盘。关闭时点金额区域再展开。
+                      {t("进入记账页即弹出金额键盘。关闭时点金额区域再展开。")}
                     </p>
                   </span>
                   <Switch
                     checked={setting.keypadAutoOpen}
-                    label="自动展开金额键盘"
+                    label={t("自动展开金额键盘")}
                     onCheckedChange={(checked) => update.mutate({ keypadAutoOpen: checked })}
                   />
                 </div>
               </section>
 
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                记账提醒
+                {t("记账提醒")}
               </span>
               <EntryReminderCard
                 ledgerId={ledgerId!}

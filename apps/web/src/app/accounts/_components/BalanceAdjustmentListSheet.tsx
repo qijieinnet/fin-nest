@@ -15,6 +15,7 @@ import {
   isBalanceEditEntry,
   isInvestmentEntry,
 } from "./account-utils";
+import { t } from "@/lib/i18n";
 
 /**
  * 本组件**自己取数**，不接收 entries 快照。
@@ -97,7 +98,7 @@ export function BalanceAdjustmentListSheet({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
-      showToast({ tone: "success", message: "已改判" });
+      showToast({ tone: "success", message: t("已改判") });
     },
     onError: (error) => showToast({ tone: "error", message: getApiErrorMessage(error) }),
   });
@@ -110,13 +111,13 @@ export function BalanceAdjustmentListSheet({
   );
 
   if (entriesQuery.isPending || (subAccountId && accountsQuery.isPending)) {
-    return <LoadingState rows={3} title="加载余额修改记录" />;
+    return <LoadingState rows={3} title={t("加载余额修改记录")} />;
   }
 
   if (adjustments.length === 0) {
     return (
       <div className="py-6">
-        <EmptyState title="暂无余额修改记录" />
+        <EmptyState title={t("暂无余额修改记录")} />
       </div>
     );
   }
@@ -152,13 +153,13 @@ export function BalanceAdjustmentListSheet({
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[12px] text-[var(--color-text-muted)]">
               <span>
-                调整前{" "}
+                {t("调整前")}{" "}
                 <strong className="font-semibold text-[var(--color-text-primary)]">
                   {formatMoney(beforeMicros)}
                 </strong>
               </span>
               <span className="text-right">
-                调整后{" "}
+                {t("调整后")}{" "}
                 <strong className="font-semibold text-[var(--color-text-primary)]">
                   {formatMoney(afterMicros)}
                 </strong>
@@ -173,7 +174,7 @@ export function BalanceAdjustmentListSheet({
                   onClick={() => reclassify.mutate({ entryId: entry.id, entryType: flipTo })}
                   variant="secondary"
                 >
-                  改判为「{entryTypeLabel(flipTo, accountType)}」
+                  {t("改判为「{value}」", { value: entryTypeLabel(flipTo, accountType) })}
                 </Button>
               </div>
             ) : null}

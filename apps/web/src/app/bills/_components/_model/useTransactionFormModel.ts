@@ -53,6 +53,7 @@ import {
   type PendingAttachment,
   type PendingPatchBody,
 } from "./transaction-form-utils";
+import { t } from "@/lib/i18n";
 
 export type TransactionSeed = {
   type?: TransactionType;
@@ -260,7 +261,7 @@ export function useTransactionFormModel({
           .map((entry) => personById.get(entry.personId))
           .filter((name): name is string => Boolean(name));
         return {
-          description: `${insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人"} · ${meta.label}`,
+          description: `${insuredNames.length > 0 ? `${insuredNames.join(t("、"))}` : t("未指定被保人")} · ${meta.label}`,
           id: insurance.id,
           icon: meta.icon,
           name: insurance.name,
@@ -451,7 +452,7 @@ export function useTransactionFormModel({
           queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
           queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "stats"] }),
         ]);
-        showToast({ tone: "success", message: "已确认入账" });
+        showToast({ tone: "success", message: t("已确认入账") });
         // 编辑页在历史里紧邻待确认列表（详情进编辑用 replace 取代了详情），
         // 用 back 直接回到列表，避免残留失效的详情页。
         if (onSaved) await onSaved(transaction);
@@ -465,7 +466,7 @@ export function useTransactionFormModel({
         postSaveFailed = true;
         showToast({
           tone: "error",
-          message: getApiErrorMessage(error, "记录已保存，部分关联失败"),
+          message: getApiErrorMessage(error, t("记录已保存，部分关联失败")),
         });
       }
       await Promise.all([
@@ -484,7 +485,7 @@ export function useTransactionFormModel({
           : Promise.resolve(),
       ]);
       if (!postSaveFailed) {
-        showToast({ tone: "success", message: isEdit ? "已保存修改" : "已记一笔" });
+        showToast({ tone: "success", message: isEdit ? t("已保存修改") : t("已记一笔") });
       }
       // 新建且开启连续记账：保留页面继续记下一笔，不触发关闭/返回。
       if (!isEdit && continuousEntry && !completeAfterSave) {
@@ -503,7 +504,7 @@ export function useTransactionFormModel({
 
   useEffect(() => {
     onSubmitBlocked?.(() => {
-      showToast({ tone: "error", message: validationMessage ?? "请先补全必填项" });
+      showToast({ tone: "error", message: validationMessage ?? t("请先补全必填项") });
     });
   }, [onSubmitBlocked, showToast, validationMessage]);
 

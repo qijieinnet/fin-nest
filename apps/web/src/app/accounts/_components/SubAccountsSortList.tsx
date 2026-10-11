@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { formatMoney, type SubAccountRow } from "./account-utils";
+import { t } from "@/lib/i18n";
 
 const SUB_ACCOUNT_GROUP = "__sub_accounts__";
 
@@ -66,7 +67,7 @@ export function SubAccountsSortList({ rows, onReorder }: SubAccountsSortListProp
               {formatMoney(row.balanceMicros)}
             </span>
             <DragHandle
-              label={`拖动排序 ${row.name}`}
+              label={t("拖动排序 {name}", { name: row.name })}
               onPointerDown={(event) => {
                 event.preventDefault();
                 beginDrag(

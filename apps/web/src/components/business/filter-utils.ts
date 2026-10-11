@@ -1,16 +1,17 @@
 import type { BusinessFilterValue } from "./filter-types";
+import { localized, msg } from "@/lib/i18n";
 
-const TIME_PRESET_LABELS: Record<NonNullable<BusinessFilterValue["timePreset"]>, string> = {
-  month: "本月",
-  lastmonth: "上月",
-  week: "本周",
-  lastweek: "上周",
-  "30d": "近30天",
-  year: "今年",
-  lastyear: "上年",
-  all: "全部",
-  custom: "自定义",
-};
+const TIME_PRESET_LABELS: Record<NonNullable<BusinessFilterValue["timePreset"]>, string> = localized({
+  month: msg("本月"),
+  lastmonth: msg("上月"),
+  week: msg("本周"),
+  lastweek: msg("上周"),
+  "30d": msg("近30天"),
+  year: msg("今年"),
+  lastyear: msg("上年"),
+  all: msg("全部"),
+  custom: msg("自定义"),
+});
 
 /** 当前筛选的周期标题，如「本月」「近30天」。 */
 export function periodLabel(value: BusinessFilterValue): string {

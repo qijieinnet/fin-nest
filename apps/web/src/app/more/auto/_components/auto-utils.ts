@@ -8,18 +8,25 @@ import type {
 } from "@/lib/api";
 import { accountSelectionId } from "@/lib/data/options";
 import { formatMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
-export const REPEAT_OPTIONS: Array<{ label: string; value: AutoRepeatRule }> = [
-  { label: "每天", value: "daily" },
-  { label: "每周", value: "weekly" },
-  { label: "每月", value: "monthly" },
-  { label: "每年", value: "yearly" },
-  { label: "不重复", value: "once" },
-];
+export const REPEAT_OPTIONS: Array<{ label: string; value: AutoRepeatRule }> = localized([
+  { label: msg("每天"), value: "daily" },
+  { label: msg("每周"), value: "weekly" },
+  { label: msg("每月"), value: "monthly" },
+  { label: msg("每年"), value: "yearly" },
+  { label: msg("不重复"), value: "once" },
+]);
 
-export const REPEAT_LABELS: Record<AutoRepeatRule, string> = Object.fromEntries(
-  REPEAT_OPTIONS.map((item) => [item.value, item.label]),
-) as Record<AutoRepeatRule, string>;
+// 不能从 REPEAT_OPTIONS 用 Object.fromEntries 派生：那会在模块加载时把 getter 读成定值，
+// 切换语言后标签不再跟着变。
+export const REPEAT_LABELS: Record<AutoRepeatRule, string> = localized({
+  daily: msg("每天"),
+  weekly: msg("每周"),
+  monthly: msg("每月"),
+  yearly: msg("每年"),
+  once: msg("不重复"),
+});
 
 export function dateOnly(value: string | null | undefined): string {
   return value?.slice(0, 10) ?? "";
@@ -31,18 +38,18 @@ export function todayKey(): string {
 
 export function formatDateLabel(value: string | null | undefined): string {
   const date = dateOnly(value);
-  if (!date) return "未安排";
+  if (!date) return t("未安排");
   const [, month, day] = date.split("-").map(Number);
   if (!month || !day) return date;
-  return `${month}月${day}日`;
+  return t("{month}月{day}日", { month, day });
 }
 
 export function formatFullDate(value: string | null | undefined): string {
   const date = dateOnly(value);
-  if (!date) return "未安排";
+  if (!date) return t("未安排");
   const [year, month, day] = date.split("-").map(Number);
   if (!year || !month || !day) return date;
-  return `${year}年${month}月${day}日`;
+  return t("{year}年{month}月{day}日", { year, month, day });
 }
 
 function addPeriod(date: Date, repeatRule: AutoRepeatRule): Date | null {
@@ -91,8 +98,8 @@ export function categorySummary(
   const subcategory = category?.subcategories.find((item) => item.id === subcategoryId);
   return {
     icon: subcategory?.icon?.trim() || category?.icon?.trim() || "📦",
-    name: subcategory?.name ?? category?.name ?? "未选择分类",
-    fullName: [category?.name, subcategory?.name].filter(Boolean).join(" · ") || "未选择分类",
+    name: subcategory?.name ?? category?.name ?? t("未选择分类"),
+    fullName: [category?.name, subcategory?.name].filter(Boolean).join(" · ") || t("未选择分类"),
   };
 }
 
@@ -105,7 +112,7 @@ export function accountSummary(
   const subAccount = account?.subAccounts.find((item) => item.id === subAccountId);
   return {
     icon: subAccount?.icon?.trim() || account?.icon?.trim() || "💼",
-    name: [account?.name, subAccount?.name].filter(Boolean).join(" · ") || "未绑定账户",
+    name: [account?.name, subAccount?.name].filter(Boolean).join(" · ") || t("未绑定账户"),
     selectionId: accountSelectionId(accountId, subAccountId),
   };
 }
@@ -121,7 +128,7 @@ export function transferAccountSummary(
   const to = accountSummary(accounts, toAccountId, toSubAccountId);
   return {
     icon: "↔",
-    name: "转账",
+    name: t("转账"),
     fullName: `${from.name} → ${to.name}`,
     from,
     to,
@@ -129,8 +136,8 @@ export function transferAccountSummary(
 }
 
 export function personName(people: Person[], personId: string | null | undefined): string {
-  if (!personId) return "未指定";
-  return people.find((person) => person.id === personId)?.name ?? "未知人员";
+  if (!personId) return t("未指定");
+  return people.find((person) => person.id === personId)?.name ?? t("未知人员");
 }
 
 export function resolveCategorySelection(categories: Category[], selectedId: string | null) {
@@ -145,9 +152,9 @@ export function resolveCategorySelection(categories: Category[], selectedId: str
 }
 
 export function transactionTypeLabel(type: TransactionType): string {
-  if (type === "income") return "收入";
-  if (type === "transfer") return "转账";
-  return "支出";
+  if (type === "income") return t("收入");
+  if (type === "transfer") return t("转账");
+  return t("支出");
 }
 
 export function ruleCategorySelection(rule: AutoRule): string | null {

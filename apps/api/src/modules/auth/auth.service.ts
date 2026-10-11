@@ -10,6 +10,8 @@ import { addDays, createOpaqueToken, hashOpaqueToken, hashPassword, verifyPasswo
 import { clientIpFromRequest } from "./ip-utils";
 import { deviceLabelFromUserAgent } from "./device-label";
 import { initializeLedgerDefaults } from "../ledgers/ledger-defaults";
+import { normalizeLocale, type AppLocale } from "@fin-nest/shared";
+import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 
 export type PublicUser = {
   id: string;
@@ -21,6 +23,8 @@ export type PublicUser = {
   appLockEnabled: boolean;
   /** 飞书客户端内跳过应用锁；同样要在首帧前拿到，否则免验证会先闪一下锁屏。 */
   appLockSkipInFeishu: boolean;
+  /** 界面语言；null = 用户未设置，前端跟随设备语言。 */
+  locale: AppLocale | null;
 };
 
 export type AuthResult = {
@@ -218,6 +222,15 @@ export class AuthService {
 
   async me(auth: SessionAuthContext): Promise<PublicUser> {
     const user = await this.prisma.client.user.findUniqueOrThrow({ where: { id: auth.userId } });
+    return this.toPublicUser(user);
+  }
+
+  /** 账号级界面偏好（目前只有语言）。不传的字段保持不变。 */
+  async updatePreferences(auth: SessionAuthContext, input: UpdatePreferencesDto): Promise<PublicUser> {
+    const user = await this.prisma.client.user.update({
+      where: { id: auth.userId },
+      data: input.locale === undefined ? {} : { locale: input.locale },
+    });
     return this.toPublicUser(user);
   }
 
@@ -531,6 +544,7 @@ export class AuthService {
       isAdmin: user.isAdmin,
       appLockEnabled: user.appLockEnabled,
       appLockSkipInFeishu: user.appLockSkipInFeishu,
+      locale: normalizeLocale(user.locale),
     };
   }
 }

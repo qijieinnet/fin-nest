@@ -22,6 +22,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { ItemTypeManagerSheet } from "./ItemTypeManagerSheet";
 import { todayKey, typeGlyph } from "./item-utils";
+import { t } from "@/lib/i18n";
 
 type ItemEditorSheetProps = {
   item?: ItemAsset;
@@ -34,7 +35,7 @@ type PendingAttachment = AttachmentItem & { file: File };
 function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
   return {
     id: record.id,
-    name: record.file?.originalName ?? "附件",
+    name: record.file?.originalName ?? t("附件"),
     contentType: record.file?.mime ?? undefined,
     sizeBytes: record.file?.sizeBytes ? Number(record.file.sizeBytes) : undefined,
   };
@@ -98,8 +99,8 @@ function TypeSelectRow({
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
-          <span>类型</span>
-          <strong>{selected ? `${selected.icon} ${selected.label}` : "请选择"}</strong>
+          <span>{t("类型")}</span>
+          <strong>{selected ? `${selected.icon} ${selected.label}` : t("请选择")}</strong>
           <ChevronRight size={18} />
         </button>
         <PopoverMenu
@@ -113,7 +114,7 @@ function TypeSelectRow({
             [
               {
                 icon: <Settings2 size={16} />,
-                label: "管理类型",
+                label: t("管理类型"),
                 onSelect: onManage,
               },
             ],
@@ -142,7 +143,7 @@ function DateFieldRow({
         <button className="biz-date-picker" onClick={() => onChange(todayKey())} type="button">
           <span className="biz-date-popover__summary">
             <span>{label}</span>
-            <strong>未选择</strong>
+            <strong>{t("未选择")}</strong>
           </span>
         </button>
       </div>
@@ -232,10 +233,10 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
   const save = useMutation({
     mutationFn: async () => {
       const priceParsed = purchasePrice.trim() ? parseMoneyToMicros(purchasePrice, { decimalPlaces }) : null;
-      if (priceParsed && !priceParsed.ok) throw new Error("购买价格格式不正确");
+      if (priceParsed && !priceParsed.ok) throw new Error(t("购买价格格式不正确"));
       const expectedTrimmed = expectedYears.trim();
       if (expectedTrimmed && !/^\d+(\.\d{1,2})?$/.test(expectedTrimmed)) {
-        throw new Error("预用年限格式不正确，最多两位小数");
+        throw new Error(t("预用年限格式不正确，最多两位小数"));
       }
 
       const body = {
@@ -272,7 +273,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
         }),
       ]);
       await onSaved?.(saved);
-      showToast({ tone: "success", message: isEditing ? "物品已更新" : "物品已添加" });
+      showToast({ tone: "success", message: isEditing ? t("物品已更新") : t("物品已添加") });
       pop();
     },
   });
@@ -321,7 +322,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
         ledgerApiPath(ledgerId, `/attachments/${entry.id}/content`),
       );
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("无法打开附件")) });
     }
   }
 
@@ -336,14 +337,14 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
       }}
     >
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑物品" : "添加物品"}
+          {isEditing ? t("编辑物品") : t("添加物品")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存物品"
+          label={t("保存物品")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -354,10 +355,10 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
         <div className="transaction-form__cards">
           <div className="transaction-form__card">
             <FieldRow
-              label="物品名称"
+              label={t("物品名称")}
               maxLength={120}
               onChange={(event) => setName(event.target.value)}
-              placeholder="如：MacBook Pro"
+              placeholder={t("如：MacBook Pro")}
               value={name}
             />
           </div>
@@ -372,20 +373,20 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="购买价格"
+              label={t("购买价格")}
               onChange={(event) => setPurchasePrice(event.target.value)}
               placeholder="0.00"
               prefix="¥"
               value={purchasePrice}
             />
             <span className="transaction-form__divider" />
-            <DateFieldRow label="购买日期" onChange={setPurchaseDate} value={purchaseDate} />
+            <DateFieldRow label={t("购买日期")} onChange={setPurchaseDate} value={purchaseDate} />
             <span className="transaction-form__divider" />
             <FieldRow
               inputMode="decimal"
-              label="预用年限"
+              label={t("预用年限")}
               onChange={(event) => setExpectedYears(event.target.value)}
-              placeholder="选填，如 3"
+              placeholder={t("选填，如 3")}
               value={expectedYears}
             />
           </div>
@@ -402,10 +403,10 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
 
           <div className="transaction-form__card">
             <FieldRow
-              label="备注"
+              label={t("备注")}
               maxLength={240}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="选填，如 序列号 / 购买渠道…"
+              placeholder={t("选填，如 序列号 / 购买渠道…")}
               value={note}
             />
           </div>

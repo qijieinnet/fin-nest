@@ -18,6 +18,7 @@ import {
   type KeypadState,
 } from "./keypad-expression";
 import { NumericPanel } from "./NumericPanel";
+import { t } from "@/lib/i18n";
 
 /** 键盘页签。amount 恒在首位，其余按记账设置的字段顺序动态生成。 */
 export type KeypadTabId =
@@ -81,7 +82,7 @@ export function AmountKeypad({
   onTypeChange,
   open,
   savedSignal = 0,
-  submitLabel = "保存",
+  submitLabel = t("保存"),
   submitting = false,
   tabs,
   type,
@@ -178,7 +179,7 @@ export function AmountKeypad({
     () => [
       {
         id: "amount",
-        label: "金额",
+        label: t("金额"),
         value: amount ? `¥${groupMoneyDisplay(amount)}` : undefined,
         panel: (
           <NumericPanel
@@ -245,10 +246,10 @@ export function AmountKeypad({
         </div>
         {/* 收起按钮固定在页签行右端（不进 __tab-scroll，页签再多也不会被滚走）。 */}
         <button
-          aria-label="收起键盘"
+          aria-label={t("收起键盘")}
           className="amount-keypad__collapse"
           onClick={onClose}
-          title="收起"
+          title={t("收起")}
           type="button"
         >
           <ChevronDown size={20} />
@@ -265,10 +266,10 @@ export function AmountKeypad({
         <div className="amount-keypad__actions-lead">
           {onExpand ? (
             <button
-              aria-label="转到记账页"
+              aria-label={t("转到记账页")}
               className="amount-keypad__action"
               onClick={onExpand}
-              title="转到记账页"
+              title={t("转到记账页")}
               type="button"
             >
               <Maximize2 size={20} />
@@ -276,10 +277,10 @@ export function AmountKeypad({
           ) : null}
           {onQuickTemplates ? (
             <button
-              aria-label="快捷记账"
+              aria-label={t("快捷记账")}
               className="amount-keypad__action"
               onClick={onQuickTemplates}
-              title="快捷记账"
+              title={t("快捷记账")}
               type="button"
             >
               <Zap size={20} />
@@ -294,7 +295,7 @@ export function AmountKeypad({
               onClick={onToday}
               type="button"
             >
-              今天
+              {t("今天")}
             </button>
           ) : null}
         </div>

@@ -65,6 +65,7 @@ import {
   insuranceTypeMeta,
   premiumFreqLabel,
 } from "./_components/insurance-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 const STATUS_CLASS: Record<string, string> = {
   active: "bg-[var(--color-tint-soft)] text-[var(--color-tint)]",
@@ -77,15 +78,15 @@ const KNOWN_INSURANCE_TYPE_VALUES: ReadonlySet<string> = new Set(
   INSURANCE_TYPES.map((type) => type.value),
 );
 
-const INSURANCE_STATUS_OPTIONS: AssetFilterOption[] = [
-  { id: "active", label: "在保" },
-  { id: "dueSoon", label: "即将到期" },
-  { id: "expired", label: "已过期" },
-];
+const INSURANCE_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "active", label: msg("在保") },
+  { id: "dueSoon", label: msg("即将到期") },
+  { id: "expired", label: msg("已过期") },
+]);
 
-const TERMINATED_INSURANCE_STATUS_OPTIONS: AssetFilterOption[] = [
-  { id: "terminated", label: "已终止" },
-];
+const TERMINATED_INSURANCE_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "terminated", label: msg("已终止") },
+]);
 
 type InsuranceGroup = {
   key: string;
@@ -247,34 +248,37 @@ function TerminatedInsurancesSheet({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
       <AssetFilterSheet
-        amountLabel="保费区间"
-        categoryLabel="保险类型"
+        amountLabel={t("保费区间")}
+        categoryLabel={t("保险类型")}
         categoryOptions={filterOptions}
-        dateLabel="保障期间"
-        keywordPlaceholder="搜索名称、被保人、公司、保单号..."
+        dateLabel={t("保障期间")}
+        keywordPlaceholder={t("搜索名称、被保人、公司、保单号...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="保单状态"
+        statusLabel={t("保单状态")}
         statusOptions={TERMINATED_INSURANCE_STATUS_OPTIONS}
         value={filterValue}
       />
 
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <div className="min-w-0 text-center">
           <h2 className="truncate text-base font-semibold text-[var(--color-text-primary)]">
-            已终止保单
+            {t("已终止保单")}
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            {filteredInsurances.length} / {insurances.length} 份
+            {t("{length} / {length2} 份", {
+              length: filteredInsurances.length,
+              length2: insurances.length,
+            })}
           </p>
         </div>
         <div className="relative">
           <IconButton
             icon={<SlidersHorizontal size={22} strokeWidth={2.2} />}
-            label="筛选已终止保单"
+            label={t("筛选已终止保单")}
             onClick={() => setFilterOpen(true)}
           />
           {activeFilterCount > 0 ? (
@@ -287,9 +291,9 @@ function TerminatedInsurancesSheet({
       </div>
 
       {insurances.length === 0 ? (
-        <EmptyState message="终止后的保单会集中放在这里。" title="还没有已终止保单" />
+        <EmptyState message={t("终止后的保单会集中放在这里。")} title={t("还没有已终止保单")} />
       ) : filteredInsurances.length === 0 ? (
-        <EmptyState message="调整筛选条件后再试。" title="没有符合条件的保单" />
+        <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的保单")} />
       ) : (
         <div className="flex flex-col gap-2.5">
           {groups.map((group) => {
@@ -312,7 +316,7 @@ function TerminatedInsurancesSheet({
                     {group.meta.label}
                   </span>
                   <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                    {group.items.length} 份
+                    {t("{length} 份", { length: group.items.length })}
                   </span>
                   <ChevronDown
                     className={cn(
@@ -404,7 +408,7 @@ export function InsurancesScreen() {
         invalidate(),
         queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId!, id) }),
       ]);
-      showToast({ tone: "success", message: expired ? "保单已归档" : "已终止续保" });
+      showToast({ tone: "success", message: expired ? t("保单已归档") : t("已终止续保") });
     },
   });
 
@@ -418,7 +422,7 @@ export function InsurancesScreen() {
         invalidate(),
         queryClient.invalidateQueries({ queryKey: queryKeys.insurance(ledgerId!, insuranceId) }),
       ]);
-      showToast({ tone: "success", message: "已恢复保单" });
+      showToast({ tone: "success", message: t("已恢复保单") });
     },
   });
 
@@ -429,7 +433,7 @@ export function InsurancesScreen() {
       }),
     onSuccess: async () => {
       await invalidate();
-      showToast({ tone: "success", message: "保单已删除" });
+      showToast({ tone: "success", message: t("保单已删除") });
     },
   });
 
@@ -458,9 +462,9 @@ export function InsurancesScreen() {
   const confirmDelete = async (insurance: Insurance) => {
     if (remove.isPending) return;
     const confirmed = await confirm({
-      title: `删除「${insurance.name}」？`,
-      message: "关联的记账记录会保留，仅移除该保单。",
-      confirmText: "删除",
+      title: t("删除「{name}」？", { name: insurance.name }),
+      message: t("关联的记账记录会保留，仅移除该保单。"),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (confirmed) remove.mutate(insurance.id);
@@ -577,7 +581,7 @@ export function InsurancesScreen() {
     if (!ledgerId) return;
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
-      title: "保单详情",
+      title: t("保单详情"),
       content: (
         <InsuranceDetailSheet
           insuranceId={insurance.id}
@@ -604,7 +608,7 @@ export function InsurancesScreen() {
     const status = insuranceStatus(insurance);
     const insuredNames = insuredPeopleNames(insurance, people);
     const metaText = [
-      insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人",
+      insuredNames.length > 0 ? `${insuredNames.join(t("、"))}` : t("未指定被保人"),
       meta.label,
       insurance.insurer,
       premiumFreqLabel(insurance.premiumFreq),
@@ -614,13 +618,13 @@ export function InsurancesScreen() {
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
-        label: `编辑${insurance.name}`,
+        label: t("编辑{name}", { name: insurance.name }),
         onClick: () => openEditor(insurance),
         tone: "neutral",
       },
       {
         icon: <Trash2 size={18} />,
-        label: `删除${insurance.name}`,
+        label: t("删除{name}", { name: insurance.name }),
         onClick: () => confirmDelete(insurance),
         tone: "danger",
       },
@@ -656,7 +660,7 @@ export function InsurancesScreen() {
             ) : null}
             {insurance.endDate && status.key !== "terminated" ? (
               <span className="text-[11px] text-[var(--color-text-muted)]">
-                {formatDateLabel(insurance.endDate)} 续保
+                {t("{value} 续保", { value: formatDateLabel(insurance.endDate) })}
               </span>
             ) : null}
           </span>
@@ -668,16 +672,16 @@ export function InsurancesScreen() {
   return (
     <MobileAppShell>
       <AssetFilterSheet
-        amountLabel="保费区间"
-        categoryLabel="保险类型"
+        amountLabel={t("保费区间")}
+        categoryLabel={t("保险类型")}
         categoryOptions={insuranceFilterOptions}
-        dateLabel="保障期间"
-        keywordPlaceholder="搜索名称、被保人、公司、保单号..."
+        dateLabel={t("保障期间")}
+        keywordPlaceholder={t("搜索名称、被保人、公司、保单号...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="保单状态"
+        statusLabel={t("保单状态")}
         statusOptions={INSURANCE_STATUS_OPTIONS}
         value={filterValue}
       />
@@ -685,7 +689,7 @@ export function InsurancesScreen() {
         action={
           sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -694,13 +698,13 @@ export function InsurancesScreen() {
                   {
                     dot: activeFilterCount > 0,
                     icon: <SlidersHorizontal size={20} strokeWidth={2.2} />,
-                    label: "筛选保单",
+                    label: t("筛选保单"),
                     onClick: () => setFilterOpen(true),
                   },
                   {
                     dot: dueReminderCount > 0,
                     icon: <MoreHorizontal size={22} strokeWidth={2.3} />,
-                    label: "更多选项",
+                    label: t("更多选项"),
                     onClick: () => setMoreMenuOpen((open) => !open),
                   },
                 ]}
@@ -713,7 +717,7 @@ export function InsurancesScreen() {
                         [
                           {
                             icon: <Plus size={18} />,
-                            label: "添加保单",
+                            label: t("添加保单"),
                             onSelect: () => {
                               setMoreMenuOpen(false);
                               openEditor();
@@ -726,9 +730,9 @@ export function InsurancesScreen() {
                     ? [
                         [
                           {
-                            description: `${dueReminderCount} 份待处理`,
+                            description: t("{dueReminderCount} 份待处理", { dueReminderCount }),
                             icon: <BellRing size={18} />,
-                            label: "到期提醒",
+                            label: t("到期提醒"),
                             onSelect: openReminders,
                           },
                         ],
@@ -741,21 +745,21 @@ export function InsurancesScreen() {
                       ) : (
                         <ChevronsDownUp size={18} />
                       ),
-                      label: allGroupsCollapsed ? "展开所有" : "折叠所有",
+                      label: allGroupsCollapsed ? t("展开所有") : t("折叠所有"),
                       onSelect: toggleAllGroups,
                     },
                     {
                       icon: <ArrowUpDown size={18} />,
-                      label: "排序",
+                      label: t("排序"),
                       onSelect: () => {
                         setMoreMenuOpen(false);
                         setSortMode(true);
                       },
                     },
                     {
-                      description: `${terminatedInsurances.length} 份`,
+                      description: t("{length} 份", { length: terminatedInsurances.length }),
                       icon: <ArchiveX size={18} />,
-                      label: "已终止",
+                      label: t("已终止"),
                       onSelect: openTerminatedInsurances,
                     },
                   ],
@@ -766,31 +770,31 @@ export function InsurancesScreen() {
             </div>
           )
         }
-        description="集中管理家庭保单，记录保额、保费与到期日，并可上传保单附件。"
+        description={t("集中管理家庭保单，记录保额、保费与到期日，并可上传保单附件。")}
         leading={
           isDesktop || !isPrimary || sortMode ? (
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label={sortMode ? "退出排序" : "返回"}
+              label={sortMode ? t("退出排序") : t("返回")}
               onClick={goBack}
             />
           ) : undefined
         }
         navigationTitleAlign="left"
-        title={sortMode ? "拖动排序" : "保险管理"}
+        title={sortMode ? t("拖动排序") : t("保险管理")}
       >
         <div className="flex flex-col gap-3 pb-22">
           {insurancesQuery.isPending || peopleQuery.isPending ? (
-            <LoadingState rows={4} title="加载保单" />
+            <LoadingState rows={4} title={t("加载保单")} />
           ) : insurances.length === 0 ? (
             <EmptyState
-              message="把寿险、医疗、车险等保单录入，保额保费一目了然，到期不漏缴。"
-              title="还没有添加保单"
+              message={t("把寿险、医疗、车险等保单录入，保额保费一目了然，到期不漏缴。")}
+              title={t("还没有添加保单")}
             />
           ) : sortMode ? (
             <>
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                按住右侧图标拖动排序；保险分类整体移动，保单仅在所属分类内排序。
+                {t("按住右侧图标拖动排序；保险分类整体移动，保单仅在所属分类内排序。")}
               </p>
               <InsuranceSortList
                 collapsedIds={collapsedIds}
@@ -803,7 +807,7 @@ export function InsurancesScreen() {
             <>
               <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
                 <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                  年缴保费合计
+                  {t("年缴保费合计")}
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
@@ -816,13 +820,15 @@ export function InsurancesScreen() {
                 <div className="mt-3.5 flex gap-7">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      在保保单
+                      {t("在保保单")}
                     </div>
-                    <div className="mt-0.5 block text-[15px] font-semibold">{active.length} 份</div>
+                    <div className="mt-0.5 block text-[15px] font-semibold">
+                      {t("{length} 份", { length: active.length })}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      保额合计
+                      {t("保额合计")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
                       {formatMoney(coverageSum)}
@@ -832,7 +838,7 @@ export function InsurancesScreen() {
               </section>
 
               {filteredInsurances.length === 0 ? (
-                <EmptyState message="调整筛选条件后再试。" title="没有符合条件的保单" />
+                <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的保单")} />
               ) : (
                 insuranceGroups.map((group) => {
                   const expanded = !collapsedIds.has(group.key);
@@ -854,7 +860,7 @@ export function InsurancesScreen() {
                           {group.meta.label}
                         </span>
                         <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                          {group.items.length} 份
+                          {t("{length} 份", { length: group.items.length })}
                         </span>
                         <ChevronDown
                           className={cn(
@@ -884,7 +890,7 @@ export function InsurancesScreen() {
           <div className="relative w-[min(100vw,430px)]">
             <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">
               <button
-                aria-label="添加保单"
+                aria-label={t("添加保单")}
                 className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
                 onClick={() => openEditor()}
                 type="button"

@@ -3,6 +3,7 @@
 import { EmptyState } from "@/components/business";
 import type { AccountEntry } from "@/lib/api";
 import { entryTypeLabel, formatDateLabel, formatMoney } from "./account-utils";
+import { t } from "@/lib/i18n";
 
 type AccountEntryListSheetProps = {
   accountType: string;
@@ -13,7 +14,7 @@ export function AccountEntryListSheet({ accountType, entries }: AccountEntryList
   if (entries.length === 0) {
     return (
       <div className="py-6">
-        <EmptyState title="暂无资金变动记录" />
+        <EmptyState title={t("暂无资金变动记录")} />
       </div>
     );
   }

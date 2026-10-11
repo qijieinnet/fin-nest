@@ -7,12 +7,13 @@ import { Button, Tabs } from "@/components/ui";
 import type { AiCard, AiDraftFields } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
 import { useLedger } from "@/providers";
+import { formatMonthShort, localized, msg, t } from "@/lib/i18n";
 
-export const TYPE_LABEL: Record<string, string> = {
-  expense: "支出",
-  income: "收入",
-  transfer: "转账",
-};
+export const TYPE_LABEL: Record<string, string> = localized({
+  expense: msg("支出"),
+  income: msg("收入"),
+  transfer: msg("转账"),
+});
 
 // 金额配色与账单行一致（TransactionRow / desktop-amount 同款翻转）：支出绿色 / 收入红色 / 转账黄色。
 export const TYPE_COLOR: Record<string, string> = {
@@ -93,11 +94,11 @@ export function shortDate(occurredOn: string): string {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diffDays = Math.round((today.getTime() - target.getTime()) / 86_400_000);
-  if (diffDays === 0) return "今天";
-  if (diffDays === 1) return "昨天";
-  if (diffDays === 2) return "前天";
-  const md = `${Number(month)}月${Number(day)}日`;
-  return Number(year) === today.getFullYear() ? md : `${year}年${md}`;
+  if (diffDays === 0) return t("今天");
+  if (diffDays === 1) return t("昨天");
+  if (diffDays === 2) return t("前天");
+  const md = t("{month}月{day}日", { month: Number(month), day: Number(day) });
+  return Number(year) === today.getFullYear() ? md : t("{year}年{md}", { year, md });
 }
 
 /** 记账草稿卡：展示 AI 解析结果，用户点确认才真正入账。已入账/已作废折叠成一行摘要。 */
@@ -131,7 +132,7 @@ export function TransactionDraftCard({
   const superseded = card.status === "superseded";
   const accountText =
     draft.type === "transfer"
-      ? [draft.fromAccountName ?? "未指定", draft.toAccountName ?? "未指定"].join(" → ")
+      ? [draft.fromAccountName ?? t("未指定"), draft.toAccountName ?? t("未指定")].join(" → ")
       : draft.accountName
         ? draft.subAccountName
           ? `${draft.accountName} · ${draft.subAccountName}`
@@ -140,7 +141,7 @@ export function TransactionDraftCard({
   const title =
     draft.subcategoryName ??
     draft.categoryName ??
-    (draft.type === "transfer" ? "转账" : (draft.note ?? TYPE_LABEL[draft.type] ?? draft.type));
+    (draft.type === "transfer" ? t("转账") : (draft.note ?? TYPE_LABEL[draft.type] ?? draft.type));
   const meta = [
     draft.occurredTime
       ? `${shortDate(draft.occurredOn)} ${draft.occurredTime}`
@@ -179,12 +180,12 @@ export function TransactionDraftCard({
           {confirmed ? (
             <span className="ai-draft__status is-confirmed">
               <Check size={12} strokeWidth={3} />
-              已记账
+              {t("已记账")}
             </span>
           ) : superseded ? (
-            <span className="ai-draft__status">已作废</span>
+            <span className="ai-draft__status">{t("已作废")}</span>
           ) : (
-            <span className="ai-draft__status is-proposed">待确认</span>
+            <span className="ai-draft__status is-proposed">{t("待确认")}</span>
           )}
         </div>
       </div>
@@ -192,19 +193,24 @@ export function TransactionDraftCard({
         <>
           {card.originalAmountMicros ? (
             <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-              原金额 {originalAmount(card.originalAmountMicros, currency)}，已按账本精度四舍五入
+              {t("原金额 {value}，已按账本精度四舍五入", {
+                value: originalAmount(card.originalAmountMicros, currency),
+              })}
             </p>
           ) : null}
           {card.possibleDuplicate ? (
             <p className="ai-draft-dup mt-2">
-              疑似重复：当天已有一笔相同金额
-              {card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : ""}
+              {t("疑似重复：当天已有一笔相同金额{value}", {
+                value: card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : "",
+              })}
             </p>
           ) : null}
           {(accountText && draft.type !== "transfer") || (draft.note && draft.note !== title) ? (
             <div className="ai-draft__details">
-              {draft.type === "transfer" ? null : <DraftRow label="账户" value={accountText} />}
-              <DraftRow label="备注" value={draft.note !== title ? draft.note : undefined} />
+              {draft.type === "transfer" ? null : (
+                <DraftRow label={t("账户")} value={accountText} />
+              )}
+              <DraftRow label={t("备注")} value={draft.note !== title ? draft.note : undefined} />
             </div>
           ) : null}
         </>
@@ -225,7 +231,7 @@ export function TransactionDraftCard({
                     onClick={onVoid}
                     variant="secondary"
                   >
-                    作废
+                    {t("作废")}
                   </Button>
                 ) : null}
                 {onEdit ? (
@@ -235,7 +241,7 @@ export function TransactionDraftCard({
                     onClick={onEdit}
                     variant="secondary"
                   >
-                    编辑
+                    {t("编辑")}
                   </Button>
                 ) : null}
               </div>
@@ -250,7 +256,7 @@ export function TransactionDraftCard({
                   onClick={onVoid}
                   variant="secondary"
                 >
-                  作废
+                  {t("作废")}
                 </Button>
               ) : null}
               {onEdit ? (
@@ -260,7 +266,7 @@ export function TransactionDraftCard({
                   onClick={onEdit}
                   variant="secondary"
                 >
-                  编辑
+                  {t("编辑")}
                 </Button>
               ) : null}
               <Button
@@ -269,7 +275,7 @@ export function TransactionDraftCard({
                 loading={confirming}
                 onClick={onConfirm}
               >
-                确认入账
+                {t("确认入账")}
               </Button>
             </div>
           )}
@@ -286,13 +292,17 @@ export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "tran
     <div className="ai-card">
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
-        <p className="shrink-0 text-xs text-[var(--color-text-muted)]">共 {card.count} 笔</p>
+        <p className="shrink-0 text-xs text-[var(--color-text-muted)]">
+          {t("共 {count} 笔", { count: card.count })}
+        </p>
       </div>
       <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-muted)]">
         {card.expenseMicros !== "0" ? (
-          <span>支出 {amount(card.expenseMicros, currency)}</span>
+          <span>{t("支出 {value}", { value: amount(card.expenseMicros, currency) })}</span>
         ) : null}
-        {card.incomeMicros !== "0" ? <span>收入 {amount(card.incomeMicros, currency)}</span> : null}
+        {card.incomeMicros !== "0" ? (
+          <span>{t("收入 {value}", { value: amount(card.incomeMicros, currency) })}</span>
+        ) : null}
       </div>
       {card.rows.length > 0 ? (
         <div className="mt-3 flex flex-col divide-y divide-black/[0.04]">
@@ -314,12 +324,12 @@ export function TransactionsCard({ card }: { card: Extract<AiCard, { kind: "tran
           ))}
           {card.count > card.rows.length ? (
             <p className="pt-2 text-center text-xs text-[var(--color-text-muted)]">
-              仅展示前 {card.rows.length} 笔
+              {t("仅展示前 {length} 笔", { length: card.rows.length })}
             </p>
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-[var(--color-text-muted)]">没有符合条件的交易</p>
+        <p className="mt-3 text-sm text-[var(--color-text-muted)]">{t("没有符合条件的交易")}</p>
       )}
     </div>
   );
@@ -330,16 +340,18 @@ export function StatsMonthCard({ card }: { card: Extract<AiCard, { kind: "stats_
   const currency = useCardCurrency(card.currency);
   return (
     <div className="ai-card">
-      <p className="font-bold text-[var(--color-text-primary)]">{card.month} 月度统计</p>
+      <p className="font-bold text-[var(--color-text-primary)]">
+        {t("{month} 月度统计", { month: card.month })}
+      </p>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
-          <p className="text-xs text-[var(--color-text-muted)]">支出</p>
+          <p className="text-xs text-[var(--color-text-muted)]">{t("支出")}</p>
           <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.expense }}>
             {amount(card.expenseMicros, currency)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-[var(--color-text-muted)]">收入</p>
+          <p className="text-xs text-[var(--color-text-muted)]">{t("收入")}</p>
           <p className="text-[18px] font-bold" style={{ color: TYPE_COLOR.income }}>
             {amount(card.incomeMicros, currency)}
           </p>
@@ -397,13 +409,15 @@ function StatsCategoryDonut({
     <div className="mt-3 flex items-center gap-4 rounded-[16px] bg-[var(--color-control-fill-muted)] p-3">
       <div className="relative h-28 w-28 shrink-0">
         <div
-          aria-label={`${TYPE_LABEL[type]}分类饼图`}
+          aria-label={t("{value}分类饼图", { value: TYPE_LABEL[type] })}
           className="absolute inset-0 rounded-full"
           role="img"
           style={{ background: `conic-gradient(${gradient})` }}
         />
         <div className="absolute inset-[17px] flex flex-col items-center justify-center rounded-full bg-[var(--color-bg-surface)]">
-          <span className="text-[10px] text-[var(--color-text-muted)]">总{TYPE_LABEL[type]}</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">
+            {t("总{value}", { value: TYPE_LABEL[type] })}
+          </span>
           <span className="mt-0.5 max-w-[76px] truncate text-[15px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
             {amount(totalMicros, currency)}
           </span>
@@ -426,7 +440,7 @@ function StatsCategoryDonut({
             </div>
           ))
         ) : (
-          <span className="text-xs text-[var(--color-text-muted)]">暂无分类数据</span>
+          <span className="text-xs text-[var(--color-text-muted)]">{t("暂无分类数据")}</span>
         )}
       </div>
     </div>
@@ -448,7 +462,7 @@ function CategorySummary({
   return (
     <div className="mt-4">
       <p className="mb-1.5 text-xs font-semibold text-[var(--color-text-muted)]">
-        {TYPE_LABEL[type]}分类汇总
+        {t("{value}分类汇总", { value: TYPE_LABEL[type] })}
       </p>
       {categories.length > 0 ? (
         <div className="flex flex-col divide-y divide-black/[0.04]">
@@ -468,14 +482,16 @@ function CategorySummary({
                   </span>
                 </div>
                 <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
-                  占比 {categoryPercent(category.amountMicros, total).toFixed(1)}%
+                  {t("占比 {value}%", {
+                    value: categoryPercent(category.amountMicros, total).toFixed(1),
+                  })}
                 </p>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="py-3 text-sm text-[var(--color-text-muted)]">暂无分类数据</p>
+        <p className="py-3 text-sm text-[var(--color-text-muted)]">{t("暂无分类数据")}</p>
       )}
     </div>
   );
@@ -498,7 +514,7 @@ function StatsTrendChart({
   const max = values.reduce((current, value) => (value > current ? value : current), 0n);
   const displayUnit = trendAmountUnit(max);
   const displayUnitLabel =
-    displayUnit === "tenThousand" ? "万元" : displayUnit === "thousand" ? "千元" : "元";
+    displayUnit === "tenThousand" ? t("万元") : displayUnit === "thousand" ? t("千元") : t("元");
   const width = 320;
   const height = 164;
   const padX = 10;
@@ -517,24 +533,25 @@ function StatsTrendChart({
   const labelEvery = points.length <= 12 ? 1 : Math.ceil(points.length / 6);
   const granularityLabel =
     card.trend?.granularity === "day"
-      ? "按日"
+      ? t("按日")
       : card.trend?.granularity === "week"
-        ? "按周"
-        : "按月";
+        ? t("按周")
+        : t("按月");
 
   return (
     <div className="mt-4 rounded-[16px] bg-[var(--color-control-fill-muted)] p-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="text-xs font-semibold text-[var(--color-text-primary)]">
-          {TYPE_LABEL[type]}趋势
+          {t("{value}趋势", { value: TYPE_LABEL[type] })}
         </p>
         <span className="text-[11px] text-[var(--color-text-muted)]">
-          {granularityLabel} · {displayUnitLabel}
+          {granularityLabel}
+          {displayUnitLabel ? ` · ${displayUnitLabel}` : ""}
         </span>
       </div>
       <div className="mt-2">
         <svg
-          aria-label={`${TYPE_LABEL[type]}趋势折线图，每个时间点均标注具体金额`}
+          aria-label={t("{value}趋势折线图，每个时间点均标注具体金额", { value: TYPE_LABEL[type] })}
           className="h-[164px] w-full overflow-visible"
           role="img"
           viewBox={`0 0 ${width} ${height}`}
@@ -582,7 +599,7 @@ function StatsTrendChart({
                   y={height - 7}
                 >
                   {card.trend?.granularity === "month"
-                    ? `${points[index]!.label.split("/").at(-1)}月`
+                    ? formatMonthShort(Number(points[index]!.label.split("/").at(-1)))
                     : points[index]!.label}
                 </text>
               ) : null}
@@ -619,12 +636,12 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
     <div className="ai-card">
       <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
       <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-        {card.dateFrom} 至 {card.dateTo}
+        {t("{dateFrom} 至 {dateTo}", { dateFrom: card.dateFrom, dateTo: card.dateTo })}
       </p>
       {bothSides ? (
         <div className="mt-3 grid grid-cols-3 gap-2">
           <div className="min-w-0">
-            <p className="text-xs text-[var(--color-text-muted)]">总支出</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{t("总支出")}</p>
             <p
               className="truncate text-[16px] font-bold [font-variant-numeric:tabular-nums]"
               style={{ color: TYPE_COLOR.expense }}
@@ -633,7 +650,7 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-[var(--color-text-muted)]">总收入</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{t("总收入")}</p>
             <p
               className="truncate text-[16px] font-bold [font-variant-numeric:tabular-nums]"
               style={{ color: TYPE_COLOR.income }}
@@ -642,7 +659,7 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-[var(--color-text-muted)]">差额</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{t("差额")}</p>
             <p className="truncate text-[16px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
               {amount(
                 (BigInt(card.incomeMicros) - BigInt(card.expenseMicros)).toString(),
@@ -654,7 +671,7 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
       ) : (
         <div className="mt-3">
           <p className="text-xs text-[var(--color-text-muted)]">
-            {type === "expense" ? "总支出" : "总收入"}
+            {type === "expense" ? t("总支出") : t("总收入")}
           </p>
           <p
             className="text-[18px] font-bold [font-variant-numeric:tabular-nums]"
@@ -668,8 +685,8 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
         <Tabs
           className="mt-4"
           items={[
-            { label: "支出", value: "expense" },
-            { label: "收入", value: "income" },
+            { label: t("支出"), value: "expense" },
+            { label: t("收入"), value: "income" },
           ]}
           onValueChange={(value) => setSelectedType(value as "expense" | "income")}
           value={type}
@@ -695,13 +712,13 @@ export function StatsPeriodCard({ card }: { card: Extract<AiCard, { kind: "stats
   );
 }
 
-const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  savings: "储蓄",
-  credit: "信用",
-  invest: "投资",
-  receivable: "可收回",
-  payable: "需归还",
-};
+const ACCOUNT_TYPE_LABEL: Record<string, string> = localized({
+  savings: msg("储蓄"),
+  credit: msg("信用"),
+  invest: msg("投资"),
+  receivable: msg("可收回"),
+  payable: msg("需归还"),
+});
 
 /** 账户余额卡：总资产/总负债/净资产 + 各账户余额（负债展示为负向红色）。 */
 export function AccountBalancesCard({
@@ -715,15 +732,15 @@ export function AccountBalancesCard({
       <div className="flex items-baseline justify-between gap-3">
         <p className="font-bold text-[var(--color-text-primary)]">{card.title}</p>
         <div className="text-right">
-          <p className="text-[11px] text-[var(--color-text-muted)]">净资产</p>
+          <p className="text-[11px] text-[var(--color-text-muted)]">{t("净资产")}</p>
           <p className="text-[18px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
             {amount(card.netWorthMicros, currency)}
           </p>
         </div>
       </div>
       <div className="mt-1 flex gap-4 text-xs text-[var(--color-text-muted)]">
-        <span>资产 {amount(card.totalAssetsMicros, currency)}</span>
-        <span>负债 {amount(card.totalLiabilitiesMicros, currency)}</span>
+        <span>{t("资产 {value}", { value: amount(card.totalAssetsMicros, currency) })}</span>
+        <span>{t("负债 {value}", { value: amount(card.totalLiabilitiesMicros, currency) })}</span>
       </div>
       {card.accounts.length > 0 ? (
         <div className="mt-3 flex flex-col divide-y divide-black/[0.04]">
@@ -751,7 +768,7 @@ export function AccountBalancesCard({
           ))}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-[var(--color-text-muted)]">暂无账户</p>
+        <p className="mt-3 text-sm text-[var(--color-text-muted)]">{t("暂无账户")}</p>
       )}
     </div>
   );
@@ -783,22 +800,26 @@ export function BudgetProgressCard({
   if (!card.enabled) {
     return (
       <div className="ai-card">
-        <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算</p>
-        <p className="mt-2 text-sm text-[var(--color-text-muted)]">该月未启用预算</p>
+        <p className="font-bold text-[var(--color-text-primary)]">
+          {t("{month} 预算", { month: card.month })}
+        </p>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">{t("该月未启用预算")}</p>
       </div>
     );
   }
   return (
     <div className="ai-card">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="font-bold text-[var(--color-text-primary)]">{card.month} 预算进度</p>
+        <p className="font-bold text-[var(--color-text-primary)]">
+          {t("{month} 预算进度", { month: card.month })}
+        </p>
         <p className="shrink-0 text-xs text-[var(--color-text-muted)]">
           {card.percent.toFixed(0)}%
         </p>
       </div>
       <div className="mt-2">
         <div className="flex items-baseline justify-between gap-3 text-sm">
-          <span className="text-[var(--color-text-muted)]">已用</span>
+          <span className="text-[var(--color-text-muted)]">{t("已用")}</span>
           <span className="text-[var(--color-text-primary)]">
             {amount(card.usedMicros, currency)}
             {card.totalBudgetMicros ? ` / ${amount(card.totalBudgetMicros, currency)}` : ""}
@@ -807,7 +828,7 @@ export function BudgetProgressCard({
         {card.totalBudgetMicros ? <BudgetBar percent={card.percent} /> : null}
         {card.remainingMicros ? (
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            剩余 {amount(card.remainingMicros, currency)}
+            {t("剩余 {value}", { value: amount(card.remainingMicros, currency) })}
           </p>
         ) : null}
       </div>

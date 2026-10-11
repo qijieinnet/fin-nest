@@ -23,6 +23,7 @@ import {
   type StatsType,
   useStatsModel,
 } from "./_model/useStatsModel";
+import { t } from "@/lib/i18n";
 
 /** 桌面统计页：2 列 dashboard 网格；分类下钻在桌面用右侧 Drawer。 */
 export function StatsScreenDesktop() {
@@ -71,18 +72,18 @@ export function StatsScreenDesktop() {
           {drilled ? (
             <IconButton
               icon={<ChevronLeft size={22} strokeWidth={2.3} />}
-              label="返回"
+              label={t("返回")}
               onClick={model.handleBack}
             />
           ) : null}
-          <h1 className="desktop-page-title">{drilled ? drilled.name : "统计"}</h1>
+          <h1 className="desktop-page-title">{drilled ? drilled.name : t("统计")}</h1>
         </div>
         <div className="flex items-center gap-3">
           {drilled ? null : (
             <Tabs
               items={[
-                { label: "支出", value: "expense" },
-                { label: "收入", value: "income" },
+                { label: t("支出"), value: "expense" },
+                { label: t("收入"), value: "income" },
               ]}
               onValueChange={(next) => model.switchType(next as StatsType)}
               value={type}
@@ -93,11 +94,11 @@ export function StatsScreenDesktop() {
       </header>
 
       {model.statsQuery.isPending ? (
-        <LoadingState rows={5} title="加载统计" />
+        <LoadingState rows={5} title={t("加载统计")} />
       ) : entries.length === 0 ? (
         <EmptyState
-          message={`这段时间没有${type === "expense" ? "支出" : "收入"}记录。`}
-          title="暂无数据"
+          message={t("这段时间没有{value}记录。", { value: type === "expense" ? t("支出") : t("收入") })}
+          title={t("暂无数据")}
         />
       ) : (
         <div className="desktop-stats__grid">
@@ -110,7 +111,7 @@ export function StatsScreenDesktop() {
               />
               <div className="absolute inset-[22px] flex flex-col items-center justify-center rounded-full bg-[var(--color-bg-surface)]">
                 <span className="max-w-[92px] truncate text-[11px] text-[var(--color-text-muted)]">
-                  {drilled ? drilled.name : type === "expense" ? "总支出" : "总收入"}
+                  {drilled ? drilled.name : type === "expense" ? t("总支出") : t("总收入")}
                 </span>
                 <span className="mt-0.5 max-w-[100px] truncate text-[19px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                   {formatMicros(totalMicros, { decimalPlaces, trimTrailingZeros: true })}
@@ -140,7 +141,7 @@ export function StatsScreenDesktop() {
             <div className="flex items-center justify-between gap-3">
               <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
                 {TREND_RANGE_LABELS[trendRange]}
-                {type === "expense" ? "支出" : "收入"}
+                {type === "expense" ? t("支出") : t("收入")}
               </p>
               <TrendRangeSelect onChange={model.setTrendRange} value={trendRange} />
             </div>
@@ -197,7 +198,7 @@ export function StatsScreenDesktop() {
           {/* 分类排行（跨两列） */}
           <section className="desktop-card desktop-stats__ranking">
             <h2 className="mb-2 px-1 text-sm font-semibold text-[var(--color-text-primary)]">
-              分类排行
+              {t("分类排行")}
             </h2>
             {entries.map((entry, index) => (
               <button

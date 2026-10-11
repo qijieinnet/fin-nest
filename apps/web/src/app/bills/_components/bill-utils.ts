@@ -3,6 +3,7 @@ import { periodLabel } from "@/components/business";
 import type { Transaction, TransactionListQuery } from "@/lib/api";
 import { resolveFilterAccountOptionId } from "@/lib/data/options";
 import { parseMoneyToMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
 export function currentMonthKey(): string {
   return new Date().toISOString().slice(0, 7);
@@ -67,14 +68,26 @@ export function timeRangeFromFilter(value: BusinessFilterValue): {
   }
 }
 
-const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAYS = localized([
+  msg("周日"),
+  msg("周一"),
+  msg("周二"),
+  msg("周三"),
+  msg("周四"),
+  msg("周五"),
+  msg("周六"),
+]);
 
 export function dayLabel(iso: string): string {
   // iso 形如 "2026-06-29"（或带时间）。按本地时间构造，避免 new Date("2026-06-29")
   // 以 UTC 零点解析导致负时区下日期/星期错位。
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
   const date = new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAYS[date.getDay()]}`;
+  return t("{value}月{value2}日 {value3}", {
+    value: date.getMonth() + 1,
+    value2: date.getDate(),
+    value3: WEEKDAYS[date.getDay()],
+  });
 }
 
 /** 多选列表优先；没有多选列表时回退到弹层写的单选字段。 */

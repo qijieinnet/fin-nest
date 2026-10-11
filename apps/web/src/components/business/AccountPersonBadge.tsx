@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/format/class-names";
 import type { AccountPerson } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 /**
  * 账户上的归属人员小标签；未指定归属时不渲染。已归档人员标注出来，提示去改归属。
@@ -23,7 +24,7 @@ export function AccountPersonBadge({
       )}
     >
       {person.name}
-      {person.archived ? "（已归档）" : ""}
+      {person.archived ? t("（已归档）") : ""}
     </span>
   );
 }

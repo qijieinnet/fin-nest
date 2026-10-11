@@ -1,4 +1,5 @@
 import { MoneyText } from "./MoneyText";
+import { t } from "@/lib/i18n";
 
 export type TrendPoint = {
   highlight?: boolean;
@@ -16,7 +17,7 @@ function absMicros(value: bigint | number | string): bigint {
   return micros < 0n ? -micros : micros;
 }
 
-export function TrendChart({ points, title = "趋势" }: TrendChartProps) {
+export function TrendChart({ points, title = t("趋势") }: TrendChartProps) {
   const values = points.map((point) => absMicros(point.valueMicros));
   const max = values.reduce((current, next) => (next > current ? next : current), 0n);
 

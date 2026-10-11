@@ -7,6 +7,7 @@ import { useNetWorthSeries } from "@/lib/data/records";
 import { useLedger } from "@/providers";
 import { COLOR_MONEY_NEGATIVE, COLOR_MONEY_POSITIVE } from "./account-utils";
 import { TrendRangeSelect, type TrendRange } from "./TrendRangeSelect";
+import { t } from "@/lib/i18n";
 
 const WIDTH = 320;
 const HEIGHT = 96;
@@ -105,7 +106,7 @@ export function NetWorthOverviewCard({
       {/* 金额单独占一行：六位数净资产在 375 宽下与右侧范围选择 / 涨幅挤在一行会重叠。 */}
       <div className="flex items-center justify-between gap-3">
         <p className="flex min-w-0 items-baseline gap-2">
-          <span className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">净资产</span>
+          <span className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">{t("净资产")}</span>
           {hasTrend ? (
             <span
               className="truncate text-[12.5px] font-semibold [font-variant-numeric:tabular-nums]"
@@ -133,7 +134,7 @@ export function NetWorthOverviewCard({
 
       <div className="mt-3.5 flex gap-7">
         <div>
-          <p className="text-[11px] text-[var(--color-text-muted)]">总资产</p>
+          <p className="text-[11px] text-[var(--color-text-muted)]">{t("总资产")}</p>
           <MoneyText
             amountMicros={assetsMicros}
             className="mt-0.5 block text-[15px] font-semibold"
@@ -141,7 +142,7 @@ export function NetWorthOverviewCard({
           />
         </div>
         <div>
-          <p className="text-[11px] text-[var(--color-text-muted)]">总负债</p>
+          <p className="text-[11px] text-[var(--color-text-muted)]">{t("总负债")}</p>
           <MoneyText
             amountMicros={liabilitiesMicros}
             className="mt-0.5 block text-[15px] font-semibold"
@@ -153,7 +154,7 @@ export function NetWorthOverviewCard({
 
       <svg
         aria-busy={seriesQuery.isPending || undefined}
-        aria-label="净资产走势"
+        aria-label={t("净资产走势")}
         className="mt-4 w-full"
         height={HEIGHT}
         preserveAspectRatio="none"

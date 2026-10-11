@@ -13,6 +13,7 @@ import {
 } from "@/lib/data/options";
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
 export type RelationBucket = "primary" | "linked";
 
@@ -40,11 +41,11 @@ export type PendingPatchBody = {
 export const NOTE_MAX_LENGTH = 240;
 
 /** 类型页签项：表单顶部页签与金额键盘的类型切换共用一份，避免文案/顺序走岔。 */
-export const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = [
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
+export const TYPE_TAB_ITEMS: Array<{ label: string; value: TransactionType }> = localized([
+  { label: msg("支出"), value: "expense" },
+  { label: msg("收入"), value: "income" },
+  { label: msg("转账"), value: "transfer" },
+]);
 
 /** 纯函数返回结果：成功携带值，失败携带面向用户的错误信息（由调用方转 toast）。 */
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; message: string };
@@ -100,7 +101,7 @@ export function splitInitialRelations(
 
 export function formatDateLabel(value: string): string {
   const today = todayKey();
-  if (value === today) return "今天";
+  if (value === today) return t("今天");
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return value.replaceAll("-", ".");
   if (year === new Date().getFullYear()) return `${month}.${day}`;
@@ -112,7 +113,7 @@ export function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem
   return {
     contentType: record.file?.mime,
     id: record.id,
-    name: record.file?.originalName ?? `附件 ${record.id.slice(0, 6)}`,
+    name: record.file?.originalName ?? t("附件 {value}", { value: record.id.slice(0, 6) }),
     sizeBytes: record.file?.sizeBytes ? Number(record.file.sizeBytes) : undefined,
   };
 }
@@ -134,16 +135,16 @@ export function buildRelations(params: RelationParams): BuildResult<TransactionR
     if (!item.accountId) continue;
     const parsed = parseMoneyToMicros(item.amount, { decimalPlaces });
     if (!parsed.ok || !parsed.amountMicros || BigInt(parsed.amountMicros) <= 0n) {
-      return { ok: false, message: "关联项目金额无效" };
+      return { ok: false, message: t("关联项目金额无效") };
     }
     const relationAccount = accounts.find((account) => account.id === item.accountId);
     const expectedKind = relationAccountKind(type, bucket);
     if (!relationAccount || relationAccount.type !== expectedKind) {
-      return { ok: false, message: "关联项目类型不正确" };
+      return { ok: false, message: t("关联项目类型不正确") };
     }
     const relationKind = relationKindFor(type, relationAccount.type);
     if (!relationKind) {
-      return { ok: false, message: "当前交易类型不支持关联" };
+      return { ok: false, message: t("当前交易类型不支持关联") };
     }
     relations.push({ accountId: item.accountId, relationKind, amountMicros: parsed.amountMicros });
   }
@@ -213,20 +214,20 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
 
   const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   if (!parsedAmount.ok || !parsedAmount.amountMicros || BigInt(parsedAmount.amountMicros) <= 0n) {
-    return { ok: false, message: "请输入有效金额" };
+    return { ok: false, message: t("请输入有效金额") };
   }
 
   if (type === "transfer") {
     const from = resolveAccountSelection(accounts, fromSel);
     const to = resolveAccountSelection(accounts, toSel);
     if (!from.accountId || !to.accountId) {
-      return { ok: false, message: "转账需要选择转出和转入账户" };
+      return { ok: false, message: t("转账需要选择转出和转入账户") };
     }
     if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
-      return { ok: false, message: "转出和转入不能是同一账户" };
+      return { ok: false, message: t("转出和转入不能是同一账户") };
     }
     if (personRequired && !personId) {
-      return { ok: false, message: "当前账本要求选择人员" };
+      return { ok: false, message: t("当前账本要求选择人员") };
     }
     return {
       ok: true,
@@ -249,15 +250,15 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
 
   const account = accountEnabled ? resolveAccountSelection(accounts, accountSel) : {};
   if (acctRequired && !account.accountId) {
-    return { ok: false, message: "当前账本要求绑定账户" };
+    return { ok: false, message: t("当前账本要求绑定账户") };
   }
   if (personRequired && !personId) {
-    return { ok: false, message: "当前账本要求选择人员" };
+    return { ok: false, message: t("当前账本要求选择人员") };
   }
 
   const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
   if (!catId) {
-    return { ok: false, message: "请选择分类" };
+    return { ok: false, message: t("请选择分类") };
   }
 
   const primary = buildRelations({
@@ -343,7 +344,7 @@ export function buildPendingPatch(params: PendingPatchParams): BuildResult<Pendi
 
   const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   if (!parsedAmount.ok || !parsedAmount.amountMicros || BigInt(parsedAmount.amountMicros) <= 0n) {
-    return { ok: false, message: "请输入有效金额" };
+    return { ok: false, message: t("请输入有效金额") };
   }
   const base = {
     amountMicros: parsedAmount.amountMicros,
@@ -354,10 +355,10 @@ export function buildPendingPatch(params: PendingPatchParams): BuildResult<Pendi
     const from = resolveAccountSelection(accounts, fromSel);
     const to = resolveAccountSelection(accounts, toSel);
     if (!from.accountId || !to.accountId) {
-      return { ok: false, message: "转账需要选择转出和转入账户" };
+      return { ok: false, message: t("转账需要选择转出和转入账户") };
     }
     if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
-      return { ok: false, message: "转出和转入不能是同一账户" };
+      return { ok: false, message: t("转出和转入不能是同一账户") };
     }
     return {
       ok: true,
@@ -377,14 +378,14 @@ export function buildPendingPatch(params: PendingPatchParams): BuildResult<Pendi
   }
   const { categoryId: catId, subcategoryId } = resolveCategory(categories, categoryId);
   if (!catId) {
-    return { ok: false, message: "请选择分类" };
+    return { ok: false, message: t("请选择分类") };
   }
   const account = accountEnabled ? resolveAccountSelection(accounts, accountSel) : {};
   if (acctRequired && !account.accountId) {
-    return { ok: false, message: "当前账本要求绑定账户" };
+    return { ok: false, message: t("当前账本要求绑定账户") };
   }
   if (personRequired && !personId) {
-    return { ok: false, message: "当前账本要求选择人员" };
+    return { ok: false, message: t("当前账本要求选择人员") };
   }
   return {
     ok: true,
@@ -436,22 +437,22 @@ export function computeValidationMessage(params: ValidationParams): string | nul
   } = params;
   const parsedAmount = parseMoneyToMicros(amount, { decimalPlaces });
   if (!parsedAmount.ok || !parsedAmount.amountMicros || BigInt(parsedAmount.amountMicros) <= 0n) {
-    return "请输入有效金额";
+    return t("请输入有效金额");
   }
   if (type === "transfer") {
     const from = resolveAccountSelection(accounts, fromSel);
     const to = resolveAccountSelection(accounts, toSel);
-    if (!from.accountId || !to.accountId) return "请选择转出和转入账户";
+    if (!from.accountId || !to.accountId) return t("请选择转出和转入账户");
     if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
-      return "转出和转入不能是同一账户";
+      return t("转出和转入不能是同一账户");
     }
-    if (personRequired && !personId) return "当前账本要求选择人员";
+    if (personRequired && !personId) return t("当前账本要求选择人员");
     return null;
   }
-  if (!resolveCategory(categories, categoryId).categoryId) return "请选择分类";
+  if (!resolveCategory(categories, categoryId).categoryId) return t("请选择分类");
   if (acctRequired && !resolveAccountSelection(accounts, accountSel).accountId) {
-    return "当前账本要求绑定账户";
+    return t("当前账本要求绑定账户");
   }
-  if (personRequired && !personId) return "当前账本要求选择人员";
+  if (personRequired && !personId) return t("当前账本要求选择人员");
   return null;
 }

@@ -8,6 +8,7 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath, type QuickTemplate } fro
 import { useQuickTemplates } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
 import { useLedger, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type QuickTemplateSheetProps = {
   directRunEnabled?: boolean;
@@ -42,7 +43,7 @@ export function QuickTemplateSheet({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
       ]);
-      showToast({ tone: "success", message: "已按模板记一笔" });
+      showToast({ tone: "success", message: t("已按模板记一笔") });
       close();
     },  });
 
@@ -56,11 +57,11 @@ export function QuickTemplateSheet({
   return (
     <div className="flex flex-col gap-3 pb-2">
       {templatesQuery.isPending ? (
-        <LoadingState rows={3} title="加载快捷模板" />
+        <LoadingState rows={3} title={t("加载快捷模板")} />
       ) : templates.length === 0 ? (
         <EmptyState
-          message="在「更多 · 快捷记账」里添加常用模板后，可在这里一键记账。"
-          title="还没有快捷模板"
+          message={t("在「更多 · 快捷记账」里添加常用模板后，可在这里一键记账。")}
+          title={t("还没有快捷模板")}
         />
       ) : (
         <ul className="flex flex-col gap-2">
@@ -77,10 +78,10 @@ export function QuickTemplateSheet({
                 <span className="truncate text-sm font-medium text-[var(--color-text-primary)]">
                   {template.name ??
                     (template.type === "income"
-                      ? "收入模板"
+                      ? t("收入模板")
                       : template.type === "transfer"
-                        ? "转账模板"
-                        : "支出模板")}
+                        ? t("转账模板")
+                        : t("支出模板"))}
                 </span>
                 {template.amountMicros ? (
                   <MoneyText
@@ -95,19 +96,19 @@ export function QuickTemplateSheet({
                     }
                   />
                 ) : (
-                  <span className="text-xs text-[var(--color-text-muted)]">点按预填金额</span>
+                  <span className="text-xs text-[var(--color-text-muted)]">{t("点按预填金额")}</span>
                 )}
               </button>
               {directRunEnabled && template.directEnabled && template.amountMicros ? (
                 <button
-                  aria-label="直接记一笔"
+                  aria-label={t("直接记一笔")}
                   className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--color-tint)] px-3 py-2 text-xs font-medium text-[var(--color-tint-contrast)] disabled:opacity-50"
                   disabled={runDirect.isPending}
                   onClick={() => runDirect.mutate(template.id)}
                   type="button"
                 >
                   <Zap size={14} />
-                  记一笔
+                  {t("记一笔")}
                 </button>
               ) : null}
             </li>

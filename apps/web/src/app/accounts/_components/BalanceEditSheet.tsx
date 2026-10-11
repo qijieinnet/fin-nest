@@ -9,6 +9,7 @@ import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type BalanceEditSheetProps = {
   accountId: string;
@@ -67,7 +68,7 @@ export function BalanceEditSheet({
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
-      showToast({ tone: "success", message: isInvest ? "已记录" : "余额已更新" });
+      showToast({ tone: "success", message: isInvest ? t("已记录") : t("余额已更新") });
       pop();
     },
   });
@@ -81,14 +82,14 @@ export function BalanceEditSheet({
       }}
     >
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {title}
         </h2>
         <IconButton
           disabled={save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存余额"
+          label={t("保存余额")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -97,8 +98,8 @@ export function BalanceEditSheet({
       {isInvest ? (
         <Tabs
           items={[
-            { label: "市值涨跌", value: "revaluation" },
-            { label: "本金存取", value: "principal" },
+            { label: t("市值涨跌"), value: "revaluation" },
+            { label: t("本金存取"), value: "principal" },
           ]}
           onValueChange={(value) => setKind(value as "revaluation" | "principal")}
           value={kind}
@@ -108,7 +109,7 @@ export function BalanceEditSheet({
         <Input
           autoFocus
           inputMode="decimal"
-          label={isInvest ? "当前市值" : "余额"}
+          label={isInvest ? t("当前市值") : t("余额")}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
           prefix="¥"
@@ -117,10 +118,10 @@ export function BalanceEditSheet({
       </div>
       <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
         {!isInvest
-          ? "保存后会生成一条余额调整记录，差额自动记入资金变动。"
+          ? t("保存后会生成一条余额调整记录，差额自动记入资金变动。")
           : isRevaluation
-            ? "差额记为投资收益。买入卖出用「本金存取」，对手方账户在账本里时优先用转账。"
-            : "差额记为本金进出、不计收益。适合卖出后转到没记账的卡这类没有对手方账户的情况。"}
+            ? t("差额记为投资收益。买入卖出用「本金存取」，对手方账户在账本里时优先用转账。")
+            : t("差额记为本金进出、不计收益。适合卖出后转到没记账的卡这类没有对手方账户的情况。")}
       </p>
     </form>
   );

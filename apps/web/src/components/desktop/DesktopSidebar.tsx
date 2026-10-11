@@ -11,6 +11,7 @@ import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
 import { useRouteNavigation } from "@/lib/nav/useRouteNavigation";
 import { routes } from "@/lib/route/routes";
 import { useAuth, useLedger, usePreferences } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type NavItem = {
   dot?: boolean;
@@ -51,22 +52,22 @@ export function DesktopSidebar() {
   }));
   const primary: NavItem[] = [
     ...configured,
-    { icon: ChartPie, label: "统计", route: routes.stats },
+    { icon: ChartPie, label: t("统计"), route: routes.stats },
   ];
 
   // 「更多」：被隐藏的一级菜单（按配置顺序）在前，其余二级功能入口固定在后。
   const moreItems: NavItem[] = [
     ...overflow.map((menu) => ({ label: menu.label, route: menu.route })),
-    ...(user?.isAdmin ? [{ label: "管理员功能", route: routes.admin }] : []),
-    { label: "分类管理", route: routes.categories },
-    { label: "人员管理", route: routes.people },
-    { dot: pendingCount > 0, label: "自动记账", route: routes.autoAccounting },
-    { label: "快速记账", route: routes.quickTemplates },
-    { label: "记账设置", route: routes.recordSettings },
-    { label: "系统设置", route: routes.systemSettings },
-    { label: "通知", route: routes.notifications },
-    ...(feishuEnabled ? [{ label: "飞书机器人", route: routes.feishu }] : []),
-    { label: "导入导出", route: routes.importExport },
+    ...(user?.isAdmin ? [{ label: t("管理员功能"), route: routes.admin }] : []),
+    { label: t("分类管理"), route: routes.categories },
+    { label: t("人员管理"), route: routes.people },
+    { dot: pendingCount > 0, label: t("自动记账"), route: routes.autoAccounting },
+    { label: t("快速记账"), route: routes.quickTemplates },
+    { label: t("记账设置"), route: routes.recordSettings },
+    { label: t("系统设置"), route: routes.systemSettings },
+    { label: t("通知"), route: routes.notifications },
+    ...(feishuEnabled ? [{ label: t("飞书机器人"), route: routes.feishu }] : []),
+    { label: t("导入导出"), route: routes.importExport },
   ];
 
   // 空闲预取一级导航 + AI + 记一笔/保险/物品/订阅的路由 chunk；其余「更多」子项数量多，仍走 hover 按需预取。
@@ -92,7 +93,7 @@ export function DesktopSidebar() {
         <AppLogo className="desktop-sidebar__brand-mark" size={30} />
         <div className="min-w-0">
           <p className="desktop-sidebar__brand-name">Fin Nest</p>
-          <p className="desktop-sidebar__brand-sub">{currentLedger?.name ?? "未选择账本"}</p>
+          <p className="desktop-sidebar__brand-sub">{currentLedger?.name ?? t("未选择账本")}</p>
         </div>
       </div>
 
@@ -124,7 +125,7 @@ export function DesktopSidebar() {
             <DotBadge show={pendingCount > 0}>
               <MoreHorizontal size={20} />
             </DotBadge>
-            <span>更多</span>
+            <span>{t("更多")}</span>
           </div>
           <div className="desktop-sidebar__subnav">
             {moreItems.map((item) => {

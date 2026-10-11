@@ -4,6 +4,7 @@ import { AlertTriangle, UserMinus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Surface } from "@/components/ui";
+import { t } from "@/lib/i18n";
 
 type RemoveMemberConfirmDialogProps = {
   memberName: string | null;
@@ -39,7 +40,7 @@ export function RemoveMemberConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-5">
       <button
-        aria-label="取消移除"
+        aria-label={t("取消移除")}
         className="absolute inset-0 bg-black/20 backdrop-blur-[12px]"
         disabled={removing}
         onClick={onCancel}
@@ -53,9 +54,13 @@ export function RemoveMemberConfirmDialog({
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]">
             <AlertTriangle size={24} strokeWidth={2.2} />
           </span>
-          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">移除成员？</h2>
+          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+            {t("移除成员？")}
+          </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-            确定将「{memberName}」移出账本吗？TA 将无法再访问本账本，已有的记账记录会保留。
+            {t("确定将「{memberName}」移出账本吗？TA 将无法再访问本账本，已有的记账记录会保留。", {
+              memberName,
+            })}
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
@@ -65,7 +70,7 @@ export function RemoveMemberConfirmDialog({
               onClick={onCancel}
               variant="secondary"
             >
-              取消
+              {t("取消")}
             </Button>
             <Button
               className="w-full justify-center"
@@ -74,7 +79,7 @@ export function RemoveMemberConfirmDialog({
               onClick={onConfirm}
               variant="danger"
             >
-              {removing ? "移除中…" : "移除"}
+              {removing ? t("移除中…") : t("移除")}
             </Button>
           </div>
         </div>

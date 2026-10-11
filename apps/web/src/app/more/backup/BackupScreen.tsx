@@ -33,6 +33,7 @@ import { useAuth, useSheetStack, useToast } from "@/providers";
 import { BackupScheduleCard } from "./_components/BackupScheduleCard";
 import { PruneBackupsConfirmDialog } from "./_components/PruneBackupsConfirmDialog";
 import { RestoreBackupSheet } from "./_components/RestoreBackupSheet";
+import { currentIntlLocale, t } from "@/lib/i18n";
 
 /** 有任务在跑时缩短轮询间隔，把「备份中…」变成「已完成」的等待压到几秒内。 */
 const BUSY_POLL_MS = 3_000;
@@ -68,10 +69,10 @@ export function BackupScreen() {
     mutationFn: () => apiRequest<BackupRecordRef>(API_ENDPOINTS.adminBackups, { method: "POST" }),
     onSuccess: async () => {
       await invalidate();
-      showToast({ tone: "success", message: "备份已开始" });
+      showToast({ tone: "success", message: t("备份已开始") });
     },
     onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "备份启动失败") }),
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("备份启动失败")) }),
   });
 
   const updateSetting = useMutation({
@@ -83,7 +84,7 @@ export function BackupScreen() {
     onSuccess: () => invalidate(),
     onError: (error) => {
       void invalidate(); // 后端拒绝时把本地草稿拉回真实值
-      showToast({ tone: "error", message: getApiErrorMessage(error, "保存失败") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("保存失败")) });
     },
   });
 
@@ -98,10 +99,13 @@ export function BackupScreen() {
     },
     onSuccess: async (archive) => {
       await invalidate();
-      showToast({ tone: "success", message: `已导入「${archive.fileName}」` });
+      showToast({
+        tone: "success",
+        message: t("已导入「{fileName}」", { fileName: archive.fileName }),
+      });
     },
     onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "导入失败") }),
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("导入失败")) }),
     onSettled: () => setImportProgress(null),
   });
 
@@ -110,10 +114,10 @@ export function BackupScreen() {
       apiRequest<void>(adminBackupPath(fileName), { method: "DELETE" }),
     onSuccess: async () => {
       await invalidate();
-      showToast({ tone: "success", message: "已删除备份" });
+      showToast({ tone: "success", message: t("已删除备份") });
     },
     onError: (error) =>
-      showToast({ tone: "error", message: getApiErrorMessage(error, "删除失败") }),
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("删除失败")) }),
   });
 
   const goBack = () => {
@@ -125,22 +129,22 @@ export function BackupScreen() {
     try {
       await downloadFile(adminBackupDownloadPath(fileName), fileName);
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "下载失败") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("下载失败")) });
     }
   };
 
   return (
     <MobileAppShell>
       <MobilePage
-        description="备份整套系统的数据与附件，或从备份恢复"
+        description={t("备份整套系统的数据与附件，或从备份恢复")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="自动备份"
+        title={t("自动备份")}
       >
         <div className="flex flex-col gap-3.5 pb-6">
           {overview && !overview.directory.writable ? (
@@ -150,12 +154,12 @@ export function BackupScreen() {
                 size={18}
               />
               <div className="min-w-0 text-sm text-[var(--color-accent-expense)]">
-                <p className="font-semibold">备份目录不可用</p>
+                <p className="font-semibold">{t("备份目录不可用")}</p>
                 <p className="mt-1 break-all">
-                  {overview.directory.path}：{overview.directory.error ?? "未知原因"}
+                  {overview.directory.path}：{overview.directory.error ?? t("未知原因")}
                 </p>
                 <p className="mt-1">
-                  请在部署时把宿主机目录映射到该路径（api 与 worker 都要映射）。
+                  {t("请在部署时把宿主机目录映射到该路径（api 与 worker 都要映射）。")}
                 </p>
               </div>
             </section>
@@ -181,10 +185,10 @@ export function BackupScreen() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-base text-[var(--color-text-primary)]">
-                  {busy ? "任务进行中…" : "立即备份"}
+                  {busy ? t("任务进行中…") : t("立即备份")}
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                  数据库 + 附件 + 每个账本的 Excel，打包成一个 zip
+                  {t("数据库 + 附件 + 每个账本的 Excel，打包成一个 zip")}
                 </span>
               </span>
             </button>
@@ -223,11 +227,11 @@ export function BackupScreen() {
               <span className="min-w-0 flex-1">
                 <span className="block text-base text-[var(--color-text-primary)]">
                   {importArchive.isPending
-                    ? `上传中… ${Math.round((importProgress ?? 0) * 100)}%`
-                    : "导入备份文件"}
+                    ? t("上传中… {value}%", { value: Math.round((importProgress ?? 0) * 100) })
+                    : t("导入备份文件")}
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                  选择一份 .zip 归档放进备份目录，之后即可从列表里恢复
+                  {t("选择一份 .zip 归档放进备份目录，之后即可从列表里恢复")}
                 </span>
               </span>
             </button>
@@ -251,7 +255,7 @@ export function BackupScreen() {
 
           {/* 周期设置 */}
           <p className="-mb-1 px-1 text-[13px] font-semibold text-[var(--color-text-secondary)]">
-            周期备份
+            {t("周期备份")}
           </p>
           {overview ? (
             <BackupScheduleCard
@@ -269,10 +273,10 @@ export function BackupScreen() {
 
           {/* 备份列表 */}
           <p className="-mb-1 px-1 text-[13px] font-semibold text-[var(--color-text-secondary)]">
-            备份文件
+            {t("备份文件")}
           </p>
           {overviewQuery.isPending ? (
-            <p className="px-1 text-sm text-[var(--color-text-muted)]">加载中…</p>
+            <p className="px-1 text-sm text-[var(--color-text-muted)]">{t("加载中…")}</p>
           ) : overview && overview.items.length > 0 ? (
             <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
               {overview.items.map((archive, index) => (
@@ -294,15 +298,17 @@ export function BackupScreen() {
             </section>
           ) : (
             <p className="px-1 text-sm text-[var(--color-text-muted)]">
-              还没有备份文件。点「立即备份」生成一份，或把已有的备份 zip 放进备份目录后刷新。
+              {t("还没有备份文件。点「立即备份」生成一份，或把已有的备份 zip 放进备份目录后刷新。")}
             </p>
           )}
 
           <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            备份目录：{overview?.directory.path ?? "—"}
+            {t("备份目录：")}
+            {overview?.directory.path ?? "—"}
             <br />
-            列表以目录里真实存在的文件为准，因此从别处拷进来的备份也能直接恢复。
-            恢复会清空当前系统的所有数据，需要输入管理员密码二次确认。
+            {t(
+              "列表以目录里真实存在的文件为准，因此从别处拷进来的备份也能直接恢复。 恢复会清空当前系统的所有数据，需要输入管理员密码二次确认。",
+            )}
           </p>
         </div>
       </MobilePage>
@@ -364,21 +370,24 @@ function ArchiveRow({
         <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
           {formatDateTime(archive.modifiedAt)} · {formatBytes(archive.sizeBytes)}
           {archive.record
-            ? ` · ${archive.record.trigger === "scheduled" ? "自动" : "手动"}`
-            : " · 外部文件"}
-          {running ? " · 生成中" : ""}
-          {failed ? " · 失败" : ""}
+            ? ` · ${archive.record.trigger === "scheduled" ? t("自动") : t("手动")}`
+            : t(" · 外部文件")}
+          {running ? t(" · 生成中") : ""}
+          {failed ? t(" · 失败") : ""}
         </span>
         {archive.record?.status === "succeeded" && archive.record.counts ? (
           <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-            {archive.record.counts.ledgers ?? 0} 个账本 · {archive.record.counts.rows ?? 0} 条数据 ·{" "}
-            {archive.record.counts.files ?? 0} 个附件
+            {t("{value} 个账本 · {value2} 条数据 · {value3} 个附件", {
+              value: archive.record.counts.ledgers ?? 0,
+              value2: archive.record.counts.rows ?? 0,
+              value3: archive.record.counts.files ?? 0,
+            })}
           </span>
         ) : null}
         {/* 缺附件的备份仍然可用，但不能让它看起来和完整备份一样。 */}
         {missingFiles > 0 ? (
           <span className="mt-0.5 block text-xs text-[var(--color-accent-expense)]">
-            {missingFiles} 个附件在存储里已丢失，未包含在这份备份中
+            {t("{missingFiles} 个附件在存储里已丢失，未包含在这份备份中", { missingFiles })}
           </span>
         ) : null}
         {failed && archive.record?.error ? (
@@ -390,19 +399,19 @@ function ArchiveRow({
       <IconButton
         disabled={running}
         icon={<Download size={18} />}
-        label="下载"
+        label={t("下载")}
         onClick={onDownload}
       />
       <IconButton
         disabled={disabled || running || failed}
         icon={<RotateCcw size={18} />}
-        label="恢复"
+        label={t("恢复")}
         onClick={onRestore}
       />
       <IconButton
         disabled={disabled || running}
         icon={<Trash2 size={18} />}
-        label="删除"
+        label={t("删除")}
         onClick={onDelete}
       />
     </div>
@@ -418,7 +427,7 @@ function RestoreStatusCard({ restore }: { restore: NonNullable<BackupOverview["r
       </span>
       <div className="min-w-0 text-sm">
         <p className="text-[var(--color-text-primary)]">
-          {running ? "正在恢复数据…" : "上一次恢复失败"}
+          {running ? t("正在恢复数据…") : t("上一次恢复失败")}
         </p>
         <p className="mt-1 break-all text-xs text-[var(--color-text-muted)]">
           {restore.fileName} · {formatDateTime(restore.startedAt)}
@@ -440,7 +449,7 @@ function BackupStatusCard({ backup }: { backup: NonNullable<BackupOverview["back
       </span>
       <div className="min-w-0 text-sm">
         <p className="text-[var(--color-text-primary)]">
-          {running ? "正在生成系统备份…" : "上一次备份失败"}
+          {running ? t("正在生成系统备份…") : t("上一次备份失败")}
         </p>
         <p className="mt-1 break-all text-xs text-[var(--color-text-muted)]">
           {backup.fileName} · {formatDateTime(backup.startedAt)}
@@ -475,7 +484,7 @@ function formatBytes(value: string): string {
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(currentIntlLocale(), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

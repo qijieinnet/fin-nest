@@ -29,6 +29,8 @@ import {
 } from "@/lib/api";
 import { linkSignals } from "@/lib/data/ai-chat-run";
 import { queryKeys } from "@/lib/query/query-keys";
+import { getResolvedLocale as currentLocale } from "@/lib/i18n/store";
+import { t } from "@/lib/i18n";
 
 /** AI 是否启用由服务端环境变量决定，会话内基本不变，长缓存减少请求。 */
 export function useAiStatus(ledgerId: string | null) {
@@ -68,7 +70,10 @@ export function useAiChat(ledgerId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { conversationId?: string; content: string }) =>
-      apiRequest<AiChatResult>(aiChatPath(ledgerId!), { method: "POST", body: input }),
+      apiRequest<AiChatResult>(aiChatPath(ledgerId!), {
+        method: "POST",
+        body: { ...input, locale: currentLocale() },
+      }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiConversations(ledgerId ?? "none"),
@@ -126,9 +131,14 @@ export async function streamAiChat(
   const token = getSessionToken();
   const images = input.images ?? [];
   let body: BodyInit;
-  const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+  const locale = currentLocale();
+  const headers: Record<string, string> = {
+    "accept-language": locale,
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
   if (images.length > 0) {
     const form = new FormData();
+    form.append("locale", locale);
     if (input.conversationId) form.append("conversationId", input.conversationId);
     if (input.requestId) form.append("requestId", input.requestId);
     form.append("content", input.content);
@@ -139,13 +149,14 @@ export async function streamAiChat(
     body = JSON.stringify({
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
       ...(input.requestId ? { requestId: input.requestId } : {}),
+      locale,
       content: input.content,
     });
   }
   // 等响应头也要有上限（上传挂住/服务端迟迟不响应），超时按断连处理；拿到头后看门狗接手。
   const headersTimeout = new AbortController();
   const headersTimer = setTimeout(
-    () => headersTimeout.abort(new Error("连接中断")),
+    () => headersTimeout.abort(new Error(t("连接中断"))),
     STREAM_HEADERS_TIMEOUT_MS,
   );
   const linked = linkSignals(signal, headersTimeout.signal);
@@ -168,10 +179,10 @@ export async function streamAiChat(
     // 错误体也可能迟迟不结束（反代 502 页面挂住）：限时读取，且仍受外部 signal（停止/卸载）约束；
     // 读不到就按 HTTP 状态处理（5xx 照样转入恢复）。
     const bodyTimer = setTimeout(
-      () => headersTimeout.abort(new Error("读取错误响应超时")),
+      () => headersTimeout.abort(new Error(t("读取错误响应超时"))),
       ERROR_BODY_TIMEOUT_MS,
     );
-    let message = "发送失败，请重试";
+    let message = t("发送失败，请重试");
     let code: string | undefined;
     try {
       const data = (await response.json()) as { message?: string; code?: string };
@@ -203,7 +214,11 @@ export async function streamAiChat(
     else if (event === "done") terminal = { kind: "done", result: data as AiChatResult };
     else if (event === "error") {
       const payload = data as { message?: string; code?: string };
-      terminal = { kind: "error", message: payload.message ?? "AI 服务出错", code: payload.code };
+      terminal = {
+        kind: "error",
+        message: payload.message ?? t("AI 服务出错"),
+        code: payload.code,
+      };
     }
   };
 
@@ -216,7 +231,7 @@ export async function streamAiChat(
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const readWithIdleTimeout = () =>
     new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
-      idleTimer = setTimeout(() => reject(new Error("连接中断")), STREAM_IDLE_TIMEOUT_MS);
+      idleTimer = setTimeout(() => reject(new Error(t("连接中断"))), STREAM_IDLE_TIMEOUT_MS);
       reader.read().then(resolve, reject);
     }).finally(() => {
       if (idleTimer) clearTimeout(idleTimer);
@@ -248,7 +263,7 @@ export async function streamAiChat(
   const outcome = terminal as Terminal | null;
   if (outcome?.kind === "error") throw new AiServerError(outcome.message, { code: outcome.code });
   if (outcome?.kind === "done") return outcome.result;
-  throw new Error("连接中断");
+  throw new Error(t("连接中断"));
 }
 
 export function useDeleteAiConversation(ledgerId: string | null) {

@@ -10,6 +10,7 @@ import { PlanEditorSheet } from "./_components/PlanEditorSheet";
 import { PlanPeriodCardSkeleton } from "./_components/PlanPeriodCard";
 import { PlanCardWithProgress, StoppedPlansSheet } from "./PlansScreen.mobile";
 import { useBudgetModel } from "./_model/useBudgetModel";
+import { t } from "@/lib/i18n";
 
 /** 桌面计划/预算页：卡片网格化（2-3 列）；详情/编辑走 Modal（桌面 SheetShell 分支）。 */
 export function PlansScreenDesktop() {
@@ -48,7 +49,7 @@ export function PlansScreenDesktop() {
     if (!ledgerId) return;
     push({
       className: "ui-bottom-sheet--edge-scroll",
-      title: "已停止计划",
+      title: t("已停止计划"),
       content: <StoppedPlansSheet kind={tab} ledgerId={ledgerId} onOpenPlan={openPlanDetail} />,
     });
   };
@@ -57,18 +58,18 @@ export function PlansScreenDesktop() {
     <MobileAppShell>
       <div className="desktop-accounts-single">
         <div className="desktop-accounts__list-head">
-          <h1 className="desktop-page-title">计划</h1>
+          <h1 className="desktop-page-title">{t("计划")}</h1>
           <IconButton
             icon={<Plus size={22} strokeWidth={2.3} />}
-            label="新建计划"
+            label={t("新建计划")}
             onClick={() => openEditor()}
           />
         </div>
 
         <Tabs
           items={[
-            { value: "expense", label: "支出限额" },
-            { value: "income", label: "收入目标" },
+            { value: "expense", label: t("支出限额") },
+            { value: "income", label: t("收入目标") },
           ]}
           onValueChange={(value) => model.setTab(value as PlanKind)}
           value={tab}
@@ -83,8 +84,8 @@ export function PlansScreenDesktop() {
         ) : tabPlans.length === 0 ? (
           <div className="mt-6">
             <EmptyState
-              message={`还没有${tab === "income" ? "收入目标" : "支出限额"}计划，点击右上角 + 新建一个。`}
-              title={tab === "income" ? "还没有收入目标" : "还没有支出限额"}
+              message={t("还没有{value}计划，点击右上角 + 新建一个。", { value: tab === "income" ? t("收入目标") : t("支出限额") })}
+              title={tab === "income" ? t("还没有收入目标") : t("还没有支出限额")}
             />
           </div>
         ) : (
@@ -107,24 +108,24 @@ export function PlansScreenDesktop() {
             type="button"
           >
             <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">
-              已停止计划
+              {t("已停止计划")}
             </span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              {model.stoppedPlansQuery.isPending ? "加载中" : `${stoppedTabPlans.length} 个`}
+              {model.stoppedPlansQuery.isPending ? t("加载中") : t("{length} 个", { length: stoppedTabPlans.length })}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>
 
         <h2 className="mt-8 px-1 pb-2.5 text-[20px] font-bold tracking-tight text-[var(--color-text-primary)]">
-          预测
+          {t("预测")}
         </h2>
         <div className="flex items-center gap-2 rounded-[18px] bg-[var(--color-bg-surface)] px-4 py-3.5 shadow-[var(--shadow-soft)]">
-          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">未到期的自动记账</span>
+          <span className="flex-1 text-[16px] text-[var(--color-text-primary)]">{t("未到期的自动记账")}</span>
           <Switch
             checked={foresightOn}
             disabled={plans.length === 0 || model.toggleForesight.isPending}
-            label="未到期的自动记账"
+            label={t("未到期的自动记账")}
             onCheckedChange={(checked) => model.toggleForesight.mutate(checked)}
           />
         </div>

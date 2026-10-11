@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type TabBarItem = {
   badge?: number;
@@ -22,7 +23,7 @@ type TabBarProps = {
 export function TabBar({ className, items, onValueChange, showLabels = true, value }: TabBarProps) {
   return (
     <nav
-      aria-label="主导航"
+      aria-label={t("主导航")}
       className={cn("tab-bar", !showLabels && "tab-bar--icon-only", className)}
       style={{ "--tab-count": items.length } as CSSProperties}
     >

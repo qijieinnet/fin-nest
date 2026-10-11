@@ -11,6 +11,7 @@
     "test:automation": "pnpm run build && node --test scripts/automation-logic.test.mjs",
     "test:feishu": "pnpm run build && node --test scripts/feishu-logic.test.mjs",
     "test:system-backup": "pnpm run build && node --test scripts/system-backup-logic.test.mjs",
+    "test:i18n": "node --test scripts/i18n-error-messages.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint ."
   },

@@ -11,6 +11,7 @@ import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { todayKey } from "./item-utils";
+import { t } from "@/lib/i18n";
 
 type ItemScrapSheetProps = {
   item: ItemAsset;
@@ -77,7 +78,7 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
   const scrap = useMutation({
     mutationFn: async () => {
       const priceParsed = sellPrice.trim() ? parseMoneyToMicros(sellPrice, { decimalPlaces }) : null;
-      if (priceParsed && !priceParsed.ok) throw new Error("出售价格格式不正确");
+      if (priceParsed && !priceParsed.ok) throw new Error(t("出售价格格式不正确"));
       return apiRequest(ledgerApiPath(ledgerId, `/items/${item.id}/scrap`), {
         method: "POST",
         body: {
@@ -91,7 +92,7 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
         queryClient.invalidateQueries({ queryKey: queryKeys.items(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.item(ledgerId, item.id) }),
       ]);
-      showToast({ tone: "success", message: "已标记报废 / 出售" });
+      showToast({ tone: "success", message: t("已标记报废 / 出售") });
       pop();
     },
   });
@@ -105,14 +106,14 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
       }}
     >
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          报废或出售
+          {t("报废或出售")}
         </h2>
         <IconButton
           disabled={scrap.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="确定报废或出售"
+          label={t("确定报废或出售")}
           loading={scrap.isPending}
           variant="primary"
           type="submit"
@@ -122,17 +123,17 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
       <div className="sheet-form-scroll flex-1 pb-6">
         <div className="transaction-form__cards">
           <p className="px-1 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            填写报废 / 出售日期，「{item.name}」的使用时长将统计到该日为止，出售价格选填。
+            {t("填写报废 / 出售日期，「{name}」的使用时长将统计到该日为止，出售价格选填。", { name: item.name })}
           </p>
 
           <div className="transaction-form__card">
-            <DateFieldRow label="报废日期" onChange={setScrapDate} value={scrapDate} />
+            <DateFieldRow label={t("报废日期")} onChange={setScrapDate} value={scrapDate} />
             <span className="transaction-form__divider" />
             <FieldRow
               inputMode="decimal"
-              label="出售价格"
+              label={t("出售价格")}
               onChange={(event) => setSellPrice(event.target.value)}
-              placeholder="选填"
+              placeholder={t("选填")}
               prefix="¥"
               value={sellPrice}
             />

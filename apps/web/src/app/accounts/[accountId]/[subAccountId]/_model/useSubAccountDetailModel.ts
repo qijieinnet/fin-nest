@@ -9,6 +9,7 @@ import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { defaultHandoverHint, isBalanceEditEntry } from "../../../_components/account-utils";
+import { t } from "@/lib/i18n";
 
 /** 子账户详情视图模型：账户/子账户查询，删除、净资产开关 mutation，关联/调整记录派生。 */
 export function useSubAccountDetailModel(accountId: string, subAccountId: string) {
@@ -43,7 +44,7 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
       clear();
-      showToast({ tone: "success", message: "子账户已删除" });
+      showToast({ tone: "success", message: t("子账户已删除") });
       router.replace(routes.account(accountId));
     },
   });
@@ -56,16 +57,19 @@ export function useSubAccountDetailModel(accountId: string, subAccountId: string
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId!) });
-      showToast({ tone: "success", message: "设置已更新" });
+      showToast({ tone: "success", message: t("设置已更新") });
     },
   });
 
   const requestDeleteSub = async () => {
     if (removeSub.isPending || !subAccount) return;
     const accepted = await confirm({
-      title: "删除子账户？",
-      message: `确定删除「${subAccount.name}」吗？需先将余额调整为 0，历史记账记录会保留。${defaultHandoverHint(account, subAccount)}`,
-      confirmText: "删除",
+      title: t("删除子账户？"),
+      message: t("确定删除「{name}」吗？需先将余额调整为 0，历史记账记录会保留。{value}", {
+        name: subAccount.name,
+        value: defaultHandoverHint(account, subAccount),
+      }),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (accepted && !removeSub.isPending) removeSub.mutate();

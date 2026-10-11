@@ -29,6 +29,7 @@ import {
   isLiability,
 } from "./_components/account-utils";
 import { useAccountsModel } from "./_model/useAccountsModel";
+import { t } from "@/lib/i18n";
 
 export function AccountsScreenMobile() {
   const router = useAppRouter();
@@ -82,7 +83,7 @@ export function AccountsScreenMobile() {
             <AccountPersonBadge person={account.person} />
             {!account.includeInNetWorth ? (
               <span className="shrink-0 rounded-[5px] bg-[var(--color-control-fill-muted)] px-1 py-px text-[10px] text-[var(--color-text-muted)]">
-                不计入
+                {t("不计入")}
               </span>
             ) : null}
           </span>
@@ -119,13 +120,13 @@ export function AccountsScreenMobile() {
             <IconButton
               className="mr-auto"
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label="返回"
+              label={t("返回")}
               onClick={goBack}
             />
           ) : null}
           {sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -133,7 +134,7 @@ export function AccountsScreenMobile() {
                 items={[
                   {
                     icon: <Ellipsis size={22} />,
-                    label: "更多",
+                    label: t("更多"),
                     onClick: () => setMoreMenuOpen((open) => !open),
                   },
                 ]}
@@ -143,14 +144,14 @@ export function AccountsScreenMobile() {
                   [
                     {
                       icon: <Plus size={18} />,
-                      label: "添加账户",
+                      label: t("添加账户"),
                       onSelect: openEditor,
                     },
                     ...(canSort
                       ? [
                           {
                             icon: <ArrowUpDown size={18} />,
-                            label: "账户排序",
+                            label: t("账户排序"),
                             onSelect: () => setSortMode(true),
                           },
                         ]
@@ -165,11 +166,11 @@ export function AccountsScreenMobile() {
         </header>
 
         {accountsQuery.isPending ? (
-          <LoadingState rows={5} title="加载账户" />
+          <LoadingState rows={5} title={t("加载账户")} />
         ) : sortMode ? (
           <>
             <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
-              按住右侧图标拖动排序，仅可在同一分类内调整。
+              {t("按住右侧图标拖动排序，仅可在同一分类内调整。")}
             </p>
             <AccountsSortList groups={groups} onReorder={model.handleReorder} />
           </>
@@ -185,8 +186,8 @@ export function AccountsScreenMobile() {
             {accounts.length === 0 ? (
               <div className="mt-4">
                 <EmptyState
-                  message="把现金、银行卡、信用卡、投资等账户录入，净资产一目了然。"
-                  title="还没有账户"
+                  message={t("把现金、银行卡、信用卡、投资等账户录入，净资产一目了然。")}
+                  title={t("还没有账户")}
                 />
                 {/* <button
                   className="mt-3 flex h-12 w-full items-center justify-center gap-1.5 rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"

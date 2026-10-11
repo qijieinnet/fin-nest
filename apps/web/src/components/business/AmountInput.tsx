@@ -4,6 +4,7 @@ import type { InputHTMLAttributes } from "react";
 import { useMemo } from "react";
 import { cleanMoneyInput, groupMoneyDisplay, parseMoneyToMicros } from "@/lib/money";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type AmountInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
   allowNegative?: boolean;
@@ -27,7 +28,7 @@ export function AmountInput({
   className,
   decimalPlaces = 2,
   error,
-  label = "金额",
+  label = t("金额"),
   onBlur,
   onDisplayActivate,
   onMicrosChange,

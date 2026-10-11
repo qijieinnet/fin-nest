@@ -18,6 +18,7 @@ import { formatMicros, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { parseLimitCount, periodShortLabel } from "./plan-utils";
+import { t } from "@/lib/i18n";
 
 type PlanPeriodConfirmSheetProps = {
   ledgerId: string;
@@ -81,7 +82,7 @@ export function PlanPeriodConfirmSheet({
   const remain = target > used ? target - used : 0n;
   const formatValue = (value: bigint) =>
     isCount
-      ? `${value.toString()} 次`
+      ? t("{value} 次", { value: value.toString() })
       : formatMicros(value, { currencySymbol: "", decimalPlaces, trimTrailingZeros: true });
 
   const confirm = useMutation({
@@ -89,11 +90,11 @@ export function PlanPeriodConfirmSheet({
       const body: { nextLimitAmountMicros?: string; nextLimitCount?: number } = {};
       if (isCount) {
         const count = parseLimitCount(nextLimit);
-        if (count === null) throw new Error("请填写大于 0 的整数次数");
+        if (count === null) throw new Error(t("请填写大于 0 的整数次数"));
         body.nextLimitCount = count;
       } else {
         const parsed = parseMoneyToMicros(nextLimit, { decimalPlaces });
-        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("请填写大于 0 的金额");
+        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error(t("请填写大于 0 的金额"));
         body.nextLimitAmountMicros = parsed.amountMicros;
       }
       return apiRequest<PlanPeriodConfirmResult>(
@@ -111,13 +112,13 @@ export function PlanPeriodConfirmSheet({
         tone: "success",
         message:
           result.remainingPendingCount > 0
-            ? `已确认，还有 ${result.remainingPendingCount} 期待确认`
-            : "已确认，开始新周期",
+            ? t("已确认，还有 {remainingPendingCount} 期待确认", { remainingPendingCount: result.remainingPendingCount })
+            : t("已确认，开始新周期"),
       });
       pop();
     },
     onError: async (error) => {
-      showToast({ tone: "error", message: error instanceof Error ? error.message : "确认失败" });
+      showToast({ tone: "error", message: error instanceof Error ? error.message : t("确认失败") });
       // 服务端说这一期已经不是待确认的那期了（多半是别的成员刚确认过）：
       // 弹层锁定的 progress.start 已经作废，留在原地重试只会一直 409，拉新数据后关掉。
       if (isApiClientError(error) && error.status === 409) {
@@ -139,14 +140,14 @@ export function PlanPeriodConfirmSheet({
       }}
     >
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          确认 {periodShortLabel(plan, progress.start, progress.endExclusive)}
+          {t("确认 {value}", { value: periodShortLabel(plan, progress.start, progress.endExclusive) })}
         </h2>
         <IconButton
           disabled={confirm.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="确认本期"
+          label={t("确认本期")}
           loading={confirm.isPending}
           variant="primary"
           type="submit"
@@ -156,17 +157,17 @@ export function PlanPeriodConfirmSheet({
       <div className="sheet-form-scroll flex-1 pb-6">
         <div className="transaction-form__cards">
           <div className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] py-1">
-            <SummaryRow label={isIncome ? "目标" : "限额"} value={formatValue(target)} />
-            <SummaryRow label={isIncome ? "已收" : "已用"} value={formatValue(used)} />
+            <SummaryRow label={isIncome ? t("目标") : t("限额")} value={formatValue(target)} />
+            <SummaryRow label={isIncome ? t("已收") : t("已用")} value={formatValue(used)} />
             {over > 0n ? (
               <SummaryRow
-                label={isIncome ? "超过目标" : "超出限额"}
+                label={isIncome ? t("超过目标") : t("超出限额")}
                 tone={isIncome ? "reached" : "over"}
                 value={formatValue(over)}
               />
             ) : (
               <SummaryRow
-                label={isIncome ? "还差" : "结余"}
+                label={isIncome ? t("还差") : t("结余")}
                 tone={isIncome ? undefined : "reached"}
                 value={formatValue(remain)}
               />
@@ -175,14 +176,14 @@ export function PlanPeriodConfirmSheet({
 
           <FieldCard
             className="transaction-form__note-card"
-            label={`下期${isIncome ? "目标" : "限额"}`}
+            label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
           >
             <div className="transaction-form__note-row">
-              <span>下期{isIncome ? "目标" : "限额"}</span>
+              <span>{t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}</span>
               <Input
-                aria-label={`下期${isIncome ? "目标" : "限额"}`}
+                aria-label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
                 inputMode={isCount ? "numeric" : "decimal"}
-                label={`下期${isIncome ? "目标" : "限额"}`}
+                label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
                 onChange={(event) => setNextLimit(event.target.value)}
                 placeholder="0"
                 prefix={isCount ? undefined : "¥"}
@@ -192,11 +193,9 @@ export function PlanPeriodConfirmSheet({
           </FieldCard>
 
           <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            {nextPeriod
-              ? `确认后卡片进入 ${periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive)}（该期已记 ${nextPeriod.recordedCount} 笔）。`
-              : "确认后卡片进入下一期。"}
-            本期之后补记的账仍按记账日期算回本期，不受确认影响。
-            {pendingConfirmCount > 1 ? `确认后还有 ${pendingConfirmCount - 1} 期待确认。` : ""}
+            {t("{value}本期之后补记的账仍按记账日期算回本期，不受确认影响。{value2}", { value: nextPeriod
+              ? t("确认后卡片进入 {value}（该期已记 {recordedCount} 笔）。", { value: periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive), recordedCount: nextPeriod.recordedCount })
+              : t("确认后卡片进入下一期。"), value2: pendingConfirmCount > 1 ? t("确认后还有 {value} 期待确认。", { value: pendingConfirmCount - 1 }) : "" })}
           </p>
         </div>
       </div>

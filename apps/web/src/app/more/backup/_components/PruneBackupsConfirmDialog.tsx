@@ -4,6 +4,7 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Surface } from "@/components/ui";
+import { t } from "@/lib/i18n";
 
 /**
  * 调小「保留份数」的二次确认。
@@ -44,7 +45,7 @@ export function PruneBackupsConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-5">
       <button
-        aria-label="取消"
+        aria-label={t("取消")}
         className="absolute inset-0 bg-black/20 backdrop-blur-[12px]"
         onClick={onCancel}
         type="button"
@@ -58,16 +59,18 @@ export function PruneBackupsConfirmDialog({
             <AlertTriangle size={24} strokeWidth={2.2} />
           </span>
           <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
-            立即删除 {prunedCount} 份旧备份？
+            {t("立即删除 {prunedCount} 份旧备份？", { prunedCount })}
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-            保留份数改为「最近 {keepCount} 份」后，超出的 {prunedCount}{" "}
-            份较旧的自动备份会被立即删除，文件无法找回。手动备份不受影响。
+            {t(
+              "保留份数改为「最近 {keepCount} 份」后，超出的 {prunedCount} 份较旧的自动备份会被立即删除，文件无法找回。手动备份不受影响。",
+              { keepCount, prunedCount },
+            )}
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
             <Button className="w-full justify-center" onClick={onCancel} variant="secondary">
-              取消
+              {t("取消")}
             </Button>
             <Button
               className="w-full justify-center"
@@ -75,7 +78,7 @@ export function PruneBackupsConfirmDialog({
               onClick={onConfirm}
               variant="danger"
             >
-              删除并保存
+              {t("删除并保存")}
             </Button>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { PopoverMenu } from "@/components/ui";
 import type { NotifyChannel, NotifyTarget } from "@/lib/api";
+import { localized, msg, t } from "@/lib/i18n";
 
 /**
  * 「推送给谁」的多选行。订阅/保单档位、自动记账规则、记账提醒四处共用。
@@ -15,7 +16,7 @@ import type { NotifyChannel, NotifyTarget } from "@/lib/api";
  */
 export function NotifyTargetsRow({
   candidates,
-  label = "推送给",
+  label = t("推送给"),
   loading,
   onToggle,
   values,
@@ -31,11 +32,11 @@ export function NotifyTargetsRow({
   const isEmpty = candidates.length === 0;
   const display = isEmpty
     ? loading
-      ? "加载中…"
-      : "无可选成员"
+      ? t("加载中…")
+      : t("无可选成员")
     : selected.length > 0
-      ? selected.map((candidate) => candidate.alias).join("、")
-      : "不推送";
+      ? selected.map((candidate) => candidate.alias).join(t("、"))
+      : t("不推送");
 
   // 选中了但一条渠道都不通的人。后端会静默跳过他们，这里必须点名。
   const unreachable = selected.filter((candidate) => candidate.channels.length === 0);
@@ -67,22 +68,22 @@ export function NotifyTargetsRow({
       </div>
       {unreachable.length > 0 ? (
         <p className="px-1 text-xs text-[var(--color-accent-warning)]">
-          {unreachable.map((candidate) => candidate.alias).join("、")}
-          {" 当前收不到推送（未绑定飞书、也未开启浏览器通知）。"}
+          {unreachable.map((candidate) => candidate.alias).join(t("、"))}
+          {t(" 当前收不到推送（未绑定飞书、也未开启浏览器通知）。")}
         </p>
       ) : null}
     </>
   );
 }
 
-const CHANNEL_LABELS: Record<NotifyChannel, string> = {
-  feishu: "飞书",
-  webpush: "通知",
-};
+const CHANNEL_LABELS: Record<NotifyChannel, string> = localized({
+  feishu: msg("飞书"),
+  webpush: msg("通知"),
+});
 
 /** 「张三 · 飞书/通知」；一条都不通时标出来，避免选了才发现收不到。 */
 function optionLabel(candidate: NotifyTarget): string {
-  if (candidate.channels.length === 0) return `${candidate.alias}（收不到）`;
+  if (candidate.channels.length === 0) return t("{alias}（收不到）", { alias: candidate.alias });
   return `${candidate.alias} · ${candidate.channels.map((channel) => CHANNEL_LABELS[channel]).join("/")}`;
 }
 

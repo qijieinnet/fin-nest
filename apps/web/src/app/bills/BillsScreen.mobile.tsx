@@ -59,6 +59,7 @@ import { DeleteBillConfirmDialog } from "./_components/DeleteBillConfirmDialog";
 import { QuickEntryKeypad } from "./_components/QuickEntryKeypad";
 import { dayLabel, periodLabel } from "./_components/bill-utils";
 import { useBillsModel } from "./_model/useBillsModel";
+import { t } from "@/lib/i18n";
 
 function rowProps(transaction: Transaction, accounts: Account[], categoryLookup: CategoryLookup) {
   if (transaction.type === "transfer") {
@@ -66,8 +67,8 @@ function rowProps(transaction: Transaction, accounts: Account[], categoryLookup:
     const to = accountName(accounts, transaction.toAccountId);
     return {
       type: "transfer" as const,
-      title: "转账",
-      categoryName: "转账",
+      title: t("转账"),
+      categoryName: t("转账"),
       categoryIcon: TRANSFER_ICON,
       description: from && to ? `${from} → ${to}` : undefined,
       amountMicros: transaction.grossAmountMicros,
@@ -149,7 +150,7 @@ export function BillsScreenMobile() {
             <IconButton
               className="mr-auto"
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label="返回"
+              label={t("返回")}
               onClick={goBack}
             />
           ) : null}
@@ -159,7 +160,7 @@ export function BillsScreenMobile() {
                 filterButtonItem(model.filterValue, () => setFilterOpen(true)),
                 {
                   icon: <ChartPie size={22} />,
-                  label: "统计",
+                  label: t("统计"),
                   onClick: () => router.push(routes.stats),
                 },
                 // 有待确认记录、待确认续费、保险到期提醒或启用账本切换时显示「更多」入口。
@@ -172,7 +173,7 @@ export function BillsScreenMobile() {
                         dot:
                           model.pendingCount > 0 || dueRenewalCount > 0 || dueInsuranceCount > 0,
                         icon: <Ellipsis size={22} />,
-                        label: "更多",
+                        label: t("更多"),
                         onClick: () => setMoreMenuOpen((open) => !open),
                       },
                     ]
@@ -185,10 +186,10 @@ export function BillsScreenMobile() {
                   ? [
                       {
                         description: currentLedger?.name
-                          ? `当前 · ${currentLedger.name}`
+                          ? t("当前 · {name}", { name: currentLedger.name })
                           : undefined,
                         icon: <WalletCards size={18} />,
-                        label: "切换账本",
+                        label: t("切换账本"),
                         onSelect: () => router.push(routes.ledgers),
                       },
                     ]
@@ -197,13 +198,13 @@ export function BillsScreenMobile() {
                   ? [
                       {
                         description:
-                          model.pendingCount > 0 ? `${model.pendingCount} 条待入账` : undefined,
+                          model.pendingCount > 0 ? t("{pendingCount} 条待入账", { pendingCount: model.pendingCount }) : undefined,
                         icon: (
                           <DotBadge show={model.pendingCount > 0}>
                             <ClipboardCheck size={18} />
                           </DotBadge>
                         ),
-                        label: "待确认",
+                        label: t("待确认"),
                         onSelect: () => router.push(routes.billsPending),
                       },
                     ]
@@ -211,13 +212,13 @@ export function BillsScreenMobile() {
                 dueRenewalCount > 0
                   ? [
                       {
-                        description: `${dueRenewalCount} 个待确认`,
+                        description: t("{dueRenewalCount} 个待确认", { dueRenewalCount }),
                         icon: (
                           <DotBadge show={dueRenewalCount > 0}>
                             <BellRing size={18} />
                           </DotBadge>
                         ),
-                        label: "续费确认",
+                        label: t("续费确认"),
                         onSelect: openRenewals,
                       },
                     ]
@@ -225,13 +226,13 @@ export function BillsScreenMobile() {
                 dueInsuranceCount > 0
                   ? [
                       {
-                        description: `${dueInsuranceCount} 份待处理`,
+                        description: t("{dueInsuranceCount} 份待处理", { dueInsuranceCount }),
                         icon: (
                           <DotBadge show={dueInsuranceCount > 0}>
                             <BellRing size={18} />
                           </DotBadge>
                         ),
-                        label: "保险到期",
+                        label: t("保险到期"),
                         onSelect: openInsuranceReminders,
                       },
                     ]
@@ -245,7 +246,7 @@ export function BillsScreenMobile() {
 
         <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
           <p className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-            {periodLabel(model.filterValue)}支出
+            {t("{value}支出", { value: periodLabel(model.filterValue) })}
           </p>
           <p className="mt-1.5 flex items-baseline gap-0.5">
             <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
@@ -255,7 +256,7 @@ export function BillsScreenMobile() {
           </p>
           <div className="mt-3.5 flex gap-7">
             <div>
-              <p className="text-[11px] text-[var(--color-text-muted)]">收入</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{t("收入")}</p>
               <MoneyText
                 amountMicros={totals.incomeMicros}
                 className="mt-0.5 block text-[15px] font-semibold"
@@ -264,7 +265,7 @@ export function BillsScreenMobile() {
               />
             </div>
             <div>
-              <p className="text-[11px] text-[var(--color-text-muted)]">结余</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{t("结余")}</p>
               <MoneyText
                 amountMicros={balanceMicros}
                 className="mt-0.5 block text-[15px] font-semibold"
@@ -274,7 +275,7 @@ export function BillsScreenMobile() {
               />
             </div>
             <div>
-              <p className="text-[11px] text-[var(--color-text-muted)]">条数</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{t("条数")}</p>
               <p className="mt-0.5 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                 {totals.count}
               </p>
@@ -285,7 +286,7 @@ export function BillsScreenMobile() {
             <div className="mt-4 border-t border-[var(--color-border-subtle)] pt-4">
               <div className="mb-2 flex items-center justify-between text-xs text-[var(--color-text-secondary)]">
                 <span>
-                  本月预算{" "}
+                  {t("本月预算")}{" "}
                   <MoneyText
                     amountMicros={budget!.total.budgetMicros!}
                     className="text-xs"
@@ -293,7 +294,7 @@ export function BillsScreenMobile() {
                   />
                 </span>
                 <span>
-                  剩余{" "}
+                  {t("剩余")}{" "}
                   <MoneyText
                     amountMicros={budget!.total.remainingMicros ?? "0"}
                     className="text-xs"
@@ -317,11 +318,11 @@ export function BillsScreenMobile() {
 
         {model.transactionsQuery.isPending ? (
           <div className="mt-5">
-            <LoadingState rows={4} title="加载账单" />
+            <LoadingState rows={4} title={t("加载账单")} />
           </div>
         ) : model.groups.length === 0 ? (
           <div className="mt-10">
-            <EmptyState title="暂无数据" />
+            <EmptyState title={t("暂无数据")} />
           </div>
         ) : (
           <div className="mt-5">
@@ -339,12 +340,12 @@ export function BillsScreenMobile() {
                       actions={[
                         {
                           icon: <Pencil size={20} />,
-                          label: "编辑",
+                          label: t("编辑"),
                           onClick: () => router.push(routes.billEdit(transaction.id)),
                         },
                         {
                           icon: <Trash2 size={20} />,
-                          label: "删除",
+                          label: t("删除"),
                           onClick: () => {
                             if (model.deleteMutation.isPending) return;
                             model.setTransactionPendingDelete(transaction);
@@ -369,11 +370,11 @@ export function BillsScreenMobile() {
             <div ref={model.sentinelRef} />
             {model.isFetchingNextPage ? (
               <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
-                加载中…
+                {t("加载中…")}
               </p>
             ) : !model.hasNextPage ? (
               <p className="mt-3 pb-2 text-center text-xs text-[var(--color-text-muted)]">
-                没有更多了
+                {t("没有更多了")}
               </p>
             ) : null}
           </div>
@@ -387,7 +388,7 @@ export function BillsScreenMobile() {
         <div className="relative w-[min(100vw,430px)]">
           <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">
             <button
-              aria-label="记一笔"
+              aria-label={t("记一笔")}
               className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
               onClick={() => setQuickEntryOpen(true)}
               type="button"

@@ -14,6 +14,7 @@ import {
 } from "@/app/more/auto/_components/auto-utils";
 import { TRANSFER_ICON } from "@/lib/data/options";
 import { dayLabel } from "../_components/bill-utils";
+import { t } from "@/lib/i18n";
 
 type PendingDayGroup = {
   date: string;
@@ -62,8 +63,8 @@ function pendingRowProps(item: AutoPendingTransaction, accounts: Account[], cate
     );
     return {
       type: "transfer" as const,
-      title: "转账",
-      categoryName: "转账",
+      title: t("转账"),
+      categoryName: t("转账"),
       categoryIcon: TRANSFER_ICON,
       description: summary.fullName,
       amountMicros: item.amountMicros,
@@ -108,12 +109,12 @@ export function PendingTransactionList({
               actions={[
                 {
                   icon: <Pencil size={20} />,
-                  label: "编辑",
+                  label: t("编辑"),
                   onClick: () => onEdit(item),
                 },
                 {
                   icon: <Trash2 size={20} />,
-                  label: "删除",
+                  label: t("删除"),
                   onClick: () => {
                     if (!busy) onDelete(item);
                   },
@@ -124,7 +125,7 @@ export function PendingTransactionList({
               leadingActions={[
                 {
                   icon: <Check size={20} />,
-                  label: "确认",
+                  label: t("确认"),
                   onClick: () => {
                     if (!busy) onConfirm(item);
                   },

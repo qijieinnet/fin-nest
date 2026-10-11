@@ -20,6 +20,7 @@ import {
   type ImportResult,
   type ImportRowIssue,
 } from "../types";
+import { t } from "@/lib/i18n";
 
 // 轮询直到服务端给出终态。上限必须高于服务端 stale 判定（10min），
 // 否则客户端提前判超时会与仍在跑的后台任务不一致，用户重试可能重复导入。
@@ -59,11 +60,11 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
           ledgerImportExcelJobPath(ledgerId, jobId),
         );
         if (job.status === "succeeded" && job.result) return job.result;
-        if (job.status === "failed") throw new Error(job.error ?? "导入失败，请稍后重试");
+        if (job.status === "failed") throw new Error(job.error ?? t("导入失败，请稍后重试"));
         // 兜底：正常不会触发（上限高于服务端 stale）。此时后台可能仍在跑，
         // 提示稍后查看而非直接判失败，避免用户立刻重试导致重复导入。
         if (Date.now() > deadline) {
-          throw new Error("导入仍在处理，请稍后重新打开导入查看结果，不要重复导入");
+          throw new Error(t("导入仍在处理，请稍后重新打开导入查看结果，不要重复导入"));
         }
         await sleep(JOB_POLL_INTERVAL_MS);
       }
@@ -72,23 +73,23 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
       if (!committed.committed) {
         // 预览到确认之间账本可能变化，重新校验失败时展示最新错误。
         setResult(committed);
-        showToast({ tone: "error", message: "数据已变化，导入未执行，请查看最新错误" });
+        showToast({ tone: "error", message: t("数据已变化，导入未执行，请查看最新错误") });
         return;
       }
       await queryClient.invalidateQueries({
         predicate: (query) => isLedgerScopedQueryKey(query.queryKey),
       });
-      showToast({ tone: "success", message: "导入完成" });
+      showToast({ tone: "success", message: t("导入完成") });
       setActiveCloseDisabled(false);
       pop({ force: true });
     },
     onError: (error) => {
       // 后台任务失败信息是普通 Error（getApiErrorMessage 只透传 ApiClientError），单独取 message。
       const message = isApiClientError(error)
-        ? getApiErrorMessage(error, "导入失败，请稍后重试")
+        ? getApiErrorMessage(error, t("导入失败，请稍后重试"))
         : error instanceof Error && error.message
           ? error.message
-          : "导入失败，请稍后重试";
+          : t("导入失败，请稍后重试");
       showToast({ tone: "error", message });
     },
   });
@@ -108,16 +109,16 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
         <IconButton
           disabled={commit.isPending}
           icon={<X size={24} strokeWidth={2.3} />}
-          label="关闭"
+          label={t("关闭")}
           onClick={() => pop()}
         />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          导入预览
+          {t("导入预览")}
         </h2>
         <IconButton
           disabled={!canCommit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label={commit.isPending ? "正在导入" : "确认导入"}
+          label={commit.isPending ? t("正在导入") : t("确认导入")}
           loading={commit.isPending}
           onClick={() => {
             if (canCommit) commit.mutate();
@@ -129,16 +130,17 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
       <div className="import-preview-sheet__scroll">
         <div className="flex flex-col gap-4 pb-2">
           <p className="text-xs text-[var(--color-text-muted)]">
-            {file.name} · 只导入 ID 为空的新增行，已有行的修改不会同步
+            {t("{name} · 只导入 ID 为空的新增行，已有行的修改不会同步", { name: file.name })}
           </p>
 
           <section className="overflow-hidden rounded-[14px] bg-[var(--color-bg-surface)]">
             <ul className="divide-y divide-black/[0.06]">
               {IMPORT_COUNT_LABELS.filter(([key]) => result.counts[key]).map(([key, label]) => {
                 const count = result.counts[key]!;
-                const parts = [`新增 ${count.new}`];
-                if (count.matched > 0) parts.push(`已存在 ${count.matched}`);
-                if (count.skipped > 0) parts.push(`跳过 ${count.skipped}`);
+                const parts = [t("新增 {new}", { new: count.new })];
+                if (count.matched > 0)
+                  parts.push(t("已存在 {matched}", { matched: count.matched }));
+                if (count.skipped > 0) parts.push(t("跳过 {skipped}", { skipped: count.skipped }));
                 return (
                   <li className="flex items-center px-4 py-2.5" key={key}>
                     <span className="min-w-0 flex-1 text-sm text-[var(--color-text-primary)]">
@@ -155,29 +157,29 @@ export function ImportPreviewSheet({ file, initial, ledgerId }: ImportPreviewShe
 
           {totalNew === 0 && !hasErrors ? (
             <p className="text-sm text-[var(--color-text-muted)]">
-              没有识别到新增行（新增行请将 ID 列留空）。
+              {t("没有识别到新增行（新增行请将 ID 列留空）。")}
             </p>
           ) : null}
 
           <IssueList
             issues={result.errors}
-            title={`错误（${result.errors.length}），修正后请重新导入`}
+            title={t("错误（{length}），修正后请重新导入", { length: result.errors.length })}
             tone="error"
           />
           <IssueList
             issues={result.warnings}
-            title={`提示（${result.warnings.length}）`}
+            title={t("提示（{length}）", { length: result.warnings.length })}
             tone="warning"
           />
 
           {hasErrors ? (
             <p className="flex items-center gap-1.5 text-xs text-[var(--color-accent-expense)]">
               <AlertTriangle size={14} />
-              有错误时不会导入任何数据，请在 Excel 中修正后重新选择文件。
+              {t("有错误时不会导入任何数据，请在 Excel 中修正后重新选择文件。")}
             </p>
           ) : null}
           {commit.isPending ? (
-            <p className="text-sm text-[var(--color-text-muted)]">正在导入…</p>
+            <p className="text-sm text-[var(--color-text-muted)]">{t("正在导入…")}</p>
           ) : null}
         </div>
       </div>
@@ -203,7 +205,11 @@ function IssueList({
       <ul className="mt-1.5 rounded-[12px] bg-[var(--color-bg-surface)] px-3 py-2">
         {issues.map((issue, index) => (
           <li className={`py-1 text-xs ${color}`} key={`${issue.sheet}-${issue.row}-${index}`}>
-            「{issue.sheet}」第 {issue.row} 行：{issue.message}
+            {t("「{sheet}」第 {row} 行：{message}", {
+              sheet: issue.sheet,
+              row: issue.row,
+              message: issue.message,
+            })}
           </li>
         ))}
       </ul>

@@ -9,6 +9,7 @@ import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type SubAccountAddSheetProps = {
   accountId: string;
@@ -29,7 +30,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
   const save = useMutation({
     mutationFn: async () => {
       const parsed = balance.trim() ? parseMoneyToMicros(balance, { allowNegative: true, decimalPlaces }) : null;
-      if (parsed && !parsed.ok) throw new Error("余额格式不正确");
+      if (parsed && !parsed.ok) throw new Error(t("余额格式不正确"));
       return apiRequest(ledgerApiPath(ledgerId, `/accounts/${accountId}/sub-accounts`), {
         method: "POST",
         body: { name: trimmedName, balanceMicros: parsed?.amountMicros },
@@ -41,7 +42,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
         queryClient.invalidateQueries({ queryKey: queryKeys.accounts(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.accountEntries(ledgerId, accountId) }),
       ]);
-      showToast({ tone: "success", message: "子账户已添加" });
+      showToast({ tone: "success", message: t("子账户已添加") });
       pop();
     },
   });
@@ -55,12 +56,12 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
       }}
     >
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
-        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">添加子账户</h2>
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
+        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">{t("添加子账户")}</h2>
         <IconButton
           disabled={!canSubmit || save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存子账户"
+          label={t("保存子账户")}
           variant="primary"
           type="submit"
         />
@@ -68,15 +69,15 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
       <div className="flex flex-col gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
         <Input
           autoFocus
-          label="名称"
+          label={t("名称")}
           maxLength={80}
           onChange={(event) => setName(event.target.value)}
-          placeholder="如：应急金"
+          placeholder={t("如：应急金")}
           value={name}
         />
         <Input
           inputMode="decimal"
-          label="初始余额（选填）"
+          label={t("初始余额（选填）")}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
           prefix="¥"
@@ -84,7 +85,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
         />
       </div>
       <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-        初始余额会同时计入账户总余额。
+        {t("初始余额会同时计入账户总余额。")}
       </p>
     </form>
   );

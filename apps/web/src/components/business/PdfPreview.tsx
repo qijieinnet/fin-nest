@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import { t } from "@/lib/i18n";
 
 // pdfjs 体积较大且仅在打开 PDF 时才需要，动态 import 保持主包精简；
 // worker 用 new URL(..., import.meta.url) 让打包器把 worker 作为静态资源发出。
@@ -110,10 +111,10 @@ export function PdfPreview({ url }: PdfPreviewProps) {
           {status === "loading" ? (
             <>
               <Loader2 className="biz-pdf-viewer__spinner" size={22} />
-              <span>正在加载 PDF…</span>
+              <span>{t("正在加载 PDF…")}</span>
             </>
           ) : (
-            <span>PDF 暂时无法预览</span>
+            <span>{t("PDF 暂时无法预览")}</span>
           )}
         </div>
       ) : null}

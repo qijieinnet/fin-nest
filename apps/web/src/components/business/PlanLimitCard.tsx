@@ -1,5 +1,6 @@
 import { formatMicros } from "@/lib/money";
 import { useDecimalPlaces } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type PlanKind = "expense" | "income";
 
@@ -28,7 +29,7 @@ function toMicros(value: bigint | number | string): bigint {
 }
 
 function formatDateRange(startDate: string, endDate: string): string {
-  return `${startDate} 至 ${endDate}`;
+  return t("{startDate} 至 {endDate}", { startDate, endDate });
 }
 
 function formatStatMoney(valueMicros: bigint, decimalPlaces: number): string {
@@ -76,13 +77,13 @@ export function PlanLimitCard({
 
   const stats = [
     {
-      label: isIncome ? "还差" : "剩余",
+      label: isIncome ? t("还差") : t("剩余"),
       primary: true,
-      sub: ` / ${daysLeft}天`,
+      sub: t(" / {daysLeft}天", { daysLeft }),
       value: formatStatMoney(remaining, decimalPlaces),
     },
     {
-      label: isIncome ? "已收" : "已用",
+      label: isIncome ? t("已收") : t("已用"),
       value: formatStatMoney(used, decimalPlaces),
     },
     // {
@@ -90,7 +91,7 @@ export function PlanLimitCard({
     //   value: (Number(dailyMicros) / Number(MICROS_PER_UNIT)).toFixed(2),
     // },
     {
-      label: isIncome ? "超出" : "超过",
+      label: isIncome ? t("超出") : t("超过"),
       value: formatStatMoney(over, decimalPlaces),
     },
   ];
@@ -115,7 +116,7 @@ export function PlanLimitCard({
           <span />
           <i />
         </span>
-        限额 {formatMicros(limit, { decimalPlaces, trimTrailingZeros: true })}
+        {t("限额")} {formatMicros(limit, { decimalPlaces, trimTrailingZeros: true })}
       </div>
       <div className="biz-plan-limit-card__range">{formatDateRange(startDate, endDate)}</div>
       <div className="biz-plan-limit-card__stats">

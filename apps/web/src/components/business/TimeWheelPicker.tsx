@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Clock } from "lucide-react";
 import { Surface } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type TimeWheelPickerProps = {
   label?: string;
@@ -39,7 +40,7 @@ function isIOSLike(): boolean {
  * 时分滚轮选择器：与 DateWheelPicker 同一套 biz-date-wheel 样式，两列（时 / 分）。
  * 用于订阅到期提醒时间等「选择 HH:mm」场景。
  */
-export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }: TimeWheelPickerProps) {
+export function TimeWheelPicker({ label = t("提醒时间"), onValueChange, value }: TimeWheelPickerProps) {
   const [open, setOpen] = useState(false);
   const [nativePicker, setNativePicker] = useState(false);
   const hourRef = useRef<HTMLDivElement | null>(null);
@@ -73,7 +74,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
     ? createPortal(
         <div className="biz-date-popover-root">
           <button
-            aria-label="关闭时间选择"
+            aria-label={t("关闭时间选择")}
             className="biz-date-popover-backdrop"
             onClick={() => setOpen(false)}
             type="button"
@@ -83,7 +84,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
               <span className="ui-bottom-sheet__grabber" />
               <header className="biz-date-wheel-sheet__header">
                 <button onClick={() => setOpen(false)} type="button">
-                  取消
+                  {t("取消")}
                 </button>
                 <strong>{draftValue}</strong>
                 <button
@@ -93,7 +94,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
                   }}
                   type="button"
                 >
-                  完成
+                  {t("完成")}
                 </button>
               </header>
               <div className="biz-date-wheel">
@@ -118,7 +119,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
                         onClick={() => setDraft((current) => ({ ...current, hour }))}
                         type="button"
                       >
-                        {pad2(hour)} 时
+                        {t("{value} 时", { value: pad2(hour) })}
                       </button>
                     ))}
                   </div>
@@ -133,7 +134,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
                         onClick={() => setDraft((current) => ({ ...current, minute }))}
                         type="button"
                       >
-                        {pad2(minute)} 分
+                        {t("{value} 分", { value: pad2(minute) })}
                       </button>
                     ))}
                   </div>
@@ -158,7 +159,7 @@ export function TimeWheelPicker({ label = "提醒时间", onValueChange, value }
         <Clock size={20} />
         <span className="biz-date-popover__summary">
           <span>{label}</span>
-          <strong>{value || "未设置"}</strong>
+          <strong>{value || t("未设置")}</strong>
         </span>
         {nativePicker ? (
           <input

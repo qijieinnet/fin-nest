@@ -24,15 +24,16 @@ import { BillDetailScreen } from "./[transactionId]/BillDetailScreen";
 import { BatchEditDialog, type BatchFieldPatch } from "./_components/BatchEditDialog";
 import { NewBillFormScreen } from "./_components/NewBillFormScreen";
 import { useBillsModel } from "./_model/useBillsModel";
+import { localized, msg, t } from "@/lib/i18n";
 
-const BATCH_FIELD_ITEMS: Array<{ field: BatchUpdateField; label: string }> = [
-  { field: "type", label: "类型" },
-  { field: "category", label: "分类" },
-  { field: "account", label: "账户" },
-  { field: "person", label: "人员" },
-  { field: "occurredOn", label: "日期" },
-  { field: "note", label: "备注" },
-];
+const BATCH_FIELD_ITEMS: Array<{ field: BatchUpdateField; label: string }> = localized([
+  { field: "type", label: msg("类型") },
+  { field: "category", label: msg("分类") },
+  { field: "account", label: msg("账户") },
+  { field: "person", label: msg("人员") },
+  { field: "occurredOn", label: msg("日期") },
+  { field: "note", label: msg("备注") },
+]);
 
 type Row = {
   dateLabel: string;
@@ -60,8 +61,8 @@ function toRow(
     return {
       dateLabel,
       categoryIcon: TRANSFER_ICON,
-      subcategoryName: "转账",
-      parentCategoryName: "转账",
+      subcategoryName: t("转账"),
+      parentCategoryName: t("转账"),
       note: transaction.note ?? "",
       personName: "",
       accountLabel: from && to ? `${from} → ${to}` : "",
@@ -73,8 +74,8 @@ function toRow(
   return {
     dateLabel,
     categoryIcon: cat.categoryIcon ?? "🧾",
-    subcategoryName: cat.title || "未分类",
-    parentCategoryName: cat.categoryName || "未分类",
+    subcategoryName: cat.title || t("未分类"),
+    parentCategoryName: cat.categoryName || t("未分类"),
     note: transaction.note ?? "",
     personName: transaction.personSnapshot?.name ?? "",
     accountLabel: accountName(accounts, transaction.accountId) ?? "",
@@ -152,19 +153,19 @@ export function BillsScreenDesktop() {
   }, [openRecord]);
 
   const allLoadedSelected =
-    transactions.length > 0 && transactions.every((t) => selectedIds.has(t.id));
+    transactions.length > 0 && transactions.every((item) => selectedIds.has(item.id));
   const someSelected = selectedIds.size > 0 && !allLoadedSelected;
   // 勾选是否全为转账：决定操作菜单是否显示「修改分类」、账户改为转出/转入两侧。
   const selectedAllTransfer =
     selectedIds.size > 0 &&
-    transactions.filter((t) => selectedIds.has(t.id)).every((t) => t.type === "transfer");
+    transactions.filter((item) => selectedIds.has(item.id)).every((item) => item.type === "transfer");
   const batchFieldItems = selectedAllTransfer
     ? BATCH_FIELD_ITEMS.filter((item) => item.field !== "category")
     : BATCH_FIELD_ITEMS;
   const toggleAll = useCallback(() => {
     setSelectedIds((prev) => {
-      if (transactions.length > 0 && transactions.every((t) => prev.has(t.id))) return new Set();
-      return new Set(transactions.map((t) => t.id));
+      if (transactions.length > 0 && transactions.every((item) => prev.has(item.id))) return new Set();
+      return new Set(transactions.map((item) => item.id));
     });
   }, [transactions]);
 
@@ -188,11 +189,11 @@ export function BillsScreenDesktop() {
       <div className="desktop-bills desktop-page--wide">
         <header className="desktop-bills__summary">
           <div className="desktop-bills__summary-figures">
-            <Figure label="支出" micros={totals.expenseMicros} tone="expense" decimalPlaces={decimalPlaces} />
-            <Figure label="收入" micros={totals.incomeMicros} tone="income" decimalPlaces={decimalPlaces} />
-            <Figure label="结余" micros={balanceMicros} tone="neutral" decimalPlaces={decimalPlaces} />
+            <Figure label={t("支出")} micros={totals.expenseMicros} tone="expense" decimalPlaces={decimalPlaces} />
+            <Figure label={t("收入")} micros={totals.incomeMicros} tone="income" decimalPlaces={decimalPlaces} />
+            <Figure label={t("结余")} micros={balanceMicros} tone="neutral" decimalPlaces={decimalPlaces} />
             <div className="desktop-bills__figure">
-              <span className="desktop-bills__figure-label">条数</span>
+              <span className="desktop-bills__figure-label">{t("条数")}</span>
               <span className="desktop-bills__figure-value [font-variant-numeric:tabular-nums]">
                 {totals.count}
               </span>
@@ -200,7 +201,7 @@ export function BillsScreenDesktop() {
             {model.showBudget && model.budget ? (
               <div className="desktop-bills__budget">
                 <span className="desktop-bills__figure-label">
-                  本月预算剩余{" "}
+                  {t("本月预算剩余")}{" "}
                   <MoneyText
                     amountMicros={model.budget.total.remainingMicros ?? "0"}
                     className="text-[11px]"
@@ -224,25 +225,25 @@ export function BillsScreenDesktop() {
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 ? (
               <div className="desktop-batch-op">
-                <span className="desktop-batch-op__count">已选 {selectedIds.size} 笔</span>
+                <span className="desktop-batch-op__count">{t("已选 {size} 笔", { size: selectedIds.size })}</span>
                 <div className="relative">
                   <button
                     className="desktop-batch-op__button"
                     onClick={() => setBatchMenuOpen((open) => !open)}
                     type="button"
                   >
-                    操作
+                    {t("操作")}
                   </button>
                   <PopoverMenu
                     groups={[
                       batchFieldItems.map((item) => ({
-                        label: `修改${item.label}`,
+                        label: t("修改{label}", { label: item.label }),
                         onSelect: () => {
                           setBatchField(item.field);
                           setBatchMenuOpen(false);
                         },
                       })),
-                      [{ label: "取消选择", onSelect: clearSelection }],
+                      [{ label: t("取消选择"), onSelect: clearSelection }],
                     ]}
                     onOpenChange={setBatchMenuOpen}
                     open={batchMenuOpen}
@@ -252,10 +253,10 @@ export function BillsScreenDesktop() {
             ) : null}
             <IconButtonGroup items={[filterButtonItem(model.filterValue, () => setFilterOpen(true))]} />
             <button
-              aria-label="记一笔"
+              aria-label={t("记一笔")}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-tint)] text-[var(--color-tint-contrast)] shadow-[var(--shadow-soft)]"
               onClick={openRecord}
-              title="记一笔（N）"
+              title={t("记一笔（N）")}
               type="button"
             >
               <Plus size={20} />
@@ -266,9 +267,9 @@ export function BillsScreenDesktop() {
         <div className="desktop-bills__body desktop-bills__body--full">
           <section className="desktop-bills__table-wrap">
             {model.transactionsQuery.isPending ? (
-              <LoadingState rows={6} title="加载账单" />
+              <LoadingState rows={6} title={t("加载账单")} />
             ) : transactions.length === 0 ? (
-              <EmptyState title="暂无数据" />
+              <EmptyState title={t("暂无数据")} />
             ) : (
               <div className="desktop-table-scroll">
                 <table className="desktop-table">
@@ -276,7 +277,7 @@ export function BillsScreenDesktop() {
                     <tr>
                       <th className="desktop-table__check">
                         <input
-                          aria-label="全选当前加载的记账"
+                          aria-label={t("全选当前加载的记账")}
                           checked={allLoadedSelected}
                           onChange={toggleAll}
                           ref={(el) => {
@@ -285,13 +286,13 @@ export function BillsScreenDesktop() {
                           type="checkbox"
                         />
                       </th>
-                      <th>日期</th>
-                      <th>小类</th>
-                      <th>大类</th>
-                      <th>人员</th>
-                      <th>账户</th>
-                      <th>备注</th>
-                      <th className="desktop-table__amount">金额</th>
+                      <th>{t("日期")}</th>
+                      <th>{t("小类")}</th>
+                      <th>{t("大类")}</th>
+                      <th>{t("人员")}</th>
+                      <th>{t("账户")}</th>
+                      <th>{t("备注")}</th>
+                      <th className="desktop-table__amount">{t("金额")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -309,7 +310,7 @@ export function BillsScreenDesktop() {
                             onClick={(event) => event.stopPropagation()}
                           >
                             <input
-                              aria-label="选择该记账"
+                              aria-label={t("选择该记账")}
                               checked={checked}
                               onChange={() => toggleRow(transaction.id)}
                               type="checkbox"
@@ -338,9 +339,9 @@ export function BillsScreenDesktop() {
                 </table>
                 <div ref={model.sentinelRef} />
                 {model.isFetchingNextPage ? (
-                  <p className="py-3 text-center text-xs text-[var(--color-text-muted)]">加载中…</p>
+                  <p className="py-3 text-center text-xs text-[var(--color-text-muted)]">{t("加载中…")}</p>
                 ) : !model.hasNextPage ? (
-                  <p className="py-3 text-center text-xs text-[var(--color-text-muted)]">没有更多了</p>
+                  <p className="py-3 text-center text-xs text-[var(--color-text-muted)]">{t("没有更多了")}</p>
                 ) : null}
               </div>
             )}

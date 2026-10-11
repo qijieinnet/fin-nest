@@ -23,6 +23,7 @@ import {
   type StatsType,
   useStatsModel,
 } from "./_model/useStatsModel";
+import { t } from "@/lib/i18n";
 
 export function StatsScreenMobile() {
   const { push } = useSheetStack();
@@ -71,7 +72,7 @@ export function StatsScreenMobile() {
           <div className="flex min-w-0 justify-start">
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label="返回"
+              label={t("返回")}
               onClick={model.handleBack}
             />
           </div>
@@ -95,8 +96,8 @@ export function StatsScreenMobile() {
         {drilled ? null : (
           <Tabs
             items={[
-              { label: "支出", value: "expense" },
-              { label: "收入", value: "income" },
+              { label: t("支出"), value: "expense" },
+              { label: t("收入"), value: "income" },
             ]}
             onValueChange={(next) => model.switchType(next as StatsType)}
             value={type}
@@ -105,15 +106,17 @@ export function StatsScreenMobile() {
 
         {model.statsQuery.isPending ? (
           <div className="mt-4">
-            <LoadingState rows={4} title="加载统计" />
+            <LoadingState rows={4} title={t("加载统计")} />
           </div>
         ) : (
           <>
             {entries.length === 0 ? (
               <div className="mt-6">
                 <EmptyState
-                  message={`这段时间没有${type === "expense" ? "支出" : "收入"}记录。`}
-                  title="暂无数据"
+                  message={t("这段时间没有{value}记录。", {
+                    value: type === "expense" ? t("支出") : t("收入"),
+                  })}
+                  title={t("暂无数据")}
                 />
               </div>
             ) : (
@@ -126,7 +129,7 @@ export function StatsScreenMobile() {
                     />
                     <div className="absolute inset-[19px] flex flex-col items-center justify-center rounded-full bg-[var(--color-bg-surface)]">
                       <span className="max-w-[80px] truncate text-[10px] text-[var(--color-text-muted)]">
-                        {drilled ? drilled.name : type === "expense" ? "总支出" : "总收入"}
+                        {drilled ? drilled.name : type === "expense" ? t("总支出") : t("总收入")}
                       </span>
                       <span className="mt-0.5 max-w-[86px] truncate text-[17px] font-bold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                         {formatMicros(totalMicros, { decimalPlaces, trimTrailingZeros: true })}
@@ -208,7 +211,7 @@ export function StatsScreenMobile() {
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
                   {TREND_RANGE_LABELS[trendRange]}
-                  {type === "expense" ? "支出" : "收入"}
+                  {type === "expense" ? t("支出") : t("收入")}
                 </p>
                 <TrendRangeSelect onChange={model.setTrendRange} value={trendRange} />
               </div>

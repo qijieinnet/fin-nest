@@ -12,6 +12,7 @@ import {
   type UseTransactionFormModelParams,
   useTransactionFormModel,
 } from "./_model/useTransactionFormModel";
+import { t } from "@/lib/i18n";
 
 export type { TransactionSeed };
 
@@ -65,7 +66,7 @@ export function TransactionForm({
 
   if (model.isLoading) {
     // 只渲染键盘时不能占页面：加载骨架会凭空插进账单列表里。
-    return keypadOnly ? null : <LoadingState rows={5} title="加载记账设置" />;
+    return keypadOnly ? null : <LoadingState rows={5} title={t("加载记账设置")} />;
   }
 
   // 只有键盘的形态没有桌面版（桌面「记一笔」是弹层里的完整表单），不走断点分发。

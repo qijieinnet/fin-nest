@@ -47,6 +47,7 @@ import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 type QuickTemplateEditorSheetProps = {
   accounts: Account[];
@@ -62,18 +63,18 @@ type QuickTemplateEditorSheetProps = {
 
 type RelationBucket = "primary" | "linked";
 
-const TYPE_ITEMS = [
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
+const TYPE_ITEMS = localized([
+  { label: msg("支出"), value: "expense" },
+  { label: msg("收入"), value: "income" },
+  { label: msg("转账"), value: "transfer" },
+]);
 
 // 关联物品的两种记法。账单表单不给这个选择（手选=耗材、当场新建物品=购入），
 // 但模板是提前配好、反复复用的，配的时候必须能说清楚这一笔算哪种。
-const ITEM_LINK_KIND_ITEMS = [
-  { label: "耗材 / 维修", value: "consumable" },
-  { label: "购入", value: "purchase" },
-];
+const ITEM_LINK_KIND_ITEMS = localized([
+  { label: msg("耗材 / 维修"), value: "consumable" },
+  { label: msg("购入"), value: "purchase" },
+]);
 
 /** 交易类型 + 关联桶（主/联动）对应的账户类型（可收回/需归还）。 */
 function relationAccountKind(
@@ -220,7 +221,7 @@ export function QuickTemplateEditorSheet({
           .map((entry) => personById.get(entry.personId))
           .filter((name): name is string => Boolean(name));
         return {
-          description: `${insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人"} · ${meta.label}`,
+          description: `${insuredNames.length > 0 ? `${insuredNames.join(t("、"))}` : t("未指定被保人")} · ${meta.label}`,
           id: insurance.id,
           icon: meta.icon,
           name: insurance.name,
@@ -228,18 +229,18 @@ export function QuickTemplateEditorSheet({
       });
   }, [insurances, people]);
   const itemOptions = useMemo(
-    () => items.map((item) => ({ id: item.id, icon: "物", name: item.name })),
+    () => items.map((item) => ({ id: item.id, icon: t("物"), name: item.name })),
     [items],
   );
   const subscriptionOptions = useMemo(
     () =>
       subscriptions
         .filter((subscription) => !subscription.terminatedAt)
-        .map((subscription) => ({ id: subscription.id, icon: "订", name: subscription.name })),
+        .map((subscription) => ({ id: subscription.id, icon: t("订"), name: subscription.name })),
     [subscriptions],
   );
-  const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
-  const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
+  const primaryRelationLabel = type === "income" ? t("需归还") : t("可收回");
+  const linkedRelationLabel = type === "income" ? t("可收回") : t("需归还");
 
   const setting = useRecordSetting(ledgerId).data;
   const order = effectiveFieldOrder(setting);
@@ -292,13 +293,13 @@ export function QuickTemplateEditorSheet({
     for (const item of relationItems) {
       if (!item.accountId) continue;
       const parsed = parseMoneyToMicros(item.amount, { decimalPlaces });
-      if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("关联项目金额无效");
+      if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error(t("关联项目金额无效"));
       const relationAccount = accounts.find((account) => account.id === item.accountId);
       const expectedKind = relationAccountKind(type, bucket);
       if (!relationAccount || relationAccount.type !== expectedKind)
-        throw new Error("关联项目类型不正确");
+        throw new Error(t("关联项目类型不正确"));
       const relationKind = relationKindFor(type, relationAccount.type);
-      if (!relationKind) throw new Error("当前交易类型不支持关联");
+      if (!relationKind) throw new Error(t("当前交易类型不支持关联"));
       relations.push({
         accountId: item.accountId,
         relationKind,
@@ -335,20 +336,20 @@ export function QuickTemplateEditorSheet({
   const save = useMutation({
     mutationFn: () => {
       const isTransfer = type === "transfer";
-      if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
-      if (isTransfer && !transferReady) throw new Error("请选择转出和转入账户");
+      if (!isTransfer && !category.categoryId) throw new Error(t("请选择分类"));
+      if (isTransfer && !transferReady) throw new Error(t("请选择转出和转入账户"));
       if (
         !isTransfer &&
         acctRequired &&
         !(accountEnabled && resolveAccountSelection(accounts, accountId).accountId)
       ) {
-        throw new Error("当前账本要求绑定账户");
+        throw new Error(t("当前账本要求绑定账户"));
       }
       if (!isTransfer && personRequired && !(personEnabled && personId)) {
-        throw new Error("当前账本要求选择人员");
+        throw new Error(t("当前账本要求选择人员"));
       }
       if (hasAmount && (!parsedAmount.ok || BigInt(parsedAmount.amountMicros) <= 0n)) {
-        throw new Error("请输入有效金额");
+        throw new Error(t("请输入有效金额"));
       }
       const account =
         !isTransfer && accountEnabled ? resolveAccountSelection(accounts, accountId) : {};
@@ -396,7 +397,7 @@ export function QuickTemplateEditorSheet({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.quickTemplates(ledgerId) });
-      showToast({ tone: "success", message: isEditing ? "快速记账已更新" : "快速记账已创建" });
+      showToast({ tone: "success", message: isEditing ? t("快速记账已更新") : t("快速记账已创建") });
       pop();
     },
   });
@@ -406,7 +407,7 @@ export function QuickTemplateEditorSheet({
       case "category":
         if (type === "transfer") return null;
         return (
-          <FieldCard className="transaction-form__picker-card" key="category" label="分类">
+          <FieldCard className="transaction-form__picker-card" key="category" label={t("分类")}>
             <CategorySelectRow
               onValueChange={setCategoryId}
               options={catOptions}
@@ -417,20 +418,20 @@ export function QuickTemplateEditorSheet({
       case "account":
         if (type === "transfer") {
           return (
-            <FieldCard className="transaction-form__picker-card" key="account" label="账户">
+            <FieldCard className="transaction-form__picker-card" key="account" label={t("账户")}>
               <AccountSelectRow
-                label="转出账户"
+                label={t("转出账户")}
                 onValueChange={setFromAccountId}
                 options={acctOptions}
-                placeholder="选择账户"
+                placeholder={t("选择账户")}
                 value={fromAccountId}
               />
               <span className="transaction-form__divider" />
               <AccountSelectRow
-                label="转入账户"
+                label={t("转入账户")}
                 onValueChange={setToAccountId}
                 options={acctOptions}
-                placeholder="选择账户"
+                placeholder={t("选择账户")}
                 value={toAccountId}
               />
             </FieldCard>
@@ -442,7 +443,7 @@ export function QuickTemplateEditorSheet({
             checked={accountEnabled}
             disabled={acctRequired}
             key="account"
-            label="账户"
+            label={t("账户")}
             onCheckedChange={(checked) => {
               setAccountEnabled(checked);
               if (!checked) setAccountId(null);
@@ -450,10 +451,10 @@ export function QuickTemplateEditorSheet({
           >
             <AccountSelectRow
               hideLabel
-              label="选择账户"
+              label={t("选择账户")}
               onValueChange={setAccountId}
               options={acctOptions}
-              placeholder="不绑定账户"
+              placeholder={t("不绑定账户")}
               value={accountId}
             />
           </ToggleCard>
@@ -464,7 +465,7 @@ export function QuickTemplateEditorSheet({
             checked={personEnabled}
             disabled={personRequired}
             key="person"
-            label="人员"
+            label={t("人员")}
             onCheckedChange={(checked) => {
               setPersonEnabled(checked);
               if (!checked) setPersonId(null);
@@ -476,15 +477,15 @@ export function QuickTemplateEditorSheet({
         );
       case "note":
         return (
-          <FieldCard className="transaction-form__note-card" key="note" label="备注">
+          <FieldCard className="transaction-form__note-card" key="note" label={t("备注")}>
             <div className="transaction-form__note-row">
-              <span>备注</span>
+              <span>{t("备注")}</span>
               <Input
-                aria-label="备注"
-                label="备注"
+                aria-label={t("备注")}
+                label={t("备注")}
                 maxLength={240}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder="选填…"
+                placeholder={t("选填…")}
                 value={note}
               />
             </div>
@@ -504,14 +505,14 @@ export function QuickTemplateEditorSheet({
       }}
     >
       <div className="auto-transaction-sheet__header">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑快速记账" : "新建快速记账"}
+          {isEditing ? t("编辑快速记账") : t("新建快速记账")}
         </h2>
         <IconButton
           disabled={!canSubmit || save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存快速记账"
+          label={t("保存快速记账")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -532,23 +533,23 @@ export function QuickTemplateEditorSheet({
               type === "income" && "transaction-form__amount--income",
             )}
             decimalPlaces={decimalPlaces}
-            label="预设金额"
+            label={t("预设金额")}
             onValueChange={setAmount}
-            placeholder="留空则记账时再输入"
+            placeholder={t("留空则记账时再输入")}
             value={amount}
           />
         </div>
 
         <div className="transaction-form__cards">
-          <FieldCard className="transaction-form__note-card" label="名称">
+          <FieldCard className="transaction-form__note-card" label={t("名称")}>
             <div className="transaction-form__note-row">
-              <span>名称</span>
+              <span>{t("名称")}</span>
               <Input
-                aria-label="名称"
-                label="名称"
+                aria-label={t("名称")}
+                label={t("名称")}
                 maxLength={80}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="如：工作日午餐 / 咖啡"
+                placeholder={t("如：工作日午餐 / 咖啡")}
                 value={name}
               />
             </div>
@@ -560,13 +561,13 @@ export function QuickTemplateEditorSheet({
             <>
               <RecoverablePayableEditor
                 accountOptions={primaryRelationOpts}
-                addLabel={`添加${primaryRelationLabel}项目`}
-                emptyText={`还没有${primaryRelationLabel}项目，可到「账户」中先添加${primaryRelationLabel}账户`}
+                addLabel={t("添加{primaryRelationLabel}项目", { primaryRelationLabel })}
+                emptyText={t("还没有{primaryRelationLabel}项目，可到「账户」中先添加{primaryRelationLabel2}账户", { primaryRelationLabel, primaryRelationLabel2: primaryRelationLabel })}
                 enabled={primaryRelationsEnabled}
                 hint={
                   type === "income"
-                    ? "这笔收入中需要归还他人的部分"
-                    : "这笔支出中可向他人收回的部分"
+                    ? t("这笔收入中需要归还他人的部分")
+                    : t("这笔支出中可向他人收回的部分")
                 }
                 items={primaryRelationItems}
                 label={primaryRelationLabel}
@@ -576,30 +577,30 @@ export function QuickTemplateEditorSheet({
 
               <RecoverablePayableEditor
                 accountOptions={linkedRelationOpts}
-                addLabel={`添加${linkedRelationLabel}项目`}
-                emptyText={`还没有${linkedRelationLabel}项目，可到「账户」中先添加${linkedRelationLabel}账户`}
+                addLabel={t("添加{linkedRelationLabel}项目", { linkedRelationLabel })}
+                emptyText={t("还没有{linkedRelationLabel}项目，可到「账户」中先添加{linkedRelationLabel2}账户", { linkedRelationLabel, linkedRelationLabel2: linkedRelationLabel })}
                 enabled={linkedRelationsEnabled}
                 hint={
                   type === "income"
-                    ? "这笔收入将自动冲减选中的可收回项目并参与计算"
-                    : "这笔支出将自动冲减选中的需归还项目并参与计算"
+                    ? t("这笔收入将自动冲减选中的可收回项目并参与计算")
+                    : t("这笔支出将自动冲减选中的需归还项目并参与计算")
                 }
                 items={linkedRelationItems}
-                label={`冲减${linkedRelationLabel}项目`}
+                label={t("冲减{linkedRelationLabel}项目", { linkedRelationLabel })}
                 onChange={setLinkedRelationItems}
                 onEnabledChange={setLinkedRelationsEnabled}
               />
 
               <AssetLinkCard
                 checked={insuranceEnabled}
-                emptyText="还没有保单，可到「我的 · 保险管理」中先添加保单"
+                emptyText={t("还没有保单，可到「我的 · 保险管理」中先添加保单")}
                 hint={
                   type === "income"
-                    ? "把这笔收入（如理赔款）关联到一份保单"
-                    : "把这笔支出（如保费）关联到一份保单"
+                    ? t("把这笔收入（如理赔款）关联到一份保单")
+                    : t("把这笔支出（如保费）关联到一份保单")
                 }
                 items={insuranceOptions}
-                label="保险"
+                label={t("保险")}
                 onCheckedChange={(checked) => {
                   setInsuranceEnabled(checked);
                   if (!checked) setSelectedInsuranceId(null);
@@ -610,7 +611,7 @@ export function QuickTemplateEditorSheet({
 
               <AssetLinkCard
                 checked={itemEnabled}
-                emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
+                emptyText={t("还没有物品，可到「我的 · 物品管理」中先添加物品")}
                 footer={
                   <div className="flex flex-col gap-1.5">
                     <Tabs
@@ -620,18 +621,18 @@ export function QuickTemplateEditorSheet({
                     />
                     <p className="transaction-form__empty-text">
                       {itemLinkKind === "purchase"
-                        ? "记为购入：只挂在物品流水里，不计入耗材合计"
-                        : "记为耗材：累加进物品的耗材合计"}
+                        ? t("记为购入：只挂在物品流水里，不计入耗材合计")
+                        : t("记为耗材：累加进物品的耗材合计")}
                     </p>
                   </div>
                 }
                 hint={
                   type === "income"
-                    ? "把这笔收入（如转卖回款）关联到一件物品"
-                    : "把这笔支出（如耗材、维修）关联到一件物品"
+                    ? t("把这笔收入（如转卖回款）关联到一件物品")
+                    : t("把这笔支出（如耗材、维修）关联到一件物品")
                 }
                 items={itemOptions}
-                label="关联物品"
+                label={t("关联物品")}
                 onCheckedChange={(checked) => {
                   setItemEnabled(checked);
                   if (!checked) {
@@ -645,14 +646,14 @@ export function QuickTemplateEditorSheet({
 
               <AssetLinkCard
                 checked={subscriptionEnabled}
-                emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+                emptyText={t("还没有订阅，可到「我的 · 订阅管理」中先添加订阅")}
                 hint={
                   type === "income"
-                    ? "把这笔收入（如退款）关联到一个订阅"
-                    : "把这笔支出（如订阅费）关联到一个订阅"
+                    ? t("把这笔收入（如退款）关联到一个订阅")
+                    : t("把这笔支出（如订阅费）关联到一个订阅")
                 }
                 items={subscriptionOptions}
-                label="关联订阅"
+                label={t("关联订阅")}
                 onCheckedChange={(checked) => {
                   setSubscriptionEnabled(checked);
                   if (!checked) setSelectedSubscriptionId(null);
@@ -682,7 +683,7 @@ export function QuickTemplateEditorSheet({
 
           {isEditing && onDelete ? (
             <Button block onClick={onDelete} variant="danger">
-              删除快速记账
+              {t("删除快速记账")}
             </Button>
           ) : null}
         </div>

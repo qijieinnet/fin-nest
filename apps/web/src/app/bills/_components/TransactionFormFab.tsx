@@ -2,6 +2,7 @@
 
 import { Check, LoaderCircle, Zap } from "lucide-react";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type TransactionFormFabProps = {
   /** 满足提交条件（与右上角保存按钮同一判断）时，按钮切换为提交态。 */
@@ -26,10 +27,10 @@ export function TransactionFormFab({
   loading = false,
   onQuickClick,
   onSubmitBlocked,
-  submitLabel = "保存",
+  submitLabel = t("保存"),
 }: TransactionFormFabProps) {
   const quickMode = !canSubmit && Boolean(onQuickClick);
-  const label = quickMode ? "快捷记账" : submitLabel;
+  const label = quickMode ? t("快捷记账") : submitLabel;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">

@@ -6,6 +6,7 @@ import { Check, ChevronRight, X } from "lucide-react";
 import { BottomSheet, Button } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
+import { t } from "@/lib/i18n";
 
 type OptionPickerProps = {
   className?: string;
@@ -23,14 +24,14 @@ type OptionPickerProps = {
 /** 通用"选一项"组件：触发行 + 底部弹层，所有单选场景统一走这里。 */
 export function OptionPicker({
   className,
-  clearLabel = "清空选择",
+  clearLabel = t("清空选择"),
   clearable = false,
-  emptyText = "暂无可选项",
+  emptyText = t("暂无可选项"),
   icon,
   label,
   onValueChange,
   options,
-  placeholder = "请选择",
+  placeholder = t("请选择"),
   value,
 }: OptionPickerProps) {
   const [open, setOpen] = useState(false);

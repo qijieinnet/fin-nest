@@ -9,6 +9,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../_components/TransactionForm";
 import { TransactionFormFab } from "../../_components/TransactionFormFab";
+import { t } from "@/lib/i18n";
 
 export function EditBillScreen({
   transactionId,
@@ -47,7 +48,7 @@ export function EditBillScreen({
       disabled={!ledgerId || waitingForTransaction || saving || !hasTransaction}
       form={formId}
       icon={<Check size={24} strokeWidth={2.6} />}
-      label="保存"
+      label={t("保存")}
       loading={saving}
       onClick={(event) => {
         if (!canSubmit) {
@@ -63,14 +64,14 @@ export function EditBillScreen({
   const closeButton = (
     <IconButton
       icon={<X size={24} strokeWidth={2.3} />}
-      label="关闭"
+      label={t("关闭")}
       onClick={() => (onClose ? onClose() : router.back())}
     />
   );
 
   const body =
     !ledgerId || waitingForTransaction ? (
-      <LoadingState rows={5} title="加载交易" />
+      <LoadingState rows={5} title={t("加载交易")} />
     ) : transactionQuery.data ? (
       <TransactionForm
         formId={formId}
@@ -83,7 +84,7 @@ export function EditBillScreen({
         onSubmitBlocked={handleSubmitBlockedChange}
       />
     ) : (
-      <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">交易不存在或已删除。</p>
+      <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">{t("交易不存在或已删除。")}</p>
     );
 
   if (embedded) {
@@ -91,7 +92,7 @@ export function EditBillScreen({
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-2 px-1 pb-2">
           {closeButton}
-          <h2 className="text-base font-bold text-[var(--color-text-primary)]">编辑交易</h2>
+          <h2 className="text-base font-bold text-[var(--color-text-primary)]">{t("编辑交易")}</h2>
           {saveAction}
         </header>
         <div className="sheet-form-scroll flex-1">{body}</div>
@@ -103,7 +104,7 @@ export function EditBillScreen({
     <MobileAppShell>
       {/* 键盘展开时把它的高度补进页面底部内边距，否则靠后的字段被永久遮住。 */}
       <div data-keypad-open={keypadOpen ? "true" : undefined}>
-        <MobilePage action={saveAction} leading={closeButton} title="编辑交易">
+        <MobilePage action={saveAction} leading={closeButton} title={t("编辑交易")}>
           {body}
         </MobilePage>
       </div>

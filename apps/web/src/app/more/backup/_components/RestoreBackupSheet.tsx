@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 /**
  * 系统恢复的二次确认：警示文案 + 输入当前管理员自己的登录密码（服务端校验，带失败限速）。
@@ -34,7 +35,7 @@ export function RestoreBackupSheet({ archive }: { archive: BackupArchive }) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.adminBackups });
-      showToast({ tone: "success", message: "恢复已开始，完成前请不要操作数据" });
+      showToast({ tone: "success", message: t("恢复已开始，完成前请不要操作数据") });
       pop();
     },
   });
@@ -44,9 +45,9 @@ export function RestoreBackupSheet({ archive }: { archive: BackupArchive }) {
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          恢复系统数据
+          {t("恢复系统数据")}
         </h2>
         <span aria-hidden />
       </div>
@@ -54,19 +55,18 @@ export function RestoreBackupSheet({ archive }: { archive: BackupArchive }) {
       <div className="flex items-start gap-2.5 rounded-[14px] bg-[var(--color-accent-expense)]/10 p-3.5">
         <AlertTriangle className="mt-0.5 shrink-0 text-[var(--color-accent-expense)]" size={18} />
         <div className="text-sm text-[var(--color-accent-expense)]">
-          <p className="font-semibold">此操作不可撤销</p>
+          <p className="font-semibold">{t("此操作不可撤销")}</p>
           <p className="mt-1">
-            当前系统的全部数据（所有用户、账本、流水、账户、档案与附件）将被清空，替换为备份
-            「{archive.fileName}」中的内容。恢复过程中其他成员的操作会失败，完成后所有人都需要重新登录。
+            {t("当前系统的全部数据（所有用户、账本、流水、账户、档案与附件）将被清空，替换为备份 「{fileName}」中的内容。恢复过程中其他成员的操作会失败，完成后所有人都需要重新登录。", { fileName: archive.fileName })}
           </p>
         </div>
       </div>
 
       <Input
         autoFocus
-        label="输入你的登录密码以确认"
+        label={t("输入你的登录密码以确认")}
         onChange={(event) => setPassword(event.target.value)}
-        placeholder="登录密码"
+        placeholder={t("登录密码")}
         type="password"
         value={password}
       />
@@ -78,12 +78,12 @@ export function RestoreBackupSheet({ archive }: { archive: BackupArchive }) {
         }}
         variant="danger"
       >
-        {restore.isPending ? "提交中…" : "清空并恢复"}
+        {restore.isPending ? t("提交中…") : t("清空并恢复")}
       </Button>
 
       {restore.isError ? (
         <p className="text-sm text-[var(--color-accent-expense)]">
-          {getApiErrorMessage(restore.error, "恢复失败，请稍后重试")}
+          {getApiErrorMessage(restore.error, t("恢复失败，请稍后重试"))}
         </p>
       ) : null}
     </div>

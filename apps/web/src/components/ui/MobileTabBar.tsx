@@ -13,12 +13,13 @@ import { useRouteNavigation } from "@/lib/nav/useRouteNavigation";
 import { routes } from "@/lib/route/routes";
 import { useLedger, usePreferences } from "@/providers";
 import { TabBar } from "./TabBar";
+import { localized, msg } from "@/lib/i18n";
 
-const MORE_TAB = {
+const MORE_TAB = localized({
   value: routes.more,
-  label: "更多",
+  label: msg("更多"),
   icon: <MoreHorizontal size={20} />,
-};
+});
 
 const AI_TAB = {
   value: routes.ai,

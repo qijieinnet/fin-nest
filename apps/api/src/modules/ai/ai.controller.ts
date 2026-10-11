@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Logger,
   Param,
   ParseUUIDPipe,
@@ -16,7 +17,7 @@ import {
 } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiConsumes, ApiOkResponse, ApiProduces, ApiTags } from "@nestjs/swagger";
-import { AppError } from "@fin-nest/backend";
+import { AppError, errorLocaleFromHeader, translateErrorMessage } from "@fin-nest/backend";
 import type { Response } from "express";
 import { AuthContext, SessionAuthContext } from "../auth/auth.types";
 import { CurrentAuth } from "../auth/current-auth.decorator";
@@ -112,6 +113,7 @@ export class AiController {
     @Body() body: ChatRequestDto,
     @UploadedFiles() images: Express.Multer.File[] | undefined,
     @Res() response: Response,
+    @Headers("accept-language") acceptLanguage?: string,
   ) {
     // 客户端断开不中止：iOS 切到别的 App 会掐断请求，本轮照常跑完落库，前端回来后按 requestId 查轮次状态恢复。
     // 只有显式停止（POST chat/stream/:requestId/cancel）才中止，已生成部分由 service 照常持久化。
@@ -159,7 +161,11 @@ export class AiController {
       // 头已发出、全局过滤器接不到，非业务异常在这里留痕，否则前端只看到一句「出错了」无从排查。
       if (!(error instanceof AppError)) this.logger.error(error);
       emit("error", {
-        message: error instanceof AppError ? error.message : "AI 服务出错，请稍后重试",
+        // 头已发出、全局过滤器的翻译也接不到，这里按请求语言自行翻译。
+        message: translateErrorMessage(
+          error instanceof AppError ? error.message : "AI 服务出错，请稍后重试",
+          errorLocaleFromHeader(acceptLanguage),
+        ),
         code: error instanceof AppError ? error.code : "AI_INTERNAL_ERROR",
       });
     } finally {

@@ -80,6 +80,7 @@ import {
   type DraftPatch,
 } from "./_components/AiDraftBatchPanel";
 import { AiDraftEditDrawer } from "./_components/AiDraftEditDrawer";
+import { currentIntlLocale, localized, msg, t } from "@/lib/i18n";
 
 // react-markdown + remark-gfm 体积较大（压缩前约 170K），动态拆出：AI 页外壳先渲染，
 // 消息区渲染时才加载；空闲预取 /ai 路由时也不必连带下载它。
@@ -89,30 +90,40 @@ const AiMarkdown = dynamic(
 );
 
 /** 空态能力入口：点一下把示例填进输入框（不直接发送），用户改完再发。 */
-const STARTERS = [
+const STARTERS = localized([
   {
     icon: PenLine,
     color: "var(--color-tint)",
-    title: "说一句就记账",
-    example: "昨天午饭 32，微信付的",
+    title: msg("说一句就记账"),
+    example: msg("昨天午饭 32，微信付的"),
   },
-  { icon: PieChart, color: "oklch(0.7 0.16 25)", title: "查花销", example: "这个月吃饭花了多少？" },
+  {
+    icon: PieChart,
+    color: "oklch(0.7 0.16 25)",
+    title: msg("查花销"),
+    example: msg("这个月吃饭花了多少？"),
+  },
   {
     icon: Wallet,
     color: "oklch(0.68 0.14 160)",
-    title: "看资产",
-    example: "我现在总资产还有多少？",
+    title: msg("看资产"),
+    example: msg("我现在总资产还有多少？"),
   },
-  { icon: Target, color: "oklch(0.7 0.15 60)", title: "看预算", example: "这个月预算还剩多少？" },
-];
+  {
+    icon: Target,
+    color: "oklch(0.7 0.15 60)",
+    title: msg("看预算"),
+    example: msg("这个月预算还剩多少？"),
+  },
+]);
 
 function greeting(): string {
   const hour = new Date().getHours();
-  if (hour < 5) return "夜深了";
-  if (hour < 11) return "早上好";
-  if (hour < 13) return "中午好";
-  if (hour < 18) return "下午好";
-  return "晚上好";
+  if (hour < 5) return t("夜深了");
+  if (hour < 11) return t("早上好");
+  if (hour < 13) return t("中午好");
+  if (hour < 18) return t("下午好");
+  return t("晚上好");
 }
 
 /** 历史会话按更新时间分组：今天 / 昨天 / 近 7 天 / 更早。 */
@@ -125,12 +136,12 @@ function groupConversations(conversations: AiConversationSummary[]) {
     const updated = new Date(conversation.updatedAt).getTime();
     const label =
       updated >= startOfToday.getTime()
-        ? "今天"
+        ? t("今天")
         : updated >= startOfToday.getTime() - day
-          ? "昨天"
+          ? t("昨天")
           : updated >= startOfToday.getTime() - 6 * day
-            ? "近 7 天"
-            : "更早";
+            ? t("近 7 天")
+            : t("更早");
     const last = groups.at(-1);
     if (last?.label === label) last.items.push(conversation);
     else groups.push({ label, items: [conversation] });
@@ -142,14 +153,14 @@ function conversationTime(updatedAt: string): string {
   const date = new Date(updatedAt);
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const hm = date.toLocaleTimeString("zh-CN", {
+  const hm = date.toLocaleTimeString(currentIntlLocale(), {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
   // 今天/昨天两组的组标题已给出日期，行内只需时刻。
   if (date.getTime() >= startOfToday.getTime() - 86_400_000) return hm;
-  const md = `${date.getMonth() + 1}月${date.getDate()}日`;
+  const md = t("{value}月{value2}日", { value: date.getMonth() + 1, value2: date.getDate() });
   return date.getFullYear() === startOfToday.getFullYear() ? md : `${date.getFullYear()}/${md}`;
 }
 // 与服务端 MAX_CHAT_IMAGES 一致。
@@ -168,7 +179,7 @@ function newViewToken(): string {
 }
 
 /** 交易已入账、卡片回写失败时的提示（本地已锁卡，服务端加载会话时补回写）。 */
-const CARD_SYNC_FAILED = "卡片状态同步失败，重新进入会话后会自动补上";
+const cardSyncFailedText = () => t("卡片状态同步失败，重新进入会话后会自动补上");
 /** 模型只出卡片、没出文字时服务端落的占位正文（同 apps/api 的 AI_CARDS_ONLY_PLACEHOLDER）。 */
 const AI_CARDS_ONLY_PLACEHOLDER = "已生成上面的卡片，请查看。";
 
@@ -193,13 +204,13 @@ function MessageImages({ ledgerId, message }: { ledgerId: string; message: AiMes
       localImageUrls?.length
         ? localImageUrls.map((url, index) => ({
             id: `${message.id}-local-${index}`,
-            name: `图片 ${index + 1}`,
+            name: t("图片 {value}", { value: index + 1 }),
             contentType: "image/jpeg",
             url,
           }))
         : (images ?? []).map((image, index) => ({
             id: image.attachmentId,
-            name: `图片 ${index + 1}`,
+            name: t("图片 {value}", { value: index + 1 }),
             contentType: "image/jpeg",
           })),
     [message.id, localImageUrls, images],
@@ -585,7 +596,7 @@ export function AiScreen() {
     target: ConversationTarget,
   ) => {
     const card = message.cards?.[cardIndex];
-    if (!card || card.kind !== "transaction_draft") throw new Error("卡片不存在");
+    if (!card || card.kind !== "transaction_draft") throw new Error(t("卡片不存在"));
     const transaction = await apiRequest<TransactionDetail>(
       ledgerApiPath(target.ledgerId, "/transactions"),
       {
@@ -622,19 +633,25 @@ export function AiScreen() {
           if (!settled.synced) unsynced++;
         } catch (error) {
           failed++;
-          firstError ??= getApiErrorMessage(error, "入账失败");
+          firstError ??= getApiErrorMessage(error, t("入账失败"));
         }
       }
     } finally {
       setBatchBusyId(null);
     }
     if (failed === 0 && unsynced === 0) {
-      showToast({ tone: "success", message: `已入账 ${succeeded} 笔` });
+      showToast({ tone: "success", message: t("已入账 {succeeded} 笔", { succeeded }) });
     } else {
-      const parts = [`已入账 ${succeeded} 笔`];
-      if (failed > 0) parts.push(`${failed} 笔失败：${firstError}`);
-      if (unsynced > 0) parts.push(`其中 ${unsynced} 笔${CARD_SYNC_FAILED}`);
-      showToast({ tone: "error", message: parts.join("，") });
+      const parts = [t("已入账 {succeeded} 笔", { succeeded })];
+      if (failed > 0) parts.push(t("{failed} 笔失败：{firstError}", { failed, firstError }));
+      if (unsynced > 0)
+        parts.push(
+          t("其中 {unsynced} 笔{CARD_SYNC_FAILED}", {
+            unsynced,
+            CARD_SYNC_FAILED: cardSyncFailedText(),
+          }),
+        );
+      showToast({ tone: "error", message: parts.join(t("，")) });
     }
     if (succeeded > 0) await invalidateLedgerData(target.ledgerId);
   };
@@ -654,7 +671,7 @@ export function AiScreen() {
           );
           voided++;
         } catch (error) {
-          firstError ??= getApiErrorMessage(error, "作废失败");
+          firstError ??= getApiErrorMessage(error, t("作废失败"));
         }
       }
     } finally {
@@ -662,8 +679,11 @@ export function AiScreen() {
     }
     showToast(
       firstError
-        ? { tone: "error", message: `已作废 ${voided} 笔，其余失败：${firstError}` }
-        : { tone: "success", message: `已作废 ${voided} 笔` },
+        ? {
+            tone: "error",
+            message: t("已作废 {voided} 笔，其余失败：{firstError}", { voided, firstError }),
+          }
+        : { tone: "success", message: t("已作废 {voided} 笔", { voided }) },
     );
   };
 
@@ -689,8 +709,13 @@ export function AiScreen() {
     onSuccess: async ({ synced }, { target }) => {
       showToast(
         synced
-          ? { tone: "success", message: "已入账" }
-          : { tone: "error", message: `已入账，但${CARD_SYNC_FAILED}` },
+          ? { tone: "success", message: t("已入账") }
+          : {
+              tone: "error",
+              message: t("已入账，但{CARD_SYNC_FAILED}", {
+                CARD_SYNC_FAILED: cardSyncFailedText(),
+              }),
+            },
       );
       await invalidateLedgerData(target.ledgerId);
     },
@@ -710,7 +735,7 @@ export function AiScreen() {
     // 用发起时的 target（mutation 变量），而不是完成时闭包里的当前会话。
     onSuccess: (updatedMessage, { target }) => {
       applyUpdatedMessage(updatedMessage, target);
-      showToast({ tone: "success", message: "已作废" });
+      showToast({ tone: "success", message: t("已作废") });
     },
     // 错误提示交给全局 onError 统一处理（内层 voidCard 已 suppress），避免重复。
     onSettled: () => setVoidingKey(null),
@@ -750,11 +775,14 @@ export function AiScreen() {
     if (images.length === 0) return;
     const room = MAX_IMAGES - pendingImages.length - reservedImagesRef.current;
     if (room <= 0) {
-      showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张图片` });
+      showToast({ tone: "error", message: t("一次最多上传 {MAX_IMAGES} 张图片", { MAX_IMAGES }) });
       return;
     }
     if (images.length > room) {
-      showToast({ tone: "error", message: `一次最多上传 ${MAX_IMAGES} 张，已取前 ${room} 张` });
+      showToast({
+        tone: "error",
+        message: t("一次最多上传 {MAX_IMAGES} 张，已取前 {room} 张", { MAX_IMAGES, room }),
+      });
     }
     const accepted = images.slice(0, room);
     reservedImagesRef.current += accepted.length;
@@ -774,7 +802,7 @@ export function AiScreen() {
         } catch (error) {
           showToast({
             tone: "error",
-            message: error instanceof Error ? error.message : "图片处理失败",
+            message: error instanceof Error ? error.message : t("图片处理失败"),
           });
         }
       }
@@ -788,7 +816,7 @@ export function AiScreen() {
     () =>
       pendingImages.map((image, index) => ({
         id: image.id,
-        name: `图片 ${index + 1}`,
+        name: t("图片 {value}", { value: index + 1 }),
         contentType: "image/jpeg",
         url: image.url,
       })),
@@ -1015,7 +1043,7 @@ export function AiScreen() {
             <div className="relative">
               <IconButton
                 icon={<MoreHorizontal size={22} strokeWidth={2.3} />}
-                label="更多"
+                label={t("更多")}
                 onClick={() => setMoreMenuOpen((open) => !open)}
               />
               <PopoverMenu
@@ -1023,19 +1051,19 @@ export function AiScreen() {
                   [
                     {
                       icon: <Plus size={18} />,
-                      label: "新建对话",
+                      label: t("新建对话"),
                       onSelect: startNewConversation,
                     },
                     {
                       icon: <History size={18} />,
-                      label: "历史记录",
+                      label: t("历史记录"),
                       onSelect: () => setHistoryOpen(true),
                     },
                   ],
                   [
                     {
                       icon: <NotebookPen size={18} />,
-                      label: "手动记账",
+                      label: t("手动记账"),
                       onSelect: () => router.push(routes.billNew),
                     },
                   ],
@@ -1049,7 +1077,7 @@ export function AiScreen() {
           leading={
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label="返回"
+              label={t("返回")}
               onClick={() => router.back()}
             />
           }
@@ -1059,26 +1087,30 @@ export function AiScreen() {
 
         <div className="-mr-[var(--space-page-x)] flex-1 overflow-y-auto pb-4 pr-[var(--space-page-x)]">
           {aiStatusQuery.isPending ? (
-            <LoadingState rows={2} title="加载中" />
+            <LoadingState rows={2} title={t("加载中")} />
           ) : !aiEnabled ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
               <Sparkles className="text-[var(--color-text-muted)]" size={28} />
-              <p className="font-semibold text-[var(--color-text-primary)]">AI Agent 未启用</p>
+              <p className="font-semibold text-[var(--color-text-primary)]">
+                {t("AI Agent 未启用")}
+              </p>
               <p className="max-w-[280px] text-sm text-[var(--color-text-muted)]">
-                在服务端配置 AI_BASE_URL / AI_API_KEY / AI_MODEL 后即可使用自然语言记账与查询。
+                {t(
+                  "在服务端配置 AI_BASE_URL / AI_API_KEY / AI_MODEL 后即可使用自然语言记账与查询。",
+                )}
               </p>
             </div>
           ) : loadingConversation ? (
-            <LoadingState rows={3} title="加载会话" />
+            <LoadingState rows={3} title={t("加载会话")} />
           ) : conversationLoadFailed ? (
             <EmptyState
               action={
                 <Button onClick={() => setLoadAttempt((n) => n + 1)} variant="primary">
-                  重试
+                  {t("重试")}
                 </Button>
               }
-              message="网络不稳定或会话已不可用，可以重试，或新建对话。"
-              title="会话加载失败"
+              message={t("网络不稳定或会话已不可用，可以重试，或新建对话。")}
+              title={t("会话加载失败")}
             />
           ) : messages.length === 0 && !streaming ? (
             // 有进行中的轮次时（例如会话刚建、首次加载拿到空详情）不显示欢迎页，让轮次进度照常可见。
@@ -1088,9 +1120,9 @@ export function AiScreen() {
                   <Sparkles size={24} strokeWidth={2.1} />
                 </span>
                 <p className="ai-empty__title" suppressHydrationWarning>
-                  {greeting()}，想记点什么？
+                  {t("{value}，想记点什么？", { value: greeting() })}
                 </p>
-                <p className="ai-empty__hint">一句话记账、查账，草稿经你确认才入账。</p>
+                <p className="ai-empty__hint">{t("一句话记账、查账，草稿经你确认才入账。")}</p>
               </div>
               <div className="ai-starters">
                 {visionEnabled ? (
@@ -1106,8 +1138,10 @@ export function AiScreen() {
                       <ImagePlus size={18} />
                     </span>
                     <span className="ai-starter__body">
-                      <span className="ai-starter__title">识别账单截图</span>
-                      <span className="ai-starter__example">上传支付记录截图，批量生成草稿</span>
+                      <span className="ai-starter__title">{t("识别账单截图")}</span>
+                      <span className="ai-starter__example">
+                        {t("上传支付记录截图，批量生成草稿")}
+                      </span>
                     </span>
                     <ChevronRight className="ai-starter__chevron" size={18} />
                   </button>
@@ -1187,7 +1221,7 @@ export function AiScreen() {
                       Boolean(streaming.content) && (holdDrafts || streaming.cards.length === 0);
                     const typing = (label?: string) => (
                       <div
-                        aria-label={label ?? "思考中"}
+                        aria-label={label ?? t("思考中")}
                         className="ai-msg ai-msg--ai flex items-center gap-2"
                       >
                         <span className="ai-typing">
@@ -1208,13 +1242,13 @@ export function AiScreen() {
                           </div>
                         ) : null}
                         {streaming.phase === "syncing"
-                          ? typing("正在同步结果…")
+                          ? typing(t("正在同步结果…"))
                           : streaming.phase === "stopping"
-                            ? typing("正在停止…")
+                            ? typing(t("正在停止…"))
                             : streaming.phase === "recovering"
-                              ? typing("连接中断，AI 仍在后台处理，完成后自动显示")
+                              ? typing(t("连接中断，AI 仍在后台处理，完成后自动显示"))
                               : holdDrafts
-                                ? typing(`已识别 ${draftCount} 笔，正在整理`)
+                                ? typing(t("已识别 {draftCount} 笔，正在整理", { draftCount }))
                                 : !showContent && streaming.cards.length === 0
                                   ? typing()
                                   : null}
@@ -1238,7 +1272,7 @@ export function AiScreen() {
                   variant="grid"
                 />
                 {compressing > 0 ? (
-                  <span className="ai-composer__compressing">处理图片中…</span>
+                  <span className="ai-composer__compressing">{t("处理图片中…")}</span>
                 ) : null}
               </div>
             ) : null}
@@ -1262,11 +1296,11 @@ export function AiScreen() {
             <div className="ai-composer__field">
               {visionEnabled ? (
                 <button
-                  aria-label="上传账单图片"
+                  aria-label={t("上传账单图片")}
                   className="ai-composer__btn ai-composer__btn--mic ai-composer__btn--attach"
                   disabled={sending || pendingImages.length >= MAX_IMAGES}
                   onClick={() => fileInputRef.current?.click()}
-                  title="上传账单图片"
+                  title={t("上传账单图片")}
                   type="button"
                 >
                   <ImagePlus size={20} />
@@ -1297,20 +1331,20 @@ export function AiScreen() {
                 }}
                 placeholder={
                   speech.listening
-                    ? "正在聆听…"
+                    ? t("正在聆听…")
                     : pendingImages.length > 0
-                      ? "补充说明（可选）"
-                      : "请输入"
+                      ? t("补充说明（可选）")
+                      : t("请输入")
                 }
                 rows={1}
                 value={input}
               />
               {showMic ? (
                 <button
-                  aria-label={speech.listening ? "停止语音输入" : "语音输入"}
+                  aria-label={speech.listening ? t("停止语音输入") : t("语音输入")}
                   className={`ai-composer__btn ai-composer__btn--mic${speech.listening ? " is-listening" : ""}`}
                   onClick={handleVoiceToggle}
-                  title={speech.listening ? "停止语音输入" : "语音输入"}
+                  title={speech.listening ? t("停止语音输入") : t("语音输入")}
                   type="button"
                 >
                   <Mic className={speech.listening ? "animate-pulse" : ""} size={20} />
@@ -1318,21 +1352,21 @@ export function AiScreen() {
               ) : null}
               {showStop ? (
                 <button
-                  aria-label="停止生成"
+                  aria-label={t("停止生成")}
                   className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
                   onClick={handleStop}
-                  title="停止生成"
+                  title={t("停止生成")}
                   type="button"
                 >
                   <Square fill="currentColor" size={15} />
                 </button>
               ) : showSend ? (
                 <button
-                  aria-label="发送"
+                  aria-label={t("发送")}
                   className="ai-composer__btn ai-composer__btn--send ai-composer__btn--enter"
                   disabled={!hasInput || !conversationReady || compressing > 0}
                   onClick={() => handleSend()}
-                  title="发送"
+                  title={t("发送")}
                   type="button"
                 >
                   <ArrowUp size={20} strokeWidth={2.6} />
@@ -1359,7 +1393,7 @@ export function AiScreen() {
           setEditingDraft((current) => (current?.token === token ? null : current));
           // 「已记一笔」与缓存刷新由表单负责，这里只回写卡片。
           const { synced } = await settleCard(message, cardIndex, transaction.id, target);
-          if (!synced) showToast({ tone: "error", message: CARD_SYNC_FAILED });
+          if (!synced) showToast({ tone: "error", message: cardSyncFailedText() });
         }}
         open={editingDraft !== null}
       />
@@ -1368,14 +1402,14 @@ export function AiScreen() {
         className="ui-bottom-sheet--edge-scroll"
         onClose={() => setHistoryOpen(false)}
         open={historyOpen}
-        title="历史会话"
+        title={t("历史会话")}
       >
         <div className="flex flex-col pb-4">
           {conversationsQuery.isPending ? (
-            <LoadingState rows={3} title="加载会话" />
+            <LoadingState rows={3} title={t("加载会话")} />
           ) : conversations.length === 0 ? (
             <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
-              还没有历史会话
+              {t("还没有历史会话")}
             </p>
           ) : (
             <>
@@ -1396,14 +1430,14 @@ export function AiScreen() {
                         type="button"
                       >
                         <span className="ai-history__title">
-                          {conversation.title ?? "未命名会话"}
+                          {conversation.title ?? t("未命名会话")}
                         </span>
                         <span className="ai-history__time">
                           {conversationTime(conversation.updatedAt)}
                         </span>
                       </button>
                       <button
-                        aria-label="删除会话"
+                        aria-label={t("删除会话")}
                         className="ai-history__delete"
                         onClick={() => {
                           deleteConversation.mutate(conversation.id, {
@@ -1412,7 +1446,7 @@ export function AiScreen() {
                             },
                           });
                         }}
-                        title="删除会话"
+                        title={t("删除会话")}
                         type="button"
                       >
                         <Trash2 size={16} />
@@ -1426,7 +1460,7 @@ export function AiScreen() {
                   className="py-3 text-center text-xs text-[var(--color-text-muted)]"
                   ref={loadMoreRef}
                 >
-                  加载中…
+                  {t("加载中…")}
                 </div>
               ) : null}
             </>

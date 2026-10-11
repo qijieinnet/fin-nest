@@ -16,6 +16,7 @@ import { AccountEditorSheet } from "../../_components/AccountEditorSheet";
 import { BalanceAdjustmentListSheet } from "../../_components/BalanceAdjustmentListSheet";
 import { BalanceEditSheet } from "../../_components/BalanceEditSheet";
 import { RelatedTransactionList } from "../../_components/RelatedTransactionList";
+import { t } from "@/lib/i18n";
 
 type SubAccountDetailScreenProps = {
   accountId: string;
@@ -39,7 +40,7 @@ function DetailLinkRow({
     >
       <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">{label}</span>
       <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
-        {count} 条
+        {t("{count} 条", { count })}
       </span>
       <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
     </button>
@@ -62,7 +63,7 @@ function StatRow({ color, label, value }: { color?: string; label: string; value
 
 function NetWorthSwitchRow({
   checked,
-  description = "开启后该子账户余额不计入净资产统计",
+  description = t("开启后该子账户余额不计入净资产统计"),
   disabled,
   onCheckedChange,
 }: {
@@ -74,13 +75,13 @@ function NetWorthSwitchRow({
   return (
     <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4">
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
+        <p className="text-[15px] text-[var(--color-text-primary)]">{t("不计入总资产")}</p>
         <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">{description}</p>
       </div>
       <Switch
         checked={checked}
         disabled={disabled}
-        label="不计入总资产"
+        label={t("不计入总资产")}
         onCheckedChange={onCheckedChange}
       />
     </div>
@@ -106,7 +107,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
-          <LoadingState rows={5} title="加载子账户" />
+          <LoadingState rows={5} title={t("加载子账户")} />
         </main>
       </MobileAppShell>
     );
@@ -116,13 +117,13 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
-          <EmptyState message="子账户不存在或已删除" title="未找到子账户" />
+          <EmptyState message={t("子账户不存在或已删除")} title={t("未找到子账户")} />
           <button
             className="mt-3 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
             onClick={goBack}
             type="button"
           >
-            返回账户
+            {t("返回账户")}
           </button>
         </main>
       </MobileAppShell>
@@ -135,7 +136,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   const subAccountBalance = BigInt(subAccount.balanceMicros);
   const isInvest = account.type === "invest";
   // 投资账户改余额＝更新市值，差额就是收益；其余账户是「记错了纠错」。
-  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
+  const balanceEditLabel = isInvest ? t("更新市值") : t("修改余额");
   const investStats = investmentStatRows(subAccount.investment);
   // 账户至少要留一个子账户承接未指定子账户的记账，所以最后一个不给删。
   const canDeleteSub = account.subAccounts.length > 1;
@@ -170,11 +171,11 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
   const openRelatedRecords = () => {
     push({
-      title: "关联记录",
+      title: t("关联记录"),
       content: (
         <RelatedTransactionList
           accountId={account.id}
-          emptyText="还没有使用该子账户的记账"
+          emptyText={t("还没有使用该子账户的记账")}
           ledgerId={ledgerId}
           subAccountId={subAccount.id}
         />
@@ -184,7 +185,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
   const openAdjustmentRecords = () => {
     push({
-      title: "余额修改记录",
+      title: t("余额修改记录"),
       content: (
         <BalanceAdjustmentListSheet
           accountId={account.id}
@@ -197,7 +198,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
   };
 
   const subMenuGroups: MenuItem[][] = [
-    [{ icon: <Pencil size={18} />, label: "编辑子账户", onSelect: openRename }],
+    [{ icon: <Pencil size={18} />, label: t("编辑子账户"), onSelect: openRename }],
     // 默认子账户也可删（角色顺位给下一个），只有账户仅剩这一个子账户时不给删。
     ...(canDeleteSub
       ? [
@@ -205,7 +206,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
             {
               danger: true,
               icon: <Trash2 size={18} />,
-              label: "删除子账户",
+              label: t("删除子账户"),
               onSelect: () => void model.requestDeleteSub(),
             },
           ],
@@ -219,7 +220,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         <header className="flex items-center justify-between pb-2">
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={`返回${account.name}`}
+            label={t("返回{name}", { name: account.name })}
             onClick={goBack}
           />
           <div className="relative flex justify-end">
@@ -227,7 +228,7 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
               items={[
                 {
                   icon: <Ellipsis size={22} />,
-                  label: "更多",
+                  label: t("更多"),
                   onClick: () => setMenuOpen((open) => !open),
                 },
               ]}
@@ -238,13 +239,13 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
 
         <AccountBalanceCard
           accountType={account.type}
-          balanceLabel="子账户余额"
+          balanceLabel={t("子账户余额")}
           balanceMicros={subAccountBalance.toString()}
           entries={entries}
           icon={subAccountIcon}
           name={`${account.name} · ${subAccountName}`}
           person={account.person}
-          subtitle={`子账户 · ${meta.name}`}
+          subtitle={t("子账户 · {name}", { name: meta.name })}
         />
 
         {/*
@@ -270,12 +271,12 @@ export function SubAccountDetailScreen({ accountId, subAccountId }: SubAccountDe
         <section className="mt-6 overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailLinkRow
             count={transactions.length}
-            label="关联记录"
+            label={t("关联记录")}
             onClick={openRelatedRecords}
           />
           <DetailLinkRow
             count={adjustmentEntries.length}
-            label="余额修改记录"
+            label={t("余额修改记录")}
             onClick={openAdjustmentRecords}
           />
         </section>

@@ -22,6 +22,7 @@ import { resetSessionQueryCache } from "@/lib/query/session-cache";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useLedger, usePreferences } from "@/providers";
+import { t } from "@/lib/i18n";
 
 export function MoreScreen() {
   const router = useAppRouter();
@@ -61,32 +62,32 @@ export function MoreScreen() {
   const expenseCount = categories.filter((category) => category.type === "expense").length;
   const incomeCount = categories.filter((category) => category.type === "income").length;
   const categoryCountText = categoriesQuery.isPending
-    ? "加载中"
-    : `${expenseCount + incomeCount} 个分类`;
-  const peopleCountText = peopleQuery.isPending ? "加载中" : `${peopleQuery.data?.length ?? 0} 人`;
+    ? t("加载中")
+    : t("{value} 个分类", { value: expenseCount + incomeCount });
+  const peopleCountText = peopleQuery.isPending ? t("加载中") : t("{value} 人", { value: peopleQuery.data?.length ?? 0 });
   const autoRules = autoRulesQuery.data ?? [];
   const autoPendingCount = autoPendingQuery.data?.length ?? 0;
   const autoCountText =
     autoRulesQuery.isPending || autoPendingQuery.isPending
-      ? "加载中"
+      ? t("加载中")
       : autoPendingCount > 0
-        ? `${autoPendingCount} 条待确认`
-        : `${autoRules.length} 条规则`;
+        ? t("{autoPendingCount} 条待确认", { autoPendingCount })
+        : t("{length} 条规则", { length: autoRules.length });
   const quickCountText = quickTemplatesQuery.isPending
-    ? "加载中"
-    : `${quickTemplatesQuery.data?.length ?? 0} 个模板`;
+    ? t("加载中")
+    : t("{value} 个模板", { value: quickTemplatesQuery.data?.length ?? 0 });
   const insuranceActiveCount = (insurancesQuery.data ?? []).filter(
     (insurance) => !insurance.terminatedAt,
   ).length;
-  const insuranceCountText = insurancesQuery.isPending ? "加载中" : `${insuranceActiveCount} 份在保`;
+  const insuranceCountText = insurancesQuery.isPending ? t("加载中") : t("{insuranceActiveCount} 份在保", { insuranceActiveCount });
   const itemActiveCount = (itemsQuery.data ?? []).filter((item) => !item.scrappedAt).length;
-  const itemCountText = itemsQuery.isPending ? "加载中" : `${itemActiveCount} 件在用`;
+  const itemCountText = itemsQuery.isPending ? t("加载中") : t("{itemActiveCount} 件在用", { itemActiveCount });
   const subscriptionActiveCount = (subscriptionsQuery.data ?? []).filter(
     (subscription) => !subscription.terminatedAt,
   ).length;
   const subscriptionCountText = subscriptionsQuery.isPending
-    ? "加载中"
-    : `${subscriptionActiveCount} 个使用中`;
+    ? t("加载中")
+    : t("{subscriptionActiveCount} 个使用中", { subscriptionActiveCount });
 
   // 未进入底部导航栏的一级菜单（被隐藏的 + 超出容量的），按「系统设置」的顺序收进「更多」。
   const { overflow: overflowMenus } = resolveNavMenuLayout(
@@ -94,13 +95,13 @@ export function MoreScreen() {
     preferences.navMenuHidden,
   );
   const menuMeta: Record<NavMenuKey, { subtitle: string; count?: string }> = {
-    bills: { subtitle: "账单记录与流水" },
-    accounts: { subtitle: "账户与余额" },
-    budget: { subtitle: "预算与计划" },
-    ledgers: { subtitle: `当前 · ${currentLedger?.name ?? "未选择"}`, count: `${ledgers.length} 个账本` },
-    insurances: { subtitle: "保单与缴费管理", count: insuranceCountText },
-    items: { subtitle: "登记物品折算成本", count: itemCountText },
-    subscriptions: { subtitle: "套餐订阅与续费管理", count: subscriptionCountText },
+    bills: { subtitle: t("账单记录与流水") },
+    accounts: { subtitle: t("账户与余额") },
+    budget: { subtitle: t("预算与计划") },
+    ledgers: { subtitle: t("当前 · {value}", { value: currentLedger?.name ?? t("未选择") }), count: t("{length} 个账本", { length: ledgers.length }) },
+    insurances: { subtitle: t("保单与缴费管理"), count: insuranceCountText },
+    items: { subtitle: t("登记物品折算成本"), count: itemCountText },
+    subscriptions: { subtitle: t("套餐订阅与续费管理"), count: subscriptionCountText },
   };
 
   return (
@@ -121,7 +122,7 @@ export function MoreScreen() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-lg font-bold text-[var(--color-text-primary)]">
-                {user?.alias ?? "未登录"}
+                {user?.alias ?? t("未登录")}
               </span>
               {subtitle ? (
                 <span className="mt-0.5 block truncate text-xs text-[var(--color-text-secondary)]">
@@ -137,14 +138,14 @@ export function MoreScreen() {
               [
                 {
                   icon: <KeyRound size={18} />,
-                  label: "修改密码",
+                  label: t("修改密码"),
                   onSelect: () => setPasswordDialogOpen(true),
                 },
                 {
                   danger: true,
                   disabled: logout.isPending,
                   icon: <LogOut size={18} />,
-                  label: logout.isPending ? "退出中…" : "退出登录",
+                  label: logout.isPending ? t("退出中…") : t("退出登录"),
                   onSelect: () => logout.mutate(),
                 },
               ],
@@ -208,9 +209,9 @@ export function MoreScreen() {
                 <Shield size={20} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-base text-[var(--color-text-primary)]">管理员功能</span>
+                <span className="block text-base text-[var(--color-text-primary)]">{t("管理员功能")}</span>
                 <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                  开放注册与用户管理
+                  {t("开放注册与用户管理")}
                 </span>
               </span>
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
@@ -225,7 +226,7 @@ export function MoreScreen() {
             onClick={() => router.push(routes.categories)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">分类管理</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("分类管理")}</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {categoryCountText}
             </span>
@@ -236,7 +237,7 @@ export function MoreScreen() {
             onClick={() => router.push(routes.people)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">人员管理</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("人员管理")}</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {peopleCountText}
             </span>
@@ -247,7 +248,7 @@ export function MoreScreen() {
             onClick={() => router.push(routes.autoAccounting)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">自动记账</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("自动记账")}</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {autoCountText}
             </span>
@@ -258,7 +259,7 @@ export function MoreScreen() {
             onClick={() => router.push(routes.quickTemplates)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">快速记账</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("快速记账")}</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
               {quickCountText}
             </span>
@@ -269,8 +270,8 @@ export function MoreScreen() {
             onClick={() => router.push(routes.recordSettings)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">记账设置</span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">字段展示与排序</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("记账设置")}</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">{t("字段展示与排序")}</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
           <button
@@ -278,8 +279,8 @@ export function MoreScreen() {
             onClick={() => router.push(routes.systemSettings)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">系统设置</span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">账单页显示偏好</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("系统设置")}</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">{t("账单页显示偏好")}</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
           <button
@@ -287,9 +288,9 @@ export function MoreScreen() {
             onClick={() => router.push(routes.notifications)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">通知</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("通知")}</span>
             <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-              推送渠道与设备
+              {t("推送渠道与设备")}
             </span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
@@ -300,10 +301,10 @@ export function MoreScreen() {
               type="button"
             >
               <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">
-                飞书机器人
+                {t("飞书机器人")}
               </span>
               <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
-                在飞书里记账
+                {t("在飞书里记账")}
               </span>
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
             </button>
@@ -313,8 +314,8 @@ export function MoreScreen() {
             onClick={() => router.push(routes.importExport)}
             type="button"
           >
-            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">导入导出</span>
-            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">备份与 Excel 记账</span>
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("导入导出")}</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">{t("备份与 Excel 记账")}</span>
             <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
           </button>
         </section>

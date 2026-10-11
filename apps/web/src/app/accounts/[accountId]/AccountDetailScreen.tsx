@@ -39,6 +39,7 @@ import {
   isMoneyAccount,
   orderedSubAccountRows,
 } from "../_components/account-utils";
+import { t } from "@/lib/i18n";
 
 type AccountDetailScreenProps = {
   accountId: string;
@@ -75,7 +76,7 @@ function DetailLinkRow({
     >
       <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">{label}</span>
       <span className="text-[14px] font-semibold text-[var(--color-text-secondary)]">
-        {count} 条
+        {t("{count} 条", { count })}
       </span>
       <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
     </button>
@@ -94,7 +95,7 @@ function NetWorthSwitchRow({
   return (
     <div className="flex items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] p-4">
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] text-[var(--color-text-primary)]">不计入总资产</p>
+        <p className="text-[15px] text-[var(--color-text-primary)]">{t("不计入总资产")}</p>
         {/* <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
           开启后该账户及子账户余额不计入净资产统计
         </p> */}
@@ -102,7 +103,7 @@ function NetWorthSwitchRow({
       <Switch
         checked={checked}
         disabled={disabled}
-        label="不计入总资产"
+        label={t("不计入总资产")}
         onCheckedChange={onCheckedChange}
       />
     </div>
@@ -134,7 +135,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
-          <LoadingState rows={5} title="加载账户" />
+          <LoadingState rows={5} title={t("加载账户")} />
         </main>
       </MobileAppShell>
     );
@@ -144,13 +145,13 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
     return (
       <MobileAppShell>
         <main className="min-h-dvh px-4 pt-[calc(20px+env(safe-area-inset-top))]">
-          <EmptyState message="账户不存在或已删除" title="未找到账户" />
+          <EmptyState message={t("账户不存在或已删除")} title={t("未找到账户")} />
           <button
             className="mt-3 flex h-12 w-full items-center justify-center rounded-[14px] bg-[var(--color-bg-surface)] text-[15px] font-semibold text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]"
             onClick={goBack}
             type="button"
           >
-            返回账户列表
+            {t("返回账户列表")}
           </button>
         </main>
       </MobileAppShell>
@@ -166,7 +167,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const moneyAccount = isMoneyAccount(account.type);
   const isInvest = account.type === "invest";
   // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
-  const balanceEditLabel = isInvest ? "更新市值" : "修改余额";
+  const balanceEditLabel = isInvest ? t("更新市值") : t("修改余额");
   const canEditBalance = moneyAccount || isLend;
   // 命名子账户（默认子账户之外）：有命名子账户时才把账户视为“已拆分”，展示子账户列表。
   const namedSubAccounts = account.subAccounts.filter((sub) => !sub.isDefault);
@@ -217,11 +218,11 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const openRelatedRecords = () => {
     push({
-      title: "关联记录",
+      title: t("关联记录"),
       content: (
         <RelatedTransactionList
           accountId={account.id}
-          emptyText="还没有使用该账户的记账"
+          emptyText={t("还没有使用该账户的记账")}
           ledgerId={ledgerId}
         />
       ),
@@ -230,7 +231,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const openAdjustmentRecords = () => {
     push({
-      title: "余额修改记录",
+      title: t("余额修改记录"),
       content: (
         <BalanceAdjustmentListSheet
           accountId={account.id}
@@ -243,7 +244,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
 
   const openEntryRecords = () => {
     push({
-      title: "资金变动记录",
+      title: t("资金变动记录"),
       content: <AccountEntryListSheet accountType={account.type} entries={entries} />,
     });
   };
@@ -251,24 +252,24 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const stats: Array<{ label: string; value: string; color?: string }> = [];
   if (account.type === "credit") {
     const limit = account.creditLimitMicros ? BigInt(account.creditLimitMicros) : null;
-    stats.push({ label: "总额度", value: limit !== null ? formatMoney(limit) : "未设置" });
+    stats.push({ label: t("总额度"), value: limit !== null ? formatMoney(limit) : t("未设置") });
     if (limit !== null) {
       const available = limit - total;
-      stats.push({ label: "可用额度", value: formatMoney(available > 0n ? available : 0n) });
+      stats.push({ label: t("可用额度"), value: formatMoney(available > 0n ? available : 0n) });
     }
-    stats.push({ label: "账单日", value: account.billDay ? `每月 ${account.billDay} 日` : "—" });
-    stats.push({ label: "还款日", value: account.repayDay ? `每月 ${account.repayDay} 日` : "—" });
+    stats.push({ label: t("账单日"), value: account.billDay ? t("每月 {billDay} 日", { billDay: account.billDay }) : "—" });
+    stats.push({ label: t("还款日"), value: account.repayDay ? t("每月 {repayDay} 日", { repayDay: account.repayDay }) : "—" });
   } else if (account.type === "invest") {
     stats.push(...investmentStatRows(account.investment));
   } else if (isLend) {
-    stats.push({ label: "对方", value: account.counterparty ?? "—" });
+    stats.push({ label: t("对方"), value: account.counterparty ?? "—" });
     stats.push({
-      label: "到期日",
-      value: account.dueDate ? formatDateLabel(account.dueDate) : "未设置",
+      label: t("到期日"),
+      value: account.dueDate ? formatDateLabel(account.dueDate) : t("未设置"),
     });
     stats.push({
-      label: "状态",
-      value: settled ? "已结清" : "进行中",
+      label: t("状态"),
+      value: settled ? t("已结清") : t("进行中"),
       color: settled ? "var(--color-text-muted)" : "var(--color-tint)",
     });
   }
@@ -288,7 +289,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         : [
             {
               icon: <Trash2 size={18} />,
-              label: `删除${subAccount.name}`,
+              label: t("删除{name}", { name: subAccount.name }),
               onClick: () => void model.requestDeleteSub(subAccount),
               tone: "danger" as const,
             },
@@ -317,18 +318,18 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
   const accountMenuGroups: MenuItem[][] = [
     [
       ...(moneyAccount
-        ? [{ icon: <Plus size={18} />, label: "添加子账户", onSelect: openSubAdd }]
+        ? [{ icon: <Plus size={18} />, label: t("添加子账户"), onSelect: openSubAdd }]
         : []),
       ...(canSortSubAccounts
-        ? [{ icon: <ArrowUpDown size={18} />, label: "子账户排序", onSelect: () => setSortMode(true) }]
+        ? [{ icon: <ArrowUpDown size={18} />, label: t("子账户排序"), onSelect: () => setSortMode(true) }]
         : []),
-      { icon: <Pencil size={18} />, label: "编辑账户", onSelect: openEditor },
+      { icon: <Pencil size={18} />, label: t("编辑账户"), onSelect: openEditor },
     ],
     [
       {
         danger: true,
         icon: <Trash2 size={18} />,
-        label: "删除账户",
+        label: t("删除账户"),
         onSelect: () => void model.requestDeleteAccount(),
       },
     ],
@@ -342,13 +343,13 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         >
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回账户"}
+            label={sortMode ? t("退出排序") : t("返回账户")}
             onClick={goBack}
           />
           <div className="relative flex justify-end">
             {sortMode ? (
               <Button onClick={() => setSortMode(false)} variant="primary">
-                完成
+                {t("完成")}
               </Button>
             ) : (
               <>
@@ -356,7 +357,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
                   items={[
                     {
                       icon: <Ellipsis size={22} />,
-                      label: "更多",
+                      label: t("更多"),
                       onClick: () => setMenuOpen((open) => !open),
                     },
                   ]}
@@ -370,10 +371,10 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         {sortMode ? (
           <section className="mt-6">
             <div className="flex items-center justify-between px-1 pb-2">
-              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{t("子账户")}</h2>
             </div>
             <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
-              按住右侧图标拖动排序，默认子账户也可调整位置。
+              {t("按住右侧图标拖动排序，默认子账户也可调整位置。")}
             </p>
             <SubAccountsSortList onReorder={model.handleReorderSub} rows={subAccountRows} />
           </section>
@@ -411,7 +412,7 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
         {moneyAccount && hasSplitSubAccounts ? (
           <section className="mt-6">
             <div className="flex items-center justify-between px-1 pb-2">
-              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">子账户</h2>
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{t("子账户")}</h2>
             </div>
             <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
               <div className="divide-y divide-black/[0.06]">
@@ -434,21 +435,21 @@ export function AccountDetailScreen({ accountId }: AccountDetailScreenProps) {
             {isLend ? (
               <DetailLinkRow
                 count={entries.length}
-                label="资金变动记录"
+                label={t("资金变动记录")}
                 onClick={openEntryRecords}
               />
             ) : null}
             {showRelatedRecordsLink ? (
               <DetailLinkRow
                 count={transactions.length}
-                label="关联记录"
+                label={t("关联记录")}
                 onClick={openRelatedRecords}
               />
             ) : null}
             {showAdjustmentRecordsLink ? (
               <DetailLinkRow
                 count={adjustmentEntries.length}
-                label="余额修改记录"
+                label={t("余额修改记录")}
                 onClick={openAdjustmentRecords}
               />
             ) : null}

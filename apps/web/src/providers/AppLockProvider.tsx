@@ -7,6 +7,7 @@ import { getLastLoginId, getSessionToken, type PublicUser } from "@/lib/api";
 import { readAppLockEnabledCache, readAppLockSkipInFeishuCache } from "@/lib/app-lock/app-lock";
 import { isFeishuClient } from "@/lib/feishu/silent-login";
 import { useAuth } from "./AuthProvider";
+import { useI18n } from "./I18nProvider";
 
 // 本次整页加载是否已解锁（模块级内存标记）：
 // SPA 内部导航不重复上锁，刷新或重新打开应用后重置、需要再次验证。
@@ -39,6 +40,8 @@ function shouldLockPerServer(user: PublicUser | null): boolean {
  */
 export function AppLockGate({ children }: { children: ReactNode }) {
   const { status, user } = useAuth();
+  // 订阅语言：切换语言时锁屏文案跟着重渲染，但本组件不随语言重挂（锁状态是整页加载级的）。
+  useI18n();
   const [locked, setLocked] = useState(false);
   const decidedRef = useRef(false);
   // 本次整页加载开始时就带着 token —— 用于区分「带着会话打开应用」和「刚在本页登录」，

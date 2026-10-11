@@ -9,6 +9,7 @@ import {
   type AiChatRunStatus,
   type AiConversationDetail,
 } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 /**
  * 流式聊天断连恢复。
@@ -61,7 +62,7 @@ async function requestWithTimeout<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(new Error("请求超时")), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => timeout.abort(new Error(t("请求超时"))), REQUEST_TIMEOUT_MS);
   const linked = linkSignals(signal, timeout.signal);
   try {
     return await apiRequest<T>(path, { ...init, signal: linked.signal });
@@ -141,7 +142,7 @@ export async function waitForAiChatRun(
   const onVisibility = () => {
     lastReachable = Date.now();
     unknownSince = null;
-    if (!isVisible()) inflight?.abort(new Error("页面进入后台"));
+    if (!isVisible()) inflight?.abort(new Error(t("页面进入后台")));
   };
   document.addEventListener("visibilitychange", onVisibility);
   try {
@@ -216,7 +217,7 @@ export async function fetchConsistentConversationDetail(
   let inflight: AbortController | null = null;
   const onVisibility = () => {
     failingSince = null;
-    if (!isVisible()) inflight?.abort(new Error("页面进入后台"));
+    if (!isVisible()) inflight?.abort(new Error(t("页面进入后台")));
   };
   document.addEventListener("visibilitychange", onVisibility);
   try {

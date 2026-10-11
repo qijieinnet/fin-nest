@@ -13,6 +13,7 @@ import type { TransactionFormModel } from "../_model/useTransactionFormModel";
 import { DatePanel } from "./DatePanel";
 import { NotePanel } from "./NotePanel";
 import type { KeypadTab } from ".";
+import { t } from "@/lib/i18n";
 
 /**
  * 按记账设置组装键盘页签（amount 由外壳自己加在首位）。
@@ -57,7 +58,7 @@ export function useKeypadTabs(
     const noteTab: KeypadTab | null = showNoteCard
       ? {
           id: "note",
-          label: "备注",
+          label: t("备注"),
           value: note || undefined,
           panel: <NotePanel maxLength={NOTE_MAX_LENGTH} onValueChange={setNote} value={note} />,
         }
@@ -74,7 +75,7 @@ export function useKeypadTabs(
           if (type === "transfer") break;
           tabs.push({
             id: "category",
-            label: "分类",
+            label: t("分类"),
             value: selectedCategory?.label,
             panel: (
               <CategorySelectionList
@@ -94,7 +95,7 @@ export function useKeypadTabs(
             if (!keypadOnly) break;
             tabs.push({
               id: "fromAccount",
-              label: "转出",
+              label: t("转出"),
               value: nestedOptionLabel(acctOptions, fromSel, "") || undefined,
               panel: (
                 <AccountSelectionList
@@ -109,7 +110,7 @@ export function useKeypadTabs(
             });
             tabs.push({
               id: "toAccount",
-              label: "转入",
+              label: t("转入"),
               value: nestedOptionLabel(acctOptions, toSel, "") || undefined,
               panel: (
                 <AccountSelectionList
@@ -131,7 +132,7 @@ export function useKeypadTabs(
           if (!showAccountCard || (!accountEnabled && !keypadOnly)) break;
           tabs.push({
             id: "account",
-            label: "账户",
+            label: t("账户"),
             // 回显与选中态都跟着开关走：切一趟转账再切回来，handleTypeChange 关掉了开关
             // 但留着 accountSel，只看 accountSel 会显示一个保存时并不会写进去的账户。
             value: accountEnabled
@@ -155,7 +156,7 @@ export function useKeypadTabs(
           if (!showPersonCard) break;
           tabs.push({
             id: "person",
-            label: "人员",
+            label: t("人员"),
             value: selectedPerson?.label,
             panel: (
               <PersonChipRow
@@ -173,7 +174,7 @@ export function useKeypadTabs(
         case "date":
           tabs.push({
             id: "date",
-            label: "日期",
+            label: t("日期"),
             // 回显已选日期：底部的「今天」在别的页签下按也能看到结果变化。
             value: formatDateLabel(occurredOn),
             panel: <DatePanel onValueChange={setOccurredOn} value={occurredOn} />,

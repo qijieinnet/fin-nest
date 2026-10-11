@@ -1,5 +1,6 @@
 import { CategoryIcon } from "./CategoryIcon";
 import { MoneyText } from "./MoneyText";
+import { t } from "@/lib/i18n";
 
 export type CategoryRingSegment = {
   color: string;
@@ -20,7 +21,7 @@ function absMicros(value: bigint | number | string): bigint {
   return micros < 0n ? -micros : micros;
 }
 
-export function CategoryRingChart({ onSegmentClick, segments, title = "分类占比" }: CategoryRingChartProps) {
+export function CategoryRingChart({ onSegmentClick, segments, title = t("分类占比") }: CategoryRingChartProps) {
   const total = segments.reduce((sum, item) => sum + absMicros(item.valueMicros), 0n);
   let cursor = 0;
   const gradient =

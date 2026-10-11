@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/format/class-names";
 import { Sheet } from "./Sheet";
+import { localized, msg, t } from "@/lib/i18n";
 
 export type EmojiCategory = {
   id: string;
@@ -18,10 +19,10 @@ export type EmojiCategory = {
  * 与 Apple 表情面板的分组与顺序一致，作为可复用 emoji 选择器的默认数据源。
  * 同一个 emoji 只归入一个分组（按 Unicode 官方分组归属），肤色变体交由系统键盘处理，此处只收录基础形态。
  */
-export const EMOJI_CATEGORIES: EmojiCategory[] = [
+export const EMOJI_CATEGORIES: EmojiCategory[] = localized([
   {
     id: "smileys",
-    name: "笑脸与情感",
+    name: msg("笑脸与情感"),
     icon: "😀",
     emojis: [
       "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "🫠", "😉", "😊", "😇", "🥰", "😍",
@@ -37,7 +38,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "people",
-    name: "人物与身体",
+    name: msg("人物与身体"),
     icon: "👋",
     emojis: [
       "👋", "🤚", "🖐️", "✋", "🖖", "🫱", "🫲", "🫳", "🫴", "🫰", "👌", "🤌", "🤏", "✌️", "🤞", "🤟",
@@ -61,7 +62,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "animals",
-    name: "动物与自然",
+    name: msg("动物与自然"),
     icon: "🐶",
     emojis: [
       "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐻‍❄️", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐽", "🐸",
@@ -81,7 +82,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "food",
-    name: "食物与饮料",
+    name: msg("食物与饮料"),
     icon: "🍎",
     emojis: [
       "🍏", "🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥",
@@ -96,7 +97,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "activity",
-    name: "活动",
+    name: msg("活动"),
     icon: "⚽",
     emojis: [
       "⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱", "🪀", "🏓", "🏸", "🏒", "🏑", "🥍",
@@ -110,7 +111,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "travel",
-    name: "旅行与地点",
+    name: msg("旅行与地点"),
     icon: "🚗",
     emojis: [
       "🚗", "🚕", "🚙", "🚌", "🚎", "🏎️", "🚓", "🚑", "🚒", "🚐", "🛻", "🚚", "🚛", "🚜", "🛴", "🚲",
@@ -125,7 +126,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "objects",
-    name: "物品",
+    name: msg("物品"),
     icon: "💡",
     emojis: [
       "⌚", "📱", "📲", "💻", "⌨️", "🖥️", "🖨️", "🖱️", "🖲️", "💽", "💾", "💿", "📀", "📼", "📷", "📸",
@@ -145,7 +146,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "symbols",
-    name: "符号",
+    name: msg("符号"),
     icon: "❤️",
     emojis: [
       "❤️", "🩷", "🧡", "💛", "💚", "💙", "🩵", "💜", "🖤", "🩶", "🤍", "🤎", "💔", "❣️", "💕", "💞",
@@ -169,7 +170,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   },
   {
     id: "flags",
-    name: "旗帜",
+    name: msg("旗帜"),
     icon: "🏁",
     emojis: [
       "🏁", "🚩", "🎌", "🏴", "🏳️", "🏳️‍🌈", "🏳️‍⚧️", "🏴‍☠️", "🇨🇳", "🇭🇰", "🇲🇴", "🇯🇵", "🇰🇷", "🇺🇸", "🇬🇧", "🇫🇷",
@@ -180,7 +181,7 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
       "🇪🇺", "🇺🇳",
     ],
   },
-];
+]);
 
 type EmojiPickerProps = {
   /** 弹窗是否打开。 */
@@ -309,7 +310,7 @@ export function EmojiPicker({
   onClose,
   onSelect,
   value,
-  title = "选择 Emoji",
+  title = t("选择 Emoji"),
   closeOnSelect = true,
   categories = EMOJI_CATEGORIES,
 }: EmojiPickerProps) {

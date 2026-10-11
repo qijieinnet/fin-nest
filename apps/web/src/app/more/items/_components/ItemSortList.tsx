@@ -5,6 +5,7 @@ import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import type { ItemAsset, ItemType } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { typeGlyph } from "./item-utils";
+import { t } from "@/lib/i18n";
 
 const ITEM_TYPE_GROUP = "__item_types__";
 
@@ -76,7 +77,7 @@ export function ItemSortList({
   return (
     <div className={cn("flex flex-col gap-2.5", drag && "select-none")}>
       {localGroups.map((group) => {
-        const typeName = group.type?.name ?? "未分类";
+        const typeName = group.type?.name ?? t("未分类");
         const expanded = !collapsedIds.has(group.key);
         const sortableTypeIndex = sortableTypeIds.indexOf(group.key);
         const isDraggedType = draggingType && drag.ids[drag.fromIndex] === group.key;
@@ -111,13 +112,15 @@ export function ItemSortList({
                     {typeName}
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                    {group.items.length > 0 ? `${group.items.length} 件物品` : "暂无物品"}
+                    {group.items.length > 0
+                      ? t("{length} 件物品", { length: group.items.length })
+                      : t("暂无物品")}
                   </span>
                 </span>
               </span>
               {group.type && !group.type.archivedAt ? (
                 <DragHandle
-                  label={`拖动排序 ${typeName}`}
+                  label={t("拖动排序 {typeName}", { typeName })}
                   onPointerDown={(event) => {
                     event.preventDefault();
                     beginDrag(ITEM_TYPE_GROUP, sortableTypeIds, sortableTypeIndex, event.clientY);
@@ -153,7 +156,7 @@ export function ItemSortList({
                         {item.name}
                       </span>
                       <DragHandle
-                        label={`拖动排序 ${item.name}`}
+                        label={t("拖动排序 {name}", { name: item.name })}
                         onPointerDown={(event) => {
                           event.preventDefault();
                           beginDrag(

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import type { Insurance } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 const INSURANCE_TYPE_GROUP = "__insurance_types__";
 
@@ -107,12 +108,12 @@ export function InsuranceSortList({
                     {group.label}
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                    {group.items.length} 份保单
+                    {t("{length} 份保单", { length: group.items.length })}
                   </span>
                 </span>
               </span>
               <DragHandle
-                label={`拖动排序 ${group.label}`}
+                label={t("拖动排序 {label}", { label: group.label })}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   beginDrag(INSURANCE_TYPE_GROUP, sortableTypes, groupIndex, event.clientY);
@@ -147,7 +148,7 @@ export function InsuranceSortList({
                         {insurance.name}
                       </span>
                       <DragHandle
-                        label={`拖动排序 ${insurance.name}`}
+                        label={t("拖动排序 {name}", { name: insurance.name })}
                         onPointerDown={(event) => {
                           event.preventDefault();
                           beginDrag(

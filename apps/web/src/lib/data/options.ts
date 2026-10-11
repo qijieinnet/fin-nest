@@ -9,14 +9,15 @@ import type {
   TransactionCreator,
   TransactionType,
 } from "@/lib/api";
+import { localized, msg, t } from "@/lib/i18n";
 
-export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  savings: "储蓄",
-  credit: "信用",
-  invest: "投资",
-  receivable: "可收回",
-  payable: "需归还",
-};
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = localized({
+  savings: msg("储蓄"),
+  credit: msg("信用"),
+  invest: msg("投资"),
+  receivable: msg("可收回"),
+  payable: msg("需归还"),
+});
 
 /** 直接绑定（资金流动）账户：可收回/需归还账户只通过关联使用，不进主账户选择。 */
 const MONEY_ACCOUNT_TYPES: AccountType[] = ["savings", "credit", "invest"];
@@ -152,7 +153,7 @@ export function categoryRowProps(
 ) {
   const resolved = resolveCategoryDisplay(transaction.categorySnapshot, lookup);
   const isIncome = transaction.type === "income";
-  const title = resolved.subcategoryName ?? resolved.name ?? (isIncome ? "收入" : "支出");
+  const title = resolved.subcategoryName ?? resolved.name ?? (isIncome ? t("收入") : t("支出"));
   return {
     title,
     categoryName: resolved.name ?? title,
@@ -238,10 +239,11 @@ export function personOptions(people: Person[]): BusinessOption[] {
 /** 记账人筛选项：以用户 id 为值，已移除成员标注「已移除」。 */
 export function creatorOptions(creators: TransactionCreator[]): BusinessOption[] {
   return creators.map((creator) => {
-    const name = creator.alias || creator.account || `用户 ${creator.userId.slice(0, 8)}`;
+    const name =
+      creator.alias || creator.account || t("用户 {value}", { value: creator.userId.slice(0, 8) });
     return {
       id: creator.userId,
-      label: creator.removed ? `${name}（已移除）` : name,
+      label: creator.removed ? t("{name}（已移除）", { name }) : name,
     };
   });
 }

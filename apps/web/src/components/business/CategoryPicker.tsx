@@ -5,6 +5,7 @@ import { Tags } from "lucide-react";
 import { BottomSheet } from "@/components/ui";
 import type { CategoryOption } from "./business-types";
 import { CategorySelectionList } from "./CategorySelectionList";
+import { t } from "@/lib/i18n";
 
 type CategoryPickerProps = {
   label?: string;
@@ -14,7 +15,7 @@ type CategoryPickerProps = {
 };
 
 export function CategoryPicker({
-  label = "分类",
+  label = t("分类"),
   onValueChange,
   options,
   value,
@@ -30,7 +31,7 @@ export function CategoryPicker({
         </span>
         <span className="biz-picker-trigger__copy">
           <span className="biz-picker-trigger__label">{label}</span>
-          <strong>{selected?.label ?? "选择分类"}</strong>
+          <strong>{selected?.label ?? t("选择分类")}</strong>
         </span>
       </button>
 
@@ -38,7 +39,7 @@ export function CategoryPicker({
         className="ui-bottom-sheet--category-picker"
         onClose={() => setOpen(false)}
         open={open}
-        title="选择分类"
+        title={t("选择分类")}
       >
         <CategorySelectionList
           disableParentWithChildren

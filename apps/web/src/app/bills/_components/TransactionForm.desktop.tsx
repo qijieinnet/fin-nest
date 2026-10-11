@@ -11,6 +11,7 @@ import { Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import { TYPE_TAB_ITEMS } from "./_model/transaction-form-utils";
 import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
+import { t } from "@/lib/i18n";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -31,14 +32,14 @@ export function TransactionFormDesktop({
   openCreateItemSheet,
 }: TransactionFormRenderProps & { formId?: string }) {
   const { type, isPendingMode } = model;
-  const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
-  const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
+  const primaryRelationLabel = type === "income" ? t("需归还") : t("可收回");
+  const linkedRelationLabel = type === "income" ? t("可收回") : t("需归还");
   const primaryRelationHint =
-    type === "income" ? "这笔收入中需要归还他人的部分" : "这笔支出中可向他人收回的部分";
+    type === "income" ? t("这笔收入中需要归还他人的部分") : t("这笔支出中可向他人收回的部分");
   const linkedRelationHint =
     type === "income"
-      ? "这笔收入将自动冲减选中的可收回项目并参与计算"
-      : "这笔支出将自动冲减选中的需归还项目并参与计算";
+      ? t("这笔收入将自动冲减选中的可收回项目并参与计算")
+      : t("这笔支出将自动冲减选中的需归还项目并参与计算");
 
   return (
     <form
@@ -58,7 +59,7 @@ export function TransactionFormDesktop({
         <AmountInput
           className="transaction-form__amount"
           decimalPlaces={model.decimalPlaces}
-          label="金额"
+          label={t("金额")}
           onValueChange={model.setAmount}
           value={model.amount}
         />
@@ -67,26 +68,26 @@ export function TransactionFormDesktop({
       <div className="transaction-form-desktop__grid">
         {type === "transfer" ? (
           <>
-            <Field label="转出账户">
+            <Field label={t("转出账户")}>
               <AccountSelect
                 onChange={model.setFromSel}
                 options={model.acctOptions}
-                title="选择转出账户"
+                title={t("选择转出账户")}
                 value={model.fromSel}
               />
             </Field>
-            <Field label="转入账户">
+            <Field label={t("转入账户")}>
               <AccountSelect
                 onChange={model.setToSel}
                 options={model.acctOptions}
-                title="选择转入账户"
+                title={t("选择转入账户")}
                 value={model.toSel}
               />
             </Field>
           </>
         ) : (
           <>
-            <Field label="分类">
+            <Field label={t("分类")}>
               <CategorySelect
                 onChange={model.setCategoryId}
                 options={model.catOptions}
@@ -94,7 +95,7 @@ export function TransactionFormDesktop({
               />
             </Field>
             {model.showAccountCard ? (
-              <Field label="账户">
+              <Field label={t("账户")}>
                 <AccountSelect
                   allowClear={!model.acctRequired}
                   onChange={(v) => {
@@ -102,7 +103,7 @@ export function TransactionFormDesktop({
                     model.setAccountEnabled(v != null);
                   }}
                   options={model.acctOptions}
-                  placeholder={model.acctRequired ? "选择账户（必填）" : "选择账户"}
+                  placeholder={model.acctRequired ? t("选择账户（必填）") : t("选择账户")}
                   value={model.accountSel}
                 />
               </Field>
@@ -111,7 +112,7 @@ export function TransactionFormDesktop({
         )}
 
         {model.showPersonCard ? (
-          <Field label="人员">
+          <Field label={t("人员")}>
             <FormSelect
               allowClear={!model.personRequired}
               onChange={(v) => {
@@ -119,25 +120,25 @@ export function TransactionFormDesktop({
                 model.setPersonEnabled(v != null);
               }}
               options={model.peopleOpts}
-              placeholder={model.personRequired ? "选择人员（必填）" : "选择人员"}
+              placeholder={model.personRequired ? t("选择人员（必填）") : t("选择人员")}
               value={model.personId}
             />
           </Field>
         ) : null}
 
-        <Field label="日期">
+        <Field label={t("日期")}>
           <DesktopDatePicker onChange={model.setOccurredOn} value={model.occurredOn} />
         </Field>
 
         {model.showNoteCard ? (
           <label className="transaction-form-desktop__note">
-            <span className="transaction-form-desktop__note-label">备注</span>
+            <span className="transaction-form-desktop__note-label">{t("备注")}</span>
             <input
-              aria-label="备注"
+              aria-label={t("备注")}
               className="transaction-form-desktop__note-input"
               maxLength={240}
               onChange={(event) => model.setNote(event.target.value)}
-              placeholder="添加备注…"
+              placeholder={t("添加备注…")}
               value={model.note}
             />
           </label>
@@ -148,8 +149,11 @@ export function TransactionFormDesktop({
         <div className="transaction-form-desktop__advanced">
           <RecoverablePayableEditor
             accountOptions={model.primaryRelationOpts}
-            addLabel={`添加${primaryRelationLabel}项目`}
-            emptyText={`还没有${primaryRelationLabel}项目，可到「账户」中先添加${primaryRelationLabel}账户`}
+            addLabel={t("添加{primaryRelationLabel}项目", { primaryRelationLabel })}
+            emptyText={t(
+              "还没有{primaryRelationLabel}项目，可到「账户」中先添加{primaryRelationLabel2}账户",
+              { primaryRelationLabel, primaryRelationLabel2: primaryRelationLabel },
+            )}
             enabled={model.primaryRelationsEnabled}
             hint={primaryRelationHint}
             items={model.primaryRelationItems}
@@ -159,12 +163,15 @@ export function TransactionFormDesktop({
           />
           <RecoverablePayableEditor
             accountOptions={model.linkedRelationOpts}
-            addLabel={`添加${linkedRelationLabel}项目`}
-            emptyText={`还没有${linkedRelationLabel}项目，可到「账户」中先添加${linkedRelationLabel}账户`}
+            addLabel={t("添加{linkedRelationLabel}项目", { linkedRelationLabel })}
+            emptyText={t(
+              "还没有{linkedRelationLabel}项目，可到「账户」中先添加{linkedRelationLabel2}账户",
+              { linkedRelationLabel, linkedRelationLabel2: linkedRelationLabel },
+            )}
             enabled={model.linkedRelationsEnabled}
             hint={linkedRelationHint}
             items={model.linkedRelationItems}
-            label={`冲减${linkedRelationLabel}项目`}
+            label={t("冲减{linkedRelationLabel}项目", { linkedRelationLabel })}
             onChange={model.setLinkedRelationItems}
             onEnabledChange={model.setLinkedRelationsEnabled}
           />
@@ -180,14 +187,14 @@ export function TransactionFormDesktop({
           ) : null}
           <AssetLinkCard
             checked={model.insuranceEnabled}
-            emptyText="还没有保单，可到「我的 · 保险管理」中先添加保单"
+            emptyText={t("还没有保单，可到「我的 · 保险管理」中先添加保单")}
             hint={
               type === "income"
-                ? "把这笔收入（如理赔款）关联到一份保单"
-                : "把这笔支出（如保费）关联到一份保单"
+                ? t("把这笔收入（如理赔款）关联到一份保单")
+                : t("把这笔支出（如保费）关联到一份保单")
             }
             items={model.insuranceOptions}
-            label="保险"
+            label={t("保险")}
             onCheckedChange={(checked) => {
               model.setInsuranceEnabled(checked);
               if (!checked) model.setSelectedInsuranceId(null);
@@ -197,15 +204,15 @@ export function TransactionFormDesktop({
           />
           <AssetLinkCard
             checked={model.itemEnabled}
-            createLabel="新建物品"
-            emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
+            createLabel={t("新建物品")}
+            emptyText={t("还没有物品，可到「我的 · 物品管理」中先添加物品")}
             hint={
               type === "income"
-                ? "把这笔收入（如转卖回款）关联到一件物品"
-                : "把这笔支出（如耗材、维修）关联到一件物品"
+                ? t("把这笔收入（如转卖回款）关联到一件物品")
+                : t("把这笔支出（如耗材、维修）关联到一件物品")
             }
             items={model.itemOptions}
-            label="关联物品"
+            label={t("关联物品")}
             onCheckedChange={(checked) => {
               model.setItemEnabled(checked);
               if (!checked) model.setSelectedItemId(null);
@@ -220,14 +227,14 @@ export function TransactionFormDesktop({
 
           <AssetLinkCard
             checked={model.subscriptionEnabled}
-            emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+            emptyText={t("还没有订阅，可到「我的 · 订阅管理」中先添加订阅")}
             hint={
               type === "income"
-                ? "把这笔收入（如退款）关联到一个订阅"
-                : "把这笔支出（如订阅费）关联到一个订阅"
+                ? t("把这笔收入（如退款）关联到一个订阅")
+                : t("把这笔支出（如订阅费）关联到一个订阅")
             }
             items={model.subscriptionOptions}
-            label="关联订阅"
+            label={t("关联订阅")}
             onCheckedChange={(checked) => {
               model.setSubscriptionEnabled(checked);
               if (!checked) model.setSelectedSubscriptionId(null);

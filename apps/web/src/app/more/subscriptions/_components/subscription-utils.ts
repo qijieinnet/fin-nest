@@ -1,14 +1,15 @@
 import type { Subscription, SubscriptionCategory } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
 /** 计费周期选项，value 与后端 BILLING_CYCLE_LABELS 一致。 */
-export const BILLING_CYCLE_OPTIONS = [
-  { value: "monthly", label: "每月" },
-  { value: "quarterly", label: "每季" },
-  { value: "yearly", label: "每年" },
-  { value: "weekly", label: "每周" },
-  { value: "custom", label: "自定义" },
-] as const;
+export const BILLING_CYCLE_OPTIONS = localized([
+  { value: "monthly", label: msg("每月") },
+  { value: "quarterly", label: msg("每季") },
+  { value: "yearly", label: msg("每年") },
+  { value: "weekly", label: msg("每周") },
+  { value: "custom", label: msg("自定义") },
+] as const);
 
 export function billingCycleLabel(cycle: string | null): string {
   if (!cycle) return "—";
@@ -19,12 +20,12 @@ export function billingCycleLabel(cycle: string | null): string {
 const ADVANCEABLE_CYCLES = new Set(["weekly", "monthly", "quarterly", "yearly"]);
 
 /** 到期提醒的提前单位，value 与后端一致。 */
-export const REMIND_UNIT_OPTIONS = [
-  { value: "day", label: "天" },
-  { value: "week", label: "周" },
-  { value: "month", label: "月" },
-  { value: "year", label: "年" },
-] as const;
+export const REMIND_UNIT_OPTIONS = localized([
+  { value: "day", label: msg("天") },
+  { value: "week", label: msg("周") },
+  { value: "month", label: msg("月") },
+  { value: "year", label: msg("年") },
+] as const);
 
 export type RemindUnit = (typeof REMIND_UNIT_OPTIONS)[number]["value"];
 
@@ -37,7 +38,7 @@ export function remindLeadLabel(
   subscription: Pick<Subscription, "remindLeadValue" | "remindLeadUnit">,
 ): string {
   if (!subscription.remindLeadValue || !subscription.remindLeadUnit) return "";
-  return `提前 ${subscription.remindLeadValue} ${remindUnitLabel(subscription.remindLeadUnit)}`;
+  return t("提前 {remindLeadValue} {value}", { remindLeadValue: subscription.remindLeadValue, value: remindUnitLabel(subscription.remindLeadUnit) });
 }
 
 /** 以 UTC 计算，把 `YYYY-MM-DD` 按单位平移 amount（可为负），返回 `YYYY-MM-DD`。 */
@@ -161,11 +162,11 @@ export function renewalReminderDue(
 export function subscriptionStatus(
   subscription: Pick<Subscription, "terminatedAt"> & ReminderFields,
 ): SubscriptionStatus {
-  if (subscription.terminatedAt) return { key: "terminated", label: "已退订", tone: "terminated" };
+  if (subscription.terminatedAt) return { key: "terminated", label: t("已退订"), tone: "terminated" };
   if (isReminderDue(subscription)) {
-    return { key: "dueSoon", label: "即将到期", tone: "dueSoon" };
+    return { key: "dueSoon", label: t("即将到期"), tone: "dueSoon" };
   }
-  return { key: "active", label: "使用中", tone: "active" };
+  return { key: "active", label: t("使用中"), tone: "active" };
 }
 
 /** 把一笔订阅费用折算成月均金额；自定义/未知周期不计入（返回 0n）。 */

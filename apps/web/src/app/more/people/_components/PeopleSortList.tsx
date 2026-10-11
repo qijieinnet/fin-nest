@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import { type Person } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 const PEOPLE_GROUP = "__people__";
 
@@ -55,7 +56,7 @@ export function PeopleSortList({ people, onReorder }: PeopleSortListProps) {
                 {person.name}
               </span>
               <DragHandle
-                label={`拖动排序 ${person.name}`}
+                label={t("拖动排序 {name}", { name: person.name })}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   beginDrag(

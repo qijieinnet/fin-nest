@@ -16,6 +16,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger } from "@/providers";
 import type { TrendRange } from "../../accounts/_components/TrendRangeSelect";
 import { filterToQuery, timeRangeFromFilter } from "../../bills/_components/bill-utils";
+import { currentLocale, t } from "@/lib/i18n";
 
 export type StatsType = "expense" | "income";
 
@@ -38,7 +39,12 @@ const statsFilterCache = new Map<string, BusinessFilterValue>();
 /** 柱状图顶部的紧凑金额：1.2万 / 3.5k / 860。 */
 export function compactYuan(micros: bigint): string {
   const yuan = Number(micros < 0n ? -micros : micros) / 1_000_000;
-  if (yuan >= 10_000) return `${(yuan / 10_000).toFixed(1)}万`;
+  // 中文习惯按「万」进位，英文按 k / M。
+  if (currentLocale() === "en") {
+    if (yuan >= 1_000_000) return `${(yuan / 1_000_000).toFixed(1)}M`;
+  } else if (yuan >= 10_000) {
+    return t("{value}万", { value: (yuan / 10_000).toFixed(1) });
+  }
   if (yuan >= 1_000) return `${(yuan / 1_000).toFixed(1)}k`;
   return `${Math.round(yuan)}`;
 }

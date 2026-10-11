@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { CircleHelp } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 type InlineHintProps = {
   text: string;
@@ -16,7 +17,7 @@ export function InlineHint({ text }: InlineHintProps) {
       <button
         aria-controls={open ? tooltipId : undefined}
         aria-expanded={open}
-        aria-label="查看说明"
+        aria-label={t("查看说明")}
         className="biz-inline-hint__trigger"
         onBlur={() => setOpen(false)}
         onClick={() => setOpen((current) => !current)}

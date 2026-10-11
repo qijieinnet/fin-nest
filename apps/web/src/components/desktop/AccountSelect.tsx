@@ -6,6 +6,7 @@ import { AccountSelectionList, nestedOptionLabel } from "@/components/business";
 import type { BusinessOption } from "@/components/business";
 import { BottomSheet, IconButton } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type AccountSelectProps = {
   allowClear?: boolean;
@@ -26,8 +27,8 @@ export function AccountSelect({
   className,
   onChange,
   options,
-  placeholder = "选择账户",
-  title = "选择账户",
+  placeholder = t("选择账户"),
+  title = t("选择账户"),
   value,
 }: AccountSelectProps) {
   const [open, setOpen] = useState(false);
@@ -42,7 +43,7 @@ export function AccountSelect({
         </span>
         {allowClear && hasValue ? (
           <span
-            aria-label="清除"
+            aria-label={t("清除")}
             className="form-select-clear"
             onClick={(event) => {
               event.stopPropagation();
@@ -66,14 +67,14 @@ export function AccountSelect({
         <div className="transaction-form__sheet-header">
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
+            label={t("关闭")}
             onClick={() => setOpen(false)}
           />
           <h2>{title}</h2>
           <span aria-hidden />
         </div>
         {options.length === 0 ? (
-          <p className="biz-muted">暂无可选账户</p>
+          <p className="biz-muted">{t("暂无可选账户")}</p>
         ) : (
           <AccountSelectionList
             onSelect={(option) => {

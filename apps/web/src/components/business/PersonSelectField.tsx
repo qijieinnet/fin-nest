@@ -3,6 +3,7 @@
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
 import { ToggleCard } from "./TransactionFieldRows";
+import { t } from "@/lib/i18n";
 
 type PersonSelectFieldProps = {
   checked: boolean;
@@ -24,7 +25,7 @@ type PersonChipRowProps = {
 
 /** 人员单选 chip 行。表单卡片与金额键盘的人员面板共用，避免两处各写一份选中态。 */
 export function PersonChipRow({
-  emptyText = "还没有人员，可到人员管理中添加",
+  emptyText = t("还没有人员，可到人员管理中添加"),
   onValueChange,
   options,
   value,
@@ -56,8 +57,8 @@ export function PersonChipRow({
 export function PersonSelectField({
   checked,
   disabled,
-  emptyText = "还没有人员，可到人员管理中添加",
-  label = "人员",
+  emptyText = t("还没有人员，可到人员管理中添加"),
+  label = t("人员"),
   onCheckedChange,
   onValueChange,
   options,

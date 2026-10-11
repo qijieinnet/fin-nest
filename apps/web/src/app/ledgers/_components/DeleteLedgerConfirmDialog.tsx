@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Surface } from "@/components/ui";
 import type { Ledger } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 type DeleteLedgerConfirmDialogProps = {
   deleting?: boolean;
@@ -38,7 +39,7 @@ export function DeleteLedgerConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-5">
       <button
-        aria-label="取消删除"
+        aria-label={t("取消删除")}
         className="absolute inset-0 bg-black/20 backdrop-blur-[12px]"
         disabled={deleting}
         onClick={onCancel}
@@ -49,7 +50,9 @@ export function DeleteLedgerConfirmDialog({
         variant="panel"
       >
         <div className="relative z-[1] flex flex-col items-center text-center">
-          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">删除账本？</h2>
+          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+            {t("删除账本？")}
+          </h2>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
             <Button
@@ -58,7 +61,7 @@ export function DeleteLedgerConfirmDialog({
               onClick={onCancel}
               variant="secondary"
             >
-              取消
+              {t("取消")}
             </Button>
             <Button
               className="w-full justify-center !bg-white shadow-[var(--shadow-soft)]"
@@ -66,7 +69,7 @@ export function DeleteLedgerConfirmDialog({
               onClick={onConfirm}
               variant="danger"
             >
-              {deleting ? "删除中…" : "删除"}
+              {deleting ? t("删除中…") : t("删除")}
             </Button>
           </div>
         </div>

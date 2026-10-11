@@ -34,6 +34,7 @@ import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { QuickTemplateEditorSheet } from "./_components/QuickTemplateEditorSheet";
+import { t } from "@/lib/i18n";
 
 function categoryDisplay(
   categories: Category[],
@@ -44,7 +45,7 @@ function categoryDisplay(
   const sub = category?.subcategories.find((item) => item.id === subcategoryId);
   return {
     icon: sub?.icon ?? category?.icon ?? undefined,
-    name: sub?.name ?? category?.name ?? "未分类",
+    name: sub?.name ?? category?.name ?? t("未分类"),
   };
 }
 
@@ -55,8 +56,8 @@ function transferAccountDisplay(
   toAccountId: string | null,
   toSubAccountId: string | null,
 ) {
-  const from = accountDisplay(accounts, fromAccountId, fromSubAccountId) ?? "未选择转出";
-  const to = accountDisplay(accounts, toAccountId, toSubAccountId) ?? "未选择转入";
+  const from = accountDisplay(accounts, fromAccountId, fromSubAccountId) ?? t("未选择转出");
+  const to = accountDisplay(accounts, toAccountId, toSubAccountId) ?? t("未选择转入");
   return `${from} → ${to}`;
 }
 
@@ -73,7 +74,7 @@ function accountDisplay(
 
 function personDisplay(people: Person[], personId: string | null) {
   if (!personId) return null;
-  return people.find((person) => person.id === personId)?.name ?? "未知人员";
+  return people.find((person) => person.id === personId)?.name ?? t("未知人员");
 }
 
 export function QuickTemplatesScreen() {
@@ -109,7 +110,7 @@ export function QuickTemplatesScreen() {
       if (ledgerId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.quickTemplates(ledgerId) });
       }
-      showToast({ tone: "success", message: "快速记账已删除" });
+      showToast({ tone: "success", message: t("快速记账已删除") });
     },
   });
 
@@ -144,14 +145,14 @@ export function QuickTemplatesScreen() {
     const name =
       template.name ??
       (template.type === "income"
-        ? "收入模板"
+        ? t("收入模板")
         : template.type === "transfer"
-          ? "转账模板"
-          : "支出模板");
+          ? t("转账模板")
+          : t("支出模板"));
     await confirm({
-      title: "删除快速记账？",
-      message: `确定删除「${name}」这个模板吗？已记录的账单不受影响。`,
-      confirmText: "删除",
+      title: t("删除快速记账？"),
+      message: t("确定删除「{name}」这个模板吗？已记录的账单不受影响。", { name }),
+      confirmText: t("删除"),
       onConfirm: () => deleteTemplate.mutateAsync(template.id),
       tone: "danger",
     });
@@ -160,7 +161,7 @@ export function QuickTemplatesScreen() {
   const renderRow = (template: QuickTemplate) => {
     const isTransfer = template.type === "transfer";
     const display = isTransfer
-      ? { icon: "↔", name: "转账" }
+      ? { icon: "↔", name: t("转账") }
       : categoryDisplay(categories, template.categoryId, template.subcategoryId);
     const account = accountDisplay(accounts, template.accountId, template.subAccountId);
     const transferAccount = transferAccountDisplay(
@@ -173,12 +174,12 @@ export function QuickTemplatesScreen() {
     const name =
       template.name ??
       (template.type === "income"
-        ? "收入模板"
+        ? t("收入模板")
         : template.type === "transfer"
-          ? "转账模板"
-          : "支出模板");
+          ? t("转账模板")
+          : t("支出模板"));
     const typeLabel =
-      template.type === "income" ? "收入" : template.type === "transfer" ? "转账" : "支出";
+      template.type === "income" ? t("收入") : template.type === "transfer" ? t("转账") : t("支出");
     const person = personDisplay(people, template.personId);
     const meta = isTransfer
       ? [typeLabel, transferAccount, person].filter(Boolean).join(" · ")
@@ -186,13 +187,13 @@ export function QuickTemplatesScreen() {
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
-        label: `编辑${name}`,
+        label: t("编辑{name}", { name }),
         onClick: () => openEditor(template),
         tone: "neutral",
       },
       {
         icon: <Trash2 size={18} />,
-        label: `删除${name}`,
+        label: t("删除{name}", { name }),
         onClick: () => confirmDelete(template),
         tone: "danger",
       },
@@ -229,7 +230,7 @@ export function QuickTemplatesScreen() {
               }
             />
           ) : (
-            <span className="shrink-0 text-xs text-[var(--color-text-muted)]">点按预填</span>
+            <span className="shrink-0 text-xs text-[var(--color-text-muted)]">{t("点按预填")}</span>
           )}
         </button>
       </SwipeActionRow>
@@ -242,28 +243,28 @@ export function QuickTemplatesScreen() {
         action={
           <IconButton
             icon={<Plus size={24} strokeWidth={2.3} />}
-            label="新建快速记账"
+            label={t("新建快速记账")}
             onClick={() => openEditor()}
           />
         }
-        description="预设常用的一笔，在账单页点闪电即可一键记账。未填金额的会在记账时补填。"
+        description={t("预设常用的一笔，在账单页点闪电即可一键记账。未填金额的会在记账时补填。")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
         navigationTitleAlign="left"
-        title="快速记账"
+        title={t("快速记账")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {loading ? (
-            <LoadingState rows={4} title="加载快速记账" />
+            <LoadingState rows={4} title={t("加载快速记账")} />
           ) : templates.length === 0 ? (
             <EmptyState
-              message="把常买的一笔存成模板，在账单页一键就能记账。"
-              title="还没有快速记账"
+              message={t("把常买的一笔存成模板，在账单页一键就能记账。")}
+              title={t("还没有快速记账")}
             />
           ) : (
             <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">

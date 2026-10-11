@@ -29,6 +29,7 @@ import {
   type PublicUser,
   setSessionToken,
 } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 const ENABLED_CACHE_KEY = "fin-nest:app-lock-enabled";
 const SKIP_IN_FEISHU_CACHE_KEY = "fin-nest:app-lock-skip-feishu";
@@ -172,7 +173,7 @@ async function reloginWithPassword(password: string): Promise<PublicUser> {
   if (!login) {
     throw new ApiClientError(401, {
       code: "UNAUTHENTICATED",
-      message: "登录状态已过期，请重新登录",
+      message: t("登录状态已过期，请重新登录"),
     });
   }
   const result = await apiRequest<AuthResult>(API_ENDPOINTS.login, {

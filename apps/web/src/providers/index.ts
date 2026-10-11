@@ -3,6 +3,7 @@ export { AppProviders } from "./AppProviders";
 export { AuthProvider, useAuth } from "./AuthProvider";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
 export { DecimalPlacesProvider, useDecimalPlaces } from "./DecimalPlacesProvider";
+export { I18nProvider, useI18n } from "./I18nProvider";
 export { LedgerProvider, useLedger } from "./LedgerProvider";
 export { NavigationProgressProvider, useNavigationProgress } from "./NavigationProgressProvider";
 export { PreferencesProvider, usePreferences } from "./PreferencesProvider";

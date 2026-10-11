@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 // 上传给识图模型前的本地压缩：统一转 JPEG、限制尺寸。
 //
 // 账单截图的信息全在文字上，尺寸限制按「文字还看得清」来定，而不是按长边一刀切：
@@ -52,7 +53,7 @@ export async function compressImageForUpload(file: Blob): Promise<Blob> {
   try {
     decoded = await decode(file);
   } catch {
-    throw new Error("无法读取这张图片，请换成 JPG / PNG 截图");
+    throw new Error(t("无法读取这张图片，请换成 JPG / PNG 截图"));
   }
   try {
     const scale = Math.min(1, MAX_WIDTH / decoded.width, MAX_HEIGHT / decoded.height);
@@ -62,7 +63,7 @@ export async function compressImageForUpload(file: Blob): Promise<Blob> {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("图片处理失败，请重试");
+    if (!context) throw new Error(t("图片处理失败，请重试"));
     // 透明 PNG 转 JPEG 时透明区域会变黑，先铺白底。
     context.fillStyle = "#fff";
     context.fillRect(0, 0, width, height);
@@ -70,7 +71,7 @@ export async function compressImageForUpload(file: Blob): Promise<Blob> {
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
     );
-    if (!blob) throw new Error("图片处理失败，请重试");
+    if (!blob) throw new Error(t("图片处理失败，请重试"));
     return blob;
   } finally {
     decoded.release();

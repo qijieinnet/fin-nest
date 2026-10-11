@@ -9,6 +9,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
 import { TransactionForm } from "../../../_components/TransactionForm";
 import { TransactionFormFab } from "../../../_components/TransactionFormFab";
+import { t } from "@/lib/i18n";
 
 export function EditPendingScreen({ pendingId }: { pendingId: string }) {
   const router = useAppRouter();
@@ -44,7 +45,7 @@ export function EditPendingScreen({ pendingId }: { pendingId: string }) {
               disabled={!ledgerId || waiting || saving || !pending}
               form={formId}
               icon={<Check size={24} strokeWidth={2.6} />}
-              label="确认入账"
+              label={t("确认入账")}
               loading={saving}
               onClick={(event) => {
                 if (!canSubmit) {
@@ -56,23 +57,23 @@ export function EditPendingScreen({ pendingId }: { pendingId: string }) {
               type="submit"
             />
           }
-          description="保存修改后将直接确认入账"
+          description={t("保存修改后将直接确认入账")}
           leading={
             <IconButton
               icon={<X size={24} strokeWidth={2.3} />}
-              label="关闭"
+              label={t("关闭")}
               onClick={() => router.back()}
             />
           }
-          title="编辑并确认"
+          title={t("编辑并确认")}
         >
           {!ledgerId || waiting ? (
-            <LoadingState rows={5} title="加载待确认记录" />
+            <LoadingState rows={5} title={t("加载待确认记录")} />
           ) : pending ? (
             <TransactionForm
               formId={formId}
               keypadOpen={keypadOpen}
-              keypadSubmitLabel="确认入账"
+              keypadSubmitLabel={t("确认入账")}
               ledgerId={ledgerId}
               onCanSubmitChange={setCanSubmit}
               onKeypadOpenChange={setKeypadOpen}
@@ -82,7 +83,7 @@ export function EditPendingScreen({ pendingId }: { pendingId: string }) {
             />
           ) : (
             <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
-              待确认记录不存在或已处理。
+              {t("待确认记录不存在或已处理。")}
             </p>
           )}
         </MobilePage>
@@ -95,7 +96,7 @@ export function EditPendingScreen({ pendingId }: { pendingId: string }) {
           formId={formId}
           loading={saving}
           onSubmitBlocked={() => submitBlocked?.()}
-          submitLabel="确认入账"
+          submitLabel={t("确认入账")}
         />
       )}
     </MobileAppShell>

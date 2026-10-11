@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import type { BusinessOption } from "@/components/business";
 import { cn } from "@/lib/format/class-names";
 import { useMounted } from "@/lib/hooks/useMounted";
+import { t } from "@/lib/i18n";
 
 type FormSelectProps = {
   allowClear?: boolean;
@@ -33,7 +34,7 @@ export function FormSelect({
   disabled = false,
   onChange,
   options,
-  placeholder = "请选择",
+  placeholder = t("请选择"),
   value,
 }: FormSelectProps) {
   const mounted = useMounted();
@@ -143,13 +144,13 @@ export function FormSelect({
             className="form-select-search"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="搜索…"
+            placeholder={t("搜索…")}
             ref={inputRef}
             value={query}
           />
           <div className="form-select-list">
             {filtered.length === 0 ? (
-              <p className="form-select-empty">无匹配项</p>
+              <p className="form-select-empty">{t("无匹配项")}</p>
             ) : (
               filtered.map((option, index) => (
                 <button
@@ -190,7 +191,7 @@ export function FormSelect({
         </span>
         {allowClear && selected ? (
           <span
-            aria-label="清除"
+            aria-label={t("清除")}
             className="form-select-clear"
             onClick={(e) => {
               e.stopPropagation();

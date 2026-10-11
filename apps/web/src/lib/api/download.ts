@@ -3,6 +3,7 @@ import { buildApiUrl } from "./client";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
 import { handleApiAuthFailure } from "./session-expiry";
 import { getSessionToken } from "./token-storage";
+import { getResolvedLocale as currentLocale } from "@/lib/i18n/store";
 
 /** 超过这个大小就别往内存里塞了，优先走「另存为」直接流到磁盘。 */
 const STREAM_THRESHOLD_BYTES = 64 * 1024 * 1024;
@@ -20,7 +21,10 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   const url = new URL(target, window.location.origin);
   const token = getSessionToken();
   const response = await fetch(url, {
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      "accept-language": currentLocale(),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
   });
   if (!response.ok) {
     let payload: ApiErrorPayload | undefined;
@@ -95,6 +99,7 @@ export function uploadFileWithProgress<TResponse>(
     request.open("POST", buildApiUrl(path));
     const token = getSessionToken();
     if (token) request.setRequestHeader("authorization", `Bearer ${token}`);
+    request.setRequestHeader("accept-language", currentLocale());
 
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total);

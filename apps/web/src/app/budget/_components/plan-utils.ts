@@ -1,12 +1,13 @@
 import type { Plan, PlanMatchRule, PlanRepeatRule, Transaction } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
-export const REPEAT_OPTIONS: Array<{ value: PlanRepeatRule; label: string }> = [
-  { value: "weekly", label: "每周" },
-  { value: "monthly", label: "每月" },
-  { value: "yearly", label: "每年" },
-  { value: "once", label: "不重复" },
-];
+export const REPEAT_OPTIONS: Array<{ value: PlanRepeatRule; label: string }> = localized([
+  { value: "weekly", label: msg("每周") },
+  { value: "monthly", label: msg("每月") },
+  { value: "yearly", label: msg("每年") },
+  { value: "once", label: msg("不重复") },
+]);
 
 export function repeatLabel(rule: string): string {
   return REPEAT_OPTIONS.find((option) => option.value === rule)?.label ?? rule;
@@ -35,10 +36,10 @@ export function periodRangeText(start: string, endExclusive: string): string {
   const end = periodEndInclusive(endExclusive);
   const [sy, sm, sd] = start.slice(0, 10).split("-").map(Number);
   const [ey, em, ed] = end.split("-").map(Number);
-  if (sy === ey && sm === em && sd === ed) return `${sy}年${sm}月${sd}日`;
-  if (sy === ey && sm === em) return `${sy}年${sm}月${sd}日–${ed}日`;
-  if (sy === ey) return `${sy}年${sm}月${sd}日–${em}月${ed}日`;
-  return `${sy}年${sm}月${sd}日 – ${ey}年${em}月${ed}日`;
+  if (sy === ey && sm === em && sd === ed) return t("{sy}年{sm}月{sd}日", { sy, sm, sd });
+  if (sy === ey && sm === em) return t("{sy}年{sm}月{sd}日–{ed}日", { sy, sm, sd, ed });
+  if (sy === ey) return t("{sy}年{sm}月{sd}日–{em}月{ed}日", { sy, sm, sd, em, ed });
+  return t("{sy}年{sm}月{sd}日 – {ey}年{em}月{ed}日", { sy, sm, sd, ey, em, ed });
 }
 
 /** 历史周期的短标签：月度显示「2026年5月」，年度显示「2025年」，其余显示范围。 */
@@ -48,8 +49,8 @@ export function periodShortLabel(
   endExclusive: string,
 ): string {
   const [year, month] = start.slice(0, 10).split("-").map(Number);
-  if (plan.repeatRule === "monthly") return `${year}年${month}月`;
-  if (plan.repeatRule === "yearly") return `${year}年`;
+  if (plan.repeatRule === "monthly") return t("{year}年{month}月", { year, month });
+  if (plan.repeatRule === "yearly") return t("{year}年", { year });
   return periodRangeText(start, endExclusive);
 }
 

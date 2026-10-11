@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Button, Surface } from "@/components/ui";
+import { t } from "@/lib/i18n";
 
 type ConfirmTone = "default" | "danger";
 
@@ -99,7 +100,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             transition={{ duration: 0.16 }}
           >
             <button
-              aria-label="取消"
+              aria-label={t("取消")}
               className="absolute inset-0 h-full w-full cursor-default bg-black/20 backdrop-blur-[12px]"
               disabled={confirming}
               onClick={handleCancel}
@@ -133,7 +134,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                     onClick={handleCancel}
                     variant="secondary"
                   >
-                    {request.cancelText ?? "取消"}
+                    {request.cancelText ?? t("取消")}
                   </Button>
                   <Button
                     className={
@@ -145,7 +146,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                     onClick={() => void handleConfirm()}
                     variant={request.tone === "danger" ? "danger" : "primary"}
                   >
-                    {request.confirmText ?? "确定"}
+                    {request.confirmText ?? t("确定")}
                   </Button>
                 </div>
               </motion.div>

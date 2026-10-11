@@ -5,23 +5,24 @@ import { useEffect, useState } from "react";
 import { TimeWheelPicker } from "@/components/business";
 import { PopoverMenu, Switch } from "@/components/ui";
 import type { BackupFrequency, BackupSetting, BackupSettingInput } from "@/lib/api";
+import { localized, msg, t } from "@/lib/i18n";
 
-const FREQUENCY_OPTIONS: ReadonlyArray<{ value: BackupFrequency; label: string }> = [
-  { value: "daily", label: "每天" },
-  { value: "weekly", label: "每周" },
-  { value: "monthly", label: "每月" },
-];
+const FREQUENCY_OPTIONS: ReadonlyArray<{ value: BackupFrequency; label: string }> = localized([
+  { value: "daily", label: msg("每天") },
+  { value: "weekly", label: msg("每周") },
+  { value: "monthly", label: msg("每月") },
+]);
 
 /** ISO 星期：1=周一 … 7=周日，与后端存储口径一致。 */
-const WEEKDAYS = [
-  { value: 1, label: "一" },
-  { value: 2, label: "二" },
-  { value: 3, label: "三" },
-  { value: 4, label: "四" },
-  { value: 5, label: "五" },
-  { value: 6, label: "六" },
-  { value: 7, label: "日" },
-] as const;
+const WEEKDAYS = localized([
+  { value: 1, label: msg("一") },
+  { value: 2, label: msg("二") },
+  { value: 3, label: msg("三") },
+  { value: 4, label: msg("四") },
+  { value: 5, label: msg("五") },
+  { value: 6, label: msg("六") },
+  { value: 7, label: msg("日") },
+] as const);
 
 const MONTH_DAYS = Array.from({ length: 31 }, (_, index) => index + 1);
 
@@ -77,14 +78,16 @@ export function BackupScheduleCard({
     <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
       <div className="flex items-center gap-3 px-4 py-[15px]">
         <span className="min-w-0 flex-1">
-          <span className="block text-[15.5px] text-[var(--color-text-primary)]">周期自动备份</span>
+          <span className="block text-[15.5px] text-[var(--color-text-primary)]">
+            {t("周期自动备份")}
+          </span>
           <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-            到点由后台任务生成备份，无需保持页面打开
+            {t("到点由后台任务生成备份，无需保持页面打开")}
           </span>
         </span>
         <Switch
           checked={draft.enabled}
-          label="周期自动备份"
+          label={t("周期自动备份")}
           onCheckedChange={(enabled) => apply({ enabled })}
         />
       </div>
@@ -97,10 +100,10 @@ export function BackupScheduleCard({
               onClick={() => setFrequencyOpen((open) => !open)}
               type="button"
             >
-              <span>备份周期</span>
+              <span>{t("备份周期")}</span>
               <strong>
                 {FREQUENCY_OPTIONS.find((option) => option.value === draft.frequency)?.label ??
-                  "每天"}
+                  t("每天")}
               </strong>
               <ChevronRight size={18} />
             </button>
@@ -132,7 +135,7 @@ export function BackupScheduleCard({
                     }}
                     type="button"
                   >
-                    周{weekday.label}
+                    {t("周{label}", { label: weekday.label })}
                   </button>
                 );
               })}
@@ -161,14 +164,14 @@ export function BackupScheduleCard({
                 })}
               </div>
               <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                当月没有选中的日期（如 31 号）时，在当月最后一天备份。
+                {t("当月没有选中的日期（如 31 号）时，在当月最后一天备份。")}
               </p>
             </>
           ) : null}
 
           <div className="transaction-form__date-card">
             <TimeWheelPicker
-              label="备份时间"
+              label={t("备份时间")}
               onValueChange={(runTime) => apply({ runTime })}
               value={draft.runTime}
             />
@@ -180,14 +183,18 @@ export function BackupScheduleCard({
               onClick={() => setKeepOpen((open) => !open)}
               type="button"
             >
-              <span>保留份数</span>
-              <strong>{draft.keepCount === 0 ? "不限" : `最近 ${draft.keepCount} 份`}</strong>
+              <span>{t("保留份数")}</span>
+              <strong>
+                {draft.keepCount === 0
+                  ? t("不限")
+                  : t("最近 {keepCount} 份", { keepCount: draft.keepCount })}
+              </strong>
               <ChevronRight size={18} />
             </button>
             <PopoverMenu
               groups={[
                 KEEP_OPTIONS.map((count) => ({
-                  label: count === 0 ? "不限" : `最近 ${count} 份`,
+                  label: count === 0 ? t("不限") : t("最近 {count} 份", { count }),
                   onSelect: () => apply({ keepCount: count }),
                   selected: count === draft.keepCount,
                 })),
@@ -197,7 +204,7 @@ export function BackupScheduleCard({
             />
           </div>
           <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            超出份数时按时间从旧到新清理，只清理自动备份，手动备份始终保留。
+            {t("超出份数时按时间从旧到新清理，只清理自动备份，手动备份始终保留。")}
           </p>
         </div>
       ) : null}

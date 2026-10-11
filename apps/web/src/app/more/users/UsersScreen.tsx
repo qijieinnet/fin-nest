@@ -17,6 +17,7 @@ import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useSheetStack } from "@/providers";
 import { UserActionsSheet } from "./_components/UserActionsSheet";
+import { t } from "@/lib/i18n";
 
 const PAGE_SIZE = 20;
 
@@ -84,7 +85,7 @@ export function UsersScreen() {
 
   const openActions = (item: AdminUser) => {
     push({
-      title: "用户操作",
+      title: t("用户操作"),
       content: <UserActionsSheet currentUserId={user?.id} initialUser={item} />,
     });
   };
@@ -92,34 +93,34 @@ export function UsersScreen() {
   return (
     <MobileAppShell>
       <MobilePage
-        description="查看成员、设置权限与禁用"
+        description={t("查看成员、设置权限与禁用")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="用户管理"
+        title={t("用户管理")}
       >
         <div className="flex flex-col gap-3.5 pb-6">
           <Input
-            aria-label="搜索用户"
+            aria-label={t("搜索用户")}
             className="bg-white shadow-[var(--shadow-soft)]"
             label=""
             name="search"
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="账号 / 邮箱 / 昵称"
+            placeholder={t("账号 / 邮箱 / 昵称")}
             type="search"
             value={search}
           />
 
           {usersQuery.isPending ? (
-            <LoadingState rows={5} title="加载用户" />
+            <LoadingState rows={5} title={t("加载用户")} />
           ) : users.length === 0 ? (
             <EmptyState
-              message={debouncedSearch ? "换个关键词试试。" : "还没有其他用户。"}
-              title={debouncedSearch ? "没有匹配的用户" : "还没有用户"}
+              message={debouncedSearch ? t("换个关键词试试。") : t("还没有其他用户。")}
+              title={debouncedSearch ? t("没有匹配的用户") : t("还没有用户")}
             />
           ) : (
             <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
@@ -145,17 +146,17 @@ export function UsersScreen() {
                             <span className="truncate">{item.alias || item.account}</span>
                             {isSelf ? (
                               <span className="shrink-0 rounded-full bg-[var(--color-tint-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-tint)]">
-                                我
+                                {t("我")}
                               </span>
                             ) : null}
                             {item.isAdmin ? (
                               <span className="shrink-0 rounded-full bg-[var(--color-tint-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-tint)]">
-                                管理员
+                                {t("管理员")}
                               </span>
                             ) : null}
                             {disabled ? (
                               <span className="shrink-0 rounded-full bg-[rgba(233,95,77,0.12)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent-expense)]">
-                                已禁用
+                                {t("已禁用")}
                               </span>
                             ) : null}
                           </span>
@@ -179,12 +180,12 @@ export function UsersScreen() {
           {/* 触底加载哨兵 */}
           <div ref={sentinelRef} />
           {isFetchingNextPage ? (
-            <p className="text-center text-xs text-[var(--color-text-muted)]">加载中…</p>
+            <p className="text-center text-xs text-[var(--color-text-muted)]">{t("加载中…")}</p>
           ) : null}
 
           {usersQuery.isError ? (
             <p className="text-sm text-[var(--color-accent-expense)]">
-              {getApiErrorMessage(usersQuery.error, "加载失败，请稍后重试")}
+              {getApiErrorMessage(usersQuery.error, t("加载失败，请稍后重试"))}
             </p>
           ) : null}
         </div>

@@ -20,6 +20,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { PersonEditorSheet } from "./_components/PersonEditorSheet";
 import { PeopleSortList } from "./_components/PeopleSortList";
+import { t } from "@/lib/i18n";
 
 export function PeopleScreen() {
   const router = useAppRouter();
@@ -85,7 +86,7 @@ export function PeopleScreen() {
         action={
           sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -93,14 +94,14 @@ export function PeopleScreen() {
                 items={[
                   {
                     icon: <Plus size={22} strokeWidth={2.3} />,
-                    label: "添加人员",
+                    label: t("添加人员"),
                     onClick: () => openEditor(),
                   },
                   ...(people.length > 1
                     ? [
                         {
                           icon: <MoreHorizontal size={22} />,
-                          label: "更多选项",
+                          label: t("更多选项"),
                           onClick: () => setMoreMenuOpen((open) => !open),
                         },
                       ]
@@ -112,7 +113,7 @@ export function PeopleScreen() {
                   [
                     {
                       icon: <ArrowUpDown size={18} />,
-                      label: "排序",
+                      label: t("排序"),
                       onSelect: () => setSortMode(true),
                     },
                   ],
@@ -123,34 +124,34 @@ export function PeopleScreen() {
             </div>
           )
         }
-        description="记账时可指定消费/收入归属的人员"
+        description={t("记账时可指定消费/收入归属的人员")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回"}
+            label={sortMode ? t("退出排序") : t("返回")}
             onClick={goBack}
           />
         }
         navigationTitleAlign="left"
-        title={sortMode ? "拖动排序" : "人员管理"}
+        title={sortMode ? t("拖动排序") : t("人员管理")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {peopleQuery.isPending ? (
-            <LoadingState rows={4} title="加载人员" />
+            <LoadingState rows={4} title={t("加载人员")} />
           ) : people.length === 0 ? (
             <EmptyState
               action={
                 <Button onClick={() => openEditor()} variant="primary">
-                  添加人员
+                  {t("添加人员")}
                 </Button>
               }
-              message="添加人员后，新建账单时可以指定归属人。"
-              title="还没有人员"
+              message={t("添加人员后，新建账单时可以指定归属人。")}
+              title={t("还没有人员")}
             />
           ) : sortMode ? (
             <>
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                按住右侧图标拖动人员排序。
+                {t("按住右侧图标拖动人员排序。")}
               </p>
               <PeopleSortList onReorder={handleReorder} people={people} />
             </>

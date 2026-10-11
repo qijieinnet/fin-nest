@@ -7,6 +7,7 @@ import { DesktopDatePicker } from "@/components/desktop/DesktopDatePicker";
 import { Surface } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
+import { formatMonthShort, t } from "@/lib/i18n";
 
 type DateWheelPickerProps = {
   label?: string;
@@ -27,8 +28,8 @@ function parseIsoDate(value: string): Date {
 function formatDisplayDate(value: string): string {
   const date = parseIsoDate(value);
   const year = date.getFullYear();
-  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
-  return year === new Date().getFullYear() ? monthDay : `${year}年${monthDay}`;
+  const monthDay = t("{value}月{value2}日", { value: date.getMonth() + 1, value2: date.getDate() });
+  return year === new Date().getFullYear() ? monthDay : t("{year}年{monthDay}", { year, monthDay });
 }
 
 function daysInMonth(year: number, month: number): number {
@@ -44,7 +45,7 @@ function isIOSLike(): boolean {
   );
 }
 
-export function DateWheelPicker({ label = "日期", onValueChange, value }: DateWheelPickerProps) {
+export function DateWheelPicker({ label = t("日期"), onValueChange, value }: DateWheelPickerProps) {
   const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
   const yearRef = useRef<HTMLDivElement | null>(null);
@@ -104,7 +105,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
     ? createPortal(
         <div className="biz-date-popover-root">
           <button
-            aria-label="关闭日期选择"
+            aria-label={t("关闭日期选择")}
             className="biz-date-popover-backdrop"
             onClick={() => setOpen(false)}
             type="button"
@@ -114,7 +115,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
               <span className="ui-bottom-sheet__grabber" />
               <header className="biz-date-wheel-sheet__header">
                 <button onClick={() => setOpen(false)} type="button">
-                  取消
+                  {t("取消")}
                 </button>
                 <strong>{formatDisplayDate(draftDate)}</strong>
                 <button
@@ -124,7 +125,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                   }}
                   type="button"
                 >
-                  完成
+                  {t("完成")}
                 </button>
               </header>
               <div className="biz-date-wheel">
@@ -149,7 +150,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                         onClick={() => patchDraft({ year })}
                         type="button"
                       >
-                        {year}年
+                        {t("{year}年", { year })}
                       </button>
                     ))}
                   </div>
@@ -164,7 +165,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                         onClick={() => patchDraft({ month })}
                         type="button"
                       >
-                        {month}月
+                        {formatMonthShort(month)}
                       </button>
                     ))}
                   </div>
@@ -179,7 +180,7 @@ export function DateWheelPicker({ label = "日期", onValueChange, value }: Date
                         onClick={() => patchDraft({ day })}
                         type="button"
                       >
-                        {day}日
+                        {t("{day}日", { day })}
                       </button>
                     ))}
                   </div>

@@ -64,6 +64,7 @@ import {
   todayKey,
   upcomingDates,
 } from "./auto-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 type AutoRuleEditorSheetProps = {
   accounts: Account[];
@@ -78,11 +79,11 @@ type AutoRuleEditorSheetProps = {
 
 type RelationBucket = "primary" | "linked";
 
-const TYPE_ITEMS = [
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
+const TYPE_ITEMS = localized([
+  { label: msg("支出"), value: "expense" },
+  { label: msg("收入"), value: "income" },
+  { label: msg("转账"), value: "transfer" },
+]);
 
 /** 交易类型 + 关联桶（主/联动）对应的账户类型（可收回/需归还）。 */
 function relationAccountKind(
@@ -222,7 +223,7 @@ export function AutoRuleEditorSheet({
           .map((entry) => personById.get(entry.personId))
           .filter((name): name is string => Boolean(name));
         return {
-          description: `${insuredNames.length > 0 ? `${insuredNames.join("、")}` : "未指定被保人"} · ${meta.label}`,
+          description: `${insuredNames.length > 0 ? `${insuredNames.join(t("、"))}` : t("未指定被保人")} · ${meta.label}`,
           id: insurance.id,
           icon: meta.icon,
           name: insurance.name,
@@ -230,14 +231,14 @@ export function AutoRuleEditorSheet({
       });
   }, [insurances, people]);
   const itemOptions = useMemo(
-    () => items.map((item) => ({ id: item.id, icon: "物", name: item.name })),
+    () => items.map((item) => ({ id: item.id, icon: t("物"), name: item.name })),
     [items],
   );
   const subscriptionOptions = useMemo(
     () =>
       subscriptions
         .filter((subscription) => !subscription.terminatedAt)
-        .map((subscription) => ({ id: subscription.id, icon: "订", name: subscription.name })),
+        .map((subscription) => ({ id: subscription.id, icon: t("订"), name: subscription.name })),
     [subscriptions],
   );
   const nextPreview = upcomingDates(startDate, repeatRule, 1)[0] ?? startDate;
@@ -247,8 +248,8 @@ export function AutoRuleEditorSheet({
   const toggleNotifyUser = (userId: string) => {
     setNotifyUserIds((current) => toggleUserId(current, userId));
   };
-  const primaryRelationLabel = type === "income" ? "需归还" : "可收回";
-  const linkedRelationLabel = type === "income" ? "可收回" : "需归还";
+  const primaryRelationLabel = type === "income" ? t("需归还") : t("可收回");
+  const linkedRelationLabel = type === "income" ? t("可收回") : t("需归还");
 
   const setting = useRecordSetting(ledgerId).data;
   const order = effectiveFieldOrder(setting);
@@ -307,13 +308,13 @@ export function AutoRuleEditorSheet({
     for (const item of relationItems) {
       if (!item.accountId) continue;
       const parsed = parseMoneyToMicros(item.amount, { decimalPlaces });
-      if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("关联项目金额无效");
+      if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error(t("关联项目金额无效"));
       const relationAccount = accounts.find((account) => account.id === item.accountId);
       const expectedKind = relationAccountKind(type, bucket);
       if (!relationAccount || relationAccount.type !== expectedKind)
-        throw new Error("关联项目类型不正确");
+        throw new Error(t("关联项目类型不正确"));
       const relationKind = relationKindFor(type, relationAccount.type);
-      if (!relationKind) throw new Error("当前交易类型不支持关联");
+      if (!relationKind) throw new Error(t("当前交易类型不支持关联"));
       relations.push({
         accountId: item.accountId,
         relationKind,
@@ -327,7 +328,7 @@ export function AutoRuleEditorSheet({
     mutationFn: () => {
       const parsed = parseMoneyToMicros(amount, { decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
-      if (BigInt(parsed.amountMicros) <= 0n) throw new Error("请输入有效金额");
+      if (BigInt(parsed.amountMicros) <= 0n) throw new Error(t("请输入有效金额"));
       const isTransfer = type === "transfer";
       const relations = isTransfer
         ? []
@@ -336,22 +337,22 @@ export function AutoRuleEditorSheet({
             ...buildRelations("linked", linkedRelationsEnabled, linkedRelationItems),
           ];
       const category = isTransfer ? {} : resolveCategorySelection(categories, categoryId);
-      if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
+      if (!isTransfer && !category.categoryId) throw new Error(t("请选择分类"));
       const account = isTransfer ? {} : resolveAccountSelection(accounts, accountId);
       if (!isTransfer && acctRequired && !account.accountId)
-        throw new Error("当前账本要求绑定账户");
-      if (!isTransfer && personRequired && !personId) throw new Error("当前账本要求选择人员");
+        throw new Error(t("当前账本要求绑定账户"));
+      if (!isTransfer && personRequired && !personId) throw new Error(t("当前账本要求选择人员"));
       const fromAccount = isTransfer ? resolveAccountSelection(accounts, fromAccountId) : {};
       const toAccount = isTransfer ? resolveAccountSelection(accounts, toAccountId) : {};
       if (isTransfer && (!fromAccount.accountId || !toAccount.accountId)) {
-        throw new Error("请选择转出和转入账户");
+        throw new Error(t("请选择转出和转入账户"));
       }
       if (
         isTransfer &&
         fromAccount.accountId === toAccount.accountId &&
         (fromAccount.subAccountId ?? null) === (toAccount.subAccountId ?? null)
       ) {
-        throw new Error("转出和转入不能是同一账户");
+        throw new Error(t("转出和转入不能是同一账户"));
       }
       const body = {
         type,
@@ -391,7 +392,10 @@ export function AutoRuleEditorSheet({
         queryClient.invalidateQueries({ queryKey: queryKeys.autoRules(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.reminderSummary(ledgerId) }),
       ]);
-      showToast({ tone: "success", message: isEditing ? "自动记账已更新" : "自动记账已创建" });
+      showToast({
+        tone: "success",
+        message: isEditing ? t("自动记账已更新") : t("自动记账已创建"),
+      });
       pop();
     },
   });
@@ -425,7 +429,7 @@ export function AutoRuleEditorSheet({
       case "category":
         if (type === "transfer") return null;
         return (
-          <FieldCard className="transaction-form__picker-card" key="category" label="分类">
+          <FieldCard className="transaction-form__picker-card" key="category" label={t("分类")}>
             <CategorySelectRow
               onValueChange={setCategoryId}
               options={catOptions}
@@ -436,16 +440,16 @@ export function AutoRuleEditorSheet({
       case "account":
         if (type === "transfer") {
           return (
-            <FieldCard className="transaction-form__picker-card" key="account" label="账户">
+            <FieldCard className="transaction-form__picker-card" key="account" label={t("账户")}>
               <AccountSelectRow
-                label="转出账户"
+                label={t("转出账户")}
                 onValueChange={setFromAccountId}
                 options={acctOptions}
                 value={fromAccountId}
               />
               <span className="transaction-form__divider" />
               <AccountSelectRow
-                label="转入账户"
+                label={t("转入账户")}
                 onValueChange={setToAccountId}
                 options={acctOptions}
                 value={toAccountId}
@@ -458,25 +462,25 @@ export function AutoRuleEditorSheet({
             checked={Boolean(accountId)}
             disabled={acctRequired}
             key="account"
-            label="账户"
+            label={t("账户")}
             onCheckedChange={(checked) => {
               setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
             }}
           >
             <AccountSelectRow
               hideLabel
-              label="选择账户"
+              label={t("选择账户")}
               onValueChange={setAccountId}
               options={acctOptions}
-              placeholder="不绑定账户"
+              placeholder={t("不绑定账户")}
               value={accountId}
             />
           </ToggleCard>
         );
       case "date":
         return (
-          <FieldCard className="transaction-form__date-card" key="date" label="日期">
-            <DateWheelPicker label="起始日期" onValueChange={setStartDate} value={startDate} />
+          <FieldCard className="transaction-form__date-card" key="date" label={t("日期")}>
+            <DateWheelPicker label={t("起始日期")} onValueChange={setStartDate} value={startDate} />
           </FieldCard>
         );
       case "person":
@@ -485,7 +489,7 @@ export function AutoRuleEditorSheet({
             checked={personEnabled}
             disabled={personRequired}
             key="person"
-            label="人员"
+            label={t("人员")}
             onCheckedChange={(checked) => {
               setPersonEnabled(checked);
               if (!checked) setPersonId(null);
@@ -497,15 +501,15 @@ export function AutoRuleEditorSheet({
         );
       case "note":
         return (
-          <FieldCard className="transaction-form__note-card" key="note" label="备注">
+          <FieldCard className="transaction-form__note-card" key="note" label={t("备注")}>
             <div className="transaction-form__note-row">
-              <span>备注</span>
+              <span>{t("备注")}</span>
               <Input
-                aria-label="备注"
-                label="备注"
+                aria-label={t("备注")}
+                label={t("备注")}
                 maxLength={240}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder="如：房租 / 视频会员..."
+                placeholder={t("如：房租 / 视频会员...")}
                 value={note}
               />
             </div>
@@ -525,14 +529,14 @@ export function AutoRuleEditorSheet({
       }}
     >
       <div className="auto-transaction-sheet__header">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑自动记账" : "新建自动记账"}
+          {isEditing ? t("编辑自动记账") : t("新建自动记账")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存自动记账"
+          label={t("保存自动记账")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -553,7 +557,7 @@ export function AutoRuleEditorSheet({
               type === "income" && "transaction-form__amount--income",
             )}
             decimalPlaces={decimalPlaces}
-            label="每期金额"
+            label={t("每期金额")}
             onValueChange={setAmount}
             value={amount}
           />
@@ -566,13 +570,16 @@ export function AutoRuleEditorSheet({
             <>
               <RecoverablePayableEditor
                 accountOptions={primaryRelationOpts}
-                addLabel={`添加${primaryRelationLabel}项目`}
-                emptyText={`还没有${primaryRelationLabel}项目，可到「账户」中先添加${primaryRelationLabel}账户`}
+                addLabel={t("添加{primaryRelationLabel}项目", { primaryRelationLabel })}
+                emptyText={t(
+                  "还没有{primaryRelationLabel}项目，可到「账户」中先添加{primaryRelationLabel2}账户",
+                  { primaryRelationLabel, primaryRelationLabel2: primaryRelationLabel },
+                )}
                 enabled={primaryRelationsEnabled}
                 hint={
                   type === "income"
-                    ? "这笔收入中需要归还他人的部分"
-                    : "这笔支出中可向他人收回的部分"
+                    ? t("这笔收入中需要归还他人的部分")
+                    : t("这笔支出中可向他人收回的部分")
                 }
                 items={primaryRelationItems}
                 label={primaryRelationLabel}
@@ -582,30 +589,33 @@ export function AutoRuleEditorSheet({
 
               <RecoverablePayableEditor
                 accountOptions={linkedRelationOpts}
-                addLabel={`添加${linkedRelationLabel}项目`}
-                emptyText={`还没有${linkedRelationLabel}项目，可到「账户」中先添加${linkedRelationLabel}账户`}
+                addLabel={t("添加{linkedRelationLabel}项目", { linkedRelationLabel })}
+                emptyText={t(
+                  "还没有{linkedRelationLabel}项目，可到「账户」中先添加{linkedRelationLabel2}账户",
+                  { linkedRelationLabel, linkedRelationLabel2: linkedRelationLabel },
+                )}
                 enabled={linkedRelationsEnabled}
                 hint={
                   type === "income"
-                    ? "这笔收入将自动冲减选中的可收回项目并参与计算"
-                    : "这笔支出将自动冲减选中的需归还项目并参与计算"
+                    ? t("这笔收入将自动冲减选中的可收回项目并参与计算")
+                    : t("这笔支出将自动冲减选中的需归还项目并参与计算")
                 }
                 items={linkedRelationItems}
-                label={`冲减${linkedRelationLabel}项目`}
+                label={t("冲减{linkedRelationLabel}项目", { linkedRelationLabel })}
                 onChange={setLinkedRelationItems}
                 onEnabledChange={setLinkedRelationsEnabled}
               />
 
               <AssetLinkCard
                 checked={insuranceEnabled}
-                emptyText="还没有保单，可到「我的 · 保险管理」中先添加保单"
+                emptyText={t("还没有保单，可到「我的 · 保险管理」中先添加保单")}
                 hint={
                   type === "income"
-                    ? "把这笔收入（如理赔款）关联到一份保单"
-                    : "把这笔支出（如保费）关联到一份保单"
+                    ? t("把这笔收入（如理赔款）关联到一份保单")
+                    : t("把这笔支出（如保费）关联到一份保单")
                 }
                 items={insuranceOptions}
-                label="保险"
+                label={t("保险")}
                 onCheckedChange={(checked) => {
                   setInsuranceEnabled(checked);
                   if (!checked) setSelectedInsuranceId(null);
@@ -616,14 +626,14 @@ export function AutoRuleEditorSheet({
 
               <AssetLinkCard
                 checked={itemEnabled}
-                emptyText="还没有物品，可到「我的 · 物品管理」中先添加物品"
+                emptyText={t("还没有物品，可到「我的 · 物品管理」中先添加物品")}
                 hint={
                   type === "income"
-                    ? "把这笔收入（如转卖回款）关联到一件物品"
-                    : "把这笔支出（如耗材、维修）关联到一件物品"
+                    ? t("把这笔收入（如转卖回款）关联到一件物品")
+                    : t("把这笔支出（如耗材、维修）关联到一件物品")
                 }
                 items={itemOptions}
-                label="关联物品"
+                label={t("关联物品")}
                 onCheckedChange={(checked) => {
                   setItemEnabled(checked);
                   if (!checked) setSelectedItemId(null);
@@ -634,14 +644,14 @@ export function AutoRuleEditorSheet({
 
               <AssetLinkCard
                 checked={subscriptionEnabled}
-                emptyText="还没有订阅，可到「我的 · 订阅管理」中先添加订阅"
+                emptyText={t("还没有订阅，可到「我的 · 订阅管理」中先添加订阅")}
                 hint={
                   type === "income"
-                    ? "把这笔收入（如退款）关联到一个订阅"
-                    : "把这笔支出（如订阅费）关联到一个订阅"
+                    ? t("把这笔收入（如退款）关联到一个订阅")
+                    : t("把这笔支出（如订阅费）关联到一个订阅")
                 }
                 items={subscriptionOptions}
-                label="关联订阅"
+                label={t("关联订阅")}
                 onCheckedChange={(checked) => {
                   setSubscriptionEnabled(checked);
                   if (!checked) setSelectedSubscriptionId(null);
@@ -653,9 +663,9 @@ export function AutoRuleEditorSheet({
           ) : null}
 
           <div className="auto-transaction-sheet__settings">
-            <FieldCard className="transaction-form__picker-card" label="自动设置">
+            <FieldCard className="transaction-form__picker-card" label={t("自动设置")}>
               <OptionPicker
-                label="重复周期"
+                label={t("重复周期")}
                 onValueChange={(value) => {
                   if (value) setRepeatRule(value as AutoRepeatRule);
                 }}
@@ -669,12 +679,12 @@ export function AutoRuleEditorSheet({
 
             <ToggleCard
               checked={runTimeEnabled}
-              hint="到点再生成待确认，并推送提醒"
-              label="指定时间"
+              hint={t("到点再生成待确认，并推送提醒")}
+              label={t("指定时间")}
               onCheckedChange={setRunTimeEnabled}
             >
               <div className="transaction-form__date-card">
-                <TimeWheelPicker label="记账时间" onValueChange={setRunTime} value={runTime} />
+                <TimeWheelPicker label={t("记账时间")} onValueChange={setRunTime} value={runTime} />
               </div>
               <div className="transaction-form__card transaction-form__picker-card">
                 <NotifyTargetsRow
@@ -689,13 +699,15 @@ export function AutoRuleEditorSheet({
             <section className="transaction-form__card">
               <div className="transaction-form__toggle-head">
                 <span>
-                  <strong>启用</strong>
+                  <strong>{t("启用")}</strong>
                   <small>
-                    下次自动生成：{enabled ? formatDateLabel(nextPreview) : "暂停中"} ·{" "}
-                    {REPEAT_LABELS[repeatRule]}
+                    {t("下次自动生成：{value} · {value2}", {
+                      value: enabled ? formatDateLabel(nextPreview) : t("暂停中"),
+                      value2: REPEAT_LABELS[repeatRule],
+                    })}
                   </small>
                 </span>
-                <Switch checked={enabled} label="启用" onCheckedChange={setEnabled} />
+                <Switch checked={enabled} label={t("启用")} onCheckedChange={setEnabled} />
               </div>
             </section>
           </div>

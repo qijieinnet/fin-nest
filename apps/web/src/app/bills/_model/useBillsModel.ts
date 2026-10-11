@@ -36,6 +36,7 @@ import {
   groupByDay,
   timeRangeFromFilter,
 } from "../_components/bill-utils";
+import { t } from "@/lib/i18n";
 
 // 按账本缓存筛选条件，进出详情页（路由跳转会重挂载）后仍保留。模块级变量在客户端导航间不清空。
 const billsFilterCache = new Map<string, BusinessFilterValue>();
@@ -156,7 +157,7 @@ export function useBillsModel() {
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
         queryClient.removeQueries({ queryKey: ["ledger", ledgerId, "transaction", transactionId] }),
       ]);
-      showToast({ tone: "success", message: "已删除" });
+      showToast({ tone: "success", message: t("已删除") });
       setTransactionPendingDelete(null);
     },  });
 
@@ -173,8 +174,8 @@ export function useBillsModel() {
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
       ]);
-      const skippedNote = result.skipped > 0 ? `，跳过 ${result.skipped} 笔` : "";
-      showToast({ tone: "success", message: `已修改 ${result.updated} 笔${skippedNote}` });
+      const skippedNote = result.skipped > 0 ? t("，跳过 {skipped} 笔", { skipped: result.skipped }) : "";
+      showToast({ tone: "success", message: t("已修改 {updated} 笔{skippedNote}", { updated: result.updated, skippedNote }) });
     },  });
 
   return {

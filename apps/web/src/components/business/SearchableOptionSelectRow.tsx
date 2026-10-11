@@ -5,6 +5,7 @@ import { ChevronRight, Search } from "lucide-react";
 import { BottomSheet, Button, Input } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
+import { t } from "@/lib/i18n";
 
 type SearchableOptionSelectRowProps = {
   className?: string;
@@ -58,13 +59,13 @@ function nestedOptionLabel(
 
 export function SearchableOptionSelectRow({
   className,
-  emptyText = "暂无可选项",
+  emptyText = t("暂无可选项"),
   hideLabel = false,
   label,
   onValueChange,
   options,
-  placeholder = "请选择",
-  searchPlaceholder = "搜索名称",
+  placeholder = t("请选择"),
+  searchPlaceholder = t("搜索名称"),
   title = label,
   value,
   visibleStep = 40,
@@ -193,7 +194,7 @@ export function SearchableOptionSelectRow({
                 onClick={() => setVisibleCount((count) => count + visibleStep)}
                 variant="secondary"
               >
-                加载更多
+                {t("加载更多")}
               </Button>
             ) : null}
           </div>

@@ -2,6 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import type { Ledger } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 type LedgerCardProps = {
   isCurrent: boolean;
@@ -16,7 +17,7 @@ export function LedgerCard({ isCurrent, isOwner, ledger, onOpenDetail }: LedgerC
   return (
     <div className="flex items-center gap-3 px-4 py-3.5 [box-shadow:inset_0_-1px_0_var(--color-border-subtle)] last:[box-shadow:none]">
       <button
-        aria-label={`查看${ledger.name}详情`}
+        aria-label={t("查看{name}详情", { name: ledger.name })}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-control-fill-muted)] text-[22px] leading-none"
         onClick={onOpenDetail}
         type="button"
@@ -36,11 +37,11 @@ export function LedgerCard({ isCurrent, isOwner, ledger, onOpenDetail }: LedgerC
           ) : null}
         </span>
         <span className="mt-0.5 block truncate text-xs text-[var(--color-text-secondary)]">
-          {isOwner ? "所有者" : "成员"} · {ledger.currency}
+          {isOwner ? t("所有者") : t("成员")} · {ledger.currency}
         </span>
       </button>
       <button
-        aria-label="账本详情"
+        aria-label={t("账本详情")}
         className="flex h-8 w-5 shrink-0 items-center justify-center text-[rgba(60,60,67,0.3)]"
         onClick={onOpenDetail}
         type="button"

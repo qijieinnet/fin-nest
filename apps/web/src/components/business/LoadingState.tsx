@@ -1,9 +1,10 @@
+import { t } from "@/lib/i18n";
 type LoadingStateProps = {
   rows?: number;
   title?: string;
 };
 
-export function LoadingState({ rows = 3, title = "加载中" }: LoadingStateProps) {
+export function LoadingState({ rows = 3, title = t("加载中") }: LoadingStateProps) {
   return (
     <div aria-busy="true" aria-label={title} className="biz-loading" role="status">
       {Array.from({ length: rows }, (_, index) => (

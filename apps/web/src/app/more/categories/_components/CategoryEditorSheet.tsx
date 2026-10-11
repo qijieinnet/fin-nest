@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useConfirm, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type CategoryKind = "expense" | "income";
 
@@ -53,7 +54,7 @@ export function CategoryEditorSheet({
     mutationFn: () => {
       const body = { name: name.trim(), icon, sortOrder };
       if (isSubcategory) {
-        if (!parentCategory) throw new Error("缺少一级分类");
+        if (!parentCategory) throw new Error(t("缺少一级分类"));
         const basePath = ledgerApiPath(ledgerId, `/categories/${parentCategory.id}/subcategories`);
         if (subcategory) {
           return apiRequest<Subcategory>(`${basePath}/${subcategory.id}`, {
@@ -79,7 +80,11 @@ export function CategoryEditorSheet({
       await invalidateCategories();
       showToast({
         tone: "success",
-        message: isEditing ? "分类已更新" : isSubcategory ? "二级分类已添加" : "一级分类已添加",
+        message: isEditing
+          ? t("分类已更新")
+          : isSubcategory
+            ? t("二级分类已添加")
+            : t("一级分类已添加"),
       });
       pop();
     },
@@ -90,7 +95,7 @@ export function CategoryEditorSheet({
     meta: { suppressErrorToast: true },
     mutationFn: () => {
       if (isSubcategory) {
-        if (!parentCategory || !subcategory) throw new Error("缺少二级分类");
+        if (!parentCategory || !subcategory) throw new Error(t("缺少二级分类"));
         return apiRequest<void>(
           ledgerApiPath(
             ledgerId,
@@ -99,14 +104,14 @@ export function CategoryEditorSheet({
           { method: "DELETE" },
         );
       }
-      if (!category) throw new Error("缺少一级分类");
+      if (!category) throw new Error(t("缺少一级分类"));
       return apiRequest<void>(ledgerApiPath(ledgerId, `/categories/${category.id}`), {
         method: "DELETE",
       });
     },
     onSuccess: async () => {
       await invalidateCategories();
-      showToast({ tone: "success", message: "分类已删除" });
+      showToast({ tone: "success", message: t("分类已删除") });
       pop();
     },
   });
@@ -115,7 +120,13 @@ export function CategoryEditorSheet({
   const changed =
     trimmedName !== (editingItem?.name ?? "") || icon !== (editingItem?.icon?.trim() || "🏷️");
   const canSubmit = trimmedName.length > 0 && !save.isPending && (!isEditing || changed);
-  const title = `${isEditing ? "编辑" : "新建"}${isSubcategory ? "二级分类" : "一级分类"}`;
+  const title = isEditing
+    ? isSubcategory
+      ? t("编辑二级分类")
+      : t("编辑一级分类")
+    : isSubcategory
+      ? t("新建二级分类")
+      : t("新建一级分类");
 
   const submit = () => {
     if (canSubmit) save.mutate();
@@ -124,9 +135,12 @@ export function CategoryEditorSheet({
   const handleDelete = async () => {
     if (!isEditing || remove.isPending) return;
     const confirmed = await confirm({
-      title: `删除${isSubcategory ? "子分类" : "分类"}「${editingItem?.name}」？`,
-      message: "有关联账单时会自动归档。",
-      confirmText: "删除",
+      title: t("删除{value}「{name}」？", {
+        value: isSubcategory ? t("子分类") : t("分类"),
+        name: editingItem?.name,
+      }),
+      message: t("有关联账单时会自动归档。"),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (confirmed) remove.mutate();
@@ -135,14 +149,14 @@ export function CategoryEditorSheet({
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {title}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存分类"
+          label={t("保存分类")}
           loading={save.isPending}
           onClick={submit}
           variant="primary"
@@ -151,7 +165,10 @@ export function CategoryEditorSheet({
 
       {parentCategory ? (
         <p className="px-1 text-xs text-[var(--color-text-muted)]">
-          上级分类 · {parentCategory.icon?.trim() || "🏷️"} {parentCategory.name}
+          {t("上级分类 · {value} {name}", {
+            value: parentCategory.icon?.trim() || "🏷️",
+            name: parentCategory.name,
+          })}
         </p>
       ) : null}
 
@@ -172,7 +189,7 @@ export function CategoryEditorSheet({
               submit();
             }
           }}
-          placeholder={isSubcategory ? "二级分类名称" : "一级分类名称"}
+          placeholder={isSubcategory ? t("二级分类名称") : t("一级分类名称")}
           value={name}
         />
       </div>
@@ -181,7 +198,7 @@ export function CategoryEditorSheet({
 
       {save.isError || remove.isError ? (
         <p className="text-sm text-[var(--color-accent-expense)]">
-          {getApiErrorMessage(save.error ?? remove.error, "操作失败，请稍后重试")}
+          {getApiErrorMessage(save.error ?? remove.error, t("操作失败，请稍后重试"))}
         </p>
       ) : null}
 
@@ -193,7 +210,7 @@ export function CategoryEditorSheet({
           onClick={handleDelete}
           variant="danger"
         >
-          {remove.isPending ? "删除中…" : "删除该分类"}
+          {remove.isPending ? t("删除中…") : t("删除该分类")}
         </Button>
       ) : null}
     </div>

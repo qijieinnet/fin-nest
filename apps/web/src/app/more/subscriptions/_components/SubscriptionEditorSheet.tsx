@@ -35,6 +35,7 @@ import {
   categoryGlyph,
   todayKey,
 } from "./subscription-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 type SubscriptionEditorSheetProps = {
   ledgerId: string;
@@ -44,10 +45,10 @@ type SubscriptionEditorSheetProps = {
 
 type PendingAttachment = AttachmentItem & { file: File };
 
-const AUTO_RENEW_OPTIONS = [
-  { value: "true", label: "自动续费" },
-  { value: "false", label: "手动续费" },
-] as const;
+const AUTO_RENEW_OPTIONS = localized([
+  { value: "true", label: msg("自动续费") },
+  { value: "false", label: msg("手动续费") },
+] as const);
 
 /** 新增一档提醒时的默认提前量：订阅按 3 天。 */
 const DEFAULT_REMIND_LEAD_DAYS = 3;
@@ -55,7 +56,7 @@ const DEFAULT_REMIND_LEAD_DAYS = 3;
 function recordToAttachmentItem(record: AttachmentRecord): AttachmentItem {
   return {
     id: record.id,
-    name: record.file?.originalName ?? "附件",
+    name: record.file?.originalName ?? t("附件"),
     contentType: record.file?.mime ?? undefined,
     sizeBytes: record.file?.sizeBytes ? Number(record.file.sizeBytes) : undefined,
   };
@@ -119,8 +120,8 @@ function CategorySelectRow({
           onClick={() => setOpen((current) => !current)}
           type="button"
         >
-          <span>分类</span>
-          <strong>{selected ? `${selected.icon} ${selected.label}` : "请选择"}</strong>
+          <span>{t("分类")}</span>
+          <strong>{selected ? `${selected.icon} ${selected.label}` : t("请选择")}</strong>
           <ChevronRight size={18} />
         </button>
         <PopoverMenu
@@ -134,7 +135,7 @@ function CategorySelectRow({
             [
               {
                 icon: <Settings2 size={16} />,
-                label: "管理分类",
+                label: t("管理分类"),
                 onSelect: onManage,
               },
             ],
@@ -152,7 +153,7 @@ function SelectRow({
   label,
   onChange,
   options,
-  placeholder = "请选择",
+  placeholder = t("请选择"),
   value,
 }: {
   label: string;
@@ -205,7 +206,7 @@ function DateFieldRow({
         <button className="biz-date-picker" onClick={() => onChange(todayKey())} type="button">
           <span className="biz-date-popover__summary">
             <span>{label}</span>
-            <strong>未选择</strong>
+            <strong>{t("未选择")}</strong>
           </span>
         </button>
       </div>
@@ -324,7 +325,7 @@ export function SubscriptionEditorSheet({
   const save = useMutation({
     mutationFn: async () => {
       const priceParsed = price.trim() ? parseMoneyToMicros(price, { decimalPlaces }) : null;
-      if (priceParsed && !priceParsed.ok) throw new Error("费用格式不正确");
+      if (priceParsed && !priceParsed.ok) throw new Error(t("费用格式不正确"));
 
       const body = {
         name: trimmedName,
@@ -370,7 +371,7 @@ export function SubscriptionEditorSheet({
         }),
       ]);
       await onSaved?.(saved);
-      showToast({ tone: "success", message: isEditing ? "订阅已更新" : "订阅已添加" });
+      showToast({ tone: "success", message: isEditing ? t("订阅已更新") : t("订阅已添加") });
       pop();
     },
   });
@@ -419,7 +420,7 @@ export function SubscriptionEditorSheet({
         ledgerApiPath(ledgerId, `/attachments/${entry.id}/content`),
       );
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "无法打开附件") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("无法打开附件")) });
     }
   }
 
@@ -434,14 +435,14 @@ export function SubscriptionEditorSheet({
       }}
     >
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑订阅" : "添加订阅"}
+          {isEditing ? t("编辑订阅") : t("添加订阅")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存订阅"
+          label={t("保存订阅")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -452,10 +453,10 @@ export function SubscriptionEditorSheet({
         <div className="transaction-form__cards">
           <div className="transaction-form__card">
             <FieldRow
-              label="订阅名称"
+              label={t("订阅名称")}
               maxLength={120}
               onChange={(event) => setName(event.target.value)}
-              placeholder="如：iCloud+ / Claude Pro"
+              placeholder={t("如：iCloud+ / Claude Pro")}
               value={name}
             />
           </div>
@@ -469,18 +470,18 @@ export function SubscriptionEditorSheet({
 
           <div className="transaction-form__card">
             <FieldRow
-              label="服务商"
+              label={t("服务商")}
               maxLength={80}
               onChange={(event) => setProvider(event.target.value)}
-              placeholder="选填，如 Apple / Anthropic"
+              placeholder={t("选填，如 Apple / Anthropic")}
               value={provider}
             />
             <span className="transaction-form__divider" />
             <FieldRow
-              label="套餐"
+              label={t("套餐")}
               maxLength={80}
               onChange={(event) => setPlanName(event.target.value)}
-              placeholder="选填，如 50GB / Pro"
+              placeholder={t("选填，如 50GB / Pro")}
               value={planName}
             />
           </div>
@@ -488,7 +489,7 @@ export function SubscriptionEditorSheet({
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="费用"
+              label={t("费用")}
               onChange={(event) => setPrice(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -496,33 +497,33 @@ export function SubscriptionEditorSheet({
             />
             <span className="transaction-form__divider" />
             <SelectRow
-              label="计费周期"
+              label={t("计费周期")}
               onChange={setBillingCycle}
               options={BILLING_CYCLE_OPTIONS}
               value={billingCycle}
             />
             <span className="transaction-form__divider" />
             <SelectRow
-              label="续费方式"
+              label={t("续费方式")}
               onChange={(value) => setAutoRenew(value === "true")}
               options={AUTO_RENEW_OPTIONS}
               value={String(autoRenew)}
             />
             <span className="transaction-form__divider" />
             <FieldRow
-              label="支付方式"
+              label={t("支付方式")}
               maxLength={80}
               onChange={(event) => setPaymentMethod(event.target.value)}
-              placeholder="选填，如 招行信用卡"
+              placeholder={t("选填，如 招行信用卡")}
               value={paymentMethod}
             />
           </div>
 
           <div className="transaction-form__card">
-            <DateFieldRow label="开通日" onChange={setStartDate} value={startDate} />
+            <DateFieldRow label={t("开通日")} onChange={setStartDate} value={startDate} />
             <span className="transaction-form__divider" />
             <DateFieldRow
-              label="下次续费日"
+              label={t("下次续费日")}
               onChange={setNextRenewalDate}
               value={nextRenewalDate}
             />
@@ -536,11 +537,11 @@ export function SubscriptionEditorSheet({
             footer={
               nextRenewalDate ? null : (
                 <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                  需设置「下次续费日」后提醒才会生效。
+                  {t("需设置「下次续费日」后提醒才会生效。")}
                 </p>
               )
             }
-            hint="到续费日前提醒确认续订，可设多档"
+            hint={t("到续费日前提醒确认续订，可设多档")}
             onChange={setReminders}
             onEnabledChange={setRemindEnabled}
             value={reminders}
@@ -558,10 +559,10 @@ export function SubscriptionEditorSheet({
 
           <div className="transaction-form__card">
             <FieldRow
-              label="备注"
+              label={t("备注")}
               maxLength={240}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="选填，如 家庭共享 / 到期提醒…"
+              placeholder={t("选填，如 家庭共享 / 到期提醒…")}
               value={note}
             />
           </div>

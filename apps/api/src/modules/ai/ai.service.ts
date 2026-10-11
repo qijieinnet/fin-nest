@@ -1153,7 +1153,7 @@ export class AiService {
     const outcome = { replied: false };
     try {
       return await this.completeChat(
-        { ledgerId, userId, userContent, images, llm, emit, signal },
+        { ledgerId, userId, userContent, images, llm, emit, signal, locale: input.locale },
         { conversation, history, historyImages, userMessageId: userMessageData.id },
         outcome,
       );
@@ -1175,6 +1175,8 @@ export class AiService {
       llm: LlmClient;
       emit?: ChatEmitter;
       signal?: AbortSignal;
+      /** 用户界面语言：英文界面时要求模型用英文回复。不传按中文。 */
+      locale?: "zh-CN" | "en";
     },
     round: {
       conversation: { id: string; title: string | null };
@@ -1184,13 +1186,13 @@ export class AiService {
     },
     outcome: { replied: boolean },
   ) {
-    const { ledgerId, userId, userContent, images, llm, emit, signal } = run;
+    const { ledgerId, userId, userContent, images, llm, emit, signal, locale } = run;
     const { conversation, history, historyImages } = round;
     const context = await this.buildLedgerContext(ledgerId, userId);
     // 待确认草稿快照：让模型知道之前生成过哪些未确认草稿，并能按编号作废/更正。
     context.outstandingDrafts = this.collectOutstandingDrafts(history);
     const messages: LlmMessage[] = [
-      { role: "system", content: this.buildSystemPrompt(context) },
+      { role: "system", content: this.buildSystemPrompt(context, locale) },
       // 出错轮次的说明文字是给用户看的，不回放给模型。
       ...history
         .filter((message) => !(message.role === "assistant" && message.failed))
@@ -3088,7 +3090,7 @@ export class AiService {
     };
   }
 
-  private buildSystemPrompt(context: LedgerContext): string {
+  private buildSystemPrompt(context: LedgerContext, locale?: "zh-CN" | "en"): string {
     const categoryLine = (category: CategoryWithSubs) =>
       `- ${category.name} id=${category.id}${
         category.subcategories.length > 0
@@ -3212,6 +3214,13 @@ export class AiService {
             "",
             "## 待确认草稿（用户尚未确认，可用 cancel_draft 按编号作废）",
             ...context.outstandingDrafts.map((draft) => `- ${draft.ref}：${draft.summary}`),
+          ]
+        : []),
+      ...(locale === "en"
+        ? [
+            "",
+            "## 回复语言",
+            "用户的界面语言是英文：所有面向用户的文字回复（含 respond_text 与最终总结）一律用英文。工具参数里的分类/账户/人员仍按上方列表的 id 与原名传递，不要翻译。",
           ]
         : []),
     ].join("\n");

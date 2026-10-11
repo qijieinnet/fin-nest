@@ -50,16 +50,17 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
 import { DeleteBillConfirmDialog } from "../_components/DeleteBillConfirmDialog";
 import { EditBillScreen } from "./edit/EditBillScreen";
+import { localized, msg, t } from "@/lib/i18n";
 
-const TYPE_LABELS: Record<string, string> = { expense: "支出", income: "收入", transfer: "转账" };
+const TYPE_LABELS: Record<string, string> = localized({ expense: msg("支出"), income: msg("收入"), transfer: msg("转账") });
 
-const SOURCE_LABELS: Record<string, string> = {
-  ai: "AI 识别",
-  auto: "自动记账",
-  import: "导入",
-  manual: "手动记录",
-  quick: "快捷记账",
-};
+const SOURCE_LABELS: Record<string, string> = localized({
+  ai: msg("AI 识别"),
+  auto: msg("自动记账"),
+  import: msg("导入"),
+  manual: msg("手动记录"),
+  quick: msg("快捷记账"),
+});
 
 const DEFAULT_FIELD_ORDER = ["type", "amount", "category", "account", "date", "person", "note"];
 
@@ -74,22 +75,22 @@ type RelationBucket = "primary" | "linked";
 function formatDateOnly(value: string): string {
   const [year, month, day] = value.slice(0, 10).split("-");
   if (!year || !month || !day) return value;
-  return `${Number(month)}月${Number(day)}日`;
+  return t("{month}月{day}日", { month: Number(month), day: Number(day) });
 }
 
 function formatDateFull(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  return t("{value}年{value2}月{value3}日", { value: date.getFullYear(), value2: date.getMonth() + 1, value3: date.getDate() });
 }
 
 function formatRecordTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  const monthDay = `${date.getMonth() + 1}月${date.getDate()}日`;
+  const monthDay = t("{value}月{value2}日", { value: date.getMonth() + 1, value2: date.getDate() });
   return date.getFullYear() === new Date().getFullYear()
     ? monthDay
-    : `${date.getFullYear()}年${monthDay}`;
+    : t("{value}年{monthDay}", { value: date.getFullYear(), monthDay });
 }
 
 function signedAmount(
@@ -150,7 +151,7 @@ function AccountValue({
 
 function creatorName(members: LedgerMember[], createdBy: string): string {
   const member = members.find((item) => item.userId === createdBy);
-  return member?.alias || member?.account || "未知记录人";
+  return member?.alias || member?.account || t("未知记录人");
 }
 
 function relationBucket(relationKind: string): RelationBucket {
@@ -161,8 +162,8 @@ function relationBucket(relationKind: string): RelationBucket {
 
 function relationLabels(type: TransactionDetail["type"]) {
   return {
-    linked: type === "income" ? "冲减可收回项目" : "冲减需归还项目",
-    primary: type === "income" ? "需归还" : "可收回",
+    linked: type === "income" ? t("冲减可收回项目") : t("冲减需归还项目"),
+    primary: type === "income" ? t("需归还") : t("可收回"),
   };
 }
 
@@ -210,7 +211,7 @@ function pendingAssetLinks(pending: AutoPendingTransaction): TransactionLink[] {
 }
 
 function fileName(attachment: AttachmentRecord): string {
-  return attachment.file?.originalName ?? `附件 ${attachment.id.slice(0, 6)}`;
+  return attachment.file?.originalName ?? t("附件 {value}", { value: attachment.id.slice(0, 6) });
 }
 
 function toAttachmentItem(attachment: AttachmentRecord): AttachmentItem {
@@ -234,7 +235,7 @@ function CategoryValue({
   category: TransactionDetail["categorySnapshot"];
   categoryLookup: CategoryLookup;
 }) {
-  if (!category) return "未选择";
+  if (!category) return t("未选择");
   const resolved = resolveCategoryDisplay(category, categoryLookup);
   return (
     <span className="bill-detail__category-value">
@@ -293,7 +294,7 @@ function RelationBlock({
     <ReadonlyBlock label={label}>
       {relations.map((relation) => (
         <div className="bill-detail__relation-row" key={relation.id}>
-          <AccountValue accountId={relation.accountId} accounts={accounts} fallback="未知账户" />
+          <AccountValue accountId={relation.accountId} accounts={accounts} fallback={t("未知账户")} />
           <MoneyText amountMicros={relation.amountMicros} tone="muted" />
         </div>
       ))}
@@ -435,7 +436,7 @@ export function BillDetailScreen({
           ),
         }),
       ]);
-      showToast({ tone: "success", message: "已删除" });
+      showToast({ tone: "success", message: t("已删除") });
       // 弹层模式下关闭详情回到列表（列表查询已失效会自动刷新）；整页模式回账单页。
       if (embedded) onClose?.();
       else router.replace(routes.bills);
@@ -461,7 +462,7 @@ export function BillDetailScreen({
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["ledger", ledgerId, "budget-progress"] }),
       ]);
-      showToast({ tone: "success", message: "已确认入账" });
+      showToast({ tone: "success", message: t("已确认入账") });
       router.replace(routes.billsPending);
     },
   });
@@ -473,7 +474,7 @@ export function BillDetailScreen({
       }),
     onSuccess: async () => {
       await invalidatePending();
-      showToast({ tone: "success", message: "已删除这条待确认" });
+      showToast({ tone: "success", message: t("已删除这条待确认") });
       router.replace(routes.billsPending);
     },
   });
@@ -493,7 +494,7 @@ export function BillDetailScreen({
         ledgerApiPath(ledgerId!, `/attachments/${item.id}/content`),
       );
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "附件暂时无法预览") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("附件暂时无法预览")) });
     }
   }
 
@@ -523,7 +524,7 @@ export function BillDetailScreen({
           return (
             <ReadonlyCard key="category">
               <ReadonlyRow
-                label="分类"
+                label={t("分类")}
                 value={<CategoryValue category={category} categoryLookup={categoryLookup} />}
               />
             </ReadonlyCard>
@@ -533,23 +534,23 @@ export function BillDetailScreen({
             return (
               <ReadonlyCard key="account">
                 <ReadonlyRow
-                  label="转出账户"
+                  label={t("转出账户")}
                   value={
                     <AccountValue
                       accountId={detail.fromAccountId}
                       accounts={accounts}
-                      fallback="未选择"
+                      fallback={t("未选择")}
                       subAccountId={detail.fromSubAccountId}
                     />
                   }
                 />
                 <ReadonlyRow
-                  label="转入账户"
+                  label={t("转入账户")}
                   value={
                     <AccountValue
                       accountId={detail.toAccountId}
                       accounts={accounts}
-                      fallback="未选择"
+                      fallback={t("未选择")}
                       subAccountId={detail.toSubAccountId}
                     />
                   }
@@ -561,12 +562,12 @@ export function BillDetailScreen({
           return detail.accountId ? (
             <ReadonlyCard key="account">
               <ReadonlyRow
-                label="账户"
+                label={t("账户")}
                 value={
                   <AccountValue
                     accountId={detail.accountId}
                     accounts={accounts}
-                    fallback="未知账户"
+                    fallback={t("未知账户")}
                     subAccountId={detail.subAccountId}
                   />
                 }
@@ -577,7 +578,7 @@ export function BillDetailScreen({
           return (
             <ReadonlyCard key="date">
               <ReadonlyRow
-                label={isPendingMode ? "计划入账日期" : "日期"}
+                label={isPendingMode ? t("计划入账日期") : t("日期")}
                 value={formatDateOnly(detail.occurredOn)}
               />
             </ReadonlyCard>
@@ -586,7 +587,7 @@ export function BillDetailScreen({
           if (!showPersonCard || !detail.personSnapshot) return null;
           return (
             <ReadonlyCard key="person">
-              <ReadonlyRow label="人员" value={detail.personSnapshot.name} />
+              <ReadonlyRow label={t("人员")} value={detail.personSnapshot.name} />
             </ReadonlyCard>
           );
         case "note":
@@ -595,7 +596,7 @@ export function BillDetailScreen({
             <ReadonlyCard key="note">
               <ReadonlyRow
                 className="bill-detail__readonly-row--multiline"
-                label="备注"
+                label={t("备注")}
                 value={detail.note}
               />
             </ReadonlyCard>
@@ -608,24 +609,24 @@ export function BillDetailScreen({
     const amountRows: DetailRow[] = [];
     if (gross !== effective) {
       amountRows.push({
-        label: "原始金额",
+        label: t("原始金额"),
         value: signedAmount(detail, detail.grossAmountMicros, decimalPlaces),
       });
       amountRows.push({
-        label: "有效金额",
+        label: t("有效金额"),
         value: signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces),
       });
     }
 
     const metaRows: DetailRow[] = [];
     if (isPendingMode) {
-      metaRows.push({ label: "生成时间", value: formatDateFull(detail.createdAt) });
-      metaRows.push({ label: "状态", value: "待确认" });
+      metaRows.push({ label: t("生成时间"), value: formatDateFull(detail.createdAt) });
+      metaRows.push({ label: t("状态"), value: t("待确认") });
     } else {
       if (detail.source !== "manual")
-        metaRows.push({ label: "来源", value: SOURCE_LABELS[detail.source] ?? detail.source });
-      metaRows.push({ label: "记录人", value: creatorName(members, detail.createdBy) });
-      metaRows.push({ label: "记录时间", value: formatRecordTime(detail.createdAt) });
+        metaRows.push({ label: t("来源"), value: SOURCE_LABELS[detail.source] ?? detail.source });
+      metaRows.push({ label: t("记录人"), value: creatorName(members, detail.createdBy) });
+      metaRows.push({ label: t("记录时间"), value: formatRecordTime(detail.createdAt) });
     }
 
     const labels = relationLabels(detail.type);
@@ -654,7 +655,7 @@ export function BillDetailScreen({
           ) : null}
 
           <ReadonlyCard>
-            <ReadonlyRow label="记录类型" value={TYPE_LABELS[detail.type]} />
+            <ReadonlyRow label={t("记录类型")} value={TYPE_LABELS[detail.type]} />
           </ReadonlyCard>
 
           {order.filter((field) => field !== "type" && field !== "amount").map(renderOrderedField)}
@@ -675,26 +676,26 @@ export function BillDetailScreen({
           ) : null}
 
           {showAttachmentCard && attachmentItems.length > 0 ? (
-            <ReadonlyBlock label="附件">
+            <ReadonlyBlock label={t("附件")}>
               <AttachmentPreview items={attachmentItems} onOpen={openAttachment} variant="grid" />
             </ReadonlyBlock>
           ) : null}
 
           {!isTransfer && insuranceNames.length > 0 ? (
             <ReadonlyCard>
-              <ReadonlyRow label="保险" value={insuranceNames.join("、")} />
+              <ReadonlyRow label={t("保险")} value={insuranceNames.join(t("、"))} />
             </ReadonlyCard>
           ) : null}
 
           {!isTransfer && itemNames.length > 0 ? (
             <ReadonlyCard>
-              <ReadonlyRow label="关联物品" value={itemNames.join("、")} />
+              <ReadonlyRow label={t("关联物品")} value={itemNames.join(t("、"))} />
             </ReadonlyCard>
           ) : null}
 
           {!isTransfer && subscriptionNames.length > 0 ? (
             <ReadonlyCard>
-              <ReadonlyRow label="关联订阅" value={subscriptionNames.join("、")} />
+              <ReadonlyRow label={t("关联订阅")} value={subscriptionNames.join(t("、"))} />
             </ReadonlyCard>
           ) : null}
 
@@ -715,11 +716,11 @@ export function BillDetailScreen({
               onClick={() => confirmPendingMutation.mutate()}
               variant="primary"
             >
-              确认入账
+              {t("确认入账")}
             </Button>
             {confirmingDelete ? (
               <>
-                <p>删除后这条待确认将不再入账（不影响下一周期继续生成），确定删除吗？</p>
+                <p>{t("删除后这条待确认将不再入账（不影响下一周期继续生成），确定删除吗？")}</p>
                 <div className="bill-detail__confirm-actions">
                   <Button
                     className="flex-1"
@@ -727,14 +728,14 @@ export function BillDetailScreen({
                     onClick={() => deletePendingMutation.mutate()}
                     variant="danger"
                   >
-                    {deletePendingMutation.isPending ? "删除中…" : "确认删除"}
+                    {deletePendingMutation.isPending ? t("删除中…") : t("确认删除")}
                   </Button>
                   <Button
                     className="flex-1"
                     onClick={() => setConfirmingDelete(false)}
                     variant="ghost"
                   >
-                    取消
+                    {t("取消")}
                   </Button>
                 </div>
               </>
@@ -746,7 +747,7 @@ export function BillDetailScreen({
                 onClick={() => setConfirmingDelete(true)}
                 variant="danger"
               >
-                删除待确认
+                {t("删除待确认")}
               </Button>
             )}
           </section>
@@ -759,7 +760,7 @@ export function BillDetailScreen({
               onClick={() => setConfirmingDelete(true)}
               variant="danger"
             >
-              删除记录
+              {t("删除记录")}
             </Button>
           </section>
         )}
@@ -767,12 +768,12 @@ export function BillDetailScreen({
     );
   };
 
-  const pageTitle = isPendingMode ? "待确认详情" : "记录详情";
+  const pageTitle = isPendingMode ? t("待确认详情") : t("记录详情");
   const closeDetail = () => (onClose ? onClose() : router.back());
   const editAction = transaction ? (
     <IconButton
       icon={<Pencil size={20} strokeWidth={2.2} />}
-      label={isPendingMode ? "编辑待确认" : "编辑记录"}
+      label={isPendingMode ? t("编辑待确认") : t("编辑记录")}
       onClick={() => {
         if (isPendingMode) {
           openPendingEditor();
@@ -800,12 +801,12 @@ export function BillDetailScreen({
       ? pendingQuery.isPending || categoriesQuery.isPending
       : transactionQuery.isPending
   ) || settingQuery.isPending ? (
-    <LoadingState rows={5} title={isPendingMode ? "加载待确认记录" : "加载交易"} />
+    <LoadingState rows={5} title={isPendingMode ? t("加载待确认记录") : t("加载交易")} />
   ) : transaction ? (
     renderBody(transaction)
   ) : (
     <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">
-      {isPendingMode ? "待确认记录不存在或已处理。" : "交易不存在或已删除。"}
+      {isPendingMode ? t("待确认记录不存在或已处理。") : t("交易不存在或已删除。")}
     </p>
   );
 
@@ -815,7 +816,7 @@ export function BillDetailScreen({
         <header className="flex items-center justify-between gap-2 px-1 pb-2">
           <IconButton
             icon={<X size={22} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={closeDetail}
           />
           <h2 className="text-base font-bold text-[var(--color-text-primary)]">{pageTitle}</h2>
@@ -843,7 +844,7 @@ export function BillDetailScreen({
         leading={
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={() => router.back()}
           />
         }

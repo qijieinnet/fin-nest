@@ -31,6 +31,8 @@ model User {
   // 默认都开——关掉某条渠道是主动行为，静默不收才是最难排查的。
   notifyFeishu   Boolean @default(true) @map("notify_feishu")
   notifyWebPush  Boolean @default(true) @map("notify_web_push")
+  // 界面语言（zh-CN / en）。null = 未设置，前端跟随设备语言；设置过就以这里为准，跨设备同步。
+  locale         String?
   disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

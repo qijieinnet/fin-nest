@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, WalletCards } from "lucide-react";
 import { cn } from "@/lib/format/class-names";
 import type { BusinessOption } from "./business-types";
+import { t } from "@/lib/i18n";
 
 type AccountPickerProps = {
   label?: string;
@@ -12,7 +13,7 @@ type AccountPickerProps = {
   value: string | null;
 };
 
-export function AccountPicker({ label = "账户", onValueChange, options, value }: AccountPickerProps) {
+export function AccountPicker({ label = t("账户"), onValueChange, options, value }: AccountPickerProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,7 +67,7 @@ export function AccountPicker({ label = "账户", onValueChange, options, value 
           <WalletCards size={20} />
         </span>
         <span className="select-field__label">{label}</span>
-        <span className="select-field__value">{selectedOption?.label ?? "选择账户"}</span>
+        <span className="select-field__value">{selectedOption?.label ?? t("选择账户")}</span>
         <ChevronDown className={cn("select-field__chevron", open && "select-field__chevron--open")} size={20} />
       </button>
 
@@ -135,7 +136,7 @@ export function AccountPicker({ label = "账户", onValueChange, options, value 
                 }}
                 type="button"
               >
-                <span>清除选项</span>
+                <span>{t("清除选项")}</span>
               </button>
             </>
           ) : null}

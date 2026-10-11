@@ -8,6 +8,7 @@ import { apiRequest, getApiErrorMessage, ledgerImportJsonPath } from "@/lib/api"
 import { isLedgerScopedQueryKey } from "@/lib/query/query-keys";
 import { useSheetStack, useToast } from "@/providers";
 import type { RestoreResult } from "../types";
+import { t } from "@/lib/i18n";
 
 type RestoreConfirmSheetProps = {
   file: File;
@@ -31,7 +32,7 @@ export function RestoreConfirmSheet({ file, ledgerId, ledgerName }: RestoreConfi
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ predicate: (query) => isLedgerScopedQueryKey(query.queryKey) });
-      showToast({ tone: "success", message: "账本已从备份恢复" });
+      showToast({ tone: "success", message: t("账本已从备份恢复") });
       pop();
     },
   });
@@ -41,25 +42,24 @@ export function RestoreConfirmSheet({ file, ledgerId, ledgerName }: RestoreConfi
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
-        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">恢复备份</h2>
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
+        <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">{t("恢复备份")}</h2>
         <span aria-hidden />
       </div>
 
       <div className="flex items-start gap-2.5 rounded-[14px] bg-[var(--color-accent-expense)]/10 p-3.5">
         <AlertTriangle className="mt-0.5 shrink-0 text-[var(--color-accent-expense)]" size={18} />
         <div className="text-sm text-[var(--color-accent-expense)]">
-          <p className="font-semibold">此操作不可撤销</p>
+          <p className="font-semibold">{t("此操作不可撤销")}</p>
           <p className="mt-1">
-            账本「{ledgerName}」现有的流水、账户、分类、保险、物品等全部数据将被清空，并替换为备份文件
-            「{file.name}」中的内容。附件不包含在备份中。
+            {t("账本「{ledgerName}」现有的流水、账户、分类、保险、物品等全部数据将被清空，并替换为备份文件 「{name}」中的内容。附件不包含在备份中。", { ledgerName, name: file.name })}
           </p>
         </div>
       </div>
 
       <Input
         autoFocus
-        label={`输入账本名称「${ledgerName}」以确认`}
+        label={t("输入账本名称「{ledgerName}」以确认", { ledgerName })}
         onChange={(event) => setConfirmName(event.target.value)}
         placeholder={ledgerName}
         value={confirmName}
@@ -72,12 +72,12 @@ export function RestoreConfirmSheet({ file, ledgerId, ledgerName }: RestoreConfi
         }}
         variant="danger"
       >
-        {restore.isPending ? "恢复中…" : "清空并恢复"}
+        {restore.isPending ? t("恢复中…") : t("清空并恢复")}
       </Button>
 
       {restore.isError ? (
         <p className="text-sm text-[var(--color-accent-expense)]">
-          {getApiErrorMessage(restore.error, "恢复失败，请稍后重试")}
+          {getApiErrorMessage(restore.error, t("恢复失败，请稍后重试"))}
         </p>
       ) : null}
     </div>

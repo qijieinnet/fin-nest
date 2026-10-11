@@ -5,6 +5,7 @@ import { AppLockGate } from "./AppLockProvider";
 import { AuthProvider } from "./AuthProvider";
 import { ConfirmProvider } from "./ConfirmProvider";
 import { DecimalPlacesProvider } from "./DecimalPlacesProvider";
+import { I18nProvider, LocaleRemount } from "./I18nProvider";
 import { LedgerProvider } from "./LedgerProvider";
 import { NavigationProgressProvider } from "./NavigationProgressProvider";
 import { PreferencesProvider } from "./PreferencesProvider";
@@ -17,22 +18,26 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryProvider>
       <PreferencesProvider>
         <AuthProvider>
-          <LedgerProvider>
-            <DecimalPlacesProvider>
-              {/* 进度条 provider 必须在 Toast / Confirm / SheetStack 之上：这三者都把弹层
+          <I18nProvider>
+            <LedgerProvider>
+              <DecimalPlacesProvider>
+                {/* 进度条 provider 必须在 Toast / Confirm / SheetStack 之上：这三者都把弹层
                   渲染成 children 的兄弟节点，套在里层的话弹层内容拿不到 context，任何
                   在弹层里调 useAppRouter 的组件（如桌面「记一笔」）都会抛错整页白屏。 */}
-              <NavigationProgressProvider>
-                <ToastProvider>
-                  <ConfirmProvider>
-                    <SheetStackProvider>
-                      <AppLockGate>{children}</AppLockGate>
-                    </SheetStackProvider>
-                  </ConfirmProvider>
-                </ToastProvider>
-              </NavigationProgressProvider>
-            </DecimalPlacesProvider>
-          </LedgerProvider>
+                <NavigationProgressProvider>
+                  <ToastProvider>
+                    <ConfirmProvider>
+                      <SheetStackProvider>
+                        <AppLockGate>
+                          <LocaleRemount>{children}</LocaleRemount>
+                        </AppLockGate>
+                      </SheetStackProvider>
+                    </ConfirmProvider>
+                  </ToastProvider>
+                </NavigationProgressProvider>
+              </DecimalPlacesProvider>
+            </LedgerProvider>
+          </I18nProvider>
         </AuthProvider>
       </PreferencesProvider>
     </QueryProvider>

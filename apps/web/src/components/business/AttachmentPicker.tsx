@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui";
 import type { AttachmentItem } from "./business-types";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { InlineHint } from "./InlineHint";
+import { t } from "@/lib/i18n";
 
 type AttachmentPickerProps = {
   accept?: string;
@@ -26,21 +27,21 @@ export function AttachmentPicker({
   onRemove,
 }: AttachmentPickerProps) {
   const active = enabled ?? items.length > 0;
-  const hint = active ? "上传票据、截图或凭证" : "关闭后不显示附件区域";
+  const hint = active ? t("上传票据、截图或凭证") : t("关闭后不显示附件区域");
 
   return (
     <div className="biz-attachment-card">
       <div className="biz-toggle-card__header">
         <span className="biz-toggle-card__copy">
           <strong>
-            附件
+            {t("附件")}
             <InlineHint text={hint} />
           </strong>
         </span>
         <Switch
           checked={active}
           disabled={!onEnabledChange}
-          label="附件"
+          label={t("附件")}
           onCheckedChange={onEnabledChange}
         />
       </div>
@@ -61,7 +62,7 @@ export function AttachmentPicker({
               <span className="ui-button__icon">
                 <Plus size={16} />
               </span>
-              添加
+              {t("添加")}
             </span>
           </label>
         </div>

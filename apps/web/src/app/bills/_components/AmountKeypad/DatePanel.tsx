@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/format/class-names";
+import { localized, msg, t } from "@/lib/i18n";
 
 type DatePanelProps = {
   onValueChange: (value: string) => void;
@@ -10,7 +11,15 @@ type DatePanelProps = {
   value: string;
 };
 
-const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+const WEEKDAY_LABELS = localized([
+  msg("一"),
+  msg("二"),
+  msg("三"),
+  msg("四"),
+  msg("五"),
+  msg("六"),
+  msg("日"),
+]);
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -75,7 +84,7 @@ export function DatePanel({ onValueChange, value }: DatePanelProps) {
     <div className="keypad-date">
       <div className="keypad-date__head">
         <button
-          aria-label="上个月"
+          aria-label={t("上个月")}
           className="keypad-date__nav"
           onClick={() => shiftMonth(-1)}
           type="button"
@@ -83,10 +92,10 @@ export function DatePanel({ onValueChange, value }: DatePanelProps) {
           <ChevronLeft size={18} />
         </button>
         <strong className="keypad-date__title">
-          {view.year} 年 {view.month} 月
+          {t("{year} 年 {month} 月", { year: view.year, month: view.month })}
         </strong>
         <button
-          aria-label="下个月"
+          aria-label={t("下个月")}
           className="keypad-date__nav"
           onClick={() => shiftMonth(1)}
           type="button"

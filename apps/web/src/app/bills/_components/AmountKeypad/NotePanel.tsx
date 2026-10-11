@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { t } from "@/lib/i18n";
 
 type NotePanelProps = {
   maxLength: number;
@@ -25,12 +26,12 @@ export function NotePanel({ maxLength, onValueChange, value }: NotePanelProps) {
   return (
     <div className="keypad-note">
       <textarea
-        aria-label="备注"
+        aria-label={t("备注")}
         // input-flat：聚焦不画全局焦点环，输入框自己的背景已经足够指示焦点。
         className="keypad-note__input input-flat"
         maxLength={maxLength}
         onChange={(event) => onValueChange(event.target.value)}
-        placeholder="添加备注"
+        placeholder={t("添加备注")}
         ref={inputRef}
         rows={2}
         value={value}

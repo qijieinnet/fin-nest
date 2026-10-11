@@ -8,14 +8,15 @@ import { IconButton, PopoverMenu } from "@/components/ui";
 import { NotifyTargetsRow, toggleUserId } from "./NotifyTargetsRow";
 import { TimeWheelPicker } from "./TimeWheelPicker";
 import { ToggleCard } from "./TransactionFieldRows";
+import { localized, msg, t } from "@/lib/i18n";
 
 /** 提前量单位，value 与后端一致。 */
-export const REMIND_UNIT_OPTIONS = [
-  { value: "day", label: "天" },
-  { value: "week", label: "周" },
-  { value: "month", label: "月" },
-  { value: "year", label: "年" },
-] as const;
+export const REMIND_UNIT_OPTIONS = localized([
+  { value: "day", label: msg("天") },
+  { value: "week", label: msg("周") },
+  { value: "month", label: msg("月") },
+  { value: "year", label: msg("年") },
+] as const);
 
 export type RemindUnit = (typeof REMIND_UNIT_OPTIONS)[number]["value"];
 
@@ -96,11 +97,11 @@ export function toReminderPayload(drafts: ReminderDraft[]): Array<{
 export function reminderSummary(reminder: ReminderSchedule): string {
   const unit =
     REMIND_UNIT_OPTIONS.find((option) => option.value === reminder.leadUnit)?.label ?? "";
-  const receivers = reminder.notifyTargets.map((target) => target.alias).join("、");
+  const receivers = reminder.notifyTargets.map((target) => target.alias).join(t("、"));
   return [
-    `提前 ${reminder.leadValue} ${unit}`,
+    t("提前 {leadValue} {unit}", { leadValue: reminder.leadValue, unit }),
     reminder.remindTime,
-    receivers && `推送给 ${receivers}`,
+    receivers && t("推送给 {receivers}", { receivers }),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -138,7 +139,7 @@ export function ReminderSchedulesEditor({
   enabled,
   footer,
   hint,
-  label = "到期提醒",
+  label = t("到期提醒"),
   onChange,
   onEnabledChange,
   value,
@@ -188,11 +189,11 @@ export function ReminderSchedulesEditor({
       {value.map((draft, index) => (
         <div className="reminder-tier" key={draft.key}>
           <div className="reminder-tier__head">
-            <strong>第 {index + 1} 次提醒</strong>
+            <strong>{t("第 {value} 次提醒", { value: index + 1 })}</strong>
             {value.length > 1 ? (
               <IconButton
                 icon={<Trash2 size={16} />}
-                label={`删除第 ${index + 1} 次提醒`}
+                label={t("删除第 {value} 次提醒", { value: index + 1 })}
                 onClick={() => onChange(value.filter((item) => item.key !== draft.key))}
                 variant="muted"
               />
@@ -204,14 +205,14 @@ export function ReminderSchedulesEditor({
             value={draft.leadValue}
           />
           <SelectRow
-            label="提前量单位"
+            label={t("提前量单位")}
             onChange={(next) => update(draft.key, { leadUnit: next as RemindUnit })}
             options={REMIND_UNIT_OPTIONS}
             value={draft.leadUnit}
           />
           <div className="transaction-form__date-card">
             <TimeWheelPicker
-              label="提醒时间"
+              label={t("提醒时间")}
               onValueChange={(next) => update(draft.key, { remindTime: next })}
               value={draft.remindTime}
             />
@@ -224,7 +225,7 @@ export function ReminderSchedulesEditor({
           />
           {duplicatedKeys.has(leadKeyOf(draft)) ? (
             <p className="px-1 text-xs text-[var(--color-accent-warning)]">
-              与其它提醒的提前量相同，保存时只会保留一条。
+              {t("与其它提醒的提前量相同，保存时只会保留一条。")}
             </p>
           ) : null}
         </div>
@@ -245,10 +246,12 @@ export function ReminderSchedulesEditor({
           type="button"
         >
           <Plus size={16} />
-          <span>添加提醒</span>
+          <span>{t("添加提醒")}</span>
         </button>
       ) : (
-        <p className="px-1 text-xs text-[var(--color-text-muted)]">最多 {MAX_REMINDERS} 档提醒。</p>
+        <p className="px-1 text-xs text-[var(--color-text-muted)]">
+          {t("最多 {MAX_REMINDERS} 档提醒。", { MAX_REMINDERS })}
+        </p>
       )}
 
       {footer}
@@ -261,7 +264,7 @@ function LeadRow({ onChange, value }: { onChange: (value: string) => void; value
     onChange(event.target.value.replace(/[^0-9]/g, "").slice(0, 3));
   return (
     <label className="account-form__field-row">
-      <span>提前</span>
+      <span>{t("提前")}</span>
       <span className="account-form__input-wrap">
         <input
           className="account-form__input"
@@ -297,7 +300,7 @@ function SelectRow({
         type="button"
       >
         <span>{label}</span>
-        <strong>{selected ? selected.label : "请选择"}</strong>
+        <strong>{selected ? selected.label : t("请选择")}</strong>
         <ChevronRight size={18} />
       </button>
       <PopoverMenu

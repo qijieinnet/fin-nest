@@ -5,6 +5,7 @@ import type { AiCard, TransactionDetail } from "@/lib/api";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { NewBillFormScreen } from "../../bills/_components/NewBillFormScreen";
 import { originalAmount, useCardCurrency } from "./AiCards";
+import { t } from "@/lib/i18n";
 
 type DraftCard = Extract<AiCard, { kind: "transaction_draft" }>;
 
@@ -37,14 +38,16 @@ export function AiDraftEditDrawer({
   if (card?.possibleDuplicate) {
     notices.push({
       warn: true,
-      text: `当天账本里已有一笔相同金额${
-        card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : ""
-      }，确认不是重复再入账`,
+      text: t("当天账本里已有一笔相同金额{value}，确认不是重复再入账", {
+        value: card.possibleDuplicate.note ? `（${card.possibleDuplicate.note}）` : "",
+      }),
     });
   }
   if (card?.originalAmountMicros) {
     notices.push({
-      text: `图上原金额 ${originalAmount(card.originalAmountMicros, currency)}，已按账本精度四舍五入`,
+      text: t("图上原金额 {value}，已按账本精度四舍五入", {
+        value: originalAmount(card.originalAmountMicros, currency),
+      }),
     });
   }
 
@@ -85,7 +88,7 @@ export function AiDraftEditDrawer({
           onClose={onClose}
           onSaved={onSaved}
           quickTemplates={false}
-          title="编辑并入账"
+          title={t("编辑并入账")}
         />
       ) : null}
     </BottomSheet>

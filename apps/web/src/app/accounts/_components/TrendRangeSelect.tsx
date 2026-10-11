@@ -4,15 +4,16 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { PopoverMenu } from "@/components/ui";
 import type { NetWorthRange } from "@/lib/api";
+import { localized, msg } from "@/lib/i18n";
 
 export type TrendRange = NetWorthRange;
 
-export const TREND_RANGE_LABELS: Record<TrendRange, string> = {
-  week: "近1周",
-  month1: "近1个月",
-  month6: "近6个月",
-  year: "近1年",
-};
+export const TREND_RANGE_LABELS: Record<TrendRange, string> = localized({
+  week: msg("近1周"),
+  month1: msg("近1个月"),
+  month6: msg("近6个月"),
+  year: msg("近1年"),
+});
 
 const TREND_RANGE_ORDER: TrendRange[] = ["week", "month1", "month6", "year"];
 

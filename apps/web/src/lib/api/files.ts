@@ -3,6 +3,7 @@ import { ledgerApiPath } from "./endpoints";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
 import { handleApiAuthFailure } from "./session-expiry";
 import { getSessionToken } from "./token-storage";
+import { getResolvedLocale as currentLocale } from "@/lib/i18n/store";
 
 async function parseErrorPayload(response: Response): Promise<ApiErrorPayload | undefined> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -18,6 +19,7 @@ export async function createAuthorizedObjectUrl(path: string): Promise<string> {
   const headers = new Headers();
   const token = getSessionToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
+  headers.set("accept-language", currentLocale());
 
   const response = await fetch(buildApiUrl(path), {
     credentials: "same-origin",
@@ -46,6 +48,7 @@ export async function uploadAttachmentFile(
   const headers = new Headers();
   const token = getSessionToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
+  headers.set("accept-language", currentLocale());
 
   const response = await fetch(buildApiUrl(ledgerApiPath(ledgerId, "/files/upload")), {
     body: formData,

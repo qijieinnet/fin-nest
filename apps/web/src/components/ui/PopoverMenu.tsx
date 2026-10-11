@@ -4,6 +4,7 @@ import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/format/class-names";
 import { Menu, type MenuItem } from "./Menu";
+import { t } from "@/lib/i18n";
 
 type PopoverMenuProps = {
   /** 面板相对锚点的对齐方向（锚点父元素需 position: relative）。 */
@@ -187,7 +188,7 @@ export function PopoverMenu({
       {createPortal(
         <>
           <button
-            aria-label="关闭菜单"
+            aria-label={t("关闭菜单")}
             className="ui-popover-menu__backdrop"
             onClick={() => onOpenChange(false)}
             type="button"

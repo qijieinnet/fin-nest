@@ -19,6 +19,7 @@ import {
   unlockWithPassword,
 } from "@/lib/app-lock/app-lock";
 import { useAuth } from "@/providers/AuthProvider";
+import { t } from "@/lib/i18n";
 
 type AppLockScreenProps = {
   /** 验证通过后调用，由外层解除锁定。 */
@@ -99,7 +100,7 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
   };
 
   return (
-    <AuthScreenShell subtitle="为保护你的账目隐私，请先验证身份" title="已锁定">
+    <AuthScreenShell subtitle={t("为保护你的账目隐私，请先验证身份")} title={t("已锁定")}>
       <div className="flex flex-col gap-3">
         {mode === "biometric" ? (
           <div className="flex flex-col gap-3">
@@ -110,13 +111,13 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
               loading={biometricPending}
               onClick={() => void runBiometric()}
             >
-              {biometricPending ? "验证中…" : "使用 Face ID / Touch ID 解锁"}
+              {biometricPending ? t("验证中…") : t("使用 Face ID / Touch ID 解锁")}
             </Button>
             {biometricFailed ? (
-              <p className="auth-error">未通过验证，请重试或改用密码解锁</p>
+              <p className="auth-error">{t("未通过验证，请重试或改用密码解锁")}</p>
             ) : null}
             <Button block onClick={() => setMode("password")} variant="plain">
-              使用密码解锁
+              {t("使用密码解锁")}
             </Button>
           </div>
         ) : (
@@ -131,29 +132,31 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
               <Input
                 autoComplete="current-password"
                 autoFocus
-                label="登录密码"
+                label={t("登录密码")}
                 name="password"
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="请输入登录密码"
+                placeholder={t("请输入登录密码")}
                 type="password"
                 value={password}
               />
             </div>
             {passwordMutation.isError ? (
-              <p className="auth-error">{getApiErrorMessage(passwordMutation.error, "密码错误")}</p>
+              <p className="auth-error">
+                {getApiErrorMessage(passwordMutation.error, t("密码错误"))}
+              </p>
             ) : null}
             <Button className="auth-submit" disabled={!canSubmit} type="submit">
-              {passwordMutation.isPending ? "验证中…" : "解锁"}
+              {passwordMutation.isPending ? t("验证中…") : t("解锁")}
             </Button>
             {biometricAvailable ? (
               <Button block onClick={() => setMode("biometric")} variant="plain">
-                使用 Face ID / Touch ID 解锁
+                {t("使用 Face ID / Touch ID 解锁")}
               </Button>
             ) : null}
           </form>
         )}
         <Button block onClick={signOut} variant="plain">
-          退出登录
+          {t("退出登录")}
         </Button>
       </div>
     </AuthScreenShell>

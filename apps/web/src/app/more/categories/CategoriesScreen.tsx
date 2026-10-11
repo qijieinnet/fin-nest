@@ -37,13 +37,14 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { CategoryEditorSheet } from "./_components/CategoryEditorSheet";
 import { CategorySortList } from "./_components/CategorySortList";
+import { localized, msg, t } from "@/lib/i18n";
 
 type CategoryKind = "expense" | "income";
 
-const SEGMENT_ITEMS = [
-  { label: "支出分类", value: "expense" },
-  { label: "收入分类", value: "income" },
-];
+const SEGMENT_ITEMS = localized([
+  { label: msg("支出分类"), value: "expense" },
+  { label: msg("收入分类"), value: "income" },
+]);
 
 function CategoryAvatar({ icon, size = 40 }: { icon?: string | null; size?: number }) {
   return (
@@ -89,13 +90,17 @@ function CategoryCard({
               {category.name}
             </span>
             <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-              {count > 0 ? `${count} 个子分类` : "暂无子分类"}
+              {count > 0 ? t("{count} 个子分类", { count }) : t("暂无子分类")}
             </span>
           </span>
         </button>
         <button
           aria-expanded={expanded}
-          aria-label={expanded ? `折叠${category.name}` : `展开${category.name}`}
+          aria-label={
+            expanded
+              ? t("折叠{name}", { name: category.name })
+              : t("展开{name}", { name: category.name })
+          }
           className="flex shrink-0 items-center justify-center self-stretch pl-3 pr-4"
           onClick={onToggle}
           type="button"
@@ -134,7 +139,7 @@ function CategoryCard({
             <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[var(--color-tint-soft)]">
               <Plus size={15} strokeWidth={2.4} />
             </span>
-            添加子分类
+            {t("添加子分类")}
           </button>
         </div>
       ) : null}
@@ -300,7 +305,7 @@ export function CategoriesScreen() {
         action={
           sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -308,14 +313,14 @@ export function CategoriesScreen() {
                 items={[
                   {
                     icon: <Plus size={22} strokeWidth={2.3} />,
-                    label: "新增一级分类",
+                    label: t("新增一级分类"),
                     onClick: () => openPrimaryEditor(),
                   },
                   ...(categories.length > 0
                     ? [
                         {
                           icon: <MoreHorizontal size={22} />,
-                          label: "更多选项",
+                          label: t("更多选项"),
                           onClick: () => setMoreMenuOpen((open) => !open),
                         },
                       ]
@@ -327,17 +332,17 @@ export function CategoriesScreen() {
                   [
                     {
                       icon: <ChevronsDownUp size={18} />,
-                      label: "折叠所有",
+                      label: t("折叠所有"),
                       onSelect: collapseAll,
                     },
                     {
                       icon: <ChevronsUpDown size={18} />,
-                      label: "展开所有",
+                      label: t("展开所有"),
                       onSelect: expandAll,
                     },
                     {
                       icon: <ArrowUpDown size={18} />,
-                      label: "排序",
+                      label: t("排序"),
                       onSelect: enterSortMode,
                     },
                   ],
@@ -351,12 +356,12 @@ export function CategoriesScreen() {
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label={sortMode ? "退出排序" : "返回"}
+            label={sortMode ? t("退出排序") : t("返回")}
             onClick={goBack}
           />
         }
         navigationTitleAlign="left"
-        title={sortMode ? "拖动排序" : "分类管理"}
+        title={sortMode ? t("拖动排序") : t("分类管理")}
       >
         <div className="flex flex-col gap-4 pb-6">
           <Tabs
@@ -366,21 +371,25 @@ export function CategoriesScreen() {
           />
 
           {categoriesQuery.isPending ? (
-            <LoadingState rows={5} title="加载分类" />
+            <LoadingState rows={5} title={t("加载分类")} />
           ) : categories.length === 0 ? (
             <EmptyState
               action={
                 <Button onClick={() => openPrimaryEditor()} variant="primary">
-                  添加一级分类
+                  {t("添加一级分类")}
                 </Button>
               }
-              message={`先添加一个${kind === "income" ? "收入" : "支出"}分类，再按需补充子分类。`}
-              title="还没有分类"
+              message={t("先添加一个{value}分类，再按需补充子分类。", {
+                value: kind === "income" ? t("收入") : t("支出"),
+              })}
+              title={t("还没有分类")}
             />
           ) : sortMode ? (
             <>
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                按住右侧图标拖动分类排序；一级分类连同子分类整体移动，二级分类仅在所属分类内排序。
+                {t(
+                  "按住右侧图标拖动分类排序；一级分类连同子分类整体移动，二级分类仅在所属分类内排序。",
+                )}
               </p>
               <CategorySortList
                 categories={categories}

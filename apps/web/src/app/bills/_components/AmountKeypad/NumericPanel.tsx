@@ -3,6 +3,7 @@
 import { Delete } from "lucide-react";
 import { cn } from "@/lib/format/class-names";
 import type { KeypadKey } from "./keypad-expression";
+import { localized, msg } from "@/lib/i18n";
 
 type NumericPanelProps = {
   decimalPlaces: number;
@@ -34,7 +35,7 @@ const digit = (value: string): KeySpec => ({
  * 网格是 4 列、按 DOM 顺序逐行填充的，扁平顺序会把功能键挤到最后一行、
  * 数字整体左移错位——渲染出来就是一堆乱序数字。
  */
-export const KEY_ROWS: KeySpec[][] = [
+export const KEY_ROWS: KeySpec[][] = localized([
   [
     digit("7"),
     digit("8"),
@@ -42,7 +43,7 @@ export const KEY_ROWS: KeySpec[][] = [
     {
       id: "backspace",
       label: "",
-      ariaLabel: "退格",
+      ariaLabel: msg("退格"),
       icon: "backspace",
       variant: "function",
       key: { kind: "backspace" },
@@ -53,22 +54,22 @@ export const KEY_ROWS: KeySpec[][] = [
     digit("4"),
     digit("5"),
     digit("6"),
-    { id: "minus", label: "−", ariaLabel: "减", variant: "function", key: { kind: "operator", value: "-" } },
+    { id: "minus", label: "−", ariaLabel: msg("减"), variant: "function", key: { kind: "operator", value: "-" } },
   ],
   [
     digit("1"),
     digit("2"),
     digit("3"),
-    { id: "plus", label: "+", ariaLabel: "加", variant: "function", key: { kind: "operator", value: "+" } },
+    { id: "plus", label: "+", ariaLabel: msg("加"), variant: "function", key: { kind: "operator", value: "+" } },
   ],
   [
-    { id: "dot", label: ".", ariaLabel: "小数点", key: { kind: "dot" } },
+    { id: "dot", label: ".", ariaLabel: msg("小数点"), key: { kind: "dot" } },
     digit("0"),
     // "00" 直接压两次 0，复用同一条约束链（小数位满了自然被拦）。
     { id: "double-zero", label: "00", key: { kind: "digit", value: "0" }, longPress: undefined },
-    { id: "equals", label: "=", ariaLabel: "求值", variant: "function", key: { kind: "equals" } },
+    { id: "equals", label: "=", ariaLabel: msg("求值"), variant: "function", key: { kind: "equals" } },
   ],
-];
+]);
 
 /** 数字键区。提交与快捷记账在外壳底部那一排，切页签也看得见。 */
 export function NumericPanel({

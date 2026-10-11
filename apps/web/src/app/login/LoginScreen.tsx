@@ -19,6 +19,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
+import { t } from "@/lib/i18n";
 
 /**
  * 登录后要回到哪。只接受**解析后仍然同源**的地址，否则退回 null。
@@ -87,12 +88,12 @@ export function LoginScreen() {
       footer={
         registrationEnabled ? (
           <>
-            还没有账号？ <Link href={routes.register}>注册</Link>
+            {t("还没有账号？")} <Link href={routes.register}>{t("注册")}</Link>
           </>
         ) : undefined
       }
-      subtitle={hasFeishuBindTicket ? "登录一次即与当前飞书账号绑定，之后在飞书里免登" : ""}
-      title="欢迎回来"
+      subtitle={hasFeishuBindTicket ? t("登录一次即与当前飞书账号绑定，之后在飞书里免登") : ""}
+      title={t("欢迎回来")}
     >
       <form
         className="auth-form"
@@ -104,29 +105,29 @@ export function LoginScreen() {
         <div className="auth-fields">
           <Input
             autoComplete="username"
-            label="邮箱或账号"
+            label={t("邮箱或账号")}
             name="login"
             onChange={(event) => setLogin(event.target.value)}
-            placeholder="邮箱或账号"
+            placeholder={t("邮箱或账号")}
             value={login}
           />
           <Input
             autoComplete="current-password"
-            label="密码"
+            label={t("密码")}
             name="password"
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="至少 8 位"
+            placeholder={t("至少 8 位")}
             type="password"
             value={password}
           />
         </div>
         {mutation.isError ? (
           <p className="auth-error">
-            {getApiErrorMessage(mutation.error, "登录失败，请检查账号或密码")}
+            {getApiErrorMessage(mutation.error, t("登录失败，请检查账号或密码"))}
           </p>
         ) : null}
         <Button className="auth-submit" disabled={!canSubmit} type="submit">
-          {mutation.isPending ? "登录中…" : "登录"}
+          {mutation.isPending ? t("登录中…") : t("登录")}
         </Button>
       </form>
     </AuthScreenShell>

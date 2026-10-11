@@ -5,6 +5,7 @@ import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import type { Subscription, SubscriptionCategory } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { categoryGlyph } from "./subscription-utils";
+import { t } from "@/lib/i18n";
 
 const CATEGORY_GROUP = "__subscription_categories__";
 
@@ -84,7 +85,7 @@ export function SubscriptionSortList({
   return (
     <div className={cn("flex flex-col gap-2.5", drag && "select-none")}>
       {localGroups.map((group) => {
-        const categoryName = group.category?.name ?? "未分类";
+        const categoryName = group.category?.name ?? t("未分类");
         const expanded = !collapsedIds.has(group.key);
         const sortableCategoryIndex = sortableCategoryIds.indexOf(group.key);
         const isDraggedCategory = draggingCategory && drag.ids[drag.fromIndex] === group.key;
@@ -119,13 +120,15 @@ export function SubscriptionSortList({
                     {categoryName}
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                    {group.items.length > 0 ? `${group.items.length} 个订阅` : "暂无订阅"}
+                    {group.items.length > 0
+                      ? t("{length} 个订阅", { length: group.items.length })
+                      : t("暂无订阅")}
                   </span>
                 </span>
               </span>
               {group.category && !group.category.archivedAt ? (
                 <DragHandle
-                  label={`拖动排序 ${categoryName}`}
+                  label={t("拖动排序 {categoryName}", { categoryName })}
                   onPointerDown={(event) => {
                     event.preventDefault();
                     beginDrag(
@@ -166,7 +169,7 @@ export function SubscriptionSortList({
                         {item.name}
                       </span>
                       <DragHandle
-                        label={`拖动排序 ${item.name}`}
+                        label={t("拖动排序 {name}", { name: item.name })}
                         onPointerDown={(event) => {
                           event.preventDefault();
                           beginDrag(

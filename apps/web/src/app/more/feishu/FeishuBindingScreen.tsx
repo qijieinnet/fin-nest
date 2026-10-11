@@ -13,6 +13,7 @@ import { routes } from "@/lib/route/routes";
 import { Button, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 /** 绑定码有效期 10 分钟，本地按秒回读剩余时间；到点自动清空，逼用户重新生成。 */
 function useCountdown(expiresAt: string | null): number {
@@ -86,24 +87,24 @@ export function FeishuBindingScreen() {
     try {
       await navigator.clipboard.writeText(code.code);
       setCopied(true);
-      showToast({ tone: "success", message: "已复制绑定码" });
+      showToast({ tone: "success", message: t("已复制绑定码") });
     } catch {
       // 非 HTTPS 或浏览器拒绝时降级：码本身就显示在屏幕上，手动输入即可。
-      showToast({ tone: "info", message: "复制失败，请手动输入" });
+      showToast({ tone: "info", message: t("复制失败，请手动输入") });
     }
   };
 
   const handleRevoke = async (bindingId: string, label: string) => {
     const ok = await confirm({
-      title: "解除绑定",
-      message: `解绑后「${label}」将无法再通过飞书记账或查询，可随时重新绑定。`,
-      confirmText: "解除绑定",
+      title: t("解除绑定"),
+      message: t("解绑后「{label}」将无法再通过飞书记账或查询，可随时重新绑定。", { label }),
+      confirmText: t("解除绑定"),
       tone: "danger",
     });
     if (!ok) return;
     try {
       await revokeBinding.mutateAsync(bindingId);
-      showToast({ tone: "success", message: "已解除绑定" });
+      showToast({ tone: "success", message: t("已解除绑定") });
     } catch (error) {
       showToast({ tone: "error", message: getApiErrorMessage(error) });
     }
@@ -114,22 +115,22 @@ export function FeishuBindingScreen() {
   return (
     <MobileAppShell>
       <MobilePage
-        description="在飞书里记账与查询"
+        description={t("在飞书里记账与查询")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="飞书机器人"
+        title={t("飞书机器人")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {!statusQuery.isLoading && !enabled ? (
             <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-              <p className="text-[15px] text-[var(--color-text-primary)]">未启用</p>
+              <p className="text-[15px] text-[var(--color-text-primary)]">{t("未启用")}</p>
               <p className="mt-1.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-                需在服务端配置 FEISHU_APP_ID 与 FEISHU_APP_SECRET 后重启 API。
+                {t("需在服务端配置 FEISHU_APP_ID 与 FEISHU_APP_SECRET 后重启 API。")}
               </p>
             </section>
           ) : null}
@@ -137,16 +138,18 @@ export function FeishuBindingScreen() {
           {enabled ? (
             <>
               <span className="px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                已绑定的飞书账号
+                {t("已绑定的飞书账号")}
               </span>
               <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
                 {bindings.length === 0 ? (
                   <p className="px-4 py-[15px] text-[14px] text-[var(--color-text-muted)]">
-                    还没有绑定的飞书账号
+                    {t("还没有绑定的飞书账号")}
                   </p>
                 ) : (
                   bindings.map((binding, index) => {
-                    const label = binding.displayName ?? `飞书账号 ···${binding.openIdSuffix}`;
+                    const label =
+                      binding.displayName ??
+                      t("飞书账号 ···{openIdSuffix}", { openIdSuffix: binding.openIdSuffix });
                     return (
                       <div
                         className={`flex items-center gap-3 px-4 py-[15px] ${
@@ -161,7 +164,9 @@ export function FeishuBindingScreen() {
                             {label}
                           </span>
                           <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                            当前账本 · {binding.currentLedgerName ?? "已删除的账本"}
+                            {t("当前账本 · {value}", {
+                              value: binding.currentLedgerName ?? t("已删除的账本"),
+                            })}
                           </span>
                         </span>
                         <Button
@@ -169,7 +174,7 @@ export function FeishuBindingScreen() {
                           onClick={() => void handleRevoke(binding.id, label)}
                           variant="ghost"
                         >
-                          解绑
+                          {t("解绑")}
                         </Button>
                       </div>
                     );
@@ -178,7 +183,7 @@ export function FeishuBindingScreen() {
               </section>
 
               <span className="mt-3 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-                添加绑定
+                {t("添加绑定")}
               </span>
               <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
                 {code ? (
@@ -189,28 +194,32 @@ export function FeishuBindingScreen() {
                       </span>
                       <IconButton
                         icon={copied ? <Check size={20} /> : <Copy size={20} />}
-                        label="复制绑定码"
+                        label={t("复制绑定码")}
                         onClick={() => void handleCopy()}
                       />
                     </div>
                     <p className="mt-2 text-[13px] text-[var(--color-text-muted)]">
-                      {formatRemaining(remaining)} 后失效，仅可使用一次
+                      {t("{value} 后失效，仅可使用一次", { value: formatRemaining(remaining) })}
                     </p>
                     <p className="mt-3 text-[13px] leading-5 text-[var(--color-text-primary)]">
-                      在飞书里<b>私聊</b>机器人发送：
+                      {t("在飞书里")}
+                      <b>{t("私聊")}</b>
+                      {t("机器人发送：")}
                     </p>
                     <p className="mt-1 font-mono text-[14px] text-[var(--color-text-primary)]">
-                      绑定 {code.code}
+                      {t("绑定 {code}", { code: code.code })}
                     </p>
                     <p className="mt-2 text-xs leading-5 text-[var(--color-text-muted)]">
-                      不要在群聊里发送绑定码——群成员都能看到，等同于把记账权限交出去。
+                      {t("不要在群聊里发送绑定码——群成员都能看到，等同于把记账权限交出去。")}
                     </p>
                   </>
                 ) : (
                   <>
                     <p className="text-[13px] leading-5 text-[var(--color-text-muted)]">
-                      生成后在飞书私聊机器人发送绑定码即可完成绑定。绑定后默认账本为 「
-                      {currentLedger?.name ?? "未选择"}」，之后可在飞书里切换。
+                      {t(
+                        "生成后在飞书私聊机器人发送绑定码即可完成绑定。绑定后默认账本为 「{value}」，之后可在飞书里切换。",
+                        { value: currentLedger?.name ?? t("未选择") },
+                      )}
                     </p>
                     <Button
                       block
@@ -219,7 +228,7 @@ export function FeishuBindingScreen() {
                       loading={createCode.isPending}
                       onClick={() => void handleGenerate()}
                     >
-                      {createCode.isPending ? "生成中…" : "生成绑定码"}
+                      {createCode.isPending ? t("生成中…") : t("生成绑定码")}
                     </Button>
                   </>
                 )}

@@ -12,6 +12,7 @@ import { AuthContext, RequestWithAuth, SessionAuthContext } from "./auth.types";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { VerifyPasswordDto } from "./dto/verify-password.dto";
 import { SessionAuthGuard } from "./session-auth.guard";
 
@@ -51,6 +52,14 @@ export class AuthController {
   @UseGuards(SessionAuthGuard)
   me(@CurrentAuth() auth: AuthContext) {
     return this.authService.me(auth as SessionAuthContext);
+  }
+
+  @Patch("me/preferences")
+  @ApiBearerAuth()
+  @ApiOkResponse({ description: "更新账号级界面偏好（语言），返回最新的当前用户" })
+  @UseGuards(SessionAuthGuard)
+  updatePreferences(@CurrentAuth() auth: AuthContext, @Body() body: UpdatePreferencesDto) {
+    return this.authService.updatePreferences(auth as SessionAuthContext, body);
   }
 
   @Post("password/verify")

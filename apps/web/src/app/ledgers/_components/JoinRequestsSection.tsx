@@ -11,9 +11,10 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 function requesterName(request: LedgerJoinRequest): string {
-  return request.requesterAlias || request.requesterAccount || `用户 ${request.requesterUserId.slice(0, 8)}`;
+  return request.requesterAlias || request.requesterAccount || t("用户 {value}", { value: request.requesterUserId.slice(0, 8) });
 }
 
 export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
@@ -40,7 +41,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
       apiRequest<LedgerJoinRequest>(approveJoinRequestPath(ledgerId, requestId), { method: "POST" }),
     onSuccess: async () => {
       await invalidate();
-      showToast({ tone: "success", message: "已通过申请" });
+      showToast({ tone: "success", message: t("已通过申请") });
     },  });
 
   const reject = useMutation({
@@ -48,7 +49,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
       apiRequest<LedgerJoinRequest>(rejectJoinRequestPath(ledgerId, requestId), { method: "POST" }),
     onSuccess: async () => {
       await invalidate();
-      showToast({ tone: "info", message: "已拒绝申请" });
+      showToast({ tone: "info", message: t("已拒绝申请") });
     },  });
 
   const requests = requestsQuery.data ?? [];
@@ -57,12 +58,12 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-sm font-medium text-[var(--color-text-secondary)]">
-        加入申请{requests.length > 0 ? `（${requests.length}）` : ""}
+        {t("加入申请{value}", { value: requests.length > 0 ? `（${requests.length}）` : "" })}
       </h3>
       {requestsQuery.isPending ? (
-        <p className="text-sm text-[var(--color-text-muted)]">加载中…</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{t("加载中…")}</p>
       ) : requests.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-muted)]">暂无待审批的申请。</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{t("暂无待审批的申请。")}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {requests.map((request) => (
@@ -88,7 +89,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
                   onClick={() => approve.mutate(request.id)}
                   type="button"
                 >
-                  通过
+                  {t("通过")}
                 </button>
                 <button
                   className="flex-1 rounded-full border border-[var(--color-border-subtle)] py-2 text-sm font-medium text-[var(--color-text-secondary)] disabled:opacity-50"
@@ -96,7 +97,7 @@ export function JoinRequestsSection({ ledgerId }: { ledgerId: string }) {
                   onClick={() => reject.mutate(request.id)}
                   type="button"
                 >
-                  拒绝
+                  {t("拒绝")}
                 </button>
               </div>
             </li>

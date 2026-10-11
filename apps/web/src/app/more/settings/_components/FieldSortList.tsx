@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 const FIELD_GROUP = "__record_fields__";
 
@@ -61,7 +62,7 @@ export function FieldSortList({ fields, onReorder }: FieldSortListProps) {
                 {field.name}
               </span>
               <DragHandle
-                label={`拖动排序 ${field.name}`}
+                label={t("拖动排序 {name}", { name: field.name })}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   beginDrag(

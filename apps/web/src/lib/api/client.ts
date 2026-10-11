@@ -1,4 +1,5 @@
 import { resolveApiBaseUrl } from "@/lib/config/public-env";
+import { getResolvedLocale as currentLocale } from "@/lib/i18n/store";
 import { ApiClientError, type ApiErrorPayload } from "./errors";
 import { handleApiAuthFailure } from "./session-expiry";
 import { getSessionToken } from "./token-storage";
@@ -63,6 +64,11 @@ export async function apiRequest<TResponse>(
   const token = getSessionToken();
   if (token && !requestHeaders.has("authorization")) {
     requestHeaders.set("authorization", `Bearer ${token}`);
+  }
+
+  // 后端按它翻译错误文案；与界面语言保持一致（用户设置 > 设备语言）。
+  if (!requestHeaders.has("accept-language")) {
+    requestHeaders.set("accept-language", currentLocale());
   }
 
   const requestInit: RequestInit = {

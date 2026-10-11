@@ -24,6 +24,7 @@ import {
   transferAccountSummary,
   upcomingDates,
 } from "./auto-utils";
+import { t } from "@/lib/i18n";
 
 type AutoRuleDetailSheetProps = {
   accounts: Account[];
@@ -106,44 +107,51 @@ export function AutoRuleDetailSheet({
       <section className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
         <div className="flex min-h-[56px] items-center gap-3 px-4">
           <span className="flex-1 text-[15px] text-[var(--color-text-primary)]">
-            {rule.enabled ? "正在运行" : "已暂停"}
+            {rule.enabled ? t("正在运行") : t("已暂停")}
           </span>
           <Switch
             checked={rule.enabled}
             disabled={pendingToggle}
-            label="启用自动记账"
+            label={t("启用自动记账")}
             onCheckedChange={onToggle}
           />
         </div>
       </section>
 
       <section>
-        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">规则</h3>
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+          {t("规则")}
+        </h3>
         <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
           {rule.type === "transfer" ? (
             <>
-              <DetailRow label="转出账户" value={fromAccount.name} />
-              <DetailRow label="转入账户" value={toAccount.name} />
-              <DetailRow label="人员" value={personName(people, rule.personId)} />
+              <DetailRow label={t("转出账户")} value={fromAccount.name} />
+              <DetailRow label={t("转入账户")} value={toAccount.name} />
+              <DetailRow label={t("人员")} value={personName(people, rule.personId)} />
             </>
           ) : (
             <>
-              <DetailRow label="分类" value={summary.fullName} />
-              <DetailRow label="账户" value={account.name} />
-              <DetailRow label="人员" value={personName(people, rule.personId)} />
+              <DetailRow label={t("分类")} value={summary.fullName} />
+              <DetailRow label={t("账户")} value={account.name} />
+              <DetailRow label={t("人员")} value={personName(people, rule.personId)} />
               {relationCount > 0 ? (
-                <DetailRow label="可收回 / 需归还" value={`${relationCount} 项`} />
+                <DetailRow
+                  label={t("可收回 / 需归还")}
+                  value={t("{relationCount} 项", { relationCount })}
+                />
               ) : null}
-              {insuranceName ? <DetailRow label="保险" value={insuranceName} /> : null}
-              {itemName ? <DetailRow label="关联物品" value={itemName} /> : null}
-              {subscriptionName ? <DetailRow label="关联订阅" value={subscriptionName} /> : null}
+              {insuranceName ? <DetailRow label={t("保险")} value={insuranceName} /> : null}
+              {itemName ? <DetailRow label={t("关联物品")} value={itemName} /> : null}
+              {subscriptionName ? (
+                <DetailRow label={t("关联订阅")} value={subscriptionName} />
+              ) : null}
             </>
           )}
-          <DetailRow label="重复周期" value={REPEAT_LABELS[rule.repeatRule]} />
-          <DetailRow label="起始日期" value={formatFullDate(rule.startDate)} />
+          <DetailRow label={t("重复周期")} value={REPEAT_LABELS[rule.repeatRule]} />
+          <DetailRow label={t("起始日期")} value={formatFullDate(rule.startDate)} />
           <DetailRow
-            label="下次生成"
-            value={rule.enabled ? formatDateLabel(rule.nextRunOn) : "暂停中"}
+            label={t("下次生成")}
+            value={rule.enabled ? formatDateLabel(rule.nextRunOn) : t("暂停中")}
           />
         </div>
       </section>
@@ -151,7 +159,7 @@ export function AutoRuleDetailSheet({
       {rule.note ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-            备注
+            {t("备注")}
           </h3>
           <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
             {rule.note}
@@ -162,7 +170,7 @@ export function AutoRuleDetailSheet({
       {upcoming.length > 0 && rule.enabled ? (
         <section>
           <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
-            即将生成
+            {t("即将生成")}
           </h3>
           <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
             {upcoming.map((date, index) => (
@@ -175,7 +183,9 @@ export function AutoRuleDetailSheet({
                   {formatFullDate(date)}
                 </span>
                 {index === 0 ? (
-                  <span className="text-xs font-semibold text-[var(--color-tint)]">下次</span>
+                  <span className="text-xs font-semibold text-[var(--color-tint)]">
+                    {t("下次")}
+                  </span>
                 ) : null}
               </div>
             ))}
@@ -190,7 +200,7 @@ export function AutoRuleDetailSheet({
           onClick={onEdit}
           variant="secondary"
         >
-          编辑规则
+          {t("编辑规则")}
         </Button>
         <Button
           className="!bg-[var(--color-bg-surface)] !text-[var(--color-accent-expense)]"
@@ -198,7 +208,7 @@ export function AutoRuleDetailSheet({
           onClick={onDelete}
           variant="danger"
         >
-          删除规则
+          {t("删除规则")}
         </Button>
       </div>
     </div>

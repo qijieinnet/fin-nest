@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Button, Input, Surface } from "@/components/ui";
 import { API_ENDPOINTS, apiRequest, getApiErrorMessage } from "@/lib/api";
 import { useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type ChangePasswordDialogProps = {
   onClose: () => void;
@@ -39,7 +40,7 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
         body: { currentPassword, newPassword },
       }),
     onSuccess: () => {
-      showToast({ message: "密码已更新", tone: "success", title: "修改成功" });
+      showToast({ message: t("密码已更新"), tone: "success", title: t("修改成功") });
       onClose();
     },
     onError: (error) => setFormError(getApiErrorMessage(error)),
@@ -71,19 +72,19 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
   const handleSubmit = () => {
     if (mutation.isPending) return;
     if (newPassword.length < MIN_LENGTH) {
-      setFormError(`新密码至少 ${MIN_LENGTH} 位`);
+      setFormError(t("新密码至少 {MIN_LENGTH} 位", { MIN_LENGTH }));
       return;
     }
     if (newPassword.length > MAX_LENGTH) {
-      setFormError(`新密码不超过 ${MAX_LENGTH} 位`);
+      setFormError(t("新密码不超过 {MAX_LENGTH} 位", { MAX_LENGTH }));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setFormError("两次输入的新密码不一致");
+      setFormError(t("两次输入的新密码不一致"));
       return;
     }
     if (newPassword === currentPassword) {
-      setFormError("新密码不能与当前密码相同");
+      setFormError(t("新密码不能与当前密码相同"));
       return;
     }
     setFormError(null);
@@ -93,7 +94,7 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-5">
       <button
-        aria-label="取消修改密码"
+        aria-label={t("取消修改密码")}
         className="absolute inset-0 bg-black/20 backdrop-blur-[12px]"
         disabled={mutation.isPending}
         onClick={onClose}
@@ -114,9 +115,9 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
             <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-tint-soft)] text-[var(--color-tint)]">
               <KeyRound size={24} strokeWidth={2.2} />
             </span>
-            <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">修改密码</h2>
+            <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">{t("修改密码")}</h2>
             <p className="mt-1.5 text-sm leading-6 text-[var(--color-text-secondary)]">
-              修改后其他设备的登录将被退出，需重新登录。
+              {t("修改后其他设备的登录将被退出，需重新登录。")}
             </p>
           </div>
 
@@ -124,25 +125,25 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
             <Input
               autoComplete="current-password"
               autoFocus
-              label="当前密码"
+              label={t("当前密码")}
               onChange={(event) => setCurrentPassword(event.target.value)}
-              placeholder="请输入当前密码"
+              placeholder={t("请输入当前密码")}
               type="password"
               value={currentPassword}
             />
             <Input
               autoComplete="new-password"
-              label="新密码"
+              label={t("新密码")}
               onChange={(event) => setNewPassword(event.target.value)}
-              placeholder={`至少 ${MIN_LENGTH} 位`}
+              placeholder={t("至少 {MIN_LENGTH} 位", { MIN_LENGTH })}
               type="password"
               value={newPassword}
             />
             <Input
               autoComplete="new-password"
-              label="确认新密码"
+              label={t("确认新密码")}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="再次输入新密码"
+              placeholder={t("再次输入新密码")}
               type="password"
               value={confirmPassword}
             />
@@ -159,7 +160,7 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
               onClick={onClose}
               variant="secondary"
             >
-              取消
+              {t("取消")}
             </Button>
             <Button
               className="w-full justify-center"
@@ -173,7 +174,7 @@ export function ChangePasswordDialog({ onClose, open }: ChangePasswordDialogProp
               type="submit"
               variant="primary"
             >
-              {mutation.isPending ? "提交中…" : "确认修改"}
+              {mutation.isPending ? t("提交中…") : t("确认修改")}
             </Button>
           </div>
         </form>

@@ -71,6 +71,7 @@ import {
   renewalReminderDue,
   subscriptionStatus,
 } from "./_components/subscription-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 const STATUS_CLASS: Record<string, string> = {
   active: "bg-[var(--color-tint-soft)] text-[var(--color-tint)]",
@@ -78,12 +79,14 @@ const STATUS_CLASS: Record<string, string> = {
   terminated: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
 
-const SUBSCRIPTION_STATUS_OPTIONS: AssetFilterOption[] = [
-  { id: "active", label: "使用中" },
-  { id: "dueSoon", label: "即将到期" },
-];
+const SUBSCRIPTION_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "active", label: msg("使用中") },
+  { id: "dueSoon", label: msg("即将到期") },
+]);
 
-const TERMINATED_STATUS_OPTIONS: AssetFilterOption[] = [{ id: "terminated", label: "已退订" }];
+const TERMINATED_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "terminated", label: msg("已退订") },
+]);
 
 type SubscriptionGroup = {
   key: string;
@@ -140,7 +143,7 @@ function buildFilterOptions(
         label: category.name,
       })),
     ...(hasUncategorized
-      ? [{ icon: categoryGlyph(null), id: "uncategorized", label: "未分类" }]
+      ? [{ icon: categoryGlyph(null), id: "uncategorized", label: t("未分类") }]
       : []),
   ];
 }
@@ -175,7 +178,7 @@ function filterSubscriptions(
     }
 
     if (keyword) {
-      const categoryName = categoryById.get(subscription.categoryId ?? "")?.name ?? "未分类";
+      const categoryName = categoryById.get(subscription.categoryId ?? "")?.name ?? t("未分类");
       const searchable = [
         subscription.name,
         subscription.provider,
@@ -261,34 +264,37 @@ function TerminatedSubscriptionsSheet({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
       <AssetFilterSheet
-        amountLabel="费用区间"
-        categoryLabel="订阅分类"
+        amountLabel={t("费用区间")}
+        categoryLabel={t("订阅分类")}
         categoryOptions={filterOptions}
-        dateLabel="开通日期"
-        keywordPlaceholder="搜索名称、服务商、备注..."
+        dateLabel={t("开通日期")}
+        keywordPlaceholder={t("搜索名称、服务商、备注...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="订阅状态"
+        statusLabel={t("订阅状态")}
         statusOptions={TERMINATED_STATUS_OPTIONS}
         value={filterValue}
       />
 
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <div className="min-w-0 text-center">
           <h2 className="truncate text-base font-semibold text-[var(--color-text-primary)]">
-            已退订
+            {t("已退订")}
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            {filtered.length} / {subscriptions.length} 个
+            {t("{length} / {length2} 个", {
+              length: filtered.length,
+              length2: subscriptions.length,
+            })}
           </p>
         </div>
         <div className="relative">
           <IconButton
             icon={<SlidersHorizontal size={22} strokeWidth={2.2} />}
-            label="筛选已退订订阅"
+            label={t("筛选已退订订阅")}
             onClick={() => setFilterOpen(true)}
           />
           {activeFilterCount > 0 ? (
@@ -301,13 +307,13 @@ function TerminatedSubscriptionsSheet({
       </div>
 
       {subscriptions.length === 0 ? (
-        <EmptyState message="退订后的订阅会集中放在这里。" title="还没有已退订订阅" />
+        <EmptyState message={t("退订后的订阅会集中放在这里。")} title={t("还没有已退订订阅")} />
       ) : filtered.length === 0 ? (
-        <EmptyState message="调整筛选条件后再试。" title="没有符合条件的订阅" />
+        <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的订阅")} />
       ) : (
         <div className="flex flex-col gap-2.5">
           {groups.map((group) => {
-            const categoryName = group.category?.name ?? "未分类";
+            const categoryName = group.category?.name ?? t("未分类");
             const expanded = !collapsedIds.has(group.key);
             return (
               <section
@@ -327,7 +333,7 @@ function TerminatedSubscriptionsSheet({
                     {categoryName}
                   </span>
                   <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                    {group.items.length} 个
+                    {t("{length} 个", { length: group.items.length })}
                   </span>
                   <ChevronDown
                     className={cn(
@@ -427,7 +433,7 @@ export function SubscriptionsScreen() {
       }),
     onSuccess: async (_data, subscriptionId) => {
       await invalidate(subscriptionId);
-      showToast({ tone: "success", message: "已退订" });
+      showToast({ tone: "success", message: t("已退订") });
     },
   });
 
@@ -438,7 +444,7 @@ export function SubscriptionsScreen() {
       }),
     onSuccess: async (_data, subscriptionId) => {
       await invalidate(subscriptionId);
-      showToast({ tone: "success", message: "已恢复订阅" });
+      showToast({ tone: "success", message: t("已恢复订阅") });
     },
   });
 
@@ -451,7 +457,7 @@ export function SubscriptionsScreen() {
       await invalidate();
       setPendingDelete(null);
       clear();
-      showToast({ tone: "success", message: "订阅已删除" });
+      showToast({ tone: "success", message: t("订阅已删除") });
     },
   });
 
@@ -599,7 +605,7 @@ export function SubscriptionsScreen() {
     if (!ledgerId) return;
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
-      title: "订阅详情",
+      title: t("订阅详情"),
       content: (
         <SubscriptionDetailSheet
           categories={categories}
@@ -618,7 +624,7 @@ export function SubscriptionsScreen() {
 
   const renderRow = (subscription: Subscription) => {
     const category = categories.find((entry) => entry.id === subscription.categoryId);
-    const categoryName = category?.name ?? "未分类";
+    const categoryName = category?.name ?? t("未分类");
     const status = subscriptionStatus(subscription);
     const nextRenewalText = subscription.nextRenewalDate
       ? `${formatDateLabel(subscription.nextRenewalDate)}`
@@ -635,13 +641,13 @@ export function SubscriptionsScreen() {
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
-        label: `编辑${subscription.name}`,
+        label: t("编辑{name}", { name: subscription.name }),
         onClick: () => openEditor(subscription),
         tone: "neutral",
       },
       {
         icon: <Trash2 size={18} />,
-        label: `删除${subscription.name}`,
+        label: t("删除{name}", { name: subscription.name }),
         onClick: () => setPendingDelete(subscription),
         tone: "danger",
       },
@@ -676,7 +682,7 @@ export function SubscriptionsScreen() {
               </span>
               {monthly > 0n ? (
                 <span className="text-[11px] text-[var(--color-text-muted)]">
-                  月均 {formatMoney(monthly)}
+                  {t("月均 {value}", { value: formatMoney(monthly) })}
                 </span>
               ) : null}
             </span>
@@ -689,16 +695,16 @@ export function SubscriptionsScreen() {
   return (
     <MobileAppShell>
       <AssetFilterSheet
-        amountLabel="费用区间"
-        categoryLabel="订阅分类"
+        amountLabel={t("费用区间")}
+        categoryLabel={t("订阅分类")}
         categoryOptions={filterOptions}
-        dateLabel="开通日期"
-        keywordPlaceholder="搜索名称、服务商、备注..."
+        dateLabel={t("开通日期")}
+        keywordPlaceholder={t("搜索名称、服务商、备注...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="订阅状态"
+        statusLabel={t("订阅状态")}
         statusOptions={SUBSCRIPTION_STATUS_OPTIONS}
         value={filterValue}
       />
@@ -716,7 +722,7 @@ export function SubscriptionsScreen() {
         action={
           sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -725,13 +731,13 @@ export function SubscriptionsScreen() {
                   {
                     dot: activeFilterCount > 0,
                     icon: <SlidersHorizontal size={20} strokeWidth={2.2} />,
-                    label: "筛选订阅",
+                    label: t("筛选订阅"),
                     onClick: () => setFilterOpen(true),
                   },
                   {
                     dot: dueRenewalCount > 0,
                     icon: <MoreHorizontal size={22} strokeWidth={2.3} />,
-                    label: "更多选项",
+                    label: t("更多选项"),
                     onClick: () => setMoreMenuOpen((open) => !open),
                   },
                 ]}
@@ -744,7 +750,7 @@ export function SubscriptionsScreen() {
                         [
                           {
                             icon: <Plus size={18} />,
-                            label: "添加订阅",
+                            label: t("添加订阅"),
                             onSelect: () => {
                               setMoreMenuOpen(false);
                               openEditor();
@@ -757,9 +763,9 @@ export function SubscriptionsScreen() {
                     ? [
                         [
                           {
-                            description: `${dueRenewalCount} 个待确认`,
+                            description: t("{dueRenewalCount} 个待确认", { dueRenewalCount }),
                             icon: <BellRing size={18} />,
-                            label: "续费确认",
+                            label: t("续费确认"),
                             onSelect: openRenewals,
                           },
                         ],
@@ -772,18 +778,18 @@ export function SubscriptionsScreen() {
                       ) : (
                         <ChevronsDownUp size={18} />
                       ),
-                      label: allGroupsCollapsed ? "展开所有" : "折叠所有",
+                      label: allGroupsCollapsed ? t("展开所有") : t("折叠所有"),
                       onSelect: toggleAllGroups,
                     },
                     {
                       icon: <ArrowUpDown size={18} />,
-                      label: "排序",
+                      label: t("排序"),
                       onSelect: enterSortMode,
                     },
                     {
-                      description: `${terminatedSubscriptions.length} 个`,
+                      description: t("{length} 个", { length: terminatedSubscriptions.length }),
                       icon: <ArchiveX size={18} />,
-                      label: "已退订",
+                      label: t("已退订"),
                       onSelect: openTerminated,
                     },
                   ],
@@ -794,31 +800,33 @@ export function SubscriptionsScreen() {
             </div>
           )
         }
-        description="集中管理 iCloud、Claude、Apple Music 等套餐订阅，记录费用与续费日，记账时关联订阅即可归集花费。左滑可编辑或删除。"
+        description={t(
+          "集中管理 iCloud、Claude、Apple Music 等套餐订阅，记录费用与续费日，记账时关联订阅即可归集花费。左滑可编辑或删除。",
+        )}
         leading={
           isDesktop || !isPrimary || sortMode ? (
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label={sortMode ? "退出排序" : "返回"}
+              label={sortMode ? t("退出排序") : t("返回")}
               onClick={goBack}
             />
           ) : undefined
         }
         navigationTitleAlign="left"
-        title={sortMode ? "拖动排序" : "订阅管理"}
+        title={sortMode ? t("拖动排序") : t("订阅管理")}
       >
         <div className="flex flex-col gap-3 pb-22">
           {subscriptionsQuery.isPending || categoriesQuery.isPending ? (
-            <LoadingState rows={4} title="加载订阅" />
+            <LoadingState rows={4} title={t("加载订阅")} />
           ) : subscriptions.length === 0 ? (
             <EmptyState
-              message="把 iCloud、Claude、Apple Music 等订阅录入，月均花费与续费日一目了然。"
-              title="还没有添加订阅"
+              message={t("把 iCloud、Claude、Apple Music 等订阅录入，月均花费与续费日一目了然。")}
+              title={t("还没有添加订阅")}
             />
           ) : sortMode ? (
             <>
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                按住右侧图标拖动排序；订阅分类整体移动，订阅仅在所属分类内排序。
+                {t("按住右侧图标拖动排序；订阅分类整体移动，订阅仅在所属分类内排序。")}
               </p>
               <SubscriptionSortList
                 collapsedIds={collapsedIds}
@@ -831,7 +839,7 @@ export function SubscriptionsScreen() {
             <>
               <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
                 <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                  月均订阅支出
+                  {t("月均订阅支出")}
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
@@ -844,15 +852,15 @@ export function SubscriptionsScreen() {
                 <div className="mt-3.5 flex gap-7">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      使用中
+                      {t("使用中")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
-                      {filtered.length} 个
+                      {t("{length} 个", { length: filtered.length })}
                     </div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      累计花费
+                      {t("累计花费")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
                       {formatMoney(spendTotal)}
@@ -862,10 +870,10 @@ export function SubscriptionsScreen() {
               </section>
 
               {filtered.length === 0 ? (
-                <EmptyState message="调整筛选条件后再试。" title="没有符合条件的订阅" />
+                <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的订阅")} />
               ) : (
                 groups.map((group) => {
-                  const categoryName = group.category?.name ?? "未分类";
+                  const categoryName = group.category?.name ?? t("未分类");
                   const expanded = !collapsedIds.has(group.key);
 
                   return (
@@ -886,7 +894,7 @@ export function SubscriptionsScreen() {
                           {categoryName}
                         </span>
                         <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                          {group.items.length} 个
+                          {t("{length} 个", { length: group.items.length })}
                         </span>
                         <ChevronDown
                           className={cn(
@@ -916,7 +924,7 @@ export function SubscriptionsScreen() {
           <div className="relative w-[min(100vw,430px)]">
             <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">
               <button
-                aria-label="添加订阅"
+                aria-label={t("添加订阅")}
                 className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
                 onClick={() => openEditor()}
                 type="button"

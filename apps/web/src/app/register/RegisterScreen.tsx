@@ -18,6 +18,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth } from "@/providers";
+import { t } from "@/lib/i18n";
 
 const ACCOUNT_PATTERN = /^[a-zA-Z0-9_][a-zA-Z0-9_-]*$/;
 
@@ -81,13 +82,13 @@ export function RegisterScreen() {
       <AuthScreenShell
         footer={
           <>
-            已有账号？ <Link href={routes.login}>去登录</Link>
+            {t("已有账号？")} <Link href={routes.login}>{t("去登录")}</Link>
           </>
         }
         subtitle=""
-        title="创建账号"
+        title={t("创建账号")}
       >
-        <p className="auth-error">当前未开放注册，请联系管理员。</p>
+        <p className="auth-error">{t("当前未开放注册，请联系管理员。")}</p>
       </AuthScreenShell>
     );
   }
@@ -96,11 +97,11 @@ export function RegisterScreen() {
     <AuthScreenShell
       footer={
         <>
-          已有账号？ <Link href={routes.login}>去登录</Link>
+          {t("已有账号？")} <Link href={routes.login}>{t("去登录")}</Link>
         </>
       }
-      subtitle={willBeAdmin ? "注册后你将成为管理员" : ""}
-      title="创建账号"
+      subtitle={willBeAdmin ? t("注册后你将成为管理员") : ""}
+      title={t("创建账号")}
     >
       <form
         className="auth-form"
@@ -112,7 +113,7 @@ export function RegisterScreen() {
         <div className="auth-fields">
           <Input
             autoComplete="email"
-            label="邮箱"
+            label={t("邮箱")}
             name="email"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="user@example.com"
@@ -121,35 +122,37 @@ export function RegisterScreen() {
           />
           <Input
             autoComplete="username"
-            error={accountInvalid ? "仅支持字母、数字、下划线和连字符" : undefined}
-            label="账号"
+            error={accountInvalid ? t("仅支持字母、数字、下划线和连字符") : undefined}
+            label={t("账号")}
             name="account"
             onChange={(event) => setAccount(event.target.value)}
-            placeholder="3-32 位，用于登录"
+            placeholder={t("3-32 位，用于登录")}
             value={account}
           />
           <Input
-            label="昵称"
+            label={t("昵称")}
             name="alias"
             onChange={(event) => setAlias(event.target.value)}
-            placeholder="展示名称"
+            placeholder={t("展示名称")}
             value={alias}
           />
           <Input
             autoComplete="new-password"
-            label="密码"
+            label={t("密码")}
             name="password"
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="至少 8 位"
+            placeholder={t("至少 8 位")}
             type="password"
             value={password}
           />
         </div>
         {mutation.isError ? (
-          <p className="auth-error">{getApiErrorMessage(mutation.error, "注册失败，请稍后重试")}</p>
+          <p className="auth-error">
+            {getApiErrorMessage(mutation.error, t("注册失败，请稍后重试"))}
+          </p>
         ) : null}
         <Button className="auth-submit" disabled={!canSubmit} type="submit">
-          {mutation.isPending ? "注册中…" : "注册"}
+          {mutation.isPending ? t("注册中…") : t("注册")}
         </Button>
       </form>
     </AuthScreenShell>

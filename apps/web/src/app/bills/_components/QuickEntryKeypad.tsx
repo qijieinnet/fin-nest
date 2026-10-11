@@ -9,6 +9,7 @@ import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
 import { writeQuickEntrySeed } from "./_model/quick-entry-handoff";
 import { templateToSeed } from "./_model/template-seed";
+import { t } from "@/lib/i18n";
 
 /** 键盘收起动画时长（--motion-duration-normal 220ms）+ 一点余量，跑完再重置表单。 */
 const RESET_DELAY_MS = 320;
@@ -73,7 +74,7 @@ export function QuickEntryKeypad({ onClose, open }: { onClose: () => void; open:
 
   const openQuickTemplates = useCallback(() => {
     push({
-      title: "快捷记账",
+      title: t("快捷记账"),
       content: <QuickTemplateSheet directRunEnabled={false} onSelectTemplate={applyTemplate} />,
     });
   }, [applyTemplate, push]);

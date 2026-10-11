@@ -28,6 +28,7 @@ import { useLedger, useSheetStack, useToast } from "@/providers";
 import { ImportPreviewSheet } from "./_components/ImportPreviewSheet";
 import { RestoreConfirmSheet } from "./_components/RestoreConfirmSheet";
 import type { ImportResult } from "./types";
+import { t } from "@/lib/i18n";
 
 type ExportKind = "json" | "excel" | "template";
 
@@ -51,15 +52,15 @@ export function ImportExportScreen() {
   const runDownload = async (kind: ExportKind) => {
     if (!ledgerId || downloading) return;
     const paths: Record<ExportKind, { path: string; fallback: string }> = {
-      json: { path: ledgerExportJsonPath(ledgerId), fallback: "fin-nest-备份.json" },
-      excel: { path: ledgerExportExcelPath(ledgerId), fallback: "fin-nest-导出.xlsx" },
-      template: { path: ledgerExportExcelTemplatePath(ledgerId), fallback: "fin-nest-模板.xlsx" },
+      json: { path: ledgerExportJsonPath(ledgerId), fallback: t("fin-nest-备份.json") },
+      excel: { path: ledgerExportExcelPath(ledgerId), fallback: t("fin-nest-导出.xlsx") },
+      template: { path: ledgerExportExcelTemplatePath(ledgerId), fallback: t("fin-nest-模板.xlsx") },
     };
     setDownloading(kind);
     try {
       await downloadFile(paths[kind].path, paths[kind].fallback);
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "导出失败，请稍后重试") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("导出失败，请稍后重试")) });
     } finally {
       setDownloading(null);
     }
@@ -100,64 +101,64 @@ export function ImportExportScreen() {
   return (
     <MobileAppShell>
       <MobilePage
-        description="备份账本数据，或在 Excel 中记账后导入"
+        description={t("备份账本数据，或在 Excel 中记账后导入")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="导入导出"
+        title={t("导入导出")}
       >
         <div className="flex flex-col gap-4 pb-6">
-          <SectionTitle>导出</SectionTitle>
+          <SectionTitle>{t("导出")}</SectionTitle>
           <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
             <EntryRow
-              description="全量备份当前账本的所有数据和关联关系，可用于恢复"
+              description={t("全量备份当前账本的所有数据和关联关系，可用于恢复")}
               icon={<DatabaseBackup size={20} />}
               onClick={() => void runDownload("json")}
-              title="下载 JSON 备份"
-              trailing={downloading === "json" ? "导出中…" : undefined}
+              title={t("下载 JSON 备份")}
+              trailing={downloading === "json" ? t("导出中…") : undefined}
             />
             <EntryRow
-              description="流水、分类、账户、保险、物品等分表导出，便于查看"
+              description={t("流水、分类、账户、保险、物品等分表导出，便于查看")}
               icon={<FileSpreadsheet size={20} />}
               onClick={() => void runDownload("excel")}
-              title="导出 Excel"
-              trailing={downloading === "excel" ? "导出中…" : undefined}
+              title={t("导出 Excel")}
+              trailing={downloading === "excel" ? t("导出中…") : undefined}
             />
             <EntryRow
-              description="带下拉选项的空白流水表，可在 Excel 中继续记账"
+              description={t("带下拉选项的空白流水表，可在 Excel 中继续记账")}
               icon={<Table size={20} />}
               last
               onClick={() => void runDownload("template")}
-              title="下载 Excel 模板"
-              trailing={downloading === "template" ? "导出中…" : undefined}
+              title={t("下载 Excel 模板")}
+              trailing={downloading === "template" ? t("导出中…") : undefined}
             />
           </section>
 
-          <SectionTitle>导入</SectionTitle>
+          <SectionTitle>{t("导入")}</SectionTitle>
           <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
             <EntryRow
-              description="识别 Excel 中新增的流水和分类、账户等基础数据（先预览再导入）"
+              description={t("识别 Excel 中新增的流水和分类、账户等基础数据（先预览再导入）")}
               icon={<FileUp size={20} />}
               onClick={() => excelInputRef.current?.click()}
-              title="导入 Excel"
-              trailing={previewExcel.isPending ? "解析中…" : undefined}
+              title={t("导入 Excel")}
+              trailing={previewExcel.isPending ? t("解析中…") : undefined}
             />
             <EntryRow
               danger
-              description="清空当前账本后从 JSON 备份完整恢复（仅账本所有者）"
+              description={t("清空当前账本后从 JSON 备份完整恢复（仅账本所有者）")}
               icon={<RotateCcw size={20} />}
               last
               onClick={() => jsonInputRef.current?.click()}
-              title="从备份恢复"
+              title={t("从备份恢复")}
             />
           </section>
 
           <p className="px-1 text-xs text-[var(--color-text-muted)]">
-            Excel 导入只处理 ID 列为空的新增行；已有行的修改和删除不会同步。备份不包含附件文件。
+            {t("Excel 导入只处理 ID 列为空的新增行；已有行的修改和删除不会同步。备份不包含附件文件。")}
           </p>
         </div>
 

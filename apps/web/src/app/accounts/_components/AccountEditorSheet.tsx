@@ -19,6 +19,7 @@ import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { ACCOUNT_GROUPS } from "./account-utils";
+import { t } from "@/lib/i18n";
 
 type AccountEditorSheetProps = {
   account?: Account;
@@ -31,7 +32,7 @@ function parseOptionalDay(value: string, label: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   const day = Number.parseInt(trimmed, 10);
-  if (!Number.isInteger(day) || day < 1 || day > 31) throw new Error(`${label}需为 1-31 的整数`);
+  if (!Number.isInteger(day) || day < 1 || day > 31) throw new Error(t("{label}需为 1-31 的整数", { label }));
   return day;
 }
 
@@ -103,20 +104,20 @@ function DaySelectRow({
         type="button"
       >
         <span>{label}</span>
-        <strong>{value ? `每月 ${value} 日` : "未设置"}</strong>
+        <strong>{value ? t("每月 {value} 日", { value }) : t("未设置")}</strong>
         <ChevronRight size={18} />
       </button>
       <PopoverMenu
         groups={[
           [
             {
-              label: "不设置",
+              label: t("不设置"),
               onSelect: () => onChange(""),
               selected: !value,
             },
           ],
           dayOptions.map((day) => ({
-            label: `每月 ${day} 日`,
+            label: t("每月 {day} 日", { day }),
             onSelect: () => onChange(day),
             selected: value === day,
           })),
@@ -160,7 +161,7 @@ function OptionalDateCard({
       type="button"
     >
       <span>{label}</span>
-      <strong>未设置</strong>
+      <strong>{t("未设置")}</strong>
       <ChevronRight size={18} />
     </button>
   );
@@ -197,20 +198,20 @@ export function AccountEditorSheet({
   const people = peopleQuery.data ?? [];
   // 归档的人员不在 /people 里，但账户可能还挂着它：补一条进选项，免得显示成「未指定」。
   const personOptions = account?.person && !people.some((item) => item.id === account.person!.id)
-    ? [...people, { id: account.person.id, name: `${account.person.name}（已归档）` }]
+    ? [...people, { id: account.person.id, name: t("{name}（已归档）", { name: account.person.name }) }]
     : people;
   const selectedPersonName =
-    personOptions.find((item) => item.id === personId)?.name ?? "未指定";
+    personOptions.find((item) => item.id === personId)?.name ?? t("未指定");
 
   const trimmedName = name.trim();
   const canSubmit = trimmedName.length > 0;
   const title = isSubAccountMode
     ? subAccount
-      ? "编辑子账户"
-      : "添加子账户"
+      ? t("编辑子账户")
+      : t("添加子账户")
     : isEditing
-      ? "编辑账户"
-      : "新建账户";
+      ? t("编辑账户")
+      : t("新建账户");
 
   const save = useMutation({
     mutationFn: async () => {
@@ -225,7 +226,7 @@ export function AccountEditorSheet({
         const balanceParsed = balance.trim()
           ? parseMoneyToMicros(balance, { allowNegative: true, decimalPlaces })
           : null;
-        if (balanceParsed && !balanceParsed.ok) throw new Error("余额格式不正确");
+        if (balanceParsed && !balanceParsed.ok) throw new Error(t("余额格式不正确"));
         return apiRequest<SubAccount>(
           ledgerApiPath(ledgerId, `/accounts/${parentAccount.id}/sub-accounts`),
           {
@@ -237,9 +238,9 @@ export function AccountEditorSheet({
       }
 
       const limitParsed = creditLimit.trim() ? parseMoneyToMicros(creditLimit, { decimalPlaces }) : null;
-      if (limitParsed && !limitParsed.ok) throw new Error("信用额度格式不正确");
-      const billDayValue = parseOptionalDay(billDay, "账单日");
-      const repayDayValue = parseOptionalDay(repayDay, "还款日");
+      if (limitParsed && !limitParsed.ok) throw new Error(t("信用额度格式不正确"));
+      const billDayValue = parseOptionalDay(billDay, t("账单日"));
+      const repayDayValue = parseOptionalDay(repayDay, t("还款日"));
 
       const shared = {
         name: trimmedName,
@@ -266,7 +267,7 @@ export function AccountEditorSheet({
       const balanceParsed = balance.trim()
         ? parseMoneyToMicros(balance, { allowNegative: true })
         : null;
-      if (balanceParsed && !balanceParsed.ok) throw new Error("余额格式不正确");
+      if (balanceParsed && !balanceParsed.ok) throw new Error(t("余额格式不正确"));
       return apiRequest<Account>(ledgerApiPath(ledgerId, "/accounts"), {
         method: "POST",
         body: { ...shared, type, balanceMicros: balanceParsed?.amountMicros },
@@ -286,11 +287,11 @@ export function AccountEditorSheet({
         tone: "success",
         message: isSubAccountMode
           ? isEditing
-            ? "子账户已更新"
-            : "子账户已添加"
+            ? t("子账户已更新")
+            : t("子账户已添加")
           : isEditing
-            ? "账户已更新"
-            : "账户已添加",
+            ? t("账户已更新")
+            : t("账户已添加"),
       });
       pop();
     },
@@ -303,7 +304,7 @@ export function AccountEditorSheet({
     disabled: isEditing && group.key !== type,
   }));
   const selectedTypeName =
-    ACCOUNT_GROUPS.find((group) => group.key === type)?.name ?? "选择账户类型";
+    ACCOUNT_GROUPS.find((group) => group.key === type)?.name ?? t("选择账户类型");
 
   return (
     <form
@@ -314,14 +315,14 @@ export function AccountEditorSheet({
       }}
     >
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
           {title}
         </h2>
         <IconButton
           disabled={!canSubmit || save.isPending}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label={isSubAccountMode ? "保存子账户" : "保存账户"}
+          label={isSubAccountMode ? t("保存子账户") : t("保存账户")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -345,10 +346,10 @@ export function AccountEditorSheet({
                 tabIndex={0}
               >
                 <span>
-                  账户类型
+                  {t("账户类型")}
                   {isEditing ? (
                     <span onClick={(event) => event.stopPropagation()}>
-                      <InlineHint text="账户类型创建后不可修改" />
+                      <InlineHint text={t("账户类型创建后不可修改")} />
                     </span>
                   ) : null}
                 </span>
@@ -379,7 +380,7 @@ export function AccountEditorSheet({
             onClick={() => setEmojiOpen(true)}
             type="button"
           >
-            <span>图标</span>
+            <span>{t("图标")}</span>
             <strong>{icon}</strong>
             <ChevronRight size={18} />
           </button>
@@ -387,10 +388,10 @@ export function AccountEditorSheet({
 
         <div className="transaction-form__card">
           <FieldRow
-            label={isSubAccountMode ? "子账户名称" : "账户名称"}
+            label={isSubAccountMode ? t("子账户名称") : t("账户名称")}
             maxLength={80}
             onChange={(event) => setName(event.target.value)}
-            placeholder={isSubAccountMode ? "如：应急金" : "如：招商银行"}
+            placeholder={isSubAccountMode ? t("如：应急金") : t("如：招商银行")}
             value={name}
           />
         </div>
@@ -403,7 +404,7 @@ export function AccountEditorSheet({
                 onClick={() => setPersonMenuOpen((open) => !open)}
                 type="button"
               >
-                <span>归属人员</span>
+                <span>{t("归属人员")}</span>
                 <strong>{selectedPersonName}</strong>
                 <ChevronRight size={18} />
               </button>
@@ -411,7 +412,7 @@ export function AccountEditorSheet({
                 groups={[
                   [
                     {
-                      label: "未指定",
+                      label: t("未指定"),
                       onSelect: () => setPersonId(null),
                       selected: personId === null,
                     },
@@ -433,7 +434,7 @@ export function AccountEditorSheet({
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="初始余额（选填）"
+              label={t("初始余额（选填）")}
               onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -446,7 +447,7 @@ export function AccountEditorSheet({
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="信用额度"
+              label={t("信用额度")}
               onChange={(event) => setCreditLimit(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -457,7 +458,7 @@ export function AccountEditorSheet({
                 <span className="transaction-form__divider" />
                 <FieldRow
                   inputMode="decimal"
-                  label="已用额度"
+                  label={t("已用额度")}
                   onChange={(event) => setBalance(event.target.value)}
                   placeholder="0.00"
                   prefix="¥"
@@ -470,9 +471,9 @@ export function AccountEditorSheet({
 
         {!isSubAccountMode && type === "credit" ? (
           <div className="transaction-form__card">
-            <DaySelectRow label="账单日" onChange={setBillDay} value={billDay} />
+            <DaySelectRow label={t("账单日")} onChange={setBillDay} value={billDay} />
             <span className="transaction-form__divider" />
-            <DaySelectRow label="还款日" onChange={setRepayDay} value={repayDay} />
+            <DaySelectRow label={t("还款日")} onChange={setRepayDay} value={repayDay} />
           </div>
         ) : null}
 
@@ -481,7 +482,7 @@ export function AccountEditorSheet({
             <div className="transaction-form__card">
               <FieldRow
                 inputMode="decimal"
-                label="当前余额"
+                label={t("当前余额")}
                 onChange={(event) => setBalance(event.target.value)}
                 placeholder="0.00"
                 prefix="¥"
@@ -499,7 +500,7 @@ export function AccountEditorSheet({
           <div className="transaction-form__card">
             <FieldRow
               inputMode="decimal"
-              label="当前市值"
+              label={t("当前市值")}
               onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
               prefix="¥"
@@ -514,7 +515,7 @@ export function AccountEditorSheet({
               <>
                 <FieldRow
                   inputMode="decimal"
-                  label={type === "receivable" ? "待收金额" : "待还金额"}
+                  label={type === "receivable" ? t("待收金额") : t("待还金额")}
                   onChange={(event) => setBalance(event.target.value)}
                   placeholder="0.00"
                   prefix="¥"
@@ -524,17 +525,17 @@ export function AccountEditorSheet({
               </>
             ) : null}
             <FieldRow
-              label="对方"
+              label={t("对方")}
               maxLength={80}
               onChange={(event) => setCounterparty(event.target.value)}
-              placeholder="姓名 / 机构"
+              placeholder={t("姓名 / 机构")}
               value={counterparty}
             />
           </div>
         ) : null}
 
         {!isSubAccountMode && isLend ? (
-          <OptionalDateCard label="到期日" onChange={setDueDate} value={dueDate} />
+          <OptionalDateCard label={t("到期日")} onChange={setDueDate} value={dueDate} />
         ) : null}
       </div>
 
@@ -542,7 +543,7 @@ export function AccountEditorSheet({
         onClose={() => setEmojiOpen(false)}
         onSelect={setIcon}
         open={emojiOpen}
-        title={isSubAccountMode ? "选择子账户图标" : "选择账户图标"}
+        title={isSubAccountMode ? t("选择子账户图标") : t("选择账户图标")}
         value={icon}
       />
     </form>

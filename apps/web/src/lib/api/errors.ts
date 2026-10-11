@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 export type ApiErrorPayload = {
   code?: string;
   message?: string;
@@ -23,9 +24,9 @@ export function isApiClientError(error: unknown): error is ApiClientError {
 }
 
 /**
- * 取面向用户的错误文案：后端统一返回中文 `message`，网络等异常回退到 fallback。
+ * 取面向用户的错误文案：后端按请求的 `Accept-Language` 返回对应语言的 `message`，网络等异常回退到 fallback。
  */
-export function getApiErrorMessage(error: unknown, fallback = "操作失败，请稍后重试"): string {
+export function getApiErrorMessage(error: unknown, fallback = t("操作失败，请稍后重试")): string {
   if (isApiClientError(error)) {
     return error.message || fallback;
   }

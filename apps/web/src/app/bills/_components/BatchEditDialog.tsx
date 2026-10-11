@@ -11,6 +11,7 @@ import type {
   TransactionType,
 } from "@/lib/api";
 import { moneyAccountOptions, resolveAccountSelection } from "@/lib/data/options";
+import { localized, msg, t } from "@/lib/i18n";
 
 /** 批量修改单字段的补丁（不含 transactionIds，由调用方补齐）。 */
 export type BatchFieldPatch = Omit<BatchUpdateTransactionsInput, "transactionIds">;
@@ -30,20 +31,20 @@ type BatchEditDialogProps = {
   onSubmit: (patch: BatchFieldPatch) => void;
 };
 
-const FIELD_TITLE: Record<BatchUpdateField, string> = {
-  type: "批量修改类型",
-  category: "批量修改分类",
-  account: "批量修改账户",
-  person: "批量修改人员",
-  occurredOn: "批量修改日期",
-  note: "批量修改备注",
-};
+const FIELD_TITLE: Record<BatchUpdateField, string> = localized({
+  type: msg("批量修改类型"),
+  category: msg("批量修改分类"),
+  account: msg("批量修改账户"),
+  person: msg("批量修改人员"),
+  occurredOn: msg("批量修改日期"),
+  note: msg("批量修改备注"),
+});
 
-const TYPE_OPTIONS: Array<{ id: TransactionType; label: string }> = [
-  { id: "expense", label: "支出" },
-  { id: "income", label: "收入" },
-  { id: "transfer", label: "转账" },
-];
+const TYPE_OPTIONS: Array<{ id: TransactionType; label: string }> = localized([
+  { id: "expense", label: msg("支出") },
+  { id: "income", label: msg("收入") },
+  { id: "transfer", label: msg("转账") },
+]);
 
 function todayKey(): string {
   const now = new Date();
@@ -195,22 +196,22 @@ function BatchEditBody({
 
   const skipHint =
     field === "type"
-      ? "（类型相同或含关联的记录将自动跳过）"
+      ? t("（类型相同或含关联的记录将自动跳过）")
       : field === "category" || (field === "account" && !allTransfer)
-        ? "（转账记录将自动跳过）"
+        ? t("（转账记录将自动跳过）")
         : "";
 
   return (
     <div className="batch-edit">
       <p className="batch-edit__hint">
-        已选 {count} 笔{skipHint}
+        {t("已选 {count} 笔{skipHint}", { count, skipHint })}
       </p>
 
       <div className="batch-edit__control">
         {field === "type" ? (
           <div className="batch-edit__pair">
             <label className="batch-edit__field">
-              <span className="batch-edit__field-label">目标类型</span>
+              <span className="batch-edit__field-label">{t("目标类型")}</span>
               <FormSelect
                 onChange={(value) => {
                   setTypeValue(value as TransactionType | null);
@@ -220,27 +221,27 @@ function BatchEditBody({
                   setToValue(null);
                 }}
                 options={TYPE_OPTIONS}
-                placeholder="选择类型"
+                placeholder={t("选择类型")}
                 value={typeValue}
               />
             </label>
             {typeValue === "transfer" ? (
               <>
                 <label className="batch-edit__field">
-                  <span className="batch-edit__field-label">转出账户</span>
+                  <span className="batch-edit__field-label">{t("转出账户")}</span>
                   <AccountSelect
                     onChange={setFromValue}
                     options={accountSelectOptions}
-                    title="选择转出账户"
+                    title={t("选择转出账户")}
                     value={fromValue}
                   />
                 </label>
                 <label className="batch-edit__field">
-                  <span className="batch-edit__field-label">转入账户</span>
+                  <span className="batch-edit__field-label">{t("转入账户")}</span>
                   <AccountSelect
                     onChange={setToValue}
                     options={accountSelectOptions}
-                    title="选择转入账户"
+                    title={t("选择转入账户")}
                     value={toValue}
                   />
                 </label>
@@ -248,7 +249,7 @@ function BatchEditBody({
             ) : null}
             {typeValue === "expense" || typeValue === "income" ? (
               <label className="batch-edit__field">
-                <span className="batch-edit__field-label">分类</span>
+                <span className="batch-edit__field-label">{t("分类")}</span>
                 <CategorySelect
                   onChange={setSelectValue}
                   options={typeCategoryOptions}
@@ -264,24 +265,24 @@ function BatchEditBody({
         {field === "account" && transferAccount ? (
           <div className="batch-edit__pair">
             <label className="batch-edit__field">
-              <span className="batch-edit__field-label">转出账户</span>
+              <span className="batch-edit__field-label">{t("转出账户")}</span>
               <AccountSelect
                 allowClear
                 onChange={setFromValue}
                 options={accountSelectOptions}
-                placeholder="不修改"
-                title="选择转出账户"
+                placeholder={t("不修改")}
+                title={t("选择转出账户")}
                 value={fromValue}
               />
             </label>
             <label className="batch-edit__field">
-              <span className="batch-edit__field-label">转入账户</span>
+              <span className="batch-edit__field-label">{t("转入账户")}</span>
               <AccountSelect
                 allowClear
                 onChange={setToValue}
                 options={accountSelectOptions}
-                placeholder="不修改"
-                title="选择转入账户"
+                placeholder={t("不修改")}
+                title={t("选择转入账户")}
                 value={toValue}
               />
             </label>
@@ -299,7 +300,7 @@ function BatchEditBody({
             allowClear
             onChange={setSelectValue}
             options={personOptions}
-            placeholder="选择人员（留空为清除）"
+            placeholder={t("选择人员（留空为清除）")}
             value={selectValue}
           />
         ) : null}
@@ -308,11 +309,11 @@ function BatchEditBody({
         ) : null}
         {field === "note" ? (
           <Input
-            aria-label="备注"
-            label="备注"
+            aria-label={t("备注")}
+            label={t("备注")}
             maxLength={240}
             onChange={(event) => setNoteValue(event.target.value)}
-            placeholder="添加备注（留空为清除）…"
+            placeholder={t("添加备注（留空为清除）…")}
             value={noteValue}
           />
         ) : null}
@@ -320,10 +321,10 @@ function BatchEditBody({
 
       <div className="batch-edit__footer">
         <Button onClick={onClose} type="button" variant="secondary">
-          取消
+          {t("取消")}
         </Button>
         <Button disabled={!canSubmit} onClick={handleSubmit} type="button" variant="primary">
-          {submitting ? "修改中…" : "确定"}
+          {submitting ? t("修改中…") : t("确定")}
         </Button>
       </div>
     </div>

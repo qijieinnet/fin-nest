@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/format/class-names";
 import { categoryOptions, moneyAccountOptions, personOptions } from "@/lib/data/options";
 import { amount, TYPE_COLOR, TYPE_LABEL, useCardCurrency } from "./AiCards";
+import { t } from "@/lib/i18n";
 
 type DraftCard = Extract<AiCard, { kind: "transaction_draft" }>;
 
@@ -93,14 +94,14 @@ function blockedTag(card: DraftCard): string {
   const reason = card.confirmationBlockedReason ?? "";
   const lacksCategory = card.draft.type !== "transfer" && !card.draft.categoryId;
   const lacksAccount = reason.includes("账户");
-  if (lacksCategory && lacksAccount) return "缺分类和账户";
-  return lacksAccount ? "缺账户" : "缺分类";
+  if (lacksCategory && lacksAccount) return t("缺分类和账户");
+  return lacksAccount ? t("缺账户") : t("缺分类");
 }
 
 /** 底部按钮的汇总说法：都缺同一样就点名，混着缺就笼统说「信息不全」。 */
 function blockedText(entries: DraftEntry[]): string {
   const tags = new Set(entries.map((entry) => blockedTag(entry.card)));
-  return tags.size === 1 ? [...tags][0]! : "信息不全";
+  return tags.size === 1 ? [...tags][0]! : t("信息不全");
 }
 
 function categoryText(draft: AiDraftFields): string | undefined {
@@ -112,7 +113,7 @@ function categoryText(draft: AiDraftFields): string | undefined {
 
 /** 账户 + 非默认子账户：同一银行下两个子账户互转时，只写账户名会变成「招行 → 招行」。 */
 function accountLabel(account?: string, subAccount?: string): string {
-  if (!account) return "未指定";
+  if (!account) return t("未指定");
   return subAccount ? `${account}·${subAccount}` : account;
 }
 
@@ -239,24 +240,28 @@ export function AiDraftBatchPanel({
     });
 
   const title = disabled
-    ? `正在识别… 已生成 ${entries.length} 笔`
+    ? t("正在识别… 已生成 {length} 笔", { length: entries.length })
     : settled
-      ? "账单草稿已处理"
-      : `${proposed.length} 笔待确认`;
+      ? t("账单草稿已处理")
+      : t("{length} 笔待确认", { length: proposed.length });
   const meta = settled
     ? [
-        confirmedCount > 0 ? `已入账 ${confirmedCount} 笔` : "",
-        voidedCount > 0 ? `已作废 ${voidedCount} 笔` : "",
+        confirmedCount > 0 ? t("已入账 {confirmedCount} 笔", { confirmedCount }) : "",
+        voidedCount > 0 ? t("已作废 {voidedCount} 笔", { voidedCount }) : "",
       ]
         .filter(Boolean)
         .join(" · ")
     : disabled
-      ? "生成完后可勾选、编辑并批量入账"
+      ? t("生成完后可勾选、编辑并批量入账")
       : [
-          `已选 ${selectedEntries.length} 笔`,
-          totals.expense > 0n ? `支出 ${amount(totals.expense.toString(), currency)}` : "",
-          totals.income > 0n ? `收入 ${amount(totals.income.toString(), currency)}` : "",
-          confirmedCount > 0 ? `已入账 ${confirmedCount}` : "",
+          t("已选 {length} 笔", { length: selectedEntries.length }),
+          totals.expense > 0n
+            ? t("支出 {value}", { value: amount(totals.expense.toString(), currency) })
+            : "",
+          totals.income > 0n
+            ? t("收入 {value}", { value: amount(totals.income.toString(), currency) })
+            : "",
+          confirmedCount > 0 ? t("已入账 {confirmedCount}", { confirmedCount }) : "",
         ]
           .filter(Boolean)
           .join(" · ");
@@ -279,7 +284,7 @@ export function AiDraftBatchPanel({
             onClick={() => setSettledExpanded((open) => !open)}
             type="button"
           >
-            {settledExpanded ? "收起" : "明细"}
+            {settledExpanded ? t("收起") : t("明细")}
           </button>
         ) : proposed.length > 0 && !disabled ? (
           <button
@@ -290,7 +295,7 @@ export function AiDraftBatchPanel({
             }
             type="button"
           >
-            {allSelected ? "全不选" : "全选"}
+            {allSelected ? t("全不选") : t("全选")}
           </button>
         ) : null}
       </div>
@@ -316,7 +321,7 @@ export function AiDraftBatchPanel({
             <IconButton
               disabled={!interactive}
               icon={<MoreHorizontal size={20} />}
-              label="更多操作"
+              label={t("更多操作")}
               onClick={() => setMenuOpen((open) => !open)}
             />
             <PopoverMenu
@@ -325,11 +330,13 @@ export function AiDraftBatchPanel({
                 [
                   {
                     icon: <SlidersHorizontal size={18} />,
-                    label: "批量设置",
+                    label: t("批量设置"),
                     description:
                       selectedEntries.length > 0
-                        ? `统一修改已选 ${selectedEntries.length} 笔的分类、账户或日期`
-                        : "先勾选要修改的草稿",
+                        ? t("统一修改已选 {length} 笔的分类、账户或日期", {
+                            length: selectedEntries.length,
+                          })
+                        : t("先勾选要修改的草稿"),
                     disabled: selectedEntries.length === 0,
                     onSelect: () => setBulkOpen(true),
                   },
@@ -338,7 +345,7 @@ export function AiDraftBatchPanel({
                   {
                     danger: true,
                     icon: <Trash2 size={18} />,
-                    label: `作废已选 ${selectedEntries.length} 笔`,
+                    label: t("作废已选 {length} 笔", { length: selectedEntries.length }),
                     disabled: selectedEntries.length === 0,
                     onSelect: () => onVoid(selectedEntries.map((entry) => entry.cardIndex)),
                   },
@@ -355,10 +362,13 @@ export function AiDraftBatchPanel({
             onClick={() => onConfirm(selectedEntries.map((entry) => entry.cardIndex))}
           >
             {blockedSelected.length > 0
-              ? `${blockedSelected.length} 笔${blockedText(blockedSelected)}，点开补充`
+              ? t("{length} 笔{value}，点开补充", {
+                  length: blockedSelected.length,
+                  value: blockedText(blockedSelected),
+                })
               : selectedEntries.length > 0
-                ? `确认入账 ${selectedEntries.length} 笔`
-                : "勾选要入账的草稿"}
+                ? t("确认入账 {length} 笔", { length: selectedEntries.length })
+                : t("勾选要入账的草稿")}
           </Button>
         </div>
       ) : null}
@@ -404,7 +414,7 @@ function DraftRowItem({
       ? `${shortDate(draft.occurredOn)} ${draft.occurredTime}`
       : shortDate(draft.occurredOn),
     draft.personName,
-    draft.note ? (category ?? (draft.type === "transfer" ? undefined : "未分类")) : undefined,
+    draft.note ? (category ?? (draft.type === "transfer" ? undefined : t("未分类"))) : undefined,
     accountText(draft),
   ]
     .filter(Boolean)
@@ -415,7 +425,7 @@ function DraftRowItem({
       {proposed ? (
         <button
           aria-checked={checked}
-          aria-label={checked ? "取消选择" : "选择"}
+          aria-label={checked ? t("取消选择") : t("选择")}
           className="ai-batch__check-hit"
           disabled={!interactive}
           onClick={onToggle}
@@ -428,7 +438,7 @@ function DraftRowItem({
         </button>
       ) : (
         <span
-          aria-label={voided ? "已作废" : "已入账"}
+          aria-label={voided ? t("已作废") : t("已入账")}
           className={cn("ai-batch__state", voided ? "is-voided" : "is-confirmed")}
         >
           {voided ? <Minus size={13} strokeWidth={3} /> : <Check size={13} strokeWidth={3} />}
@@ -453,12 +463,12 @@ function DraftRowItem({
             <span className="ai-batch__tags">
               {blocked ? <span className="ai-tag ai-tag--danger">{blockedTag(card)}</span> : null}
               {card.possibleDuplicate ? (
-                <span className="ai-tag ai-tag--warn">疑似重复</span>
+                <span className="ai-tag ai-tag--warn">{t("疑似重复")}</span>
               ) : null}
-              {card.originalAmountMicros ? <span className="ai-tag">已取整</span> : null}
+              {card.originalAmountMicros ? <span className="ai-tag">{t("已取整")}</span> : null}
             </span>
           ) : (
-            <span className="ai-batch__row-status">{voided ? "已作废" : "已入账"}</span>
+            <span className="ai-batch__row-status">{voided ? t("已作废") : t("已入账")}</span>
           )}
         </span>
       </button>
@@ -545,7 +555,7 @@ function BulkEditSheet({
     return result;
   }, [entries, categoryId, categoryType, accountId, personId, occurredOn, categories, accounts]);
   const peopleOptions = useMemo(
-    () => [{ id: KEEP_PERSON, label: "不修改" }, ...personOptions(people)],
+    () => [{ id: KEEP_PERSON, label: t("不修改") }, ...personOptions(people)],
     [people],
   );
 
@@ -556,20 +566,24 @@ function BulkEditSheet({
       await onSave(patches);
       onClose();
     } catch (saveError) {
-      setError(getApiErrorMessage(saveError, "保存失败，请重试"));
+      setError(getApiErrorMessage(saveError, t("保存失败，请重试")));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <BottomSheet onClose={onClose} open={open} title={`批量设置 · 已选 ${entries.length} 笔`}>
+    <BottomSheet
+      onClose={onClose}
+      open={open}
+      title={t("批量设置 · 已选 {length} 笔", { length: entries.length })}
+    >
       <div className="ai-batch__editor">
         {expenseCount > 0 && incomeCount > 0 ? (
           <Tabs
             items={[
-              { label: `支出分类 · ${expenseCount} 笔`, value: "expense" },
-              { label: `收入分类 · ${incomeCount} 笔`, value: "income" },
+              { label: t("支出分类 · {expenseCount} 笔", { expenseCount }), value: "expense" },
+              { label: t("收入分类 · {incomeCount} 笔", { incomeCount }), value: "income" },
             ]}
             onValueChange={(type) => {
               setCategoryType(type as "expense" | "income");
@@ -583,35 +597,35 @@ function BulkEditSheet({
             <CategorySelectRow
               onValueChange={setCategoryId}
               options={options}
-              placeholder="不修改"
+              placeholder={t("不修改")}
               value={categoryId}
             />
             <AccountSelectRow
-              label="账户"
+              label={t("账户")}
               onValueChange={setAccountId}
               options={accountOptions}
-              placeholder="不修改"
+              placeholder={t("不修改")}
               value={accountId}
             />
           </>
         ) : null}
         {people.length > 0 ? (
           <SearchableOptionSelectRow
-            label="人员"
+            label={t("人员")}
             onValueChange={(id) => setPersonId(id === KEEP_PERSON ? null : id)}
             options={peopleOptions}
-            placeholder="不修改"
-            searchPlaceholder="搜索人员"
+            placeholder={t("不修改")}
+            searchPlaceholder={t("搜索人员")}
             value={personId}
           />
         ) : null}
         {occurredOn ? (
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
-              <DateWheelPicker label="日期" onValueChange={setOccurredOn} value={occurredOn} />
+              <DateWheelPicker label={t("日期")} onValueChange={setOccurredOn} value={occurredOn} />
             </div>
             <button className="ai-batch__link" onClick={() => setOccurredOn(null)} type="button">
-              不修改
+              {t("不修改")}
             </button>
           </div>
         ) : (
@@ -620,17 +634,21 @@ function BulkEditSheet({
             onClick={() => setOccurredOn(entries[0]?.card.draft.occurredOn ?? null)}
             type="button"
           >
-            <span>日期</span>
-            <strong>不修改</strong>
+            <span>{t("日期")}</span>
+            <strong>{t("不修改")}</strong>
             <ChevronRight size={18} />
           </button>
         )}
         <p className="ai-batch__hint">
-          分类只改同方向的草稿{accountId ? "，账户不改转账" : ""}；没动的项保持原样。
+          {t("分类只改同方向的草稿{value}；没动的项保持原样。", {
+            value: accountId ? t("，账户不改转账") : "",
+          })}
         </p>
         {error ? <p className="ai-batch__error">{error}</p> : null}
         <Button block disabled={patches.length === 0} loading={saving} onClick={() => void apply()}>
-          {patches.length > 0 ? `应用到 ${patches.length} 笔` : "选择要统一修改的项"}
+          {patches.length > 0
+            ? t("应用到 {length} 笔", { length: patches.length })
+            : t("选择要统一修改的项")}
         </Button>
       </div>
     </BottomSheet>

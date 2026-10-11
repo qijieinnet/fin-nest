@@ -7,12 +7,13 @@ import { MobileAppShell } from "@/components/ui";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
+import { t } from "@/lib/i18n";
 
 function Fallback() {
   return (
     <MobileAppShell>
       <main className="flex min-h-dvh items-center justify-center px-[var(--space-page-x)]">
-        <LoadingState rows={3} title="加载账本" />
+        <LoadingState rows={3} title={t("加载账本")} />
       </main>
     </MobileAppShell>
   );

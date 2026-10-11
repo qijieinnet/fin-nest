@@ -8,6 +8,7 @@ import { useSubscriptionCategories } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { SubscriptionCategoryEditorSheet } from "./SubscriptionCategoryEditorSheet";
 import { categoryGlyph } from "./subscription-utils";
+import { t } from "@/lib/i18n";
 
 type SubscriptionCategoryManagerSheetProps = {
   ledgerId: string;
@@ -37,25 +38,25 @@ export function SubscriptionCategoryManagerSheet({
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          订阅分类
+          {t("订阅分类")}
         </h2>
         <IconButton
           icon={<Plus size={24} strokeWidth={2.3} />}
-          label="新增分类"
+          label={t("新增分类")}
           onClick={() => openEditor()}
           variant="primary"
         />
       </div>
 
       {categoriesQuery.isPending ? (
-        <LoadingState rows={4} title="加载分类" />
+        <LoadingState rows={4} title={t("加载分类")} />
       ) : categories.length === 0 ? (
         <p className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-6 text-center text-[13px] leading-5 text-[var(--color-text-muted)]">
-          还没有订阅分类
+          {t("还没有订阅分类")}
           <br />
-          点击右上角「+」新增
+          {t("点击右上角「+」新增")}
         </p>
       ) : (
         <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">

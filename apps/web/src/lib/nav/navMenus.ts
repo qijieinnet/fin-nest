@@ -9,6 +9,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { routes } from "@/lib/route/routes";
+import { localized, msg } from "@/lib/i18n";
 
 /** 可在导航栏中配置显示/排序的一级菜单键。 */
 export type NavMenuKey =
@@ -28,15 +29,15 @@ export type NavMenuDef = {
 };
 
 /** 导航菜单注册表：设置页与侧边栏共用，保证键、标签、路由、图标一致。 */
-export const NAV_MENUS: NavMenuDef[] = [
-  { key: "bills", label: "账单", route: routes.bills, icon: Home },
-  { key: "accounts", label: "账户", route: routes.accounts, icon: WalletCards },
-  { key: "budget", label: "计划", route: routes.budget, icon: CalendarDays },
-  { key: "ledgers", label: "账本", route: routes.ledgers, icon: BookText },
-  { key: "insurances", label: "保险", route: routes.insurances, icon: ShieldCheck },
-  { key: "items", label: "物品", route: routes.items, icon: Package },
-  { key: "subscriptions", label: "订阅", route: routes.subscriptions, icon: RefreshCw },
-];
+export const NAV_MENUS: NavMenuDef[] = localized([
+  { key: "bills", label: msg("账单"), route: routes.bills, icon: Home },
+  { key: "accounts", label: msg("账户"), route: routes.accounts, icon: WalletCards },
+  { key: "budget", label: msg("计划"), route: routes.budget, icon: CalendarDays },
+  { key: "ledgers", label: msg("账本"), route: routes.ledgers, icon: BookText },
+  { key: "insurances", label: msg("保险"), route: routes.insurances, icon: ShieldCheck },
+  { key: "items", label: msg("物品"), route: routes.items, icon: Package },
+  { key: "subscriptions", label: msg("订阅"), route: routes.subscriptions, icon: RefreshCw },
+]);
 
 export const NAV_MENU_KEYS: NavMenuKey[] = NAV_MENUS.map((menu) => menu.key);
 

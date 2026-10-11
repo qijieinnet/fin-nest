@@ -9,11 +9,16 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@fin-nest/db";
 import { AppError } from "./app-error";
+import { errorLocaleFromHeader, translateErrorMessage } from "../i18n/translate-error";
 
 type ErrorBody = {
   code: string;
   message: string;
   details?: Record<string, unknown>;
+};
+
+type HttpRequest = {
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 type HttpResponse = {
@@ -28,9 +33,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<HttpResponse>();
+    const http = host.switchToHttp();
+    const response = http.getResponse<HttpResponse>();
+    const request = http.getRequest<HttpRequest | undefined>();
     const { statusCode, body } = this.toErrorResponse(exception);
-    response.status(statusCode).json(body);
+    // 业务代码统一抛中文文案，出口处按请求语言翻译（前端每个请求都带 Accept-Language）。
+    const locale = errorLocaleFromHeader(request?.headers?.["accept-language"]);
+    response.status(statusCode).json({ ...body, message: translateErrorMessage(body.message, locale) });
   }
 
   private toErrorResponse(exception: unknown): { statusCode: number; body: ErrorBody } {

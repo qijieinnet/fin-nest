@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "@/lib/format/class-names";
 import { haptic } from "@/lib/haptics";
+import { t } from "@/lib/i18n";
 
 export type SwipeAction = {
   icon?: ReactNode;
@@ -272,7 +273,7 @@ export function SwipeActionRow({
       </div>
       {open ? (
         <button
-          aria-label="收起操作"
+          aria-label={t("收起操作")}
           className="biz-swipe-row__scrim"
           onClick={() => setOpen(null)}
           onPointerDown={(event) =>

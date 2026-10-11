@@ -67,6 +67,7 @@ import {
   itemUsedYears,
   typeGlyph,
 } from "./_components/item-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 const STATUS_CLASS: Record<string, string> = {
   active: "bg-[var(--color-tint-soft)] text-[var(--color-tint)]",
@@ -74,12 +75,14 @@ const STATUS_CLASS: Record<string, string> = {
   scrapped: "bg-[var(--color-control-fill-muted)] text-[var(--color-text-muted)]",
 };
 
-const ITEM_STATUS_OPTIONS: AssetFilterOption[] = [
-  { id: "active", label: "在用" },
-  { id: "reached", label: "到达年限" },
-];
+const ITEM_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "active", label: msg("在用") },
+  { id: "reached", label: msg("到达年限") },
+]);
 
-const SCRAPPED_ITEM_STATUS_OPTIONS: AssetFilterOption[] = [{ id: "scrapped", label: "已报废" }];
+const SCRAPPED_ITEM_STATUS_OPTIONS: AssetFilterOption[] = localized([
+  { id: "scrapped", label: msg("已报废") },
+]);
 
 type ItemGroup = {
   key: string;
@@ -127,7 +130,7 @@ function buildItemFilterOptions(
       .filter((type) => items.some((item) => item.typeId === type.id))
       .map((type) => ({ icon: typeGlyph(type), id: type.id, label: type.name })),
     ...(hasUncategorizedItems
-      ? [{ icon: typeGlyph(null), id: "uncategorized", label: "未分类" }]
+      ? [{ icon: typeGlyph(null), id: "uncategorized", label: t("未分类") }]
       : []),
   ];
 }
@@ -162,7 +165,7 @@ function filterItems(
     }
 
     if (keyword) {
-      const typeName = itemTypeById.get(item.typeId ?? "")?.name ?? "未分类";
+      const typeName = itemTypeById.get(item.typeId ?? "")?.name ?? t("未分类");
       const searchable = [item.name, item.note, typeName].filter(Boolean).join(" ").toLowerCase();
       if (!searchable.includes(keyword)) return false;
     }
@@ -235,34 +238,34 @@ function ScrappedItemsSheet({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
       <AssetFilterSheet
-        amountLabel="总价区间"
-        categoryLabel="物品分类"
+        amountLabel={t("总价区间")}
+        categoryLabel={t("物品分类")}
         categoryOptions={filterOptions}
-        dateLabel="购买日期"
-        keywordPlaceholder="搜索名称、备注..."
+        dateLabel={t("购买日期")}
+        keywordPlaceholder={t("搜索名称、备注...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="物品状态"
+        statusLabel={t("物品状态")}
         statusOptions={SCRAPPED_ITEM_STATUS_OPTIONS}
         value={filterValue}
       />
 
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <div className="min-w-0 text-center">
           <h2 className="truncate text-base font-semibold text-[var(--color-text-primary)]">
-            已报废物品
+            {t("已报废物品")}
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-            {filteredItems.length} / {items.length} 件
+            {t("{length} / {length2} 件", { length: filteredItems.length, length2: items.length })}
           </p>
         </div>
         <div className="relative">
           <IconButton
             icon={<SlidersHorizontal size={22} strokeWidth={2.2} />}
-            label="筛选已报废物品"
+            label={t("筛选已报废物品")}
             onClick={() => setFilterOpen(true)}
           />
           {activeFilterCount > 0 ? (
@@ -275,13 +278,16 @@ function ScrappedItemsSheet({
       </div>
 
       {items.length === 0 ? (
-        <EmptyState message="报废或出售后的物品会集中放在这里。" title="还没有已报废物品" />
+        <EmptyState
+          message={t("报废或出售后的物品会集中放在这里。")}
+          title={t("还没有已报废物品")}
+        />
       ) : filteredItems.length === 0 ? (
-        <EmptyState message="调整筛选条件后再试。" title="没有符合条件的物品" />
+        <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的物品")} />
       ) : (
         <div className="flex flex-col gap-2.5">
           {groups.map((group) => {
-            const typeName = group.type?.name ?? "未分类";
+            const typeName = group.type?.name ?? t("未分类");
             const expanded = !collapsedIds.has(group.key);
 
             return (
@@ -302,7 +308,7 @@ function ScrappedItemsSheet({
                     {typeName}
                   </span>
                   <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                    {group.items.length} 件
+                    {t("{length} 件", { length: group.items.length })}
                   </span>
                   <ChevronDown
                     className={cn(
@@ -409,7 +415,7 @@ export function ItemsScreen() {
       apiRequest(ledgerApiPath(ledgerId!, `/items/${itemId}/restore`), { method: "POST" }),
     onSuccess: async (_data, itemId) => {
       await invalidate(itemId);
-      showToast({ tone: "success", message: "已恢复在用" });
+      showToast({ tone: "success", message: t("已恢复在用") });
     },
   });
 
@@ -421,7 +427,7 @@ export function ItemsScreen() {
       setItemPendingDelete(null);
       // 从详情弹层删除时把弹层一并关掉，避免停留在已删除的物品上。
       clear();
-      showToast({ tone: "success", message: "物品已删除" });
+      showToast({ tone: "success", message: t("物品已删除") });
     },
   });
 
@@ -551,7 +557,7 @@ export function ItemsScreen() {
     if (!ledgerId) return;
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
-      title: "物品详情",
+      title: t("物品详情"),
       content: (
         <ItemDetailSheet
           itemId={item.id}
@@ -569,29 +575,31 @@ export function ItemsScreen() {
 
   const renderRow = (item: ItemAsset) => {
     const type = itemTypes.find((entry) => entry.id === item.typeId);
-    const typeName = type?.name ?? "其他";
+    const typeName = type?.name ?? t("其他");
     const status = itemStatus(item);
     const total = itemTotalMicros(item, BigInt(item.consumablesMicros ?? "0"));
     const metaText = [
       // typeName,
       item.purchaseDate ? formatDateLabel(item.purchaseDate) : null,
-      item.purchaseDate ? `${formatFixed1(itemUsedYears(item))} 年` : "未填购买日",
+      item.purchaseDate
+        ? t("{value} 年", { value: formatFixed1(itemUsedYears(item)) })
+        : t("未填购买日"),
     ]
       .filter(Boolean)
       .join(" · ");
     const usedText = item.purchaseDate
-      ? `月均 ${formatAverage(total, itemUsedMonths(item))}`
+      ? t("月均 {value}", { value: formatAverage(total, itemUsedMonths(item)) })
       : null;
     const actions: SwipeAction[] = [
       {
         icon: <Edit3 size={18} />,
-        label: `编辑${item.name}`,
+        label: t("编辑{name}", { name: item.name }),
         onClick: () => openEditor(item),
         tone: "neutral",
       },
       {
         icon: <Trash2 size={18} />,
-        label: `删除${item.name}`,
+        label: t("删除{name}", { name: item.name }),
         onClick: () => setItemPendingDelete(item),
         tone: "danger",
       },
@@ -636,16 +644,16 @@ export function ItemsScreen() {
   return (
     <MobileAppShell>
       <AssetFilterSheet
-        amountLabel="总价区间"
-        categoryLabel="物品分类"
+        amountLabel={t("总价区间")}
+        categoryLabel={t("物品分类")}
         categoryOptions={itemFilterOptions}
-        dateLabel="购买日期"
-        keywordPlaceholder="搜索名称、备注..."
+        dateLabel={t("购买日期")}
+        keywordPlaceholder={t("搜索名称、备注...")}
         onApply={() => undefined}
         onChange={setFilterValue}
         onOpenChange={setFilterOpen}
         open={filterOpen}
-        statusLabel="物品状态"
+        statusLabel={t("物品状态")}
         statusOptions={ITEM_STATUS_OPTIONS}
         value={filterValue}
       />
@@ -663,7 +671,7 @@ export function ItemsScreen() {
         action={
           sortMode ? (
             <Button onClick={() => setSortMode(false)} variant="primary">
-              完成
+              {t("完成")}
             </Button>
           ) : (
             <div className="relative flex justify-end">
@@ -672,12 +680,12 @@ export function ItemsScreen() {
                   {
                     dot: activeFilterCount > 0,
                     icon: <SlidersHorizontal size={20} strokeWidth={2.2} />,
-                    label: "筛选物品",
+                    label: t("筛选物品"),
                     onClick: () => setFilterOpen(true),
                   },
                   {
                     icon: <MoreHorizontal size={22} strokeWidth={2.3} />,
-                    label: "更多选项",
+                    label: t("更多选项"),
                     onClick: () => setMoreMenuOpen((open) => !open),
                   },
                 ]}
@@ -690,7 +698,7 @@ export function ItemsScreen() {
                         [
                           {
                             icon: <Plus size={18} />,
-                            label: "添加物品",
+                            label: t("添加物品"),
                             onSelect: () => {
                               setMoreMenuOpen(false);
                               openEditor();
@@ -706,18 +714,18 @@ export function ItemsScreen() {
                       ) : (
                         <ChevronsDownUp size={18} />
                       ),
-                      label: allGroupsCollapsed ? "展开所有" : "折叠所有",
+                      label: allGroupsCollapsed ? t("展开所有") : t("折叠所有"),
                       onSelect: toggleAllGroups,
                     },
                     {
                       icon: <ArrowUpDown size={18} />,
-                      label: "排序",
+                      label: t("排序"),
                       onSelect: enterSortMode,
                     },
                     {
-                      description: `${scrappedItems.length} 件`,
+                      description: t("{length} 件", { length: scrappedItems.length }),
                       icon: <ArchiveX size={18} />,
-                      label: "已报废",
+                      label: t("已报废"),
                       onSelect: openScrappedItems,
                     },
                   ],
@@ -728,31 +736,33 @@ export function ItemsScreen() {
             </div>
           )
         }
-        description="登记每件物品的购买价与预用年限，记账时关联物品即可自动归集耗材开销，折算年均、月均成本。左滑可编辑或删除。"
+        description={t(
+          "登记每件物品的购买价与预用年限，记账时关联物品即可自动归集耗材开销，折算年均、月均成本。左滑可编辑或删除。",
+        )}
         leading={
           isDesktop || !isPrimary || sortMode ? (
             <IconButton
               icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-              label={sortMode ? "退出排序" : "返回"}
+              label={sortMode ? t("退出排序") : t("返回")}
               onClick={goBack}
             />
           ) : undefined
         }
         navigationTitleAlign="left"
-        title={sortMode ? "拖动排序" : "物品管理"}
+        title={sortMode ? t("拖动排序") : t("物品管理")}
       >
         <div className="flex flex-col gap-3 pb-22">
           {itemsQuery.isPending || itemTypesQuery.isPending ? (
-            <LoadingState rows={4} title="加载物品" />
+            <LoadingState rows={4} title={t("加载物品")} />
           ) : items.length === 0 ? (
             <EmptyState
-              message="把数码、家电、家具等大件录入，记账时关联，年均月均成本一目了然。"
-              title="还没有添加物品"
+              message={t("把数码、家电、家具等大件录入，记账时关联，年均月均成本一目了然。")}
+              title={t("还没有添加物品")}
             />
           ) : sortMode ? (
             <>
               <p className="px-1 text-xs text-[var(--color-text-muted)]">
-                按住右侧图标拖动排序；物品类型整体移动，物品仅在所属类型内排序。
+                {t("按住右侧图标拖动排序；物品类型整体移动，物品仅在所属类型内排序。")}
               </p>
               <ItemSortList
                 collapsedIds={collapsedIds}
@@ -765,7 +775,7 @@ export function ItemsScreen() {
             <>
               <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
                 <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                  平均月价
+                  {t("平均月价")}
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
@@ -778,7 +788,7 @@ export function ItemsScreen() {
                 <div className="mt-3.5 flex flex-wrap gap-x-7 gap-y-3">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      平均年价
+                      {t("平均年价")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
                       {formatMoney(avgYearMicros)}
@@ -786,7 +796,7 @@ export function ItemsScreen() {
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      在用总价
+                      {t("在用总价")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
                       {formatMoney(totalValue)}
@@ -794,15 +804,15 @@ export function ItemsScreen() {
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      在用件数
+                      {t("在用件数")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
-                      {filteredItems.length} 件
+                      {t("{length} 件", { length: filteredItems.length })}
                     </div>
                   </div>
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
-                      耗材合计
+                      {t("耗材合计")}
                     </div>
                     <div className="mt-0.5 block text-[15px] font-semibold">
                       {formatMoney(consumablesTotal)}
@@ -812,10 +822,10 @@ export function ItemsScreen() {
               </section>
 
               {filteredItems.length === 0 ? (
-                <EmptyState message="调整筛选条件后再试。" title="没有符合条件的物品" />
+                <EmptyState message={t("调整筛选条件后再试。")} title={t("没有符合条件的物品")} />
               ) : (
                 itemGroups.map((group) => {
-                  const typeName = group.type?.name ?? "未分类";
+                  const typeName = group.type?.name ?? t("未分类");
                   const expanded = !collapsedIds.has(group.key);
 
                   return (
@@ -836,7 +846,7 @@ export function ItemsScreen() {
                           {typeName}
                         </span>
                         <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                          {group.items.length} 件
+                          {t("{length} 件", { length: group.items.length })}
                         </span>
                         <ChevronDown
                           className={cn(
@@ -866,7 +876,7 @@ export function ItemsScreen() {
           <div className="relative w-[min(100vw,430px)]">
             <div className="pointer-events-auto absolute bottom-[calc(var(--space-tab-bar-height)+34px+env(safe-area-inset-bottom))] right-4 flex h-[52px] w-[52px] items-center justify-center rounded-[26px] bg-[var(--color-tint)] shadow-[var(--shadow-app)]">
               <button
-                aria-label="添加物品"
+                aria-label={t("添加物品")}
                 className="flex h-full w-full items-center justify-center text-[var(--color-tint-contrast)]"
                 onClick={() => openEditor()}
                 type="button"

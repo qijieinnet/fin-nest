@@ -6,23 +6,24 @@ import { NotifyTargetsRow, TimeWheelPicker, toggleUserId } from "@/components/bu
 import { PopoverMenu, Switch } from "@/components/ui";
 import type { EntryReminder, EntryReminderFrequency, EntryReminderInput } from "@/lib/api";
 import { useNotifyCandidates } from "@/lib/data/notifications";
+import { localized, msg, t } from "@/lib/i18n";
 
-const FREQUENCY_OPTIONS: ReadonlyArray<{ value: EntryReminderFrequency; label: string }> = [
-  { value: "daily", label: "每天" },
-  { value: "weekly", label: "每周" },
-  { value: "monthly", label: "每月" },
-];
+const FREQUENCY_OPTIONS: ReadonlyArray<{ value: EntryReminderFrequency; label: string }> = localized([
+  { value: "daily", label: msg("每天") },
+  { value: "weekly", label: msg("每周") },
+  { value: "monthly", label: msg("每月") },
+]);
 
 /** ISO 星期：1=周一 … 7=周日，与后端存储口径一致。 */
-const WEEKDAYS = [
-  { value: 1, label: "一" },
-  { value: 2, label: "二" },
-  { value: 3, label: "三" },
-  { value: 4, label: "四" },
-  { value: 5, label: "五" },
-  { value: 6, label: "六" },
-  { value: 7, label: "日" },
-] as const;
+const WEEKDAYS = localized([
+  { value: 1, label: msg("一") },
+  { value: 2, label: msg("二") },
+  { value: 3, label: msg("三") },
+  { value: 4, label: msg("四") },
+  { value: 5, label: msg("五") },
+  { value: 6, label: msg("六") },
+  { value: 7, label: msg("日") },
+] as const);
 
 const MONTH_DAYS = Array.from({ length: 31 }, (_, index) => index + 1);
 
@@ -93,10 +94,10 @@ export function EntryReminderCard({
   return (
     <section className="overflow-hidden rounded-[18px] bg-[var(--color-bg-surface)] shadow-[var(--shadow-soft)]">
       <div className="flex items-center gap-3 px-4 py-[15px]">
-        <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">提醒记账</span>
+        <span className="flex-1 text-[15.5px] text-[var(--color-text-primary)]">{t("提醒记账")}</span>
         <Switch
           checked={draft.enabled}
-          label="提醒记账"
+          label={t("提醒记账")}
           onCheckedChange={(checked) => apply({ enabled: checked }, { enabled: checked })}
         />
       </div>
@@ -109,10 +110,10 @@ export function EntryReminderCard({
               onClick={() => setFrequencyOpen((open) => !open)}
               type="button"
             >
-              <span>提醒周期</span>
+              <span>{t("提醒周期")}</span>
               <strong>
                 {FREQUENCY_OPTIONS.find((option) => option.value === draft.frequency)?.label ??
-                  "每天"}
+                  t("每天")}
               </strong>
               <ChevronRight size={18} />
             </button>
@@ -144,7 +145,7 @@ export function EntryReminderCard({
                     }}
                     type="button"
                   >
-                    周{weekday.label}
+                    {t("周{label}", { label: weekday.label })}
                   </button>
                 );
               })}
@@ -173,14 +174,14 @@ export function EntryReminderCard({
                 })}
               </div>
               <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-                当月没有选中的日期（如 31 号）时，在当月最后一天提醒。
+                {t("当月没有选中的日期（如 31 号）时，在当月最后一天提醒。")}
               </p>
             </>
           ) : null}
 
           <div className="transaction-form__date-card">
             <TimeWheelPicker
-              label="提醒时间"
+              label={t("提醒时间")}
               onValueChange={(remindTime) => apply({ remindTime }, { remindTime })}
               value={draft.remindTime}
             />

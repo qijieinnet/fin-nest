@@ -6,6 +6,7 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath, type Plan, type PlanKind
 import { usePlans, useStoppedPlans } from "@/lib/data/records";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 /** 计划/预算页视图模型：计划列表、启停/恢复/删除、未到期自动记账开关。弹层由组件用 push 打开。 */
 export function useBudgetModel() {
@@ -55,7 +56,7 @@ export function useBudgetModel() {
       }
       showToast({
         tone: "success",
-        message: enabled ? "已开启未到期的自动记账" : "已关闭未到期的自动记账",
+        message: enabled ? t("已开启未到期的自动记账") : t("已关闭未到期的自动记账"),
       });
     },
   });
@@ -66,7 +67,7 @@ export function useBudgetModel() {
     onSuccess: async () => {
       await invalidatePlans();
       clear();
-      showToast({ tone: "success", message: "计划已删除" });
+      showToast({ tone: "success", message: t("计划已删除") });
     },
   });
 
@@ -81,7 +82,7 @@ export function useBudgetModel() {
           : Promise.resolve(),
       ]);
       clear();
-      showToast({ tone: "success", message: "计划已停止" });
+      showToast({ tone: "success", message: t("计划已停止") });
     },
   });
 
@@ -98,16 +99,16 @@ export function useBudgetModel() {
           : Promise.resolve(),
       ]);
       clear();
-      showToast({ tone: "success", message: "计划已恢复" });
+      showToast({ tone: "success", message: t("计划已恢复") });
     },
   });
 
   const requestDeletePlan = async (plan: Plan) => {
     if (removePlan.isPending) return;
     const accepted = await confirm({
-      title: "删除计划？",
-      message: `确定删除「${plan.name}」吗？记账记录会保留，仅移除该计划。`,
-      confirmText: "删除",
+      title: t("删除计划？"),
+      message: t("确定删除「{name}」吗？记账记录会保留，仅移除该计划。", { name: plan.name }),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (accepted && !removePlan.isPending) removePlan.mutate(plan.id);
@@ -116,9 +117,9 @@ export function useBudgetModel() {
   const requestStopPlan = async (plan: Plan) => {
     if (stopPlan.isPending) return;
     const accepted = await confirm({
-      title: "停止计划？",
-      message: `停止后「${plan.name}」将不再出现在计划列表中，可在已停止计划里查看。`,
-      confirmText: "停止",
+      title: t("停止计划？"),
+      message: t("停止后「{name}」将不再出现在计划列表中，可在已停止计划里查看。", { name: plan.name }),
+      confirmText: t("停止"),
       tone: "danger",
     });
     if (accepted && !stopPlan.isPending) stopPlan.mutate(plan.id);
@@ -127,9 +128,9 @@ export function useBudgetModel() {
   const requestRestorePlan = async (plan: Plan) => {
     if (restorePlan.isPending) return;
     const accepted = await confirm({
-      title: "恢复计划？",
-      message: `恢复后「${plan.name}」会重新出现在计划列表中，并继续统计命中的记账。`,
-      confirmText: "恢复",
+      title: t("恢复计划？"),
+      message: t("恢复后「{name}」会重新出现在计划列表中，并继续统计命中的记账。", { name: plan.name }),
+      confirmText: t("恢复"),
     });
     if (accepted && !restorePlan.isPending) restorePlan.mutate(plan.id);
   };

@@ -7,6 +7,7 @@ import { Button, EmojiPickerContent, IconButton } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type ItemType } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useConfirm, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type ItemTypeEditorSheetProps = {
   ledgerId: string;
@@ -43,21 +44,21 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
     },
     onSuccess: async () => {
       await invalidateTypes();
-      showToast({ tone: "success", message: isEditing ? "类型已更新" : "类型已添加" });
+      showToast({ tone: "success", message: isEditing ? t("类型已更新") : t("类型已添加") });
       pop();
     },
   });
 
   const remove = useMutation({
     mutationFn: () => {
-      if (!type) throw new Error("缺少类型");
+      if (!type) throw new Error(t("缺少类型"));
       return apiRequest<void>(ledgerApiPath(ledgerId, `/item-types/${type.id}`), {
         method: "DELETE",
       });
     },
     onSuccess: async () => {
       await invalidateTypes();
-      showToast({ tone: "success", message: "类型已删除" });
+      showToast({ tone: "success", message: t("类型已删除") });
       pop();
     },
   });
@@ -74,9 +75,9 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
   const handleDelete = async () => {
     if (!isEditing || remove.isPending) return;
     const confirmed = await confirm({
-      title: `删除类型「${type?.name}」？`,
-      message: "该类型会被归档，已记录的物品仍会显示此类型。",
-      confirmText: "删除",
+      title: t("删除类型「{name}」？", { name: type?.name }),
+      message: t("该类型会被归档，已记录的物品仍会显示此类型。"),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (confirmed) remove.mutate();
@@ -85,14 +86,14 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑类型" : "新增类型"}
+          {isEditing ? t("编辑类型") : t("新增类型")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存类型"
+          label={t("保存类型")}
           loading={save.isPending}
           onClick={submit}
           variant="primary"
@@ -116,7 +117,7 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
               submit();
             }
           }}
-          placeholder="类型名称"
+          placeholder={t("类型名称")}
           value={name}
         />
       </div>
@@ -131,7 +132,7 @@ export function ItemTypeEditorSheet({ ledgerId, sortOrder, type }: ItemTypeEdito
           onClick={handleDelete}
           variant="danger"
         >
-          {remove.isPending ? "删除中…" : "删除该类型"}
+          {remove.isPending ? t("删除中…") : t("删除该类型")}
         </Button>
       ) : null}
     </div>

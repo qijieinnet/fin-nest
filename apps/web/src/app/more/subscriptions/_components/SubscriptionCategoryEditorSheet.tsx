@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useConfirm, useSheetStack, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 type SubscriptionCategoryEditorSheetProps = {
   category?: SubscriptionCategory;
@@ -55,14 +56,14 @@ export function SubscriptionCategoryEditorSheet({
     },
     onSuccess: async () => {
       await invalidateCategories();
-      showToast({ tone: "success", message: isEditing ? "分类已更新" : "分类已添加" });
+      showToast({ tone: "success", message: isEditing ? t("分类已更新") : t("分类已添加") });
       pop();
     },
   });
 
   const remove = useMutation({
     mutationFn: () => {
-      if (!category) throw new Error("缺少分类");
+      if (!category) throw new Error(t("缺少分类"));
       return apiRequest<void>(
         ledgerApiPath(ledgerId, `/subscription-categories/${category.id}`),
         { method: "DELETE" },
@@ -70,7 +71,7 @@ export function SubscriptionCategoryEditorSheet({
     },
     onSuccess: async () => {
       await invalidateCategories();
-      showToast({ tone: "success", message: "分类已删除" });
+      showToast({ tone: "success", message: t("分类已删除") });
       pop();
     },
   });
@@ -87,9 +88,9 @@ export function SubscriptionCategoryEditorSheet({
   const handleDelete = async () => {
     if (!isEditing || remove.isPending) return;
     const confirmed = await confirm({
-      title: `删除分类「${category?.name}」？`,
-      message: "该分类会被归档，已记录的订阅仍会显示此分类。",
-      confirmText: "删除",
+      title: t("删除分类「{name}」？", { name: category?.name }),
+      message: t("该分类会被归档，已记录的订阅仍会显示此分类。"),
+      confirmText: t("删除"),
       tone: "danger",
     });
     if (confirmed) remove.mutate();
@@ -98,14 +99,14 @@ export function SubscriptionCategoryEditorSheet({
   return (
     <div className="flex flex-col gap-4 pb-2">
       <div className="grid grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {isEditing ? "编辑分类" : "新增分类"}
+          {isEditing ? t("编辑分类") : t("新增分类")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存分类"
+          label={t("保存分类")}
           loading={save.isPending}
           onClick={submit}
           variant="primary"
@@ -129,7 +130,7 @@ export function SubscriptionCategoryEditorSheet({
               submit();
             }
           }}
-          placeholder="分类名称"
+          placeholder={t("分类名称")}
           value={name}
         />
       </div>
@@ -144,7 +145,7 @@ export function SubscriptionCategoryEditorSheet({
           onClick={handleDelete}
           variant="danger"
         >
-          {remove.isPending ? "删除中…" : "删除该分类"}
+          {remove.isPending ? t("删除中…") : t("删除该分类")}
         </Button>
       ) : null}
     </div>

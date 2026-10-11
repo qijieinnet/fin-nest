@@ -13,6 +13,7 @@ import {
   formatMoney,
   renewalReminderDue,
 } from "./subscription-utils";
+import { t } from "@/lib/i18n";
 
 type SubscriptionRenewalConfirmSheetProps = {
   ledgerId: string;
@@ -41,7 +42,7 @@ export function SubscriptionRenewalConfirmSheet({
   const openDetail = (subscription: Subscription) => {
     push({
       className: "ui-bottom-sheet--full-height ui-bottom-sheet--edge-scroll",
-      title: "订阅详情",
+      title: t("订阅详情"),
       content: (
         <SubscriptionDetailSheet
           categories={categories}
@@ -55,24 +56,24 @@ export function SubscriptionRenewalConfirmSheet({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-2">
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <div className="min-w-0 text-center">
           <h2 className="truncate text-base font-semibold text-[var(--color-text-primary)]">
-            续费确认
+            {t("续费确认")}
           </h2>
-          <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{due.length} 个待确认</p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{t("{length} 个待确认", { length: due.length })}</p>
         </div>
         <span aria-hidden />
       </div>
 
       {subscriptionsQuery.isPending ? (
-        <LoadingState rows={3} title="加载订阅" />
+        <LoadingState rows={3} title={t("加载订阅")} />
       ) : due.length === 0 ? (
-        <EmptyState message="到达提醒日期的订阅会集中在这里等待确认。" title="暂无待确认续费" />
+        <EmptyState message={t("到达提醒日期的订阅会集中在这里等待确认。")} title={t("暂无待确认续费")} />
       ) : (
         <div className="flex flex-col gap-2.5">
           <p className="px-1 text-xs text-[var(--color-text-muted)]">
-            点击订阅查看详情，并在详情内「确认续订」。
+            {t("点击订阅查看详情，并在详情内「确认续订」。")}
           </p>
           {due.map((subscription) => {
             const metaText = [
@@ -97,7 +98,7 @@ export function SubscriptionRenewalConfirmSheet({
                       {subscription.name}
                     </span>
                     <span className="shrink-0 rounded-md bg-[rgba(255,149,0,0.14)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-accent-warning,#c77700)]">
-                      即将到期
+                      {t("即将到期")}
                     </span>
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">

@@ -18,6 +18,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
 import { DeletePendingConfirmDialog } from "./DeletePendingConfirmDialog";
 import { PendingTransactionList } from "./PendingTransactionList";
+import { t } from "@/lib/i18n";
 
 export function PendingBillsScreen() {
   const router = useAppRouter();
@@ -61,7 +62,7 @@ export function PendingBillsScreen() {
       }),
     onSuccess: async () => {
       await invalidateAfterConfirm();
-      showToast({ tone: "success", message: "已确认入账" });
+      showToast({ tone: "success", message: t("已确认入账") });
     },
   });
 
@@ -73,7 +74,7 @@ export function PendingBillsScreen() {
       }),
     onSuccess: async () => {
       await invalidateAfterConfirm();
-      showToast({ tone: "success", message: "待确认记录已全部入账" });
+      showToast({ tone: "success", message: t("待确认记录已全部入账") });
     },
   });
 
@@ -84,7 +85,7 @@ export function PendingBillsScreen() {
       }),
     onSuccess: async () => {
       await invalidatePending();
-      showToast({ tone: "success", message: "已删除这条待确认" });
+      showToast({ tone: "success", message: t("已删除这条待确认") });
       setPendingDelete(null);
     },
   });
@@ -114,27 +115,30 @@ export function PendingBillsScreen() {
               onClick={() => confirmBatch.mutate(pending.map((item) => item.id))}
               variant="primary"
             >
-              全部确认
+              {t("全部确认")}
             </Button>
           ) : (
             <span aria-hidden />
           )
         }
-        description="定时记账生成的记录，确认后才会正式入账"
+        description={t("定时记账生成的记录，确认后才会正式入账")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="待确认"
+        title={t("待确认")}
       >
         {loading ? (
-          <LoadingState rows={4} title="加载待确认记录" />
+          <LoadingState rows={4} title={t("加载待确认记录")} />
         ) : pending.length === 0 ? (
           <div className="mt-10">
-            <EmptyState message="定时记账到期后会在这里生成待确认记录。" title="暂无待确认" />
+            <EmptyState
+              message={t("定时记账到期后会在这里生成待确认记录。")}
+              title={t("暂无待确认")}
+            />
           </div>
         ) : (
           <div className="pb-6">

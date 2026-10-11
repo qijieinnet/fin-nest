@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { BottomSheet, Tabs } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 export type AssetFilterOption = {
   icon?: ReactNode;
@@ -121,14 +122,14 @@ export function AssetFilterSheet({
       className="ui-bottom-sheet--filter"
       onClose={() => onOpenChange(false)}
       open={open}
-      title="过滤条件"
+      title={t("过滤条件")}
     >
       <div className="biz-filter-prototype">
         <div className="biz-filter-prototype__actions">
           <button onClick={reset} type="button">
-            重置
+            {t("重置")}
           </button>
-          <span>过滤条件</span>
+          <span>{t("过滤条件")}</span>
           <button
             onClick={() => {
               onChange(draft);
@@ -137,13 +138,13 @@ export function AssetFilterSheet({
             }}
             type="button"
           >
-            完成
+            {t("完成")}
           </button>
         </div>
 
         <Tabs
           className="biz-filter-tabs"
-          items={tabs.map((item) => ({ label: item, value: item }))}
+          items={tabs.map((item) => ({ label: t(item), value: item }))}
           onValueChange={(nextTab) => setTab(nextTab as AssetFilterTab)}
           value={activeTab}
         />
@@ -151,7 +152,9 @@ export function AssetFilterSheet({
         <div className="biz-filter-prototype__body">
           {activeTab === "分类" ? (
             <>
-              <p className="biz-filter-label">{categoryLabel}（可多选）</p>
+              <p className="biz-filter-label">
+                {t("{categoryLabel}（可多选）", { categoryLabel })}
+              </p>
               <div className="biz-filter-chip-row">
                 {categoryOptions.map((option) => (
                   <FilterChip
@@ -170,7 +173,7 @@ export function AssetFilterSheet({
 
           {activeTab === "状态" ? (
             <>
-              <p className="biz-filter-label">{statusLabel}（可多选）</p>
+              <p className="biz-filter-label">{t("{statusLabel}（可多选）", { statusLabel })}</p>
               <div className="biz-filter-chip-row">
                 {statusOptions.map((option) => (
                   <FilterChip
@@ -192,7 +195,7 @@ export function AssetFilterSheet({
                 <input
                   inputMode="decimal"
                   onChange={(event) => patch({ amountMin: event.currentTarget.value })}
-                  placeholder="最小"
+                  placeholder={t("最小")}
                   type="text"
                   value={draft.amountMin ?? ""}
                 />
@@ -200,7 +203,7 @@ export function AssetFilterSheet({
                 <input
                   inputMode="decimal"
                   onChange={(event) => patch({ amountMax: event.currentTarget.value })}
-                  placeholder="最大"
+                  placeholder={t("最大")}
                   type="text"
                   value={draft.amountMax ?? ""}
                 />
@@ -213,20 +216,20 @@ export function AssetFilterSheet({
               <p className="biz-filter-label">{dateLabel}</p>
               <div className="biz-filter-date-range biz-filter-date-range--custom">
                 <label className="biz-filter-date-cell">
-                  <span className="biz-filter-date-caption">开始日期</span>
+                  <span className="biz-filter-date-caption">{t("开始日期")}</span>
                   <input
                     onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
-                    placeholder="选择日期"
+                    placeholder={t("选择日期")}
                     type="date"
                     value={draft.dateFrom ?? ""}
                   />
                 </label>
                 <span>—</span>
                 <label className="biz-filter-date-cell">
-                  <span className="biz-filter-date-caption">结束日期</span>
+                  <span className="biz-filter-date-caption">{t("结束日期")}</span>
                   <input
                     onChange={(event) => patch({ dateTo: event.currentTarget.value })}
-                    placeholder="选择日期"
+                    placeholder={t("选择日期")}
                     type="date"
                     value={draft.dateTo ?? ""}
                   />
@@ -237,7 +240,7 @@ export function AssetFilterSheet({
 
           {activeTab === "其它" ? (
             <>
-              <p className="biz-filter-label">关键词</p>
+              <p className="biz-filter-label">{t("关键词")}</p>
               <input
                 className="biz-filter-input"
                 onChange={(event) => patch({ keyword: event.currentTarget.value })}

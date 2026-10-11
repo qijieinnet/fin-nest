@@ -1,4 +1,5 @@
 import { MoneyText } from "./MoneyText";
+import { t } from "@/lib/i18n";
 
 type BudgetProgressProps = {
   budgetMicros: bigint | number | string;
@@ -6,7 +7,7 @@ type BudgetProgressProps = {
   usedMicros: bigint | number | string;
 };
 
-export function BudgetProgress({ budgetMicros, label = "本月预算", usedMicros }: BudgetProgressProps) {
+export function BudgetProgress({ budgetMicros, label = t("本月预算"), usedMicros }: BudgetProgressProps) {
   const budget = BigInt(budgetMicros);
   const used = BigInt(usedMicros);
   const remaining = budget - used;
@@ -19,11 +20,11 @@ export function BudgetProgress({ budgetMicros, label = "本月预算", usedMicro
           {label} <MoneyText amountMicros={budgetMicros} tone="muted" />
         </span>
         <span>
-          剩余 <MoneyText amountMicros={remaining} tone={remaining < 0n ? "expense" : "muted"} />
+          {t("剩余")}{" "}<MoneyText amountMicros={remaining} tone={remaining < 0n ? "expense" : "muted"} />
         </span>
       </div>
       <span
-        aria-label={`${label} 已使用 ${percent}%`}
+        aria-label={t("{label} 已使用 {percent}%", { label, percent })}
         className="biz-budget-card__track"
         role="meter"
         aria-valuemin={0}

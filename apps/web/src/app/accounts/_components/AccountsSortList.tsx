@@ -5,6 +5,7 @@ import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import type { Account } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
 import { accountTotalMicros, formatMoney, isLiability } from "./account-utils";
+import { t } from "@/lib/i18n";
 
 export type AccountSortGroup = {
   key: string;
@@ -99,7 +100,7 @@ export function AccountsSortList({ groups, onReorder }: AccountsSortListProps) {
                       {formatMoney(total)}
                     </span>
                     <DragHandle
-                      label={`拖动排序 ${account.name}`}
+                      label={t("拖动排序 {name}", { name: account.name })}
                       onPointerDown={(event) => {
                         event.preventDefault();
                         beginDrag(

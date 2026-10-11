@@ -12,6 +12,7 @@ import { QuickTemplateSheet } from "./QuickTemplateSheet";
 import { TransactionForm, type TransactionSeed } from "./TransactionForm";
 import { TransactionFormFab } from "./TransactionFormFab";
 import { templateToSeed } from "./_model/template-seed";
+import { t } from "@/lib/i18n";
 
 type PrefillResponse = {
   type?: TransactionSeed["type"];
@@ -63,7 +64,7 @@ export function NewBillFormScreen({
   onSaved,
   quickTemplates = true,
   templateId,
-  title = "记一笔",
+  title = t("记一笔"),
 }: NewBillFormScreenProps) {
   const router = useAppRouter();
   const { ledgerId } = useLedger();
@@ -152,7 +153,7 @@ export function NewBillFormScreen({
       return;
     }
     push({
-      title: "快捷记账",
+      title: t("快捷记账"),
       content: <QuickTemplateSheet directRunEnabled={false} onSelectTemplate={applyTemplate} />,
     });
   }, [applyTemplate, embedded, push]);
@@ -167,7 +168,7 @@ export function NewBillFormScreen({
       disabled={!ledgerId || waitingForPrefill || saving}
       form={formId}
       icon={<Check size={24} strokeWidth={2.6} />}
-      label="保存"
+      label={t("保存")}
       loading={saving}
       onClick={(event) => {
         if (!canSubmit) {
@@ -182,7 +183,7 @@ export function NewBillFormScreen({
   const closeButton = (
     <IconButton
       icon={<X size={24} strokeWidth={2.3} />}
-      label="关闭"
+      label={t("关闭")}
       onClick={() => (onClose ? onClose() : router.back())}
     />
   );
@@ -190,13 +191,13 @@ export function NewBillFormScreen({
     <IconButton
       disabled={!ledgerId || waitingForPrefill || saving}
       icon={<Zap size={22} strokeWidth={2.3} />}
-      label="快捷记账"
+      label={t("快捷记账")}
       onClick={openQuickTemplates}
     />
   );
   const body =
     !ledgerId || waitingForPrefill ? (
-      <LoadingState rows={5} title="加载中" />
+      <LoadingState rows={5} title={t("加载中")} />
     ) : (
       <TransactionForm
         completeAfterSave={completeAfterSave}
@@ -238,7 +239,7 @@ export function NewBillFormScreen({
           className="ui-bottom-sheet--sheet-form"
           onClose={() => setQuickOpen(false)}
           open={quickOpen}
-          title="快捷记账"
+          title={t("快捷记账")}
         >
           <QuickTemplateSheet
             directRunEnabled={false}
@@ -258,7 +259,7 @@ export function NewBillFormScreen({
           action={saveAction}
           hideNavigationBar={hideHeader}
           leading={closeButton}
-          title="记一笔"
+          title={t("记一笔")}
         >
           {body}
         </MobilePage>

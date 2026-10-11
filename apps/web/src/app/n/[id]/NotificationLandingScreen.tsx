@@ -8,6 +8,7 @@ import { routes } from "@/lib/route/routes";
 import { Button, IconButton, MobileAppShell, MobilePage } from "@/components/ui";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 /**
  * 推送落地页。
@@ -67,13 +68,13 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
           result.status === "done"
             ? // detail 是「下次续费日：…」这类只有本次执行才知道的结论，刷新后就没有了，
               // 所以只出现在 toast 里，不进页面上的终态区。
-              [result.resultSummary ?? "已处理", result.detail].filter(Boolean).join(" · ")
+              [result.resultSummary ?? t("已处理"), result.detail].filter(Boolean).join(" · ")
             : result.actedByAlias
-              ? `已由 ${result.actedByAlias} 处理`
-              : "该提醒已处理",
+              ? t("已由 {actedByAlias} 处理", { actedByAlias: result.actedByAlias })
+              : t("该提醒已处理"),
       });
     } catch (error) {
-      showToast({ tone: "error", message: getApiErrorMessage(error, "操作失败") });
+      showToast({ tone: "error", message: getApiErrorMessage(error, t("操作失败")) });
     }
   };
 
@@ -84,24 +85,24 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={() => router.push(routes.home)}
           />
         }
-        title={notification?.payload.title ?? "提醒"}
+        title={notification?.payload.title ?? t("提醒")}
       >
         <div className="flex flex-col gap-3 pb-6">
           {/* redirecting 的那一帧也按加载中渲染：否则用户会看见落地页连同「查看详情」
               按钮闪一下再跳走，正是这次要去掉的那次多余点击的视觉残影。 */}
           {query.isLoading || redirecting ? (
-            <p className="px-1 text-[14px] text-[var(--color-text-muted)]">加载中…</p>
+            <p className="px-1 text-[14px] text-[var(--color-text-muted)]">{t("加载中…")}</p>
           ) : null}
 
           {query.isError ? (
             <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
-              <p className="text-[15px] text-[var(--color-text-primary)]">打不开这条提醒</p>
+              <p className="text-[15px] text-[var(--color-text-primary)]">{t("打不开这条提醒")}</p>
               <p className="mt-1.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-                {getApiErrorMessage(query.error, "提醒不存在，或你不是该账本的成员。")}
+                {getApiErrorMessage(query.error, t("提醒不存在，或你不是该账本的成员。"))}
               </p>
             </section>
           ) : null}
@@ -137,12 +138,16 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
               {notification.actionState ? (
                 <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-4 shadow-[var(--shadow-soft)]">
                   <p className="text-[15px] text-[var(--color-text-primary)]">
-                    {notification.resultSummary ?? "已处理"}
+                    {notification.resultSummary ?? t("已处理")}
                   </p>
                   {notification.actedByAlias ? (
                     <p className="mt-1.5 text-[13px] text-[var(--color-text-muted)]">
-                      由 {notification.actedByAlias} 处理
-                      {notification.actedAt ? ` · ${formatDateTime(notification.actedAt)}` : ""}
+                      {t("由 {actedByAlias} 处理{value}", {
+                        actedByAlias: notification.actedByAlias,
+                        value: notification.actedAt
+                          ? ` · ${formatDateTime(notification.actedAt)}`
+                          : "",
+                      })}
                     </p>
                   ) : null}
                 </section>
@@ -161,7 +166,7 @@ export function NotificationLandingScreen({ notificationId }: { notificationId: 
               )}
 
               <Button block onClick={() => openSource(notification)} variant="ghost">
-                查看详情
+                {t("查看详情")}
               </Button>
             </>
           ) : null}
@@ -186,7 +191,7 @@ function amountClass(notification: NotificationView): string {
 /** 新结构用 fields，历史行只有整行文本（payload.lines），退回按「说明」逐行展示。 */
 function fieldRows(notification: NotificationView): Array<{ label: string; value: string }> {
   if (notification.payload.fields.length) return notification.payload.fields;
-  return (notification.payload.lines ?? []).map((line) => ({ label: "说明", value: line }));
+  return (notification.payload.lines ?? []).map((line) => ({ label: t("说明"), value: line }));
 }
 
 /** 「查看详情」跳到提醒对应的业务页面。没有独立详情路由的类型退回列表页。 */

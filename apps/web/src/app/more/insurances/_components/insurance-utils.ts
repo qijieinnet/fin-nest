@@ -1,26 +1,27 @@
 import type { Insurance } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
-export const INSURANCE_TYPES = [
-  { value: "medical", label: "医疗", icon: "🏥" },
-  { value: "critical", label: "重疾", icon: "🩺" },
-  { value: "life", label: "寿险", icon: "🕊️" },
-  { value: "accident", label: "意外", icon: "🛟" },
-  { value: "car", label: "车险", icon: "🚗" },
-  { value: "property", label: "家财", icon: "🏠" },
-  { value: "other", label: "其他", icon: "📄" },
-] as const;
+export const INSURANCE_TYPES = localized([
+  { value: "medical", label: msg("医疗"), icon: "🏥" },
+  { value: "critical", label: msg("重疾"), icon: "🩺" },
+  { value: "life", label: msg("寿险"), icon: "🕊️" },
+  { value: "accident", label: msg("意外"), icon: "🛟" },
+  { value: "car", label: msg("车险"), icon: "🚗" },
+  { value: "property", label: msg("家财"), icon: "🏠" },
+  { value: "other", label: msg("其他"), icon: "📄" },
+] as const);
 
-export const PREMIUM_FREQ_OPTIONS = [
-  { value: "year", label: "年缴" },
-  { value: "month", label: "月缴" },
-  { value: "single", label: "趸缴" },
-] as const;
+export const PREMIUM_FREQ_OPTIONS = localized([
+  { value: "year", label: msg("年缴") },
+  { value: "month", label: msg("月缴") },
+  { value: "single", label: msg("趸缴") },
+] as const);
 
-export const RENEWAL_OPTIONS = [
-  { value: "auto", label: "自动续保" },
-  { value: "manual", label: "手动续保" },
-] as const;
+export const RENEWAL_OPTIONS = localized([
+  { value: "auto", label: msg("自动续保") },
+  { value: "manual", label: msg("手动续保") },
+] as const);
 
 export function insuranceTypeMeta(type: string) {
   return INSURANCE_TYPES.find((item) => item.value === type) ?? { value: type, label: type, icon: "📄" };
@@ -44,12 +45,12 @@ export function todayKey(): string {
 }
 
 /** 到期提醒的提前单位，value 与后端一致。 */
-export const REMIND_UNIT_OPTIONS = [
-  { value: "day", label: "天" },
-  { value: "week", label: "周" },
-  { value: "month", label: "月" },
-  { value: "year", label: "年" },
-] as const;
+export const REMIND_UNIT_OPTIONS = localized([
+  { value: "day", label: msg("天") },
+  { value: "week", label: msg("周") },
+  { value: "month", label: msg("月") },
+  { value: "year", label: msg("年") },
+] as const);
 
 export type RemindUnit = (typeof REMIND_UNIT_OPTIONS)[number]["value"];
 
@@ -62,7 +63,7 @@ export function remindLeadLabel(
   insurance: Pick<Insurance, "remindLeadValue" | "remindLeadUnit">,
 ): string {
   if (!insurance.remindLeadValue || !insurance.remindLeadUnit) return "";
-  return `提前 ${insurance.remindLeadValue} ${remindUnitLabel(insurance.remindLeadUnit)}`;
+  return t("提前 {remindLeadValue} {value}", { remindLeadValue: insurance.remindLeadValue, value: remindUnitLabel(insurance.remindLeadUnit) });
 }
 
 /** 以 UTC 计算，把 `YYYY-MM-DD` 按单位平移 amount（可为负），返回 `YYYY-MM-DD`。 */
@@ -130,15 +131,15 @@ export type InsuranceStatus = {
 export function insuranceStatus(
   insurance: Pick<Insurance, "terminatedAt" | "endDate" | "remindLeadValue" | "remindLeadUnit">,
 ): InsuranceStatus {
-  if (insurance.terminatedAt) return { key: "terminated", label: "已终止", tone: "terminated" };
+  if (insurance.terminatedAt) return { key: "terminated", label: t("已终止"), tone: "terminated" };
   if (insurance.endDate && insurance.endDate.slice(0, 10) < todayKey()) {
-    return { key: "expired", label: "已过期", tone: "expired" };
+    return { key: "expired", label: t("已过期"), tone: "expired" };
   }
   // 未过期但已到提醒日：即将到期。
   if (isReminderDue(insurance)) {
-    return { key: "dueSoon", label: "即将到期", tone: "dueSoon" };
+    return { key: "dueSoon", label: t("即将到期"), tone: "dueSoon" };
   }
-  return { key: "active", label: "在保", tone: "active" };
+  return { key: "active", label: t("在保"), tone: "active" };
 }
 
 /** 已到提醒日、未终止的保单，按到期日先后排序（供到期提醒列表与账单入口复用）。 */

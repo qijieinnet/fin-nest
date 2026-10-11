@@ -34,6 +34,7 @@ import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { dateOnly, resolveCategorySelection } from "./auto-utils";
+import { t } from "@/lib/i18n";
 
 type AutoPendingEditorSheetProps = {
   accounts: Account[];
@@ -83,22 +84,22 @@ export function AutoPendingEditorSheet({
     mutationFn: () => {
       const parsed = parseMoneyToMicros(amount, { decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
-      if (BigInt(parsed.amountMicros) <= 0n) throw new Error("请输入有效金额");
+      if (BigInt(parsed.amountMicros) <= 0n) throw new Error(t("请输入有效金额"));
       const isTransfer = pending.type === "transfer";
       const category = isTransfer ? {} : resolveCategorySelection(categories, categoryId);
-      if (!isTransfer && !category.categoryId) throw new Error("请选择分类");
+      if (!isTransfer && !category.categoryId) throw new Error(t("请选择分类"));
       const account = isTransfer ? {} : resolveAccountSelection(accounts, accountId);
       const fromAccount = isTransfer ? resolveAccountSelection(accounts, fromAccountId) : {};
       const toAccount = isTransfer ? resolveAccountSelection(accounts, toAccountId) : {};
       if (isTransfer && (!fromAccount.accountId || !toAccount.accountId)) {
-        throw new Error("请选择转出和转入账户");
+        throw new Error(t("请选择转出和转入账户"));
       }
       if (
         isTransfer &&
         fromAccount.accountId === toAccount.accountId &&
         (fromAccount.subAccountId ?? null) === (toAccount.subAccountId ?? null)
       ) {
-        throw new Error("转出和转入不能是同一账户");
+        throw new Error(t("转出和转入不能是同一账户"));
       }
       return apiRequest<AutoPendingTransaction>(
         ledgerApiPath(ledgerId, `/auto-pending-transactions/${pending.id}`),
@@ -123,7 +124,7 @@ export function AutoPendingEditorSheet({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.autoPending(ledgerId) });
-      showToast({ tone: "success", message: "待确认记录已更新" });
+      showToast({ tone: "success", message: t("待确认记录已更新") });
       pop();
     },
   });
@@ -156,14 +157,14 @@ export function AutoPendingEditorSheet({
       }}
     >
       <div className="auto-transaction-sheet__header">
-        <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+        <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          编辑待确认
+          {t("编辑待确认")}
         </h2>
         <IconButton
           disabled={!canSubmit}
           icon={<Check size={24} strokeWidth={2.6} />}
-          label="保存待确认记录"
+          label={t("保存待确认记录")}
           loading={save.isPending}
           variant="primary"
           type="submit"
@@ -178,7 +179,7 @@ export function AutoPendingEditorSheet({
               pending.type === "income" && "transaction-form__amount--income",
             )}
             decimalPlaces={decimalPlaces}
-            label="金额"
+            label={t("金额")}
             onValueChange={setAmount}
             value={amount}
           />
@@ -186,7 +187,7 @@ export function AutoPendingEditorSheet({
 
         <div className="transaction-form__cards">
           {pending.type !== "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="分类">
+            <FieldCard className="transaction-form__picker-card" label={t("分类")}>
               <CategorySelectRow
                 onValueChange={setCategoryId}
                 options={catOptions}
@@ -196,16 +197,16 @@ export function AutoPendingEditorSheet({
           ) : null}
 
           {pending.type === "transfer" ? (
-            <FieldCard className="transaction-form__picker-card" label="账户">
+            <FieldCard className="transaction-form__picker-card" label={t("账户")}>
               <AccountSelectRow
-                label="转出账户"
+                label={t("转出账户")}
                 onValueChange={setFromAccountId}
                 options={acctOptions}
                 value={fromAccountId}
               />
               <span className="transaction-form__divider" />
               <AccountSelectRow
-                label="转入账户"
+                label={t("转入账户")}
                 onValueChange={setToAccountId}
                 options={acctOptions}
                 value={toAccountId}
@@ -214,25 +215,25 @@ export function AutoPendingEditorSheet({
           ) : (
             <ToggleCard
               checked={Boolean(accountId)}
-              label="账户"
+              label={t("账户")}
               onCheckedChange={(checked) => {
                 setAccountId(checked ? firstSelectableAccountOptionId(acctOptions) : null);
               }}
             >
               <AccountSelectRow
                 hideLabel
-                label="选择账户"
+                label={t("选择账户")}
                 onValueChange={setAccountId}
                 options={acctOptions}
-                placeholder="不绑定账户"
+                placeholder={t("不绑定账户")}
                 value={accountId}
               />
             </ToggleCard>
           )}
 
-          <FieldCard className="transaction-form__date-card" label="日期">
+          <FieldCard className="transaction-form__date-card" label={t("日期")}>
             <DateWheelPicker
-              label="记账日期"
+              label={t("记账日期")}
               onValueChange={setScheduledFor}
               value={scheduledFor}
             />
@@ -240,7 +241,7 @@ export function AutoPendingEditorSheet({
 
           <ToggleCard
             checked={personEnabled}
-            label="人员"
+            label={t("人员")}
             onCheckedChange={(checked) => {
               setPersonEnabled(checked);
               if (!checked) setPersonId(null);
@@ -266,19 +267,19 @@ export function AutoPendingEditorSheet({
                 })}
               </div>
             ) : (
-              <p className="transaction-form__empty-text">还没有人员，可到人员管理中添加</p>
+              <p className="transaction-form__empty-text">{t("还没有人员，可到人员管理中添加")}</p>
             )}
           </ToggleCard>
 
-          <FieldCard className="transaction-form__note-card" label="备注">
+          <FieldCard className="transaction-form__note-card" label={t("备注")}>
             <div className="transaction-form__note-row">
-              <span>备注</span>
+              <span>{t("备注")}</span>
               <Input
-                aria-label="备注"
-                label="备注"
+                aria-label={t("备注")}
+                label={t("备注")}
                 maxLength={240}
                 onChange={(event) => setNote(event.target.value)}
-                placeholder="选填..."
+                placeholder={t("选填...")}
                 value={note}
               />
             </div>

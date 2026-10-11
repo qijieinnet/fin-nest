@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { t } from "@/lib/i18n";
 
 type NavigationProgressContextValue = {
   /** 一次导航开始时调用，返回「本次导航结束」的回调；内部按并发数计数。 */
@@ -128,6 +129,7 @@ export function NavigationProgressProvider({ children }: { children: ReactNode }
 
 export function useNavigationProgress(): NavigationProgressContextValue {
   const context = useContext(NavigationProgressContext);
-  if (!context) throw new Error("useNavigationProgress 必须在 NavigationProgressProvider 内使用");
+  if (!context)
+    throw new Error(t("useNavigationProgress 必须在 NavigationProgressProvider 内使用"));
   return context;
 }

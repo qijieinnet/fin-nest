@@ -14,6 +14,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useAuth, useToast } from "@/providers";
+import { t } from "@/lib/i18n";
 
 export function AdminScreen() {
   const router = useAppRouter();
@@ -41,7 +42,7 @@ export function AdminScreen() {
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.registrationSetting, data);
-      showToast({ tone: "success", message: data.registrationEnabled ? "已开放注册" : "已关闭注册" });
+      showToast({ tone: "success", message: data.registrationEnabled ? t("已开放注册") : t("已关闭注册") });
     },
   });
 
@@ -58,29 +59,29 @@ export function AdminScreen() {
   return (
     <MobileAppShell>
       <MobilePage
-        description="开放注册与用户管理"
+        description={t("开放注册与用户管理")}
         leading={
           <IconButton
             icon={<ChevronLeft size={24} strokeWidth={2.3} />}
-            label="返回"
+            label={t("返回")}
             onClick={goBack}
           />
         }
-        title="管理员功能"
+        title={t("管理员功能")}
       >
         <div className="flex flex-col gap-3.5 pb-6">
           {/* 开放注册开关 */}
           <section className="flex items-center gap-3 rounded-[18px] bg-[var(--color-bg-surface)] px-[18px] py-4 shadow-[var(--shadow-soft)]">
             <div className="min-w-0 flex-1">
-              <p className="text-base text-[var(--color-text-primary)]">允许新用户注册</p>
+              <p className="text-base text-[var(--color-text-primary)]">{t("允许新用户注册")}</p>
               <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                关闭后，注册页将拒绝新用户注册
+                {t("关闭后，注册页将拒绝新用户注册")}
               </p>
             </div>
             <Switch
               checked={registration?.registrationEnabled ?? false}
               disabled={!registration || registrationMutation.isPending}
-              label="允许新用户注册"
+              label={t("允许新用户注册")}
               onCheckedChange={(next) => registrationMutation.mutate(next)}
             />
           </section>
@@ -93,9 +94,9 @@ export function AdminScreen() {
               type="button"
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-base text-[var(--color-text-primary)]">用户管理</span>
+                <span className="block text-base text-[var(--color-text-primary)]">{t("用户管理")}</span>
                 <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                  查看成员、设置权限与禁用
+                  {t("查看成员、设置权限与禁用")}
                 </span>
               </span>
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
@@ -106,9 +107,9 @@ export function AdminScreen() {
               type="button"
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-base text-[var(--color-text-primary)]">自动备份</span>
+                <span className="block text-base text-[var(--color-text-primary)]">{t("自动备份")}</span>
                 <span className="mt-0.5 block truncate text-xs text-[var(--color-text-muted)]">
-                  全系统数据与附件的备份、周期备份与恢复
+                  {t("全系统数据与附件的备份、周期备份与恢复")}
                 </span>
               </span>
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />

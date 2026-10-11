@@ -23,6 +23,7 @@ import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { parseLimitCount, REPEAT_OPTIONS, todayKey } from "./plan-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 type PlanEditorSheetProps = {
   defaultKind?: PlanKind;
@@ -35,15 +36,15 @@ type Option<TValue extends string> = {
   value: TValue;
 };
 
-const KIND_OPTIONS: Array<Option<PlanKind>> = [
-  { value: "expense", label: "支出限额" },
-  { value: "income", label: "收入目标" },
-];
+const KIND_OPTIONS: Array<Option<PlanKind>> = localized([
+  { value: "expense", label: msg("支出限额") },
+  { value: "income", label: msg("收入目标") },
+]);
 
-const METRIC_OPTIONS: Array<Option<PlanMetric>> = [
-  { value: "amount", label: "金额" },
-  { value: "count", label: "次数" },
-];
+const METRIC_OPTIONS: Array<Option<PlanMetric>> = localized([
+  { value: "amount", label: msg("金额") },
+  { value: "count", label: msg("次数") },
+]);
 
 function TextFieldRow({
   inputMode,
@@ -104,7 +105,7 @@ function SelectRow<TValue extends string>({
           type="button"
         >
           <span>{label}</span>
-          <strong>{selected?.label ?? "请选择"}</strong>
+          <strong>{selected?.label ?? t("请选择")}</strong>
           <ChevronRight size={18} />
         </button>
         <PopoverMenu
@@ -217,7 +218,8 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
     personIds,
     subcategoryIds: validSubcategoryIds,
   });
-  const filterSummary = filterCount === 0 ? "全部记账" : `已设置 ${filterCount} 项`;
+  const filterSummary =
+    filterCount === 0 ? t("全部记账") : t("已设置 {filterCount} 项", { filterCount });
   const filterValue = useMemo<BusinessFilterValue>(
     () => ({
       accountId: accountIds.at(-1) ?? null,
@@ -239,11 +241,12 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
       let limitCountValue: number | undefined;
       if (metric === "amount") {
         const parsed = parseMoneyToMicros(limitAmount, { decimalPlaces });
-        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error("请填写大于 0 的金额");
+        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n)
+          throw new Error(t("请填写大于 0 的金额"));
         limitAmountMicros = parsed.amountMicros;
       } else {
         const parsedCount = parseLimitCount(limitCount);
-        if (parsedCount === null) throw new Error("请填写大于 0 的整数次数");
+        if (parsedCount === null) throw new Error(t("请填写大于 0 的整数次数"));
         limitCountValue = parsedCount;
       }
 
@@ -257,7 +260,7 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
       const body = {
         ...(plan ? {} : { kind }),
         metric,
-        name: name.trim() || (kind === "income" ? "收入目标" : "支出限额"),
+        name: name.trim() || (kind === "income" ? t("收入目标") : t("支出限额")),
         limitAmountMicros,
         limitCount: limitCountValue,
         startDate,
@@ -275,7 +278,7 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
         queryClient.invalidateQueries({ queryKey: queryKeys.plans(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.planProgress(ledgerId, saved.id) }),
       ]);
-      showToast({ tone: "success", message: isEditing ? "计划已更新" : "计划已创建" });
+      showToast({ tone: "success", message: isEditing ? t("计划已更新") : t("计划已创建") });
       pop();
     },
   });
@@ -290,14 +293,14 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
         }}
       >
         <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
-          <IconButton icon={<X size={24} strokeWidth={2.3} />} label="关闭" onClick={pop} />
+          <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
           <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-            {isEditing ? "编辑计划" : "新计划"}
+            {isEditing ? t("编辑计划") : t("新计划")}
           </h2>
           <IconButton
             disabled={save.isPending}
             icon={<Check size={24} strokeWidth={2.6} />}
-            label="保存计划"
+            label={t("保存计划")}
             loading={save.isPending}
             variant="primary"
             type="submit"
@@ -316,15 +319,15 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
             />
 
             <TextFieldRow
-              label="计划名称"
+              label={t("计划名称")}
               maxLength={80}
               onChange={(event) => setName(event.target.value)}
-              placeholder="选填，如 拿铁基金"
+              placeholder={t("选填，如 拿铁基金")}
               value={name}
             />
 
             <SelectRow
-              label="目标类型"
+              label={t("目标类型")}
               onChange={setMetric}
               options={METRIC_OPTIONS}
               value={metric}
@@ -333,7 +336,7 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
             {metric === "amount" ? (
               <TextFieldRow
                 inputMode="decimal"
-                label={`${kind === "income" ? "收入" : "支出"}金额`}
+                label={t("{value}金额", { value: kind === "income" ? t("收入") : t("支出") })}
                 onChange={(event) => setLimitAmount(event.target.value)}
                 placeholder="0"
                 prefix="¥"
@@ -342,19 +345,23 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
             ) : (
               <TextFieldRow
                 inputMode="numeric"
-                label={`${kind === "income" ? "收入" : "支出"}次数`}
+                label={t("{value}次数", { value: kind === "income" ? t("收入") : t("支出") })}
                 onChange={(event) => setLimitCount(event.target.value)}
                 placeholder="0"
                 value={limitCount}
               />
             )}
 
-            <FieldCard className="transaction-form__date-card" label="开始日期">
-              <DateWheelPicker label="开始日期" onValueChange={setStartDate} value={startDate} />
+            <FieldCard className="transaction-form__date-card" label={t("开始日期")}>
+              <DateWheelPicker
+                label={t("开始日期")}
+                onValueChange={setStartDate}
+                value={startDate}
+              />
             </FieldCard>
 
             <SelectRow
-              label="重复"
+              label={t("重复")}
               onChange={setRepeatRule}
               options={REPEAT_OPTIONS}
               value={repeatRule}
@@ -364,12 +371,12 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
               <section className="transaction-form__card">
                 <div className="transaction-form__toggle-head">
                   <span>
-                    <strong>周期结束需确认</strong>
-                    <small>本期结束后卡片停在本期显示结算，确认后才进入下一期</small>
+                    <strong>{t("周期结束需确认")}</strong>
+                    <small>{t("本期结束后卡片停在本期显示结算，确认后才进入下一期")}</small>
                   </span>
                   <Switch
                     checked={periodConfirmEnabled}
-                    label="周期结束需确认"
+                    label={t("周期结束需确认")}
                     onCheckedChange={setPeriodConfirmEnabled}
                   />
                 </div>
@@ -381,13 +388,13 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
               onClick={() => setFilterOpen(true)}
               type="button"
             >
-              <span className="font-semibold">过滤条件</span>
+              <span className="font-semibold">{t("过滤条件")}</span>
               <strong>{filterSummary}</strong>
               <ChevronRight size={18} />
             </button>
 
             <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-              不设置过滤条件时，统计该方向的全部记账；设置后仅统计命中的记账。
+              {t("不设置过滤条件时，统计该方向的全部记账；设置后仅统计命中的记账。")}
             </p>
           </div>
         </div>

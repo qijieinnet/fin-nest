@@ -6,9 +6,10 @@ import { apiRequest, getApiErrorMessage, type LedgerMember, ledgerMembersPath, l
 import { queryKeys } from "@/lib/query/query-keys";
 import { useToast } from "@/providers";
 import { RemoveMemberConfirmDialog } from "./RemoveMemberConfirmDialog";
+import { t } from "@/lib/i18n";
 
 function memberName(member: LedgerMember): string {
-  return member.alias || member.account || `用户 ${member.userId.slice(0, 8)}`;
+  return member.alias || member.account || t("用户 {value}", { value: member.userId.slice(0, 8) });
 }
 
 export function MembersSection({
@@ -37,7 +38,7 @@ export function MembersSection({
         queryClient.invalidateQueries({ queryKey: queryKeys.ledgerMembers(ledgerId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.ledgers }),
       ]);
-      showToast({ tone: "success", message: "已移除成员" });
+      showToast({ tone: "success", message: t("已移除成员") });
       setMemberPendingRemove(null);
     },
   });
@@ -47,10 +48,10 @@ export function MembersSection({
   return (
     <section className="flex flex-col gap-2">
       <h3 className="text-sm font-medium text-[var(--color-text-secondary)]">
-        成员{members.length > 0 ? `（${members.length}）` : ""}
+        {t("成员{value}", { value: members.length > 0 ? `（${members.length}）` : "" })}
       </h3>
       {membersQuery.isPending ? (
-        <p className="text-sm text-[var(--color-text-muted)]">加载中…</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{t("加载中…")}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {members.map((member) => {
@@ -64,10 +65,10 @@ export function MembersSection({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">
                     {memberName(member)}
-                    {isSelf ? "（我）" : ""}
+                    {isSelf ? t("（我）") : ""}
                   </span>
                   <span className="text-xs text-[var(--color-text-secondary)]">
-                    {member.role === "owner" ? "所有者" : "成员"}
+                    {member.role === "owner" ? t("所有者") : t("成员")}
                     {member.account ? ` · ${member.account}` : ""}
                   </span>
                 </span>
@@ -78,7 +79,7 @@ export function MembersSection({
                     onClick={() => setMemberPendingRemove(member)}
                     type="button"
                   >
-                    移除
+                    {t("移除")}
                   </button>
                 ) : null}
               </li>

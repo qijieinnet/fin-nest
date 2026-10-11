@@ -20,6 +20,8 @@ export type PublicUser = {
   appLockEnabled: boolean;
   /** 飞书客户端内跳过应用锁（默认 true）；同样进本地缓存，供首帧判断。 */
   appLockSkipInFeishu: boolean;
+  /** 界面语言（账号级）；null = 未设置，跟随设备语言。 */
+  locale: "zh-CN" | "en" | null;
 };
 
 export type AuthResult = {

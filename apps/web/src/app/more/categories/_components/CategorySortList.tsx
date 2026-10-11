@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DragHandle, shiftFor, useDragSort } from "@/components/ui";
 import { type Category } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 /** 一级分类列表的分组标识；其余分组标识即某父级 id（其二级分类列表）。 */
 const CATEGORY_GROUP = "__categories__";
@@ -102,12 +103,12 @@ export function CategorySortList({
                     {category.name}
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                    {count > 0 ? `${count} 个子分类` : "暂无子分类"}
+                    {count > 0 ? t("{count} 个子分类", { count }) : t("暂无子分类")}
                   </span>
                 </span>
               </span>
               <DragHandle
-                label={`拖动排序 ${category.name}`}
+                label={t("拖动排序 {name}", { name: category.name })}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   beginDrag(
@@ -146,7 +147,7 @@ export function CategorySortList({
                         {sub.name}
                       </span>
                       <DragHandle
-                        label={`拖动排序 ${sub.name}`}
+                        label={t("拖动排序 {name}", { name: sub.name })}
                         onPointerDown={(event) => {
                           event.preventDefault();
                           beginDrag(

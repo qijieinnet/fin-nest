@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Surface } from "@/components/ui";
 import type { Subscription } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 type DeleteSubscriptionConfirmDialogProps = {
   deleting?: boolean;
@@ -39,7 +40,7 @@ export function DeleteSubscriptionConfirmDialog({
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-5">
       <button
-        aria-label="取消删除"
+        aria-label={t("取消删除")}
         className="absolute inset-0 bg-black/20 backdrop-blur-[12px]"
         disabled={deleting}
         onClick={onCancel}
@@ -53,9 +54,13 @@ export function DeleteSubscriptionConfirmDialog({
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(255,59,48,0.12)] text-[var(--color-accent-expense)]">
             <AlertTriangle size={24} strokeWidth={2.2} />
           </span>
-          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">删除订阅？</h2>
+          <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">
+            {t("删除订阅？")}
+          </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--color-text-secondary)]">
-            确定删除「{subscription.name}」吗？关联的记账记录会保留，仅移除订阅。
+            {t("确定删除「{name}」吗？关联的记账记录会保留，仅移除订阅。", {
+              name: subscription.name,
+            })}
           </p>
 
           <div className="mt-5 grid w-full grid-cols-2 gap-2.5">
@@ -65,7 +70,7 @@ export function DeleteSubscriptionConfirmDialog({
               onClick={onCancel}
               variant="secondary"
             >
-              取消
+              {t("取消")}
             </Button>
             <Button
               className="w-full justify-center"
@@ -74,7 +79,7 @@ export function DeleteSubscriptionConfirmDialog({
               onClick={onConfirm}
               variant="danger"
             >
-              {deleting ? "删除中…" : "删除"}
+              {deleting ? t("删除中…") : t("删除")}
             </Button>
           </div>
         </div>

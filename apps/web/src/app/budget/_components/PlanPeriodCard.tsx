@@ -10,6 +10,7 @@ import {
   periodShortLabel,
   todayKey,
 } from "./plan-utils";
+import { t } from "@/lib/i18n";
 
 type PlanPeriodCardProps = {
   onTap?: () => void;
@@ -25,7 +26,7 @@ type PlanPeriodCardProps = {
   onConfirm?: () => void;
 };
 
-export function PlanPeriodCardSkeleton({ title = "加载计划" }: { title?: string }) {
+export function PlanPeriodCardSkeleton({ title = t("加载计划") }: { title?: string }) {
   const skeleton = "animate-pulse rounded-full bg-[var(--color-control-fill-muted)]";
 
   return (
@@ -112,9 +113,9 @@ export function PlanPeriodCard({
   const daysLeft = isCurrent ? Math.max(0, daysBetweenKeys(today, endInclusive)) : 0;
 
   const formatValue = (value: bigint) =>
-    isCount ? `${value.toString()} 次` : statMoney(value, decimalPlaces);
+    isCount ? t("{value} 次", { value: value.toString() }) : statMoney(value, decimalPlaces);
   const limitText = isCount
-    ? `${progress.targetCount ?? 0} 次`
+    ? t("{value} 次", { value: progress.targetCount ?? 0 })
     : formatMicros(progress.targetAmountMicros ?? "0", {
         decimalPlaces,
         trimTrailingZeros: true,
@@ -122,12 +123,12 @@ export function PlanPeriodCard({
 
   const stats = [
     {
-      label: isIncome ? "还差" : "剩余",
-      sub: isCurrent ? ` / ${daysLeft}天` : "",
+      label: isIncome ? t("还差") : t("剩余"),
+      sub: isCurrent ? t(" / {daysLeft}天", { daysLeft }) : "",
       value: formatValue(remain),
     },
-    { label: isIncome ? "已收" : "已用", value: formatValue(used) },
-    { label: isIncome ? "超出" : "超过", value: formatValue(over) },
+    { label: isIncome ? t("已收") : t("已用"), value: formatValue(used) },
+    { label: isIncome ? t("超出") : t("超过"), value: formatValue(over) },
   ];
 
   return (
@@ -139,10 +140,10 @@ export function PlanPeriodCard({
       >
         {awaitingConfirm ? (
           <div className="flex items-center gap-2 border-b border-black/[0.06] bg-[var(--color-control-fill-muted)] px-4 py-2 text-[12px] font-medium text-[var(--color-text-secondary)]">
-            <span>本期已结束 · 待确认</span>
+            <span>{t("本期已结束 · 待确认")}</span>
             {pendingConfirmCount > 1 ? (
               <span className="ml-auto text-[var(--color-text-muted)]">
-                还有 {pendingConfirmCount - 1} 期待确认
+                {t("还有 {value} 期待确认", { value: pendingConfirmCount - 1 })}
               </span>
             ) : null}
           </div>
@@ -194,7 +195,7 @@ export function PlanPeriodCard({
             </span>
             <span className="shrink-0 text-right">
               <span className="block text-[12px] text-[var(--color-text-muted)]">
-                {isIncome ? "目标" : "限额"}
+                {isIncome ? t("目标") : t("限额")}
               </span>
               <strong className="mt-1 block text-[17px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                 {limitText}
@@ -217,11 +218,11 @@ export function PlanPeriodCard({
               <span>
                 {overLimit
                   ? isIncome
-                    ? "已超过目标"
-                    : "已超出限额"
+                    ? t("已超过目标")
+                    : t("已超出限额")
                   : isIncome
-                    ? "目标推进中"
-                    : "仍在限额内"}
+                    ? t("目标推进中")
+                    : t("仍在限额内")}
               </span>
             </div>
           </div>
@@ -249,8 +250,8 @@ export function PlanPeriodCard({
         </div>
         {showMatchedFooter ? (
           <div className="flex items-center border-t border-black/[0.06] px-4 py-3 text-sm text-[var(--color-text-secondary)]">
-            <span className="flex-1">命中 {matchedCount} 笔记账</span>
-            <span className="font-medium text-[var(--color-tint)]">查看明细 ›</span>
+            <span className="flex-1">{t("命中 {matchedCount} 笔记账", { matchedCount })}</span>
+            <span className="font-medium text-[var(--color-tint)]">{t("查看明细 ›")}</span>
           </div>
         ) : null}
       </button>
@@ -259,15 +260,18 @@ export function PlanPeriodCard({
         <div className="flex items-center gap-3 border-t border-black/[0.06] px-4 py-3">
           <span className="min-w-0 flex-1 text-[13px] text-[var(--color-text-muted)]">
             {nextPeriod
-              ? `${periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive)}已记 ${nextPeriod.recordedCount} 笔`
-              : "确认后开始下一期"}
+              ? t("{value}已记 {recordedCount} 笔", {
+                  value: periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive),
+                  recordedCount: nextPeriod.recordedCount,
+                })
+              : t("确认后开始下一期")}
           </span>
           <button
             className="shrink-0 rounded-full bg-[var(--color-tint)] px-3.5 py-1.5 text-[13px] font-semibold text-white transition active:scale-[0.97]"
             onClick={onConfirm}
             type="button"
           >
-            确认并开始下一期
+            {t("确认并开始下一期")}
           </button>
         </div>
       ) : null}

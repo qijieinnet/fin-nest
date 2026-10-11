@@ -1,5 +1,6 @@
 import type { Account, AccountType, InvestmentSummary, SubAccount } from "@/lib/api";
 import { formatMicros } from "@/lib/money";
+import { localized, msg, t } from "@/lib/i18n";
 
 export type AccountGroupMeta = {
   key: AccountType;
@@ -7,13 +8,13 @@ export type AccountGroupMeta = {
   kind: "asset" | "liability";
 };
 
-export const ACCOUNT_GROUPS: AccountGroupMeta[] = [
-  { key: "savings", name: "储蓄账户", kind: "asset" },
-  { key: "credit", name: "信用账户", kind: "liability" },
-  { key: "invest", name: "投资账户", kind: "asset" },
-  { key: "receivable", name: "可收回项目", kind: "asset" },
-  { key: "payable", name: "需归还项目", kind: "liability" },
-];
+export const ACCOUNT_GROUPS: AccountGroupMeta[] = localized([
+  { key: "savings", name: msg("储蓄账户"), kind: "asset" },
+  { key: "credit", name: msg("信用账户"), kind: "liability" },
+  { key: "invest", name: msg("投资账户"), kind: "asset" },
+  { key: "receivable", name: msg("可收回项目"), kind: "asset" },
+  { key: "payable", name: msg("需归还项目"), kind: "liability" },
+]);
 
 export const ACCOUNT_EMOJI = [
   "💵",
@@ -42,7 +43,7 @@ export function accountGroupMeta(type: string): AccountGroupMeta {
   return (
     ACCOUNT_GROUPS.find((group) => group.key === type) ?? {
       key: "savings",
-      name: "储蓄账户",
+      name: t("储蓄账户"),
       kind: "asset",
     }
   );
@@ -144,11 +145,11 @@ export const COLOR_MONEY_POSITIVE = "var(--color-accent-expense)";
 export const COLOR_MONEY_NEGATIVE = "var(--color-accent-income)";
 
 export function balanceLabel(type: string): string {
-  if (type === "credit") return "已用额度";
-  if (type === "invest") return "当前市值";
-  if (type === "receivable") return "待收金额";
-  if (type === "payable") return "待还金额";
-  return "账户余额";
+  if (type === "credit") return t("已用额度");
+  if (type === "invest") return t("当前市值");
+  if (type === "receivable") return t("待收金额");
+  if (type === "payable") return t("待还金额");
+  return t("账户余额");
 }
 
 export function formatMoney(micros: bigint | string | null | undefined): string {
@@ -186,14 +187,14 @@ export function investmentStatRows(investment: InvestmentSummary | null): StatRo
   const abs = gain < 0n ? -gain : gain;
   const color = gain >= 0n ? GAIN_COLOR : LOSS_COLOR;
   const rows: StatRowData[] = [
-    { label: "本金", value: formatMoney(cost) },
-    { label: "收益", value: `${gain >= 0n ? "+" : "−"}${formatMoney(abs)}`, color },
+    { label: t("本金"), value: formatMoney(cost) },
+    { label: t("收益"), value: `${gain >= 0n ? "+" : "−"}${formatMoney(abs)}`, color },
   ];
   // 本金 ≤ 0（清仓后收回多于投入，或全部资金都是收益）时收益率没有意义，不展示。
   if (cost > 0n) {
     const rate = (Number(gain) / Number(cost)) * 100;
     rows.push({
-      label: "收益率",
+      label: t("收益率"),
       value: `${rate >= 0 ? "+" : "−"}${Math.abs(rate).toFixed(2)}%`,
       color,
     });
@@ -212,40 +213,48 @@ export function defaultHandoverHint(account: Account | null, subAccount: SubAcco
   if (!subAccount.isDefault || !account) return "";
   const successor = orderedSubAccountRows(account).find((row) => row.id !== subAccount.id);
   if (!successor) return "";
-  return `\n\n「${subAccount.name}」是当前承接「未指定子账户」记账的默认子账户，删除后这个角色会交给「${successor.name}」。`;
+  return t(
+    "\n\n「{name}」是当前承接「未指定子账户」记账的默认子账户，删除后这个角色会交给「{name2}」。",
+    { name: subAccount.name, name2: successor.name },
+  );
 }
 
 /** 列表行的副标题：信用显示额度、投资显示收益、往来显示对方。 */
 export function accountSubtitle(account: Account): string {
   if (account.type === "credit") {
-    return account.creditLimitMicros ? `额度 ${formatMoney(account.creditLimitMicros)}` : "";
+    return account.creditLimitMicros
+      ? t("额度 {value}", { value: formatMoney(account.creditLimitMicros) })
+      : "";
   }
   if (account.type === "invest") {
     if (!account.investment) return "";
     const profit = BigInt(account.investment.gainMicros);
     const abs = profit < 0n ? -profit : profit;
-    return `收益 ${profit >= 0n ? "+" : "−"}${formatMoney(abs).replace("¥", "")}`;
+    return t("收益 {value}{value2}", {
+      value: profit >= 0n ? "+" : "−",
+      value2: formatMoney(abs).replace("¥", ""),
+    });
   }
   if (isLendAccount(account.type)) return account.counterparty ?? "";
   return "";
 }
 
-export const ENTRY_TYPE_LABELS: Record<string, string> = {
-  adjustment: "余额调整",
-  revaluation: "市值涨跌",
-  principal: "本金存取",
-  opening: "初始余额",
-  settlement: "历史收款 / 还款",
-  expense: "支出",
-  income: "收入",
-  transfer_in: "转入",
-  transfer_out: "转出",
-  receivable_increase: "可收回增加",
-  receivable_decrease: "可收回减少",
-  payable_increase: "需归还增加",
-  payable_decrease: "需归还减少",
-  reversal: "冲正",
-};
+export const ENTRY_TYPE_LABELS: Record<string, string> = localized({
+  adjustment: msg("余额调整"),
+  revaluation: msg("市值涨跌"),
+  principal: msg("本金存取"),
+  opening: msg("初始余额"),
+  settlement: msg("历史收款 / 还款"),
+  expense: msg("支出"),
+  income: msg("收入"),
+  transfer_in: msg("转入"),
+  transfer_out: msg("转出"),
+  receivable_increase: msg("可收回增加"),
+  receivable_decrease: msg("可收回减少"),
+  payable_increase: msg("需归还增加"),
+  payable_decrease: msg("需归还减少"),
+  reversal: msg("冲正"),
+});
 
 /**
  * 「余额修改记录」收录的流水类型：都是用户手动改余额的产物，按同一入口展示。
@@ -261,6 +270,7 @@ export function isInvestmentEntry(entryType: string): boolean {
 }
 
 export function entryTypeLabel(entryType: string, accountType: string): string {
-  if (entryType === "settlement") return accountType === "receivable" ? "历史收款" : "历史还款";
-  return ENTRY_TYPE_LABELS[entryType] ?? "变动";
+  if (entryType === "settlement")
+    return accountType === "receivable" ? t("历史收款") : t("历史还款");
+  return ENTRY_TYPE_LABELS[entryType] ?? t("变动");
 }

@@ -6,6 +6,7 @@ import { CategorySelectionList, nestedOptionLabel } from "@/components/business"
 import type { CategoryOption } from "@/components/business";
 import { BottomSheet, IconButton } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
+import { t } from "@/lib/i18n";
 
 type CategorySelectProps = {
   className?: string;
@@ -23,7 +24,7 @@ export function CategorySelect({
   className,
   onChange,
   options,
-  placeholder = "选择分类",
+  placeholder = t("选择分类"),
   value,
 }: CategorySelectProps) {
   const [open, setOpen] = useState(false);
@@ -48,10 +49,10 @@ export function CategorySelect({
         <div className="transaction-form__sheet-header">
           <IconButton
             icon={<X size={24} strokeWidth={2.3} />}
-            label="关闭"
+            label={t("关闭")}
             onClick={() => setOpen(false)}
           />
-          <h2>选择分类</h2>
+          <h2>{t("选择分类")}</h2>
           <span aria-hidden />
         </div>
         <CategorySelectionList

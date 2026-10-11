@@ -14,6 +14,7 @@ import { useAccounts, useCategories } from "@/lib/data/records";
 import { useSheetStack } from "@/providers";
 import { BillDetailScreen } from "../../../bills/[transactionId]/BillDetailScreen";
 import { dayLabel, groupByDay } from "../../../bills/_components/bill-utils";
+import { t } from "@/lib/i18n";
 
 type ItemTransactionListProps = {
   emptyText: string;
@@ -25,7 +26,7 @@ type ItemTransactionListProps = {
 function purchaseBadge() {
   return (
     <span className="rounded-md bg-[var(--color-tint-soft)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-tint)]">
-      购买
+      {t("购买")}
     </span>
   );
 }
@@ -41,8 +42,8 @@ function rowProps(
     const to = accountName(accounts, transaction.toAccountId);
     return {
       type: "transfer" as const,
-      title: "转账",
-      categoryName: "转账",
+      title: t("转账"),
+      categoryName: t("转账"),
       categoryIcon: TRANSFER_ICON,
       description: from && to ? `${from} → ${to}` : undefined,
       amountMicros: transaction.effectiveAmountMicros,
@@ -96,7 +97,7 @@ export function ItemTransactionList({
   };
 
   if (accountsQuery.isPending) {
-    return <LoadingState rows={3} title="加载记录" />;
+    return <LoadingState rows={3} title={t("加载记录")} />;
   }
 
   if (groups.length === 0) {

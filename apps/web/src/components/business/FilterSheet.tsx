@@ -8,6 +8,7 @@ import type { BusinessOption, CategoryOption, TransactionType } from "./business
 import { CategorySelectionList } from "./CategorySelectionList";
 import type { BusinessFilterValue, FilterField } from "./filter-types";
 import { resetFilterValue } from "./filter-utils";
+import { localized, msg, t } from "@/lib/i18n";
 
 type FilterSheetProps = {
   accountOptions?: BusinessOption[];
@@ -25,24 +26,25 @@ type FilterSheetProps = {
 
 type FilterTab = "分类" | "时间" | "账户" | "其它";
 
-const typePills: Array<{ label: string; value: TransactionType | "all" }> = [
-  { label: "全部", value: "all" },
-  { label: "支出", value: "expense" },
-  { label: "收入", value: "income" },
-  { label: "转账", value: "transfer" },
-];
+const typePills: Array<{ label: string; value: TransactionType | "all" }> = localized([
+  { label: msg("全部"), value: "all" },
+  { label: msg("支出"), value: "expense" },
+  { label: msg("收入"), value: "income" },
+  { label: msg("转账"), value: "transfer" },
+]);
 
-const timePills: Array<{ label: string; value: NonNullable<BusinessFilterValue["timePreset"]> }> = [
-  { label: "本月", value: "month" },
-  { label: "上月", value: "lastmonth" },
-  { label: "本周", value: "week" },
-  { label: "上周", value: "lastweek" },
-  { label: "近30天", value: "30d" },
-  { label: "今年", value: "year" },
-  { label: "上年", value: "lastyear" },
-  { label: "全部", value: "all" },
-  { label: "自定义", value: "custom" },
-];
+const timePills: Array<{ label: string; value: NonNullable<BusinessFilterValue["timePreset"]> }> =
+  localized([
+    { label: msg("本月"), value: "month" },
+    { label: msg("上月"), value: "lastmonth" },
+    { label: msg("本周"), value: "week" },
+    { label: msg("上周"), value: "lastweek" },
+    { label: msg("近30天"), value: "30d" },
+    { label: msg("今年"), value: "year" },
+    { label: msg("上年"), value: "lastyear" },
+    { label: msg("全部"), value: "all" },
+    { label: msg("自定义"), value: "custom" },
+  ]);
 
 function hasField(fields: FilterField[], field: FilterField): boolean {
   return fields.includes(field);
@@ -167,7 +169,7 @@ export function FilterSheet({
       className="ui-bottom-sheet--filter"
       onClose={() => onOpenChange(false)}
       open={open}
-      title="过滤条件"
+      title={t("过滤条件")}
     >
       <div className="biz-filter-prototype">
         <div className="biz-filter-prototype__actions">
@@ -179,9 +181,9 @@ export function FilterSheet({
             }}
             type="button"
           >
-            重置
+            {t("重置")}
           </button>
-          <span>过滤条件</span>
+          <span>{t("过滤条件")}</span>
           <button
             onClick={() => {
               onChange(draft);
@@ -190,13 +192,13 @@ export function FilterSheet({
             }}
             type="button"
           >
-            完成
+            {t("完成")}
           </button>
         </div>
 
         <Tabs
           className="biz-filter-tabs"
-          items={tabs.map((item) => ({ label: item, value: item }))}
+          items={tabs.map((item) => ({ label: t(item), value: item }))}
           onValueChange={(nextTab) => setTab(nextTab as FilterTab)}
           value={activeTab}
         />
@@ -206,7 +208,7 @@ export function FilterSheet({
             <>
               {hasField(fields, "type") ? (
                 <>
-                  <p className="biz-filter-label">交易类型</p>
+                  <p className="biz-filter-label">{t("交易类型")}</p>
                   <div className="biz-filter-chip-row">
                     {typePills.map((pill) => (
                       <FilterChip
@@ -229,7 +231,7 @@ export function FilterSheet({
 
               {hasField(fields, "category") && effectiveType !== "transfer" ? (
                 <>
-                  <p className="biz-filter-label">分类（可选到二级，多选）</p>
+                  <p className="biz-filter-label">{t("分类（可选到二级，多选）")}</p>
                   <CategorySelectionList
                     highlightParentWhenChildSelected={false}
                     onSelect={(option, parent) => {
@@ -249,7 +251,7 @@ export function FilterSheet({
               ) : null}
 
               {effectiveType === "transfer" ? (
-                <p className="biz-filter-hint">转账记录不区分分类，可在「账户」中筛选。</p>
+                <p className="biz-filter-hint">{t("转账记录不区分分类，可在「账户」中筛选。")}</p>
               ) : null}
             </>
           ) : null}
@@ -258,7 +260,7 @@ export function FilterSheet({
             <>
               {hasField(fields, "dateRange") ? (
                 <>
-                  <p className="biz-filter-label">记账日期</p>
+                  <p className="biz-filter-label">{t("记账日期")}</p>
                   <div className="biz-filter-chip-row">
                     {timePills.map((pill) => (
                       <FilterChip
@@ -272,20 +274,20 @@ export function FilterSheet({
                   {(draft.timePreset ?? "month") === "custom" ? (
                     <div className="biz-filter-date-range biz-filter-date-range--custom">
                       <label className="biz-filter-date-cell">
-                        <span className="biz-filter-date-caption">开始日期</span>
+                        <span className="biz-filter-date-caption">{t("开始日期")}</span>
                         <input
                           onChange={(event) => patch({ dateFrom: event.currentTarget.value })}
-                          placeholder="选择日期"
+                          placeholder={t("选择日期")}
                           type="date"
                           value={draft.dateFrom ?? ""}
                         />
                       </label>
                       <span>—</span>
                       <label className="biz-filter-date-cell">
-                        <span className="biz-filter-date-caption">结束日期</span>
+                        <span className="biz-filter-date-caption">{t("结束日期")}</span>
                         <input
                           onChange={(event) => patch({ dateTo: event.currentTarget.value })}
-                          placeholder="选择日期"
+                          placeholder={t("选择日期")}
                           type="date"
                           value={draft.dateTo ?? ""}
                         />
@@ -297,23 +299,23 @@ export function FilterSheet({
 
               {hasField(fields, "createdRange") ? (
                 <>
-                  <p className="biz-filter-label">记录时间（按入账当天筛选）</p>
+                  <p className="biz-filter-label">{t("记录时间（按入账当天筛选）")}</p>
                   <div className="biz-filter-date-range biz-filter-date-range--custom">
                     <label className="biz-filter-date-cell">
-                      <span className="biz-filter-date-caption">开始日期</span>
+                      <span className="biz-filter-date-caption">{t("开始日期")}</span>
                       <input
                         onChange={(event) => patch({ createdFrom: event.currentTarget.value })}
-                        placeholder="选择日期"
+                        placeholder={t("选择日期")}
                         type="date"
                         value={draft.createdFrom ?? ""}
                       />
                     </label>
                     <span>—</span>
                     <label className="biz-filter-date-cell">
-                      <span className="biz-filter-date-caption">结束日期</span>
+                      <span className="biz-filter-date-caption">{t("结束日期")}</span>
                       <input
                         onChange={(event) => patch({ createdTo: event.currentTarget.value })}
-                        placeholder="选择日期"
+                        placeholder={t("选择日期")}
                         type="date"
                         value={draft.createdTo ?? ""}
                       />
@@ -326,7 +328,7 @@ export function FilterSheet({
 
           {activeTab === "账户" ? (
             <>
-              <p className="biz-filter-label">账户（可选到子账户，多选）</p>
+              <p className="biz-filter-label">{t("账户（可选到子账户，多选）")}</p>
               <div className="biz-category-picker-sheet">
                 {primaryAccountOptions.map((account) => {
                   const subOptions = accountOptions.filter(
@@ -381,11 +383,11 @@ export function FilterSheet({
             <>
               {hasField(fields, "keyword") ? (
                 <>
-                  <p className="biz-filter-label">备注搜索</p>
+                  <p className="biz-filter-label">{t("备注搜索")}</p>
                   <input
                     className="biz-filter-input"
                     onChange={(event) => patch({ keyword: event.currentTarget.value })}
-                    placeholder="输入备注关键词..."
+                    placeholder={t("输入备注关键词...")}
                     value={draft.keyword ?? ""}
                   />
                 </>
@@ -393,7 +395,7 @@ export function FilterSheet({
 
               {hasField(fields, "person") ? (
                 <>
-                  <p className="biz-filter-label">人员（可多选）</p>
+                  <p className="biz-filter-label">{t("人员（可多选）")}</p>
                   <div className="biz-filter-chip-row">
                     {personOptions.map((person) => (
                       <FilterChip
@@ -412,7 +414,7 @@ export function FilterSheet({
 
               {hasField(fields, "creator") ? (
                 <>
-                  <p className="biz-filter-label">记账人 / 创建人（可多选）</p>
+                  <p className="biz-filter-label">{t("记账人 / 创建人（可多选）")}</p>
                   <div className="biz-filter-chip-row">
                     {creatorOptions.map((creator) => (
                       <FilterChip
@@ -431,12 +433,12 @@ export function FilterSheet({
 
               {hasField(fields, "amountRange") ? (
                 <>
-                  <p className="biz-filter-label">金额区间</p>
+                  <p className="biz-filter-label">{t("金额区间")}</p>
                   <div className="biz-filter-date-range">
                     <input
                       inputMode="decimal"
                       onChange={(event) => patch({ amountMin: event.currentTarget.value })}
-                      placeholder="最小"
+                      placeholder={t("最小")}
                       type="text"
                       value={draft.amountMin ?? ""}
                     />
@@ -444,7 +446,7 @@ export function FilterSheet({
                     <input
                       inputMode="decimal"
                       onChange={(event) => patch({ amountMax: event.currentTarget.value })}
-                      placeholder="最大"
+                      placeholder={t("最大")}
                       type="text"
                       value={draft.amountMax ?? ""}
                     />

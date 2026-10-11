@@ -12,6 +12,7 @@ import {
   updatePendingAiRound,
   waitForAiChatRun,
 } from "@/lib/data/ai-chat-run";
+import { t } from "@/lib/i18n";
 
 /**
  * streaming：连接正常收流；recovering：连接已断，按 requestId 等服务端结果；stopping：已点停止；
@@ -169,17 +170,17 @@ export function useAiChatRounds(ledgerId: string | null, callbacks: AiRoundCallb
         if (life.signal.aborted) return;
         if (!detail) {
           // 前台持续拉不到：先不占着界面，保留待恢复记录，下次进入 AI 页续接（服务端已有结果）。
-          notify("error", "网络异常，AI 的结果稍后会显示在这个对话里");
+          notify("error", t("网络异常，AI 的结果稍后会显示在这个对话里"));
           drop(requestId, true);
           return;
         }
-        if (lost) notify("error", "这条消息的处理意外中断了，请重新发送");
+        if (lost) notify("error", t("这条消息的处理意外中断了，请重新发送"));
         const round = drop(requestId);
         if (round) callbacksRef.current.onFinished(round, { conversationId, detail });
       } catch (error) {
         if (life.signal.aborted) return;
         // 确定性拒绝（登录失效/无权限/会话不存在）：停止等待，不撤回本地消息，也不整体重载会话。
-        notify("error", getApiErrorMessage(error) || "无法获取这条消息的结果");
+        notify("error", getApiErrorMessage(error) || t("无法获取这条消息的结果"));
         drop(requestId);
       }
     },
@@ -216,18 +217,18 @@ export function useAiChatRounds(ledgerId: string | null, callbacks: AiRoundCallb
         }
         if (terminal.state === "unknown") {
           const round = drop(requestId);
-          if (round && round.phase !== "stopping") notify("error", "发送失败，请重新发送");
+          if (round && round.phase !== "stopping") notify("error", t("发送失败，请重新发送"));
           if (round) callbacksRef.current.onDiscarded(round);
           return;
         }
         // unreachable：先不占着界面，保留待恢复记录，下次进入 AI 页继续。
-        notify("error", "网络异常，AI 的结果稍后会显示在这个对话里");
+        notify("error", t("网络异常，AI 的结果稍后会显示在这个对话里"));
         drop(requestId, true);
       } catch (error) {
         if (life.signal.aborted) return;
         // 确定性拒绝（登录失效/无权限/会话不存在）：停止等待。用户消息可能已落库，不撤回本地消息，
         // 也不去整体重载会话（无权读取，且会冲掉本地内容）。
-        notify("error", getApiErrorMessage(error) || "无法获取这条消息的结果");
+        notify("error", getApiErrorMessage(error) || t("无法获取这条消息的结果"));
         drop(requestId);
       }
     },
@@ -336,7 +337,7 @@ export function useAiChatRounds(ledgerId: string | null, callbacks: AiRoundCallb
         // 取消失败时只有仍停在本次设置的 stopping 才回退：期间服务端已出结论进入 syncing 等，保持现状。
         const current = storeRef.current[requestId];
         if (current?.phase !== "stopping" || stopSeqRef.current.get(requestId) !== seq) return;
-        callbacksRef.current.notify("error", "停止失败，请重试");
+        callbacksRef.current.notify("error", t("停止失败，请重试"));
         patch(requestId, (current) => ({
           ...current,
           phase: previousPhase === "streaming" ? "recovering" : previousPhase,

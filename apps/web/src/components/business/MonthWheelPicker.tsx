@@ -2,6 +2,7 @@
 
 import { CalendarRange } from "lucide-react";
 import { Input } from "@/components/ui";
+import { t } from "@/lib/i18n";
 
 type MonthWheelPickerProps = {
   label?: string;
@@ -9,7 +10,7 @@ type MonthWheelPickerProps = {
   value: string;
 };
 
-export function MonthWheelPicker({ label = "月份", onValueChange, value }: MonthWheelPickerProps) {
+export function MonthWheelPicker({ label = t("月份"), onValueChange, value }: MonthWheelPickerProps) {
   return (
     <div className="biz-date-picker">
       <CalendarRange size={20} />

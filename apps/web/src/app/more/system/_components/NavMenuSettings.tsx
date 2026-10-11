@@ -5,6 +5,7 @@ import { DragHandle, shiftFor, Switch, useDragSort } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import { navMenuByKey, type NavMenuKey } from "@/lib/nav/navMenus";
 import { usePreferences } from "@/providers";
+import { t } from "@/lib/i18n";
 
 const NAV_MENU_GROUP = "__nav_menus__";
 
@@ -69,11 +70,15 @@ export function NavMenuSettings() {
               </span>
               <Switch
                 checked={visible}
-                label={`${visible ? "隐藏" : "显示"}${menu.label}`}
+                label={
+                  visible
+                    ? t("隐藏{name}", { name: menu.label })
+                    : t("显示{name}", { name: menu.label })
+                }
                 onCheckedChange={(checked) => toggleVisible(key, checked)}
               />
               <DragHandle
-                label={`拖动排序 ${menu.label}`}
+                label={t("拖动排序 {label}", { label: menu.label })}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   beginDrag(NAV_MENU_GROUP, order, index, event.clientY);

@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   login: "/auth/login",
   logout: "/auth/logout",
   me: "/auth/me",
+  mePreferences: "/auth/me/preferences",
   password: "/auth/password",
   /** 校验当前登录用户密码（应用锁解锁用），成功 204、失败 401。 */
   passwordVerify: "/auth/password/verify",

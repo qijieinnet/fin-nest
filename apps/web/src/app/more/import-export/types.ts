@@ -1,3 +1,4 @@
+import { localized, msg } from "@/lib/i18n";
 export type ImportRowIssue = { sheet: string; row: number; message: string };
 
 export type ImportCounts = Record<string, { new: number; matched: number; skipped: number }>;
@@ -23,14 +24,14 @@ export type ImportJobStatusResult = {
 export type RestoreResult = { counts: Record<string, number> };
 
 /** counts key → 界面展示名，顺序即展示顺序。 */
-export const IMPORT_COUNT_LABELS: [string, string][] = [
-  ["transactions", "流水"],
-  ["categories", "分类"],
-  ["subcategories", "子分类"],
-  ["people", "成员"],
-  ["accounts", "账户"],
-  ["subAccounts", "子账户"],
-  ["insurances", "保险"],
-  ["items", "物品"],
-  ["itemTypes", "物品类型"],
-];
+export const IMPORT_COUNT_LABELS: [string, string][] = localized([
+  ["transactions", msg("流水")],
+  ["categories", msg("分类")],
+  ["subcategories", msg("子分类")],
+  ["people", msg("成员")],
+  ["accounts", msg("账户")],
+  ["subAccounts", msg("子账户")],
+  ["insurances", msg("保险")],
+  ["items", msg("物品")],
+  ["itemTypes", msg("物品类型")],
+]);

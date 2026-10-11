@@ -19,6 +19,7 @@ import {
 import { IconButton } from "@/components/ui";
 import type { AttachmentItem } from "./business-types";
 import { PdfPreview } from "./PdfPreview";
+import { t } from "@/lib/i18n";
 
 function formatFileSize(sizeBytes?: number): string {
   if (!sizeBytes) return "";
@@ -241,7 +242,7 @@ export function AttachmentPreview({
       : null;
 
   if (items.length === 0) {
-    return <p className="biz-muted">暂无附件</p>;
+    return <p className="biz-muted">{t("暂无附件")}</p>;
   }
 
   if (variant === "grid") {
@@ -255,7 +256,7 @@ export function AttachmentPreview({
           return (
             <div className="biz-attachment-tile" key={item.id}>
               <button
-                aria-label={`打开 ${item.name}`}
+                aria-label={t("打开 {name}", { name: item.name })}
                 className="biz-attachment-tile__open"
                 onClick={() => void handleOpen(item)}
                 type="button"
@@ -276,7 +277,7 @@ export function AttachmentPreview({
               </button>
               {onRemove ? (
                 <button
-                  aria-label={`移除 ${item.name}`}
+                  aria-label={t("移除 {name}", { name: item.name })}
                   className="biz-attachment-tile__remove"
                   onClick={() => onRemove(item.id)}
                   type="button"
@@ -323,13 +324,13 @@ export function AttachmentPreview({
               </span>
               <span className="biz-attachment__copy">
                 <strong>{item.name}</strong>
-                <small>{formatFileSize(item.sizeBytes) || item.contentType || "文件"}</small>
+                <small>{formatFileSize(item.sizeBytes) || item.contentType || t("文件")}</small>
               </span>
             </button>
             {onRemove ? (
               <IconButton
                 icon={<X size={16} />}
-                label={`移除 ${item.name}`}
+                label={t("移除 {name}", { name: item.name })}
                 onClick={() => onRemove(item.id)}
                 variant="muted"
               />
@@ -374,7 +375,7 @@ function AttachmentFullscreenPreview({
   return (
     <div className="biz-attachment-preview">
       <button
-        aria-label="关闭预览"
+        aria-label={t("关闭预览")}
         className="biz-attachment-preview__backdrop"
         onClick={onClose}
         type="button"
@@ -389,32 +390,37 @@ function AttachmentFullscreenPreview({
             <>
               <IconButton
                 icon={<ZoomOut size={17} />}
-                label="缩小"
+                label={t("缩小")}
                 onClick={onZoomOut}
                 variant="muted"
               />
               <span>{Math.round(zoom * 100)}%</span>
               <IconButton
                 icon={<ZoomIn size={17} />}
-                label="放大"
+                label={t("放大")}
                 onClick={onZoomIn}
                 variant="muted"
               />
               <IconButton
                 icon={<RotateCcw size={17} />}
-                label="重置缩放"
+                label={t("重置缩放")}
                 onClick={onResetZoom}
                 variant="muted"
               />
             </>
           ) : null}
-          <IconButton icon={<X size={18} />} label="关闭预览" onClick={onClose} variant="muted" />
+          <IconButton
+            icon={<X size={18} />}
+            label={t("关闭预览")}
+            onClick={onClose}
+            variant="muted"
+          />
         </div>
       </header>
       <div className="biz-attachment-preview__body">
         {hasMultiple ? (
           <button
-            aria-label="上一张附件"
+            aria-label={t("上一张附件")}
             className="biz-attachment-preview__nav biz-attachment-preview__nav--previous"
             onClick={onPrevious}
             type="button"
@@ -425,11 +431,11 @@ function AttachmentFullscreenPreview({
         {status === "loading" ? (
           <div className="biz-attachment-preview__status" role="status">
             <Loader2 className="biz-attachment-preview__spinner" size={26} />
-            <span>正在加载附件…</span>
+            <span>{t("正在加载附件…")}</span>
           </div>
         ) : status === "error" || !url ? (
           <div className="biz-attachment-preview__status" role="alert">
-            <span>附件暂时无法预览</span>
+            <span>{t("附件暂时无法预览")}</span>
           </div>
         ) : image ? (
           <img alt={item.name} src={url} style={{ transform: `scale(${zoom})` }} />
@@ -442,7 +448,7 @@ function AttachmentFullscreenPreview({
         )}
         {hasMultiple ? (
           <button
-            aria-label="下一张附件"
+            aria-label={t("下一张附件")}
             className="biz-attachment-preview__nav biz-attachment-preview__nav--next"
             onClick={onNext}
             type="button"
