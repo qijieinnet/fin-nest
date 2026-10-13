@@ -11,6 +11,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { DataTransferModule } from "./modules/data-transfer/data-transfer.module";
 import { FeishuModule } from "./modules/feishu/feishu.module";
 import { FilesModule } from "./modules/files/files.module";
+import { FxModule } from "./modules/fx/fx.module";
 import { LedgersModule } from "./modules/ledgers/ledgers.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PlansModule } from "./modules/plans/plans.module";
@@ -36,6 +37,7 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     DataTransferModule,
     FeishuModule,
     FilesModule,
+    FxModule,
     NotificationsModule,
     TransactionsModule,
     RecordsModule,

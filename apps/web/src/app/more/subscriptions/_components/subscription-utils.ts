@@ -1,5 +1,6 @@
+import { convertMicros } from "@fin-nest/shared";
 import type { Subscription, SubscriptionCategory } from "@/lib/api";
-import { formatMicros } from "@/lib/money";
+import { baseCurrencyCode, formatAmountIn } from "@/lib/money";
 import { localized, msg, t } from "@/lib/i18n";
 
 /** 计费周期选项，value 与后端 BILLING_CYCLE_LABELS 一致。 */
@@ -189,11 +190,29 @@ export function monthlyCostMicros(
   }
 }
 
-export function formatMoney(micros: bigint | string | null | undefined): string {
+/** 金额（去尾零、不带本币符号）；传外币时带外币符号——订阅费用按订阅自己的币种显示。 */
+export function formatMoney(
+  micros: bigint | string | null | undefined,
+  currency?: string | null,
+): string {
   if (micros === null || micros === undefined) return "—";
-  return formatMicros(typeof micros === "bigint" ? micros.toString() : micros, {
+  return formatAmountIn(typeof micros === "bigint" ? micros.toString() : micros, currency, {
     trimTrailingZeros: true,
   });
+}
+
+/**
+ * 月均费用折成本币（合计用）：本币订阅原样；外币订阅按 `rates`（币种 → 1 外币折多少本币）折算，
+ * 缺汇率返回 null，调用方不计入。
+ */
+export function monthlyCostBaseMicros(
+  subscription: Pick<Subscription, "priceMicros" | "billingCycle" | "currency">,
+  rates: Map<string, bigint>,
+): bigint | null {
+  const monthly = monthlyCostMicros(subscription);
+  if (!subscription.currency || subscription.currency === baseCurrencyCode()) return monthly;
+  const rate = rates.get(subscription.currency);
+  return rate ? convertMicros(monthly, rate) : null;
 }
 
 /** 把微单位金额转成输入框用的普通字符串（无货币符号、无千分位）。 */

@@ -157,13 +157,14 @@ test("@ 占位符清理", () => {
 test("金额按账本小数位补零并加千分位", () => {
   assert.equal(formatMicros("35000000", 2, "CNY"), "¥35.00");
   assert.equal(formatMicros("1234567890000", 2, "CNY"), "¥1,234,567.89");
-  assert.equal(formatMicros("35000000", 0, "JPY"), "¥35");
+  // JPY 与 CNY 同样写作 ¥，同屏出现时分不清，目录里 JPY 用 JP¥。
+  assert.equal(formatMicros("35000000", 0, "JPY"), "JP¥35");
   assert.equal(formatMicros("-35500000", 2, "CNY"), "-¥35.50");
   assert.equal(formatMicros(0n, 2, "CNY"), "¥0.00");
 });
 
 test("未收录币种用代码前缀，不猜符号", () => {
-  assert.equal(formatMicros("1000000", 2, "SGD"), "SGD 1.00");
+  assert.equal(formatMicros("1000000", 2, "SEK"), "SEK 1.00");
   assert.equal(formatMicros("1000000", 2, null), "1.00");
 });
 

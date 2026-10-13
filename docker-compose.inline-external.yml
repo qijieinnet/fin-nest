@@ -121,6 +121,9 @@ services:
       # SEARCH_API_KEY: sk-xxx
       # SEARCH_BASE_URL: http://searxng:8080
       # SEARCH_MAX_RESULTS: 5
+      # 汇率数据源（多币种）：frankfurter = 欧洲央行参考汇率（免 key）；none = 不联网、汇率只能手填。
+      # 连不上外网也不影响记账，只是外币要在「记账设置 › 汇率」里手填。
+      FX_PROVIDER: frankfurter
       # 飞书机器人（可选）：两者必须同时填，只填一个会启动报错。
       # FEISHU_APP_ID: cli_xxx
       # FEISHU_APP_SECRET: xxx
@@ -177,6 +180,8 @@ services:
       # 周期备份由 worker 写、页面列表由 api 读，只挂一边会出现「备份生成了但页面看不到」。
       BACKUP_DIR: /data/backups
       WORKER_POLL_INTERVAL_MS: "30000"
+      # 汇率数据源：worker 每天刷新在用外币的汇率；须与 api 的 FX_PROVIDER 一致。
+      FX_PROVIDER: frankfurter
     volumes:
       # ★5 必须与 api 写同一个宿主机目录，否则周期备份写在别处、页面里看不到。
       - ./fin-nest-backups:/data/backups

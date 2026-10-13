@@ -103,7 +103,7 @@ export function AccountsScreenMobile() {
           }`}
         >
           {liability && total !== 0n ? "−" : ""}
-          {formatMoney(total)}
+          {formatMoney(total, account.currency)}
         </span>
         <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
       </button>
@@ -180,6 +180,7 @@ export function AccountsScreenMobile() {
               assetsMicros={netWorth.assetsMicros}
               decimalPlaces={decimalPlaces}
               liabilitiesMicros={netWorth.liabilitiesMicros}
+              missingCurrencies={netWorth.missingCurrencies}
               netMicros={netWorth.netMicros}
             />
 

@@ -1,3 +1,4 @@
+import { currencyDecimals } from "@fin-nest/shared";
 import { Injectable } from "@nestjs/common";
 import {
   currentTimeKey,
@@ -495,6 +496,8 @@ type SubscriptionRow = {
   provider: string | null;
   planName: string | null;
   priceMicros: bigint | null;
+  /** 费用币种；空 = 账本本币。 */
+  currency: string | null;
   billingCycle: string | null;
   paymentMethod: string | null;
   autoRenew: boolean;
@@ -541,11 +544,18 @@ function buildOccurrence(
     "费用",
     subscription.priceMicros === null
       ? null
-      : formatMicros(
-          subscription.priceMicros,
-          context.ledger?.amountDecimalPlaces ?? 2,
-          context.ledger?.currency,
-        ),
+      : // 外币订阅按自己的币种显示（$20 而不是 ¥20）；本币沿用账本小数位。
+        subscription.currency && subscription.currency !== context.ledger?.currency
+        ? formatMicros(
+            subscription.priceMicros,
+            currencyDecimals(subscription.currency),
+            subscription.currency,
+          )
+        : formatMicros(
+            subscription.priceMicros,
+            context.ledger?.amountDecimalPlaces ?? 2,
+            context.ledger?.currency,
+          ),
   );
   push(fields, "计费周期", label(BILLING_CYCLE_LABELS, subscription.billingCycle));
   push(fields, "续费方式", subscription.autoRenew ? "自动续费" : "手动续费");
@@ -691,6 +701,8 @@ type PendingRow = {
   ledgerId: string;
   type: string;
   amountMicros: bigint;
+  originalCurrency: string | null;
+  originalAmountMicros: bigint | null;
   scheduledFor: Date;
   categoryId: string | null;
   subcategoryId: string | null;
@@ -775,6 +787,17 @@ function buildPendingOccurrence(
   } else {
     push(fields, "分类", twoLevel(pending.categoryId, pending.subcategoryId));
     push(fields, "账户", twoLevel(pending.accountId, pending.subAccountId));
+  }
+  if (pending.originalCurrency && pending.originalAmountMicros !== null) {
+    push(
+      fields,
+      "原币金额",
+      formatMicros(
+        pending.originalAmountMicros,
+        currencyDecimals(pending.originalCurrency),
+        pending.originalCurrency,
+      ),
+    );
   }
   push(fields, "计划入账日期", dateKey(pending.scheduledFor));
   push(fields, "人员", name(pending.personId));

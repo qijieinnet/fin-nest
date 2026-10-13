@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, X } from "lucide-react";
 import { type ChangeEvent, useRef, useState } from "react";
-import { DateWheelPicker, InlineHint } from "@/components/business";
+import { CurrencySelect, DateWheelPicker, InlineHint } from "@/components/business";
 import { EmojiPicker, IconButton, PopoverMenu } from "@/components/ui";
 import {
   apiRequest,
@@ -15,9 +15,10 @@ import {
 } from "@/lib/api";
 import { usePeople } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { currencyLabel } from "@/lib/data/currency-names";
+import { currencyDecimals, currencySymbolOf, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { useBaseCurrency, useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { ACCOUNT_GROUPS } from "./account-utils";
 import { t } from "@/lib/i18n";
 
@@ -176,11 +177,22 @@ export function AccountEditorSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
-  const decimalPlaces = useDecimalPlaces();
+  const ledgerDecimalPlaces = useDecimalPlaces();
+  const { code: baseCurrency } = useBaseCurrency();
   const isSubAccountMode = Boolean(parentAccount);
   const isEditing = Boolean(account || subAccount);
 
   const [type, setType] = useState<AccountType>(account?.type ?? "savings");
+  // 账户币种：建账时选，之后不可改；子账户随父账户。往来账户恒为本币。
+  const [currencyChoice, setCurrencyChoice] = useState(
+    account?.currency ?? parentAccount?.currency ?? baseCurrency,
+  );
+  const isLendType = type === "receivable" || type === "payable";
+  const currency = isLendType ? baseCurrency : currencyChoice;
+  // 余额/额度按账户币种输入：本币沿用账本小数位，外币用币种自己的（JPY 0 位）。
+  const decimalPlaces =
+    currency === baseCurrency ? ledgerDecimalPlaces : currencyDecimals(currency);
+  const symbol = currencySymbolOf(currency);
   const [name, setName] = useState(subAccount?.name ?? account?.name ?? "");
   const [icon, setIcon] = useState(subAccount?.icon ?? account?.icon ?? "💵");
   const [balance, setBalance] = useState("");
@@ -265,12 +277,12 @@ export function AccountEditorSheet({
       }
 
       const balanceParsed = balance.trim()
-        ? parseMoneyToMicros(balance, { allowNegative: true })
+        ? parseMoneyToMicros(balance, { allowNegative: true, decimalPlaces })
         : null;
       if (balanceParsed && !balanceParsed.ok) throw new Error(t("余额格式不正确"));
       return apiRequest<Account>(ledgerApiPath(ledgerId, "/accounts"), {
         method: "POST",
-        body: { ...shared, type, balanceMicros: balanceParsed?.amountMicros },
+        body: { ...shared, type, currency, balanceMicros: balanceParsed?.amountMicros },
         headers: { "idempotency-key": createClientId("account") },
       });
     },
@@ -374,6 +386,33 @@ export function AccountEditorSheet({
           </div>
         ) : null}
 
+        {!isSubAccountMode && !isLendType ? (
+          <div className="transaction-form__card">
+            <div className="account-form__select-row">
+              <span>
+                {t("币种")}
+                {isEditing ? (
+                  <InlineHint text={t("账户币种创建后不可修改")} />
+                ) : (
+                  <InlineHint
+                    text={t("余额与流水都按账户币种记；外币账户在净资产、合计里按汇率折成本币")}
+                  />
+                )}
+              </span>
+              {isEditing ? (
+                <strong>{currencyLabel(currency)}</strong>
+              ) : (
+                <CurrencySelect
+                  onChange={setCurrencyChoice}
+                  pinned={baseCurrency}
+                  value={currency}
+                  variant="row"
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <div className="transaction-form__card">
           <button
             className="account-form__select-row"
@@ -437,7 +476,7 @@ export function AccountEditorSheet({
               label={t("初始余额（选填）")}
               onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={symbol}
               value={balance}
             />
           </div>
@@ -450,7 +489,7 @@ export function AccountEditorSheet({
               label={t("信用额度")}
               onChange={(event) => setCreditLimit(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={symbol}
               value={creditLimit}
             />
             {!isEditing ? (
@@ -461,7 +500,7 @@ export function AccountEditorSheet({
                   label={t("已用额度")}
                   onChange={(event) => setBalance(event.target.value)}
                   placeholder="0.00"
-                  prefix="¥"
+                  prefix={symbol}
                   value={balance}
                 />
               </>
@@ -485,7 +524,7 @@ export function AccountEditorSheet({
                 label={t("当前余额")}
                 onChange={(event) => setBalance(event.target.value)}
                 placeholder="0.00"
-                prefix="¥"
+                prefix={symbol}
                 value={balance}
               />
             </div>
@@ -503,7 +542,7 @@ export function AccountEditorSheet({
               label={t("当前市值")}
               onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={symbol}
               value={balance}
             />
           </div>
@@ -518,7 +557,7 @@ export function AccountEditorSheet({
                   label={type === "receivable" ? t("待收金额") : t("待还金额")}
                   onChange={(event) => setBalance(event.target.value)}
                   placeholder="0.00"
-                  prefix="¥"
+                  prefix={symbol}
                   value={balance}
                 />
                 <span className="transaction-form__divider" />

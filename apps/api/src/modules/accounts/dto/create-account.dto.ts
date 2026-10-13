@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CURRENCY_CODES } from "@fin-nest/shared";
 import { IsBoolean, IsInt, IsIn, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
 
 export class CreateAccountDto {
@@ -22,7 +23,15 @@ export class CreateAccountDto {
   @IsString()
   personId?: string | null;
 
-  @ApiPropertyOptional({ example: "0" })
+  @ApiPropertyOptional({
+    example: "USD",
+    description: "账户币种，不传为账本本币；建账后不可改。往来账户（可收回/需归还）只能是本币",
+  })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  currency?: string;
+
+  @ApiPropertyOptional({ example: "0", description: "初始余额（账户币种）" })
   @IsOptional()
   @IsString()
   @Matches(/^-?\d+$/)

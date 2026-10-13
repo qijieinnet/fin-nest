@@ -1,5 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import { BackgroundJobsService, NotificationService, SystemBackupService } from "@fin-nest/backend";
+import {
+  BackgroundJobsService,
+  FxRateService,
+  NotificationService,
+  SystemBackupService,
+  todayKey,
+} from "@fin-nest/backend";
 import { AutoSchedulerService } from "./automation/auto-scheduler.service";
 import { FileDeletePayload, FileDeleteService } from "./files/file-delete.service";
 import { ReminderSchedulerService } from "./notifications/reminder-scheduler.service";
@@ -13,7 +19,13 @@ export class WorkerRunnerService {
     private readonly reminderScheduler: ReminderSchedulerService,
     private readonly notifications: NotificationService,
     private readonly systemBackup: SystemBackupService,
+    private readonly fx: FxRateService,
   ) {}
+
+  /** 上次刷新汇率成功的本地日期；进程重启后会再刷一次，多一次请求无妨。 */
+  private fxRefreshedOn: string | null = null;
+  /** 刷新失败（外网不通）后的退避：一小时后再试，别每 30 秒打一次外网。 */
+  private fxRetryAfter = 0;
 
   async runOnce(): Promise<{ processed: number; created: number; notificationsSent: number }> {
     const gated = await this.systemBackup.runWorkerBatch(() => this.runAllowedBatch());
@@ -47,6 +59,23 @@ export class WorkerRunnerService {
       await this.reminderScheduler.scanEntryReminders();
     } catch (error) {
       console.error("fin-nest-worker entry reminder scan failed:", error);
+    }
+    // 汇率每天刷新一次（只请求在用的外币；未启用数据源时直接跳过）。放在 job 循环之前：
+    // 自动记账生成待确认时按当日汇率折算本币，只查库不联网，靠这里先把汇率备好。
+    if (
+      this.fx.providerEnabled &&
+      this.fxRefreshedOn !== todayKey() &&
+      Date.now() >= this.fxRetryAfter
+    ) {
+      try {
+        const { written, failed } = await this.fx.refreshLatestInUse();
+        if (failed === 0) this.fxRefreshedOn = todayKey();
+        else this.fxRetryAfter = Date.now() + 60 * 60_000;
+        if (written > 0) console.log(`fin-nest-worker refreshed ${written} exchange rates`);
+      } catch (error) {
+        this.fxRetryAfter = Date.now() + 60 * 60_000;
+        console.error("fin-nest-worker exchange rate refresh failed:", error);
+      }
     }
     // 周期备份同样是扫表判定：周期配置随时可改，排好的 job 每次改动都要回收，得不偿失。
     // worker 会等周期备份结束，避免进程在容器停止时把半截归档一起砍掉。

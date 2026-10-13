@@ -237,6 +237,15 @@ function draftToTransactionInput(
     grossAmountMicros: draft.grossAmountMicros,
     occurredOn: draft.occurredOn,
     ...(draft.currency ? { currency: draft.currency } : {}),
+    ...(draft.originalCurrency && draft.originalAmountMicros
+      ? {
+          originalCurrency: draft.originalCurrency,
+          originalAmountMicros: draft.originalAmountMicros,
+        }
+      : {}),
+    ...(draft.toCurrency && draft.toAmountMicros
+      ? { toCurrency: draft.toCurrency, toAmountMicros: draft.toAmountMicros }
+      : {}),
     ...(draft.categoryId ? { categoryId: draft.categoryId } : {}),
     ...(draft.subcategoryId ? { subcategoryId: draft.subcategoryId } : {}),
     ...(draft.personId ? { personId: draft.personId } : {}),

@@ -4,6 +4,7 @@ import {
   AuditLogService,
   currentMonthKey,
   DatabaseTransactionService,
+  FxRateService,
   isEntryReminderConfigured,
   monthRange,
   PrismaService,
@@ -32,6 +33,7 @@ export class RecordsService {
     private readonly audit: AuditLogService,
     private readonly ledgers: LedgersService,
     private readonly reminderTargets: ReminderTargetsService,
+    private readonly fx: FxRateService,
   ) {}
 
   async listCategories(ledgerId: string, userId: string, type?: string) {
@@ -445,7 +447,7 @@ export class RecordsService {
       },
       orderBy: { occurredOn: "asc" },
     });
-    const netWorth = await buildNetWorth(this.prisma, ledgerId, trendMonths);
+    const netWorth = await buildNetWorth(this.prisma, this.fx, ledgerId, trendMonths);
 
     const monthTransactions = transactions.filter((transaction) => {
       const happenedAt = new Date(transaction.occurredOn);
@@ -463,6 +465,7 @@ export class RecordsService {
       trend: trendMonths.map((bucket) => this.trendBucket(bucket, transactions)),
       netWorthMicros: netWorth.netWorthMicros,
       netWorthTrend: netWorth.netWorthTrend,
+      missingCurrencies: netWorth.missingCurrencies,
     };
   }
 

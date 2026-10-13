@@ -18,6 +18,13 @@ import { CreateTransactionDto, TransactionAccountRelationDto } from "./dto/creat
 import { ListTransactionsQueryDto } from "./dto/list-transactions-query.dto";
 import { UpdateTransactionDto } from "./dto/update-transaction.dto";
 import {
+  fxToDto,
+  normalizeTransactionFx,
+  sideAmount,
+  transferAmounts,
+  type TransactionFx,
+} from "./transaction-fx";
+import {
   accountIdsNeedingRelations,
   accountWhereFilters,
   categoryWhereFilters,
@@ -31,6 +38,19 @@ type TransactionWithRelations = Prisma.TransactionGetPayload<Record<string, neve
 };
 
 const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
+
+/** normalize 的结果：本币金额 + 币种字段 + 各账户侧落账金额（账户币种）。 */
+type NormalizedTransaction = {
+  baseCurrency: string;
+  grossAmountMicros: bigint;
+  effectiveAmountMicros: bigint;
+  fx: TransactionFx;
+  accountAmountMicros: bigint;
+  fromAmountMicros: bigint;
+  toAmountMicros: bigint;
+  categorySnapshot: Record<string, string | null> | null;
+  personSnapshot: { id: string; name: string; icon: string | null } | null;
+};
 
 export function transactionOrderBy(
   query: Pick<ListTransactionsQueryDto, "sortBy" | "sortOrder">,
@@ -283,7 +303,8 @@ export class TransactionsService {
             type: input.type,
             grossAmountMicros: normalized.grossAmountMicros,
             effectiveAmountMicros: normalized.effectiveAmountMicros,
-            currency: input.currency ?? existing.currency,
+            currency: normalized.baseCurrency,
+            ...normalized.fx,
             occurredOn: parseDateOnly(input.occurredOn),
             occurredAt: parseDateOnly(input.occurredOn),
             categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
@@ -409,7 +430,17 @@ export class TransactionsService {
       }
       const input = this.reconstructUpdateInput(existing, relations, links);
       this.applyBatchField(input, dto);
-      await this.update(ledgerId, transactionId, userId, input);
+      try {
+        await this.update(ledgerId, transactionId, userId, input);
+      } catch (error) {
+        // 改账户 / 改类型后新账户的币种对不上这笔的原币（比如把美元消费挪到港币卡）：跳过这笔，
+        // 而不是让整批在中途失败、留下一半已改一半没改。
+        if (error instanceof AppError && error.code.startsWith("FX_")) {
+          skipped += 1;
+          continue;
+        }
+        throw error;
+      }
       updated += 1;
     }
     return { updated, skipped };
@@ -426,6 +457,7 @@ export class TransactionsService {
       grossAmountMicros: existing.grossAmountMicros.toString(),
       occurredOn: dateKey(existing.occurredOn),
       currency: existing.currency,
+      ...fxToDto(existing),
       categoryId: existing.categoryId ?? undefined,
       subcategoryId: existing.subcategoryId ?? undefined,
       personId: existing.personId ?? undefined,
@@ -563,17 +595,14 @@ export class TransactionsService {
   ) {
     const normalized = await this.normalize(tx, ledgerId, input);
     const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
-    const ledger = await tx.ledger.findFirst({
-      where: { id: ledgerId, deletedAt: null },
-      select: { currency: true },
-    });
     const transaction = await tx.transaction.create({
       data: {
         ledgerId,
         type: input.type,
         grossAmountMicros: normalized.grossAmountMicros,
         effectiveAmountMicros: normalized.effectiveAmountMicros,
-        currency: input.currency ?? ledger?.currency ?? "CNY",
+        currency: normalized.baseCurrency,
+        ...normalized.fx,
         occurredOn: parseDateOnly(input.occurredOn),
         occurredAt: parseDateOnly(input.occurredOn),
         categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
@@ -610,9 +639,16 @@ export class TransactionsService {
     tx: PrismaTransactionClient,
     ledgerId: string,
     input: CreateTransactionDto,
-  ) {
+  ): Promise<NormalizedTransaction> {
     const grossAmountMicros = BigInt(input.grossAmountMicros);
     if (grossAmountMicros <= 0n) throw new AppError("INVALID_AMOUNT", "金额必须大于 0", 400);
+    const ledger = await tx.ledger.findFirst({
+      where: { id: ledgerId, deletedAt: null },
+      select: { currency: true },
+    });
+    if (!ledger) throw new AppError("LEDGER_NOT_FOUND", "账本不存在", 404);
+    const baseCurrency = ledger.currency;
+    const fx = normalizeTransactionFx(input, baseCurrency);
 
     const settings = await tx.recordSetting.findUnique({ where: { ledgerId } });
     if (input.type !== "transfer" && settings?.acctRequired && !input.accountId) {
@@ -630,12 +666,44 @@ export class TransactionsService {
     if (input.type === "transfer" && (input.insuranceId || input.itemId)) {
       throw new AppError("TRANSFER_ASSET_LINK_UNSUPPORTED", "转账不支持关联保险或物品", 400);
     }
+    let accountAmountMicros = grossAmountMicros;
+    let fromAmountMicros = grossAmountMicros;
+    let toAmountMicros = grossAmountMicros;
     if (input.type !== "transfer" && input.accountId) {
-      await this.assertMoneyAccount(tx, ledgerId, input.accountId, input.subAccountId);
+      const account = await this.assertMoneyAccount(
+        tx,
+        ledgerId,
+        input.accountId,
+        input.subAccountId,
+      );
+      accountAmountMicros = sideAmount(
+        fx,
+        baseCurrency,
+        grossAmountMicros,
+        account.currency,
+        "account",
+      );
     }
     if (input.type === "transfer") {
-      await this.assertMoneyAccount(tx, ledgerId, input.fromAccountId!, input.fromSubAccountId);
-      await this.assertMoneyAccount(tx, ledgerId, input.toAccountId!, input.toSubAccountId);
+      const from = await this.assertMoneyAccount(
+        tx,
+        ledgerId,
+        input.fromAccountId!,
+        input.fromSubAccountId,
+      );
+      const to = await this.assertMoneyAccount(
+        tx,
+        ledgerId,
+        input.toAccountId!,
+        input.toSubAccountId,
+      );
+      ({ fromAmountMicros, toAmountMicros } = transferAmounts(
+        fx,
+        baseCurrency,
+        grossAmountMicros,
+        from.currency,
+        to.currency,
+      ));
       if (
         input.fromAccountId === input.toAccountId &&
         input.fromSubAccountId === input.toSubAccountId
@@ -648,7 +716,7 @@ export class TransactionsService {
     if (input.type === "transfer" && relations.length > 0) {
       throw new AppError("TRANSFER_RELATION_UNSUPPORTED", "转账不支持可收回/需归还关联", 400);
     }
-    await this.validateRelationAccounts(tx, ledgerId, input.type, relations);
+    await this.validateRelationAccounts(tx, ledgerId, input.type, relations, baseCurrency);
     const relationTotal = relations.reduce(
       (sum, relation) => sum + BigInt(relation.amountMicros),
       0n,
@@ -664,8 +732,13 @@ export class TransactionsService {
     const subcategoryId = input.type === "transfer" ? undefined : input.subcategoryId;
 
     return {
+      baseCurrency,
       grossAmountMicros,
       effectiveAmountMicros: grossAmountMicros - relationTotal,
+      fx,
+      accountAmountMicros,
+      fromAmountMicros,
+      toAmountMicros,
       categorySnapshot: await this.categorySnapshot(
         tx,
         ledgerId,
@@ -804,6 +877,7 @@ export class TransactionsService {
     ledgerId: string,
     transactionType: string,
     relations: TransactionAccountRelationDto[],
+    baseCurrency: string,
   ) {
     if (relations.length === 0) return;
 
@@ -838,6 +912,10 @@ export class TransactionsService {
         : "payable";
       if (account.type !== expectedType) {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
+      }
+      // 关联金额与有效金额同口径（本币），往来账户也只能是本币。
+      if (account.currency !== baseCurrency) {
+        throw new AppError("RELATION_ACCOUNT_CURRENCY", "往来账户只能使用账本本币", 400);
       }
     }
   }
@@ -899,11 +977,12 @@ export class TransactionsService {
         400,
       );
     }
-    if (!subAccountId) return;
+    if (!subAccountId) return account;
     const subAccount = await tx.subAccount.findFirst({
       where: { id: subAccountId, ledgerId, accountId, archivedAt: null },
     });
     if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+    return account;
   }
 
   private async writeRelationsAndEntries(
@@ -912,7 +991,7 @@ export class TransactionsService {
     transactionId: string,
     userId: string,
     input: CreateTransactionDto,
-    normalized: { grossAmountMicros: bigint },
+    normalized: NormalizedTransaction,
   ) {
     const occurredAt = parseDateOnly(input.occurredOn);
     if (input.type === "expense" && input.accountId) {
@@ -921,7 +1000,7 @@ export class TransactionsService {
         accountId: input.accountId,
         subAccountId: input.subAccountId,
         entryType: "expense",
-        amountDeltaMicros: -normalized.grossAmountMicros,
+        amountDeltaMicros: -normalized.accountAmountMicros,
         orientForLiability: true,
         transactionId,
         note: input.note,
@@ -935,7 +1014,7 @@ export class TransactionsService {
         accountId: input.accountId,
         subAccountId: input.subAccountId,
         entryType: "income",
-        amountDeltaMicros: normalized.grossAmountMicros,
+        amountDeltaMicros: normalized.accountAmountMicros,
         orientForLiability: true,
         transactionId,
         note: input.note,
@@ -949,7 +1028,7 @@ export class TransactionsService {
         accountId: input.fromAccountId!,
         subAccountId: input.fromSubAccountId,
         entryType: "transfer_out",
-        amountDeltaMicros: -normalized.grossAmountMicros,
+        amountDeltaMicros: -normalized.fromAmountMicros,
         orientForLiability: true,
         transactionId,
         relatedAccountId: input.toAccountId,
@@ -962,7 +1041,7 @@ export class TransactionsService {
         accountId: input.toAccountId!,
         subAccountId: input.toSubAccountId,
         entryType: "transfer_in",
-        amountDeltaMicros: normalized.grossAmountMicros,
+        amountDeltaMicros: normalized.toAmountMicros,
         orientForLiability: true,
         transactionId,
         relatedAccountId: input.fromAccountId,

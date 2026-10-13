@@ -7,10 +7,7 @@ import type {
   TransactionRelationInput,
   TransactionType,
 } from "@/lib/api";
-import {
-  relationKindFor,
-  resolveAccountSelection,
-} from "@/lib/data/options";
+import { relationKindFor, resolveAccountSelection } from "@/lib/data/options";
 import { createClientId } from "@/lib/id/client-id";
 import { microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { localized, msg, t } from "@/lib/i18n";
@@ -35,6 +32,9 @@ export type PendingPatchBody = {
   toSubAccountId: string | null;
   personId: string | null;
   note: string;
+  /** 外币待确认：原币；null = 清除。 */
+  originalCurrency?: string | null;
+  originalAmountMicros?: string | null;
 };
 
 /** 备注长度上限：表单卡片与键盘备注页签共用一份，避免两处限制走岔。 */
@@ -223,7 +223,10 @@ export function buildPayload(params: PayloadParams): BuildResult<TransactionInpu
     if (!from.accountId || !to.accountId) {
       return { ok: false, message: t("转账需要选择转出和转入账户") };
     }
-    if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
+    if (
+      from.accountId === to.accountId &&
+      (from.subAccountId ?? null) === (to.subAccountId ?? null)
+    ) {
       return { ok: false, message: t("转出和转入不能是同一账户") };
     }
     if (personRequired && !personId) {
@@ -357,7 +360,10 @@ export function buildPendingPatch(params: PendingPatchParams): BuildResult<Pendi
     if (!from.accountId || !to.accountId) {
       return { ok: false, message: t("转账需要选择转出和转入账户") };
     }
-    if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
+    if (
+      from.accountId === to.accountId &&
+      (from.subAccountId ?? null) === (to.subAccountId ?? null)
+    ) {
       return { ok: false, message: t("转出和转入不能是同一账户") };
     }
     return {
@@ -443,7 +449,10 @@ export function computeValidationMessage(params: ValidationParams): string | nul
     const from = resolveAccountSelection(accounts, fromSel);
     const to = resolveAccountSelection(accounts, toSel);
     if (!from.accountId || !to.accountId) return t("请选择转出和转入账户");
-    if (from.accountId === to.accountId && (from.subAccountId ?? null) === (to.subAccountId ?? null)) {
+    if (
+      from.accountId === to.accountId &&
+      (from.subAccountId ?? null) === (to.subAccountId ?? null)
+    ) {
       return t("转出和转入不能是同一账户");
     }
     if (personRequired && !personId) return t("当前账本要求选择人员");

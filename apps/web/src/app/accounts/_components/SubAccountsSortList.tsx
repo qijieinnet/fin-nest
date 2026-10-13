@@ -12,10 +12,12 @@ type SubAccountsSortListProps = {
   /** 统一的子账户展示项，含默认桶（isDefault）与命名子账户，均可拖拽。 */
   rows: SubAccountRow[];
   onReorder: (orderedIds: string[]) => void;
+  /** 父账户币种。 */
+  currency?: string | null;
 };
 
 /** 子账户排序列表：默认桶与命名子账户共用一套顺序，按住右侧手柄拖动即可调整。 */
-export function SubAccountsSortList({ rows, onReorder }: SubAccountsSortListProps) {
+export function SubAccountsSortList({ currency, rows, onReorder }: SubAccountsSortListProps) {
   const [items, setItems] = useState<SubAccountRow[]>(rows);
 
   const commit = (_groupKey: string, orderedIds: string[]) => {
@@ -64,7 +66,7 @@ export function SubAccountsSortList({ rows, onReorder }: SubAccountsSortListProp
               {row.name}
             </span>
             <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-              {formatMoney(row.balanceMicros)}
+              {formatMoney(row.balanceMicros, currency)}
             </span>
             <DragHandle
               label={t("拖动排序 {name}", { name: row.name })}

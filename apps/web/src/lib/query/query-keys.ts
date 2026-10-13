@@ -46,6 +46,9 @@ export const queryKeys = {
   budgetProgress: (ledgerId: string, month: string) =>
     ["ledger", ledgerId, "budget-progress", month] as const,
   stats: (ledgerId: string, range: unknown) => ["ledger", ledgerId, "stats", range ?? null] as const,
+  fxRates: (ledgerId: string) => ["ledger", ledgerId, "fx", "rates"] as const,
+  fxRate: (ledgerId: string, from: string, to: string, date: string) =>
+    ["ledger", ledgerId, "fx", "rate", from, to, date] as const,
   netWorth: (ledgerId: string, range: string) =>
     ["ledger", ledgerId, "net-worth", range] as const,
   cashflow: (ledgerId: string, range: string, filters: unknown) =>

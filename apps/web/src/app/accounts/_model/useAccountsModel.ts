@@ -7,7 +7,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useLedger, useToast } from "@/providers";
 import {
   ACCOUNT_GROUPS,
-  accountNetWorthMicros,
+  groupTotalBaseMicros,
   netWorthSummary,
 } from "../_components/account-utils";
 
@@ -54,7 +54,8 @@ export function useAccountsModel() {
 
   const groups = ACCOUNT_GROUPS.map((group) => {
     const list = accounts.filter((account) => account.type === group.key);
-    const total = list.reduce((sum, account) => sum + accountNetWorthMicros(account), 0n);
+    // 分组合计按本币：外币账户折算后再加（缺汇率的不计入，净资产卡会提示）。
+    const total = groupTotalBaseMicros(list);
     return { ...group, list, total };
   }).filter((group) => group.list.length > 0);
 

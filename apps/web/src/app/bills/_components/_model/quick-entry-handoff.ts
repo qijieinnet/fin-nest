@@ -12,11 +12,9 @@ export const QUICK_ENTRY_SEED_KEY = "fin-nest.quick-entry-seed";
  * 键盘能改的就是这几项，关联/附件/资产那些字段快捷记账本来就碰不到，不用带。
  */
 export function quickEntrySeed(model: TransactionFormModel): TransactionSeed {
-  const parsed = parseMoneyToMicros(model.amount, { decimalPlaces: model.decimalPlaces });
   return {
     type: model.type,
-    // 没填或填了一半（"12."）就不带过去，全屏页按空金额开，用户接着输。
-    grossAmountMicros: parsed.ok ? parsed.amountMicros : null,
+    ...amountSeed(model),
     // 选中的可能是二级分类；表单初始化取的是 subcategoryId ?? categoryId，放哪个字段都还原得回来。
     categoryId: model.categoryId,
     // accountSel 本身就是 accountSelectionId(accountId, subAccountId) 的结果（子账户优先），
@@ -28,6 +26,48 @@ export function quickEntrySeed(model: TransactionFormModel): TransactionSeed {
     personId: model.personEnabled ? model.personId : null,
     occurredOn: model.occurredOn,
     note: model.note,
+  };
+}
+
+/**
+ * 金额部分。外币时键盘里的金额是入账币种（$10），不能当本币带过去：
+ * 折算已就绪就把本币金额 + 原币字段整套带上（保留用户手改过的折合值）；
+ * 还没算出来就只带原币，让全屏页按汇率重新折算。
+ */
+function amountSeed(model: TransactionFormModel): Partial<TransactionSeed> {
+  const fx = model.fx;
+  // 模板还在等汇率反推本币：带上原币和「要重算」标记，全屏页接着反推，不能把估算值固化下来。
+  if (fx.pendingRecompute) {
+    const estimate = parseMoneyToMicros(model.amount, { decimalPlaces: model.decimalPlaces });
+    return {
+      grossAmountMicros: estimate.ok ? estimate.amountMicros : null,
+      originalCurrency: fx.pendingRecompute.currency,
+      originalAmountMicros: fx.pendingRecompute.micros.toString(),
+      fxRecompute: true,
+    };
+  }
+  const built = fx.buildFx();
+  if (built.ok) {
+    const gross = parseMoneyToMicros(built.value.grossInput, {
+      decimalPlaces: model.decimalPlaces,
+    });
+    return {
+      grossAmountMicros: gross.ok ? gross.amountMicros : null,
+      originalCurrency: built.value.fields.originalCurrency ?? null,
+      originalAmountMicros: built.value.fields.originalAmountMicros ?? null,
+      toCurrency: built.value.fields.toCurrency ?? null,
+      toAmountMicros: built.value.fields.toAmountMicros ?? null,
+    };
+  }
+  const entry = parseMoneyToMicros(model.amount, { decimalPlaces: fx.entryDecimalPlaces });
+  // 没填或填了一半（"12."）就不带过去，全屏页按空金额开，用户接着输。
+  if (!entry.ok) return { grossAmountMicros: null };
+  if (fx.entryCurrency === fx.baseCurrency) return { grossAmountMicros: entry.amountMicros };
+  return {
+    grossAmountMicros: null,
+    originalCurrency: fx.entryCurrency,
+    originalAmountMicros: entry.amountMicros,
+    fxRecompute: true,
   };
 }
 

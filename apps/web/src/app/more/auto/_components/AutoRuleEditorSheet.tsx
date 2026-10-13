@@ -65,6 +65,7 @@ import {
   upcomingDates,
 } from "./auto-utils";
 import { localized, msg, t } from "@/lib/i18n";
+import { OriginalAmountCard, useOriginalAmount } from "../../_components/OriginalAmountCard";
 
 type AutoRuleEditorSheetProps = {
   accounts: Account[];
@@ -145,6 +146,14 @@ export function AutoRuleEditorSheet({
   const decimalPlaces = useDecimalPlaces();
   const [type, setType] = useState<TransactionType>(rule?.type ?? "expense");
   const [amount, setAmount] = useState(() => microsToInput(rule?.amountMicros, { decimalPlaces }));
+  // 外币规则（如每月 $20 的订阅）：原币才是每期的实际金额，上面的本币金额是估算。
+  const original = useOriginalAmount({
+    initialCurrency: rule?.originalCurrency,
+    initialMicros: rule?.originalAmountMicros,
+    ledgerId,
+    baseValue: amount,
+    onSuggestBase: setAmount,
+  });
   const [categoryId, setCategoryId] = useState<string | null>(
     rule && rule.type !== "transfer"
       ? ruleCategorySelection(rule)
@@ -329,6 +338,8 @@ export function AutoRuleEditorSheet({
       const parsed = parseMoneyToMicros(amount, { decimalPlaces });
       if (!parsed.ok) throw new Error(parsed.error);
       if (BigInt(parsed.amountMicros) <= 0n) throw new Error(t("请输入有效金额"));
+      const originalPayload = original.payload();
+      if (!originalPayload.ok) throw new Error(originalPayload.message);
       const isTransfer = type === "transfer";
       const relations = isTransfer
         ? []
@@ -357,6 +368,8 @@ export function AutoRuleEditorSheet({
       const body = {
         type,
         amountMicros: parsed.amountMicros,
+        originalCurrency: originalPayload.originalCurrency,
+        originalAmountMicros: originalPayload.originalAmountMicros,
         categoryId: isTransfer ? null : category.categoryId,
         subcategoryId: isTransfer ? null : (category.subcategoryId ?? null),
         accountId: isTransfer ? null : (account.accountId ?? null),
@@ -557,13 +570,14 @@ export function AutoRuleEditorSheet({
               type === "income" && "transaction-form__amount--income",
             )}
             decimalPlaces={decimalPlaces}
-            label={t("每期金额")}
+            label={original.foreign ? t("每期金额（本币估算）") : t("每期金额")}
             onValueChange={setAmount}
             value={amount}
           />
         </div>
 
         <div className="transaction-form__cards">
+          <OriginalAmountCard state={original} />
           {orderedFieldsForType(order, type).map(renderField)}
 
           {type !== "transfer" ? (

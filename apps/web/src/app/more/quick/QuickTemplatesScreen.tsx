@@ -35,6 +35,7 @@ import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useConfirm, useLedger, useSheetStack, useToast } from "@/providers";
 import { QuickTemplateEditorSheet } from "./_components/QuickTemplateEditorSheet";
 import { t } from "@/lib/i18n";
+import { formatCurrencyMicros } from "@/lib/money";
 
 function categoryDisplay(
   categories: Category[],
@@ -217,7 +218,13 @@ export function QuickTemplatesScreen() {
               {meta}
             </span>
           </span>
-          {template.amountMicros ? (
+          {template.originalCurrency && template.originalAmountMicros ? (
+            <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)]">
+              {formatCurrencyMicros(template.originalAmountMicros, template.originalCurrency, {
+                trimTrailingZeros: true,
+              })}
+            </span>
+          ) : template.amountMicros ? (
             <MoneyText
               amountMicros={template.amountMicros}
               className="shrink-0 text-[15px] font-semibold"

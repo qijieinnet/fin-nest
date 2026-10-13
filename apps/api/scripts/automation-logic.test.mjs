@@ -22,6 +22,9 @@ const fullRule = {
   toSubAccountId: "to-sub-1",
   personId: "person-1",
   note: "网飞会员",
+  // 外币规则：本币金额是估算，原币随规则整份进入待确认（worker 再按汇率重算本币）。
+  originalCurrency: "USD",
+  originalAmountMicros: 15990000n,
   relationPayload: [
     { accountId: "account-2", relationKind: "receivable_from_expense", amountMicros: "3000000" },
   ],
@@ -55,6 +58,8 @@ test("搬运清单覆盖两张表同名的全部业务列，且不含系统列",
       "insuranceId",
       "itemId",
       "note",
+      "originalAmountMicros",
+      "originalCurrency",
       "personId",
       "relationPayload",
       "subAccountId",

@@ -24,13 +24,30 @@ export const SHEET_NAMES = {
   lookup: "基础数据",
 } as const;
 
-export type ColumnDef = { key: string; header: string; width?: number };
+/**
+ * `aliases`：导入时也认的旧表头。多币种之前金额列叫「金额(元)」，改成「金额」后
+ * 用户手里的旧导出/旧模板必须照样能导入。
+ */
+export type ColumnDef = { key: string; header: string; width?: number; aliases?: string[] };
+
+/** 导入按表头找列：先认当前表头，再认旧表头。 */
+export function columnForHeader(columns: ColumnDef[], header: string): ColumnDef | undefined {
+  return (
+    columns.find((column) => column.header === header) ??
+    columns.find((column) => column.aliases?.includes(header))
+  );
+}
 
 export const TRANSACTION_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },
   { key: "occurredOn", header: "日期", width: 12 },
   { key: "type", header: "类型", width: 8 },
-  { key: "amount", header: "金额(元)", width: 12 },
+  { key: "amount", header: "金额", width: 12, aliases: ["金额(元)"] },
+  // 多币种（docs/MULTI_CURRENCY_PLAN.md §2.1）：「金额」恒为账本本币；外币那一侧的原币金额填这里。
+  { key: "originalCurrency", header: "原币种", width: 8 },
+  { key: "originalAmount", header: "原币金额", width: 12 },
+  { key: "toCurrency", header: "转入币种", width: 8 },
+  { key: "toAmount", header: "转入金额", width: 12 },
   { key: "category", header: "分类", width: 12 },
   { key: "subcategory", header: "子分类", width: 12 },
   { key: "account", header: "账户", width: 14 },
@@ -67,9 +84,9 @@ export const ACCOUNT_ENTRY_COLUMNS: ColumnDef[] = [
   { key: "account", header: "账户", width: 14 },
   { key: "subAccount", header: "子账户", width: 12 },
   { key: "entryType", header: "类型", width: 10 },
-  { key: "amountDelta", header: "变动(元)", width: 12 },
-  { key: "balanceBefore", header: "变动前余额(元)", width: 14 },
-  { key: "balanceAfter", header: "变动后余额(元)", width: 14 },
+  { key: "amountDelta", header: "变动", width: 12, aliases: ["变动(元)"] },
+  { key: "balanceBefore", header: "变动前余额", width: 14, aliases: ["变动前余额(元)"] },
+  { key: "balanceAfter", header: "变动后余额", width: 14, aliases: ["变动后余额(元)"] },
   { key: "transactionId", header: "关联流水ID", width: 38 },
   { key: "note", header: "备注", width: 20 },
 ];
@@ -117,9 +134,11 @@ export const ACCOUNT_COLUMNS: ColumnDef[] = [
   { key: "name", header: "名称", width: 14 },
   { key: "icon", header: "图标", width: 12 },
   { key: "person", header: "归属人员", width: 12 },
-  { key: "balance", header: "余额(元)", width: 12 },
+  // 账户币种：空 = 账本本币。余额、信用额度按账户币种填。
+  { key: "currency", header: "币种", width: 8 },
+  { key: "balance", header: "余额", width: 12, aliases: ["余额(元)"] },
   { key: "includeInNetWorth", header: "计入净资产", width: 10 },
-  { key: "creditLimit", header: "信用额度(元)", width: 12 },
+  { key: "creditLimit", header: "信用额度", width: 12, aliases: ["信用额度(元)"] },
   { key: "counterparty", header: "对方", width: 12 },
   { key: "billDay", header: "账单日", width: 8 },
   { key: "repayDay", header: "还款日", width: 8 },
@@ -130,7 +149,7 @@ export const SUB_ACCOUNT_COLUMNS: ColumnDef[] = [
   { key: "account", header: "所属账户", width: 14 },
   { key: "name", header: "名称", width: 14 },
   { key: "icon", header: "图标", width: 12 },
-  { key: "balance", header: "余额(元)", width: 12 },
+  { key: "balance", header: "余额", width: 12, aliases: ["余额(元)"] },
   { key: "includeInNetWorth", header: "计入净资产", width: 10 },
 ];
 
@@ -142,8 +161,8 @@ export const INSURANCE_COLUMNS: ColumnDef[] = [
   { key: "method", header: "投保方式", width: 10 },
   { key: "paymentMethod", header: "缴费方式", width: 12 },
   { key: "policyNo", header: "保单号", width: 16 },
-  { key: "coverage", header: "保额(元)", width: 12 },
-  { key: "premium", header: "保费(元)", width: 12 },
+  { key: "coverage", header: "保额", width: 12, aliases: ["保额(元)"] },
+  { key: "premium", header: "保费", width: 12, aliases: ["保费(元)"] },
   { key: "premiumFreq", header: "缴费频率", width: 10 },
   { key: "periods", header: "期数", width: 8 },
   { key: "renewal", header: "续保", width: 10 },
@@ -158,7 +177,7 @@ export const ITEM_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },
   { key: "name", header: "名称", width: 16 },
   { key: "itemType", header: "物品类型", width: 12 },
-  { key: "purchasePrice", header: "购入价格(元)", width: 12 },
+  { key: "purchasePrice", header: "购入价格", width: 12, aliases: ["购入价格(元)"] },
   { key: "purchaseDate", header: "购入日期", width: 12 },
   { key: "expectedYears", header: "预计年限", width: 10 },
   { key: "note", header: "备注", width: 20 },
@@ -176,7 +195,9 @@ export const SUBSCRIPTION_COLUMNS: ColumnDef[] = [
   { key: "category", header: "订阅分类", width: 12 },
   { key: "provider", header: "服务商", width: 14 },
   { key: "planName", header: "套餐", width: 12 },
-  { key: "price", header: "费用(元)", width: 12 },
+  { key: "price", header: "费用", width: 12, aliases: ["费用(元)"] },
+  // 费用币种：空 = 账本本币。
+  { key: "currency", header: "币种", width: 8 },
   { key: "billingCycle", header: "计费周期", width: 10 },
   { key: "paymentMethod", header: "支付方式", width: 12 },
   { key: "autoRenew", header: "自动续费", width: 10 },
@@ -206,7 +227,7 @@ export const PLAN_COLUMNS: ColumnDef[] = [
   { key: "kind", header: "类型", width: 10 },
   { key: "metric", header: "指标", width: 10 },
   { key: "name", header: "名称", width: 16 },
-  { key: "limitAmount", header: "限额(元)", width: 12 },
+  { key: "limitAmount", header: "限额", width: 12, aliases: ["限额(元)"] },
   { key: "limitCount", header: "限次", width: 8 },
   { key: "startDate", header: "开始日期", width: 12 },
   { key: "repeatRule", header: "重复规则", width: 12 },
@@ -215,7 +236,7 @@ export const PLAN_COLUMNS: ColumnDef[] = [
 export const BUDGET_COLUMNS: ColumnDef[] = [
   { key: "id", header: "ID", width: 38 },
   { key: "category", header: "分类", width: 14 },
-  { key: "amount", header: "金额(元)", width: 12 },
+  { key: "amount", header: "金额", width: 12, aliases: ["金额(元)"] },
 ];
 
 export const TRANSACTION_TYPE_LABELS: Record<string, string> = {
@@ -239,7 +260,7 @@ export const CATEGORY_TYPE_LABELS: Record<string, string> = {
 
 export const BOOLEAN_LABELS: Record<string, string> = { true: "是", false: "否" };
 
-/** 往来关联标记，编码格式：账户名/计入可收回/金额元，多条用；分隔。 */
+/** 往来关联标记，编码格式：账户名/计入可收回/金额（本币），多条用；分隔。 */
 export const RELATION_KIND_LABELS: Record<string, string> = {
   receivable_from_expense: "计入可收回",
   payable_from_income: "产生需归还",

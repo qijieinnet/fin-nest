@@ -32,3 +32,6 @@ export * from "./system-backup/system-backup.service";
 export * from "./system-backup/system-backup.types";
 export * from "./system-backup/backup-schedule";
 export * from "./automation/auto-pending-from-rule";
+export * from "./fx/fx-provider";
+export * from "./fx/fx-rate.service";
+export * from "./system-backup/legacy-rows";

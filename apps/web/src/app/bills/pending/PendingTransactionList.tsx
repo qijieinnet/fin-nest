@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Pencil, Trash2 } from "lucide-react";
-import { SwipeActionRow, TransactionGroup, TransactionRow } from "@/components/business";
+import { originalAmountProps, SwipeActionRow, TransactionGroup, TransactionRow } from "@/components/business";
 import {
   type Account,
   type AutoPendingTransaction,
@@ -133,7 +133,11 @@ export function PendingTransactionList({
                 },
               ]}
             >
-              <TransactionRow onClick={() => onOpen(item)} {...pendingRowProps(item, accounts, categories)} />
+              <TransactionRow
+                onClick={() => onOpen(item)}
+                {...pendingRowProps(item, accounts, categories)}
+                {...originalAmountProps(item)}
+              />
             </SwipeActionRow>
           ))}
         </TransactionGroup>

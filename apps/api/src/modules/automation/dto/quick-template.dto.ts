@@ -1,3 +1,4 @@
+import { CURRENCY_CODES } from "@fin-nest/shared";
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
@@ -31,6 +32,21 @@ export class CreateQuickTemplateDto {
   @IsString()
   @Matches(/^(0|[1-9]\d*)$/)
   amountMicros?: string;
+
+  @ApiPropertyOptional({
+    example: "USD",
+    description:
+      "外币金额的币种（不能是本币）；amountMicros 仍是本币金额（估算），生成/记账时按当日汇率重算",
+  })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  originalCurrency?: string | null;
+
+  @ApiPropertyOptional({ example: "20000000" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(0|[1-9]\d*)$/)
+  originalAmountMicros?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -15,7 +15,9 @@ import {
 import { Input, Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import { orderedFieldsForType } from "@/lib/data/field-order";
+import { currencySymbolOf } from "@/lib/money";
 import { AmountKeypad } from "./AmountKeypad";
+import { TransactionFxFields } from "./TransactionFxFields";
 import { useKeypadTabs } from "./AmountKeypad/useKeypadTabs";
 import { quickEntrySeed } from "./_model/quick-entry-handoff";
 import {
@@ -171,7 +173,8 @@ export function TransactionFormMobile({
     <AmountKeypad
       amount={model.amount}
       canSubmit={!model.validationMessage && !model.mutationState.isPending}
-      decimalPlaces={model.decimalPlaces}
+      currencySymbol={currencySymbolOf(model.fx.entryCurrency)}
+      decimalPlaces={model.fx.entryDecimalPlaces}
       halfScreen={keypadOnly}
       onAmountChange={model.setAmount}
       onClose={() => onKeypadOpenChange(false)}
@@ -208,7 +211,8 @@ export function TransactionFormMobile({
         />
         <AmountInput
           className="transaction-form__amount"
-          decimalPlaces={model.decimalPlaces}
+          currencySymbol={currencySymbolOf(model.fx.entryCurrency)}
+          decimalPlaces={model.fx.entryDecimalPlaces}
           label={t("金额")}
           onDisplayActivate={() => onKeypadOpenChange?.(true)}
           onValueChange={model.setAmount}
@@ -219,6 +223,7 @@ export function TransactionFormMobile({
       </div>
 
       <div className="transaction-form__cards">
+        <TransactionFxFields fx={model.fx} onInputFocus={() => onKeypadOpenChange?.(false)} />
         {orderedFieldsForType(model.order, type).map(renderOrderedField)}
 
         {!isPendingMode && type !== "transfer" ? (

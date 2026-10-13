@@ -40,7 +40,7 @@ import { useInsurances, usePeople } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { cn } from "@/lib/format/class-names";
-import { parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
@@ -811,7 +811,7 @@ export function InsurancesScreen() {
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
-                    ¥
+                    {baseCurrencySymbol()}
                   </span>
                   <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                     {formatMoney(annualPremium)}

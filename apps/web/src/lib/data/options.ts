@@ -10,6 +10,7 @@ import type {
   TransactionType,
 } from "@/lib/api";
 import { localized, msg, t } from "@/lib/i18n";
+import { baseCurrencyCode } from "@/lib/money";
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = localized({
   savings: msg("储蓄"),
@@ -161,6 +162,13 @@ export function categoryRowProps(
   };
 }
 
+/** 外币账户在选择器里带上币种（「美元卡 · USD」），选账户时就知道这笔会按什么币种扣。 */
+function accountLabelWithCurrency(account: Account): string {
+  return account.currency && account.currency !== baseCurrencyCode()
+    ? `${account.name} · ${account.currency}`
+    : account.name;
+}
+
 export function moneyAccountOptions(
   accounts: Account[],
   config: MoneyAccountOptionsConfig = {},
@@ -178,7 +186,7 @@ export function moneyAccountOptions(
       // 筛选场景用账户 id（等价于筛选该账户全部记录）。
       options.push({
         id: !parentSelectable && defaultSub ? defaultSub.id : account.id,
-        label: account.name,
+        label: accountLabelWithCurrency(account),
         icon: account.icon ?? undefined,
         badge: account.person?.name,
       });
@@ -188,7 +196,7 @@ export function moneyAccountOptions(
     const parentId = parentSelectable ? account.id : accountGroupOptionId(account.id);
     options.push({
       id: parentId,
-      label: account.name,
+      label: accountLabelWithCurrency(account),
       icon: account.icon ?? undefined,
       // 归属挂在账户上，子账户不带标签。
       badge: account.person?.name,

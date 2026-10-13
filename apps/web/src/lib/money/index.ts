@@ -1,7 +1,23 @@
-export { formatMicros, getMoneyTone, setAmbientDecimalPlaces } from "./format-money";
+export {
+  baseCurrencyCode,
+  baseCurrencySymbol,
+  formatMicros,
+  getMoneyTone,
+  setAmbientBaseCurrency,
+  setAmbientDecimalPlaces,
+} from "./format-money";
 export type { FormatMoneyOptions, MoneyTone } from "./format-money";
 export { MONEY_MICROS_PER_UNIT, normalizeMicros } from "./micros";
 export { cleanMoneyInput, parseMoneyToMicros } from "./parse-money";
 export type { ParseMoneyOptions, ParseMoneyResult } from "./parse-money";
 export { groupMoneyDisplay, microsToInput } from "./to-input";
 export type { MicrosToInputOptions } from "./to-input";
+export {
+  CURRENCIES,
+  currencyDecimals,
+  currencySymbolOf,
+  DEFAULT_CURRENCY,
+  formatAmountIn,
+  formatCurrencyMicros,
+  isSupportedCurrency,
+} from "./currency";

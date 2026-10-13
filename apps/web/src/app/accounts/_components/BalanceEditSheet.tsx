@@ -8,7 +8,8 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { useSheetStack, useToast } from "@/providers";
+import { useAccountCurrency } from "./useAccountCurrency";
 import { t } from "@/lib/i18n";
 
 type BalanceEditSheetProps = {
@@ -46,7 +47,7 @@ export function BalanceEditSheet({
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
-  const decimalPlaces = useDecimalPlaces();
+  const { decimalPlaces, symbol } = useAccountCurrency(ledgerId, accountId);
   const [balance, setBalance] = useState(initialBalance);
   // 投资账户：这笔差额算收益还是算本金。默认市值涨跌——那是改余额的主要用途。
   const [kind, setKind] = useState<"revaluation" | "principal">("revaluation");
@@ -112,7 +113,7 @@ export function BalanceEditSheet({
           label={isInvest ? t("当前市值") : t("余额")}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
-          prefix="¥"
+          prefix={symbol}
           value={balance}
         />
       </div>

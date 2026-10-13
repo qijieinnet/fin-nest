@@ -1,5 +1,6 @@
 "use client";
 
+import { baseCurrencyCode, baseCurrencySymbol } from "@/lib/money";
 import { useId, useMemo, useState } from "react";
 import { AccountPersonBadge } from "@/components/business";
 import type { AccountEntry, AccountPerson } from "@/lib/api";
@@ -35,6 +36,10 @@ type AccountBalanceCardProps = {
   currentBalanceMicros?: bigint | string;
   /** 账户类型，决定曲线涨跌的好坏配色 */
   accountType: string;
+  /** 账户币种：外币账户金额带外币符号，并在余额下补一行折合本币。 */
+  currency?: string | null;
+  /** 外币账户按最新汇率折合的本币余额（显示用）；本币账户不传。 */
+  baseBalanceMicros?: string | null;
   /** 该范围（账户 / 子账户 / 默认桶）下的全部资金流水 */
   entries: AccountEntry[];
 };
@@ -154,6 +159,8 @@ export function AccountBalanceCard({
   negativePrefix = false,
   currentBalanceMicros,
   accountType,
+  currency,
+  baseBalanceMicros,
   entries,
 }: AccountBalanceCardProps) {
   const [range, setRange] = useState<TrendRange>("month6");
@@ -220,8 +227,17 @@ export function AccountBalanceCard({
             style={{ color: balanceColor }}
           >
             {negativePrefix && displayMicros !== 0n ? "−" : ""}
-            {formatMoney(displayMicros)}
+            {formatMoney(displayMicros, currency)}
           </p>
+          {currency && currency !== baseCurrencyCode() ? (
+            <p className="mt-0.5 text-[12.5px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
+              {baseBalanceMicros
+                ? t("≈ {value}", {
+                    value: `${baseCurrencySymbol()}${formatMoney(baseBalanceMicros)}`,
+                  })
+                : t("缺少 {currency} 汇率，未计入净资产", { currency })}
+            </p>
+          ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 pb-0.5">
           <TrendRangeSelect onChange={setRange} value={range} />
@@ -230,7 +246,7 @@ export function AccountBalanceCard({
             style={{ color: deltaColor }}
           >
             {deltaMicros === 0n ? "" : deltaMicros > 0n ? "+" : "−"}
-            {formatMoney(deltaAbs)}
+            {formatMoney(deltaAbs, currency)}
           </p>
         </div>
       </div>

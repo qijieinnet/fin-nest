@@ -17,6 +17,8 @@ import { t } from "@/lib/i18n";
 type PrefillResponse = {
   type?: TransactionSeed["type"];
   grossAmountMicros?: string;
+  originalCurrency?: string;
+  originalAmountMicros?: string;
   categoryId?: string;
   subcategoryId?: string;
   accountId?: string;
@@ -110,6 +112,9 @@ export function NewBillFormScreen({
     ? {
         type: prefillQuery.data.type,
         grossAmountMicros: prefillQuery.data.grossAmountMicros ?? null,
+        originalCurrency: prefillQuery.data.originalCurrency ?? null,
+        originalAmountMicros: prefillQuery.data.originalAmountMicros ?? null,
+        fxRecompute: Boolean(prefillQuery.data.originalCurrency),
         categoryId: prefillQuery.data.categoryId ?? null,
         subcategoryId: prefillQuery.data.subcategoryId ?? null,
         personId: prefillQuery.data.personId ?? null,

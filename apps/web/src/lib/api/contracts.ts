@@ -305,7 +305,35 @@ export type SubAccount = {
   isDefault: boolean;
   /** 投资子账户的本金/收益，非投资账户下为 null。口径同 Account.investment。 */
   investment: InvestmentSummary | null;
+  /** 按最新汇率折合的本币余额（本币账户等于 balanceMicros）；取不到汇率为 null。 */
+  baseBalanceMicros: string | null;
   archivedAt: string | null;
+};
+
+/** 汇率报价：1 from = rate to。source=manual 为本账本手填。 */
+export type FxQuote = {
+  from: string;
+  to: string;
+  date: string;
+  rate: string;
+  source: "identity" | "manual" | "frankfurter";
+};
+
+export type FxManualRate = {
+  id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  date: string;
+  rate: string;
+  updatedAt: string;
+};
+
+export type FxOverview = {
+  baseCurrency: string;
+  /** 汇率数据源；null = 未启用（只能手填）。 */
+  provider: string | null;
+  currencies: Array<{ currency: string; providerSupported: boolean; latest: FxQuote | null }>;
+  manualRates: FxManualRate[];
 };
 
 /**
@@ -335,8 +363,14 @@ export type Account = {
   /** 归属人员 id，null 表示未指定。 */
   personId: string | null;
   person: AccountPerson | null;
-  /** 账户总余额（含子账户，等于各子账户余额之和）。 */
+  /** 账户币种：余额、信用额度、流水都按它记；建账后不可改。往来账户恒为账本本币。 */
+  currency: string;
+  /** 账户总余额（含子账户，等于各子账户余额之和），账户币种。 */
   balanceMicros: string;
+  /** 按最新汇率折合的本币余额（本币账户等于 balanceMicros）；取不到汇率为 null。 */
+  baseBalanceMicros: string | null;
+  /** 外币账户用的最新汇率（1 账户币种 = rate 本币）；本币账户为 null。 */
+  fxRate: { rate: string; date: string; source: FxQuote["source"] } | null;
   includeInNetWorth: boolean;
   creditLimitMicros: string | null;
   /** 投资账户的本金/收益（派生只读），非投资账户为 null。 */
@@ -448,7 +482,14 @@ export type Transaction = {
   type: TransactionType;
   grossAmountMicros: string;
   effectiveAmountMicros: string;
+  /** 恒为账本本币；gross/effective 都是本币金额。 */
   currency: string;
+  /** 外币那一侧的原币金额（见 docs/MULTI_CURRENCY_PLAN.md §2.1）。 */
+  originalCurrency: string | null;
+  originalAmountMicros: string | null;
+  /** 仅转账：两侧都是外币且币种不同时的转入侧金额。 */
+  toCurrency: string | null;
+  toAmountMicros: string | null;
   occurredOn: string;
   categoryId: string | null;
   subcategoryId: string | null;
@@ -483,8 +524,14 @@ export type TransactionInput = {
   type: TransactionType;
   grossAmountMicros: string;
   occurredOn: string;
-  /** 缺省时后端使用账本币种。 */
+  /** 缺省时后端使用账本币种（只能是本币）。 */
   currency?: string;
+  /** 外币那一侧（不能是本币），与金额成对；grossAmountMicros 仍是本币。 */
+  originalCurrency?: string;
+  originalAmountMicros?: string;
+  /** 仅转账：两侧都是外币且币种不同时的转入侧。 */
+  toCurrency?: string;
+  toAmountMicros?: string;
   categoryId?: string;
   subcategoryId?: string;
   personId?: string;
@@ -722,6 +769,8 @@ export type NetWorthSeries = {
   netWorthMicros: string;
   /** 各时段末净资产（旧 → 新），label 已按粒度格式化。 */
   points: Array<{ label: string; netWorthMicros: string }>;
+  /** 有外币账户却取不到汇率的币种：这些账户未计入净资产，前端提示去补汇率。 */
+  missingCurrencies: string[];
   /**
    * 按归属人员拆分的曲线，只有请求带 `groupBy=person` 时才非空（目前前端未使用）。
    * 归属不记历史，历史点按「当前归属」追溯重算：改归属会改写各人过去的曲线，总曲线不变。
@@ -740,6 +789,9 @@ export type QuickTemplate = {
   type: TransactionType;
   name: string | null;
   amountMicros: string | null;
+  /** 外币模板：amountMicros 是本币估算，记账时按当日汇率重算。 */
+  originalCurrency: string | null;
+  originalAmountMicros: string | null;
   categoryId: string | null;
   subcategoryId: string | null;
   accountId: string | null;
@@ -775,6 +827,9 @@ export type AutoRule = {
   enabled: boolean;
   type: TransactionType;
   amountMicros: string;
+  /** 外币规则：amountMicros 是本币估算，生成待确认时按当日汇率重算。 */
+  originalCurrency: string | null;
+  originalAmountMicros: string | null;
   categoryId: string | null;
   subcategoryId: string | null;
   accountId: string | null;
@@ -812,6 +867,8 @@ export type AutoPendingTransaction = {
   status: AutoPendingStatus;
   type: TransactionType;
   amountMicros: string;
+  originalCurrency: string | null;
+  originalAmountMicros: string | null;
   categoryId: string | null;
   subcategoryId: string | null;
   accountId: string | null;
@@ -950,6 +1007,8 @@ export type Subscription = {
   provider: string | null;
   planName: string | null;
   priceMicros: string | null;
+  /** 费用币种；null = 账本本币。 */
+  currency: string | null;
   billingCycle: string | null;
   paymentMethod: string | null;
   autoRenew: boolean;
@@ -1122,6 +1181,11 @@ export type AiDraftFields = {
   occurredTime?: string;
   /** 新卡片会写入；旧历史卡片缺省时按 CNY 展示。 */
   currency?: string;
+  /** 外币草稿：原币金额（grossAmountMicros 是后端按汇率折出的本币）。 */
+  originalCurrency?: string;
+  originalAmountMicros?: string;
+  toCurrency?: string;
+  toAmountMicros?: string;
   categoryId?: string;
   categoryName?: string;
   subcategoryId?: string;
@@ -1177,6 +1241,10 @@ export type AiAccountBalance = {
   /** 归属人员名字；未设归属或旧历史卡片缺省。 */
   person?: string | null;
   balanceMicros: string;
+  /** 账户币种；旧卡片缺省 = 卡片币种。 */
+  currency?: string;
+  /** 外币账户按最新汇率折合的本币余额。 */
+  baseBalanceMicros?: string | null;
   /** 负债类账户（信用/需归还）：balanceMicros 记为正数的欠款，前端展示为负向。 */
   isLiability: boolean;
 };
@@ -1274,6 +1342,10 @@ export type AiDraftInput = {
   grossAmountMicros: string;
   occurredOn: string;
   occurredTime?: string;
+  originalCurrency?: string;
+  originalAmountMicros?: string;
+  toCurrency?: string;
+  toAmountMicros?: string;
   categoryId?: string;
   subcategoryId?: string;
   personId?: string;

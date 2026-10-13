@@ -4,6 +4,7 @@ import {
   BackgroundJobsService,
   DatabaseTransactionService,
   dateKey,
+  FxRateService,
   IdempotencyService,
   parseDateOnly,
   PrismaService,
@@ -17,6 +18,11 @@ import {
   CreateTransactionDto,
   TransactionAccountRelationDto,
 } from "../transactions/dto/create-transaction.dto";
+import {
+  normalizeTransactionFx,
+  sideAmount,
+  transferAmounts,
+} from "../transactions/transaction-fx";
 import { TransactionsService } from "../transactions/transactions.service";
 import { ListAutoPendingQueryDto, UpdateAutoPendingDto } from "./dto/auto-pending.dto";
 import { CreateAutoRuleDto, UpdateAutoRuleDto } from "./dto/auto-rule.dto";
@@ -25,6 +31,8 @@ import { CreateQuickTemplateDto, UpdateQuickTemplateDto } from "./dto/quick-temp
 type AutoPayload = {
   accountId?: string | null;
   amountMicros?: string | null;
+  originalCurrency?: string | null;
+  originalAmountMicros?: string | null;
   categoryId?: string | null;
   fromAccountId?: string | null;
   fromSubAccountId?: string | null;
@@ -63,6 +71,7 @@ export class AutomationService {
     private readonly transactions: TransactionsService,
     private readonly idempotency: IdempotencyService,
     private readonly reminderTargets: ReminderTargetsService,
+    private readonly fx: FxRateService,
   ) {}
 
   async listRules(ledgerId: string, userId: string) {
@@ -93,6 +102,7 @@ export class AutomationService {
           enabled: input.enabled ?? true,
           type: input.type,
           amountMicros: BigInt(input.amountMicros),
+          ...originalColumns(input.originalCurrency, input.originalAmountMicros),
           categoryId: isTransfer ? null : input.categoryId!,
           subcategoryId: isTransfer ? null : (input.subcategoryId ?? null),
           accountId: isTransfer ? null : (input.accountId ?? null),
@@ -147,9 +157,11 @@ export class AutomationService {
       { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
+    const ruleOriginal = mergeOriginal(existing, input);
     await this.assertAutoPayload(ledgerId, type, {
       amountMicros:
         input.amountMicros === undefined ? existing.amountMicros.toString() : input.amountMicros,
+      ...ruleOriginal,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -188,6 +200,7 @@ export class AutomationService {
           type: input.type,
           enabled: input.enabled,
           amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
+          ...originalColumns(ruleOriginal.originalCurrency, ruleOriginal.originalAmountMicros),
           categoryId: type === "transfer" ? null : input.categoryId,
           subcategoryId:
             type === "transfer"
@@ -301,9 +314,11 @@ export class AutomationService {
       { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
+    const pendingOriginal = mergeOriginal(existing, input);
     await this.assertAutoPayload(ledgerId, existing.type, {
       amountMicros:
         input.amountMicros === undefined ? existing.amountMicros.toString() : input.amountMicros,
+      ...pendingOriginal,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -323,6 +338,7 @@ export class AutomationService {
       where: { id: pendingId },
       data: {
         amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
+        ...originalColumns(pendingOriginal.originalCurrency, pendingOriginal.originalAmountMicros),
         scheduledFor: input.scheduledFor ? parseDateOnly(input.scheduledFor) : undefined,
         categoryId: existing.type === "transfer" ? null : input.categoryId,
         subcategoryId:
@@ -472,9 +488,11 @@ export class AutomationService {
       { accountId: existing.toAccountId, subAccountId: existing.toSubAccountId },
       { accountId: input.toAccountId, subAccountId: input.toSubAccountId },
     );
+    const templateOriginal = mergeOriginal(existing, input);
     await this.assertAutoPayload(ledgerId, type, {
       amountMicros:
         input.amountMicros === undefined ? existing.amountMicros?.toString() : input.amountMicros,
+      ...templateOriginal,
       categoryId: input.categoryId === undefined ? existing.categoryId : input.categoryId,
       subcategoryId:
         input.categoryId !== undefined && input.subcategoryId === undefined
@@ -504,6 +522,7 @@ export class AutomationService {
         type: input.type,
         name: input.name,
         amountMicros: input.amountMicros === undefined ? undefined : BigInt(input.amountMicros),
+        ...originalColumns(templateOriginal.originalCurrency, templateOriginal.originalAmountMicros),
         categoryId: type === "transfer" ? null : input.categoryId,
         subcategoryId:
           type === "transfer"
@@ -571,7 +590,7 @@ export class AutomationService {
     await this.ledgers.assertMember(ledgerId, userId);
     const template = await this.assertTemplate(ledgerId, templateId, userId);
     return {
-      ...this.templateToTransaction(template, todayKey()),
+      ...(await this.templateToTransaction(ledgerId, template, todayKey())),
       insuranceId: template.insuranceId,
       itemId: template.itemId,
       itemLinkKind: template.itemLinkKind,
@@ -584,7 +603,7 @@ export class AutomationService {
     const template = await this.assertTemplate(ledgerId, templateId, userId);
     if (!template.directEnabled)
       throw new AppError("QUICK_TEMPLATE_DIRECT_DISABLED", "模板未开启直接记账", 400);
-    if (!template.amountMicros)
+    if (!template.amountMicros && template.originalAmountMicros === null)
       throw new AppError("QUICK_TEMPLATE_AMOUNT_REQUIRED", "直接记账模板必须包含金额", 400);
     // 直接记账是最容易被双击/重放的入口，与交易创建一样支持 Idempotency-Key。
     return this.idempotency.run(
@@ -598,13 +617,18 @@ export class AutomationService {
     template: Prisma.QuickTemplateGetPayload<Record<string, never>>,
     userId: string,
   ) {
+    // 外币模板要按今天的汇率折算本币，可能要联网查汇率，放在事务外面做。
+    const input = await this.templateToTransaction(ledgerId, template, todayKey());
+    if (!input.grossAmountMicros || BigInt(input.grossAmountMicros) <= 0n) {
+      throw new AppError("FX_RATE_UNAVAILABLE", "取不到汇率，无法折算本币金额，请先在汇率设置里补录", 400);
+    }
     return this.txs.run(
       async (tx) => {
         const transaction = await this.transactions.createInsideExistingTransaction(
           tx,
           ledgerId,
           userId,
-          this.templateToTransaction(template, todayKey()),
+          input,
           { source: "quick", sourceId: template.id, auditAction: "quick_template.run" },
         );
         await this.linkAssets(tx, ledgerId, transaction.id, {
@@ -626,6 +650,7 @@ export class AutomationService {
       return {
         type: pending.type,
         grossAmountMicros: pending.amountMicros.toString(),
+        ...originalDto(pending),
         occurredOn: dateKey(pending.scheduledFor),
         fromAccountId: pending.fromAccountId ?? undefined,
         fromSubAccountId: pending.fromSubAccountId ?? undefined,
@@ -639,6 +664,7 @@ export class AutomationService {
     return {
       type: pending.type,
       grossAmountMicros: pending.amountMicros.toString(),
+      ...originalDto(pending),
       occurredOn: dateKey(pending.scheduledFor),
       categoryId: pending.categoryId ?? undefined,
       subcategoryId: pending.subcategoryId ?? undefined,
@@ -650,14 +676,38 @@ export class AutomationService {
     };
   }
 
-  private templateToTransaction(
+  /**
+   * 模板 → 交易输入。外币模板的本币金额按 occurredOn 的汇率现算（模板里存的只是估算），
+   * 取不到汇率时退回估算值；两者都没有时 grossAmountMicros 为空串，由调用方决定怎么处理。
+   */
+  private async templateToTransaction(
+    ledgerId: string,
     template: Prisma.QuickTemplateGetPayload<Record<string, never>>,
     occurredOn: string,
-  ): CreateTransactionDto {
+  ): Promise<CreateTransactionDto> {
+    let grossAmountMicros = template.amountMicros?.toString() ?? "";
+    if (template.originalCurrency && template.originalAmountMicros !== null) {
+      const ledger = await this.prisma.client.ledger.findFirstOrThrow({
+        where: { id: ledgerId },
+        select: { currency: true, amountDecimalPlaces: true },
+      });
+      const converted = await this.fx.convert(
+        ledgerId,
+        template.originalAmountMicros,
+        template.originalCurrency,
+        ledger.currency,
+        occurredOn,
+        { decimalPlaces: ledger.amountDecimalPlaces },
+      );
+      if (converted && converted.amountMicros > 0n) {
+        grossAmountMicros = converted.amountMicros.toString();
+      }
+    }
     if (template.type === "transfer") {
       return {
         type: template.type,
-        grossAmountMicros: template.amountMicros?.toString() ?? "",
+        grossAmountMicros,
+        ...originalDto(template),
         occurredOn,
         fromAccountId: template.fromAccountId ?? undefined,
         fromSubAccountId: template.fromSubAccountId ?? undefined,
@@ -670,7 +720,8 @@ export class AutomationService {
     const relations = this.parseRelations(template.relationPayload);
     return {
       type: template.type,
-      grossAmountMicros: template.amountMicros?.toString() ?? "",
+      grossAmountMicros,
+      ...originalDto(template),
       occurredOn,
       categoryId: template.categoryId ?? undefined,
       subcategoryId: template.subcategoryId ?? undefined,
@@ -693,6 +744,7 @@ export class AutomationService {
       type: input.type,
       name: input.name,
       amountMicros: input.amountMicros ? BigInt(input.amountMicros) : null,
+      ...originalColumns(input.originalCurrency, input.originalAmountMicros),
       categoryId: isTransfer ? null : input.categoryId!,
       subcategoryId: isTransfer ? null : (input.subcategoryId ?? null),
       accountId: isTransfer ? null : (input.accountId ?? null),
@@ -752,16 +804,32 @@ export class AutomationService {
   }
 
   private async assertAutoPayload(ledgerId: string, type: string, payload: AutoPayload) {
+    // 与交易同一套币种规则（transaction-fx）：规则 / 待确认 / 模板不支持 to_*，
+    // 所以「两侧都是外币且币种不同」的转账在这里就会被拒。
+    const base = await this.baseCurrency(ledgerId);
+    const fx = normalizeTransactionFx(
+      {
+        type,
+        originalCurrency: payload.originalCurrency,
+        originalAmountMicros: payload.originalAmountMicros,
+      },
+      base,
+    );
     if (type === "transfer") {
       if (!payload.fromAccountId || !payload.toAccountId) {
         throw new AppError("TRANSFER_ACCOUNTS_REQUIRED", "转账必须选择转出和转入账户", 400);
       }
-      await this.assertAccount(
+      const from = await this.assertAccount(
         ledgerId,
         payload.fromAccountId,
         payload.fromSubAccountId ?? undefined,
       );
-      await this.assertAccount(ledgerId, payload.toAccountId, payload.toSubAccountId ?? undefined);
+      const to = await this.assertAccount(
+        ledgerId,
+        payload.toAccountId,
+        payload.toSubAccountId ?? undefined,
+      );
+      transferAmounts(fx, base, 1n, from.currency, to.currency);
       if (
         payload.fromAccountId === payload.toAccountId &&
         (payload.fromSubAccountId ?? null) === (payload.toSubAccountId ?? null)
@@ -783,17 +851,27 @@ export class AutomationService {
       throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
     }
     if (payload.accountId) {
-      await this.assertAccount(ledgerId, payload.accountId, payload.subAccountId ?? undefined);
+      const account = await this.assertAccount(
+        ledgerId,
+        payload.accountId,
+        payload.subAccountId ?? undefined,
+      );
+      sideAmount(fx, base, 1n, account.currency, "account");
     }
     if (payload.personId) await this.assertPerson(ledgerId, payload.personId);
-    await this.assertRelations(ledgerId, type, payload.relations ?? []);
+    await this.assertRelations(ledgerId, type, payload.relations ?? [], base);
     this.assertRelationTotal(payload.amountMicros, payload.relations ?? []);
     if (payload.insuranceId) await this.assertInsurance(ledgerId, payload.insuranceId);
     if (payload.itemId) await this.assertItem(ledgerId, payload.itemId);
     if (payload.subscriptionId) await this.assertSubscription(ledgerId, payload.subscriptionId);
   }
 
-  private async assertRelations(ledgerId: string, type: string, relations: StoredRelation[]) {
+  private async assertRelations(
+    ledgerId: string,
+    type: string,
+    relations: StoredRelation[],
+    baseCurrency: string,
+  ) {
     if (relations.length === 0) return;
     const accounts = await this.prisma.client.account.findMany({
       where: {
@@ -826,6 +904,9 @@ export class AutomationService {
         : "payable";
       if (account.type !== expectedType) {
         throw new AppError("RELATION_ACCOUNT_TYPE_MISMATCH", "关联账户类型不匹配", 400);
+      }
+      if (account.currency !== baseCurrency) {
+        throw new AppError("RELATION_ACCOUNT_CURRENCY", "往来账户只能使用账本本币", 400);
       }
     }
   }
@@ -979,11 +1060,20 @@ export class AutomationService {
         400,
       );
     }
-    if (!subAccountId) return;
+    if (!subAccountId) return account;
     const subAccount = await this.prisma.client.subAccount.findFirst({
       where: { id: subAccountId, ledgerId, accountId, archivedAt: null },
     });
     if (!subAccount) throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+    return account;
+  }
+
+  private async baseCurrency(ledgerId: string): Promise<string> {
+    const ledger = await this.prisma.client.ledger.findFirstOrThrow({
+      where: { id: ledgerId },
+      select: { currency: true },
+    });
+    return ledger.currency;
   }
 
   private async assertPerson(ledgerId: string, personId: string) {
@@ -992,4 +1082,49 @@ export class AutomationService {
     });
     if (!person) throw new AppError("PERSON_NOT_FOUND", "人员不存在", 404);
   }
+}
+
+type OriginalFields = { originalCurrency?: string | null; originalAmountMicros?: string | null };
+
+/**
+ * PATCH 语义：两个字段都没传 = 保持原值；传了任意一个就整对替换（null/空 = 清除）。
+ * 只改一半（换了币种没给金额）会让币种和金额对不上，所以不做逐字段合并。
+ */
+function mergeOriginal(
+  existing: { originalCurrency: string | null; originalAmountMicros: bigint | null },
+  input: OriginalFields,
+): { originalCurrency: string | null; originalAmountMicros: string | null } {
+  if (input.originalCurrency === undefined && input.originalAmountMicros === undefined) {
+    return {
+      originalCurrency: existing.originalCurrency,
+      originalAmountMicros: existing.originalAmountMicros?.toString() ?? null,
+    };
+  }
+  return {
+    originalCurrency: input.originalCurrency || null,
+    originalAmountMicros: input.originalAmountMicros || null,
+  };
+}
+
+/** 写库用：成对的原币列（已经过 normalizeTransactionFx 校验）。 */
+function originalColumns(
+  currency: string | null | undefined,
+  amountMicros: string | null | undefined,
+): { originalCurrency: string | null; originalAmountMicros: bigint | null } {
+  return currency && amountMicros
+    ? { originalCurrency: currency, originalAmountMicros: BigInt(amountMicros) }
+    : { originalCurrency: null, originalAmountMicros: null };
+}
+
+/** 读库 → 交易 DTO 的原币字段。 */
+function originalDto(row: {
+  originalCurrency: string | null;
+  originalAmountMicros: bigint | null;
+}): Pick<CreateTransactionDto, "originalCurrency" | "originalAmountMicros"> {
+  return row.originalCurrency && row.originalAmountMicros !== null
+    ? {
+        originalCurrency: row.originalCurrency,
+        originalAmountMicros: row.originalAmountMicros.toString(),
+      }
+    : {};
 }

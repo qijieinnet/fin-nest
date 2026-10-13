@@ -16,26 +16,26 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique @db.Citext
-  account      String    @unique @db.Citext
-  alias        String
-  isAdmin      Boolean   @default(false) @map("is_admin")
-  passwordHash String    @map("password_hash")
+  id                  String    @id @default(uuid()) @db.Uuid
+  email               String    @unique @db.Citext
+  account             String    @unique @db.Citext
+  alias               String
+  isAdmin             Boolean   @default(false) @map("is_admin")
+  passwordHash        String    @map("password_hash")
   // 应用锁（打开应用时验证身份）总开关，账号级：开启后该用户在任何设备/浏览器上都要先验证。
-  appLockEnabled Boolean @default(false) @map("app_lock_enabled")
+  appLockEnabled      Boolean   @default(false) @map("app_lock_enabled")
   // 飞书客户端内是否跳过上面那道验证。默认跳过：能打开这个页面就已经过了飞书自己的
   // 设备锁/登录态，再验一次纯属重复。只在 appLockEnabled 为真时才有意义。
-  appLockSkipInFeishu Boolean @default(true) @map("app_lock_skip_in_feishu")
+  appLockSkipInFeishu Boolean   @default(true) @map("app_lock_skip_in_feishu")
   // 推送渠道偏好，账号级：配置提醒时只选「推给谁」，走哪条渠道由本人这两个开关决定。
   // 默认都开——关掉某条渠道是主动行为，静默不收才是最难排查的。
-  notifyFeishu   Boolean @default(true) @map("notify_feishu")
-  notifyWebPush  Boolean @default(true) @map("notify_web_push")
+  notifyFeishu        Boolean   @default(true) @map("notify_feishu")
+  notifyWebPush       Boolean   @default(true) @map("notify_web_push")
   // 界面语言（zh-CN / en）。null = 未设置，前端跟随设备语言；设置过就以这里为准，跨设备同步。
-  locale         String?
-  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  locale              String?
+  disabledAt          DateTime? @map("disabled_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("users")
 }
@@ -256,28 +256,30 @@ model Person {
 }
 
 model Account {
-  id                   String    @id @default(uuid()) @db.Uuid
-  ledgerId             String    @map("ledger_id") @db.Uuid
-  type                 String
-  name                 String
-  icon                 String?
+  id                String    @id @default(uuid()) @db.Uuid
+  ledgerId          String    @map("ledger_id") @db.Uuid
+  type              String
+  name              String
+  icon              String?
   // 归属人员（可空＝未指定）。只存当前值、不记历史，净资产按人拆分的历史按当前归属追溯重算。
-  personId             String?   @map("person_id") @db.Uuid
-  balanceMicros        BigInt    @default(0) @map("balance_micros")
-  includeInNetWorth    Boolean   @default(true) @map("include_in_net_worth")
+  personId          String?   @map("person_id") @db.Uuid
+  // 账户币种：余额、流水、调整都按它记；建账后不可改（多币种方案 §2）。往来账户恒为账本本币。
+  currency          String    @db.Char(3)
+  balanceMicros     BigInt    @default(0) @map("balance_micros")
+  includeInNetWorth Boolean   @default(true) @map("include_in_net_worth")
   // 同一分类内的手动排序序号，列表按其升序排列。
-  sortOrder            Int       @default(0) @map("sort_order")
-  creditLimitMicros    BigInt?   @map("credit_limit_micros")
-  counterparty         String?
-  dueDate              DateTime? @map("due_date") @db.Date
-  billDay              Int?      @map("bill_day") @db.SmallInt
-  repayDay             Int?      @map("repay_day") @db.SmallInt
-  settledAt            DateTime? @map("settled_at") @db.Timestamptz(6)
-  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdBy            String?   @map("created_by") @db.Uuid
-  updatedBy            String?   @map("updated_by") @db.Uuid
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sortOrder         Int       @default(0) @map("sort_order")
+  creditLimitMicros BigInt?   @map("credit_limit_micros")
+  counterparty      String?
+  dueDate           DateTime? @map("due_date") @db.Date
+  billDay           Int?      @map("bill_day") @db.SmallInt
+  repayDay          Int?      @map("repay_day") @db.SmallInt
+  settledAt         DateTime? @map("settled_at") @db.Timestamptz(6)
+  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy         String?   @map("created_by") @db.Uuid
+  updatedBy         String?   @map("updated_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([ledgerId, type, archivedAt])
   @@index([ledgerId, personId])
@@ -330,7 +332,13 @@ model Transaction {
   type                  String
   grossAmountMicros     BigInt    @map("gross_amount_micros")
   effectiveAmountMicros BigInt    @map("effective_amount_micros")
+  // 恒等于账本本币；gross/effective 都是本币金额。
   currency              String    @default("CNY") @db.Char(3)
+  // 外币那一侧的原币金额（!= 本币）；to_* 仅用于两侧都是外币且币种不同的转账。见多币种方案 §2.1。
+  originalCurrency      String?   @map("original_currency") @db.Char(3)
+  originalAmountMicros  BigInt?   @map("original_amount_micros")
+  toCurrency            String?   @map("to_currency") @db.Char(3)
+  toAmountMicros        BigInt?   @map("to_amount_micros")
   occurredOn            DateTime  @map("occurred_on") @db.Date
   occurredAt            DateTime  @map("occurred_at") @db.Timestamptz(6)
   categoryId            String?   @map("category_id") @db.Uuid
@@ -415,36 +423,39 @@ model TransactionLink {
 }
 
 model AutoRule {
-  id               String    @id @default(uuid()) @db.Uuid
-  ledgerId         String    @map("ledger_id") @db.Uuid
-  enabled          Boolean   @default(true)
-  type             String
-  amountMicros     BigInt    @map("amount_micros")
-  categoryId       String?   @map("category_id") @db.Uuid
-  subcategoryId    String?   @map("subcategory_id") @db.Uuid
-  accountId        String?   @map("account_id") @db.Uuid
-  subAccountId     String?   @map("sub_account_id") @db.Uuid
-  fromAccountId    String?   @map("from_account_id") @db.Uuid
-  fromSubAccountId String?   @map("from_sub_account_id") @db.Uuid
-  toAccountId      String?   @map("to_account_id") @db.Uuid
-  toSubAccountId   String?   @map("to_sub_account_id") @db.Uuid
-  personId         String?   @map("person_id") @db.Uuid
-  note             String?
-  relationPayload  Json?     @map("relation_payload") @db.JsonB
-  insuranceId      String?   @map("insurance_id") @db.Uuid
-  itemId           String?   @map("item_id") @db.Uuid
-  subscriptionId   String?   @map("subscription_id") @db.Uuid
-  repeatRule       String    @map("repeat_rule")
-  startDate        DateTime  @map("start_date") @db.Date
-  nextRunOn        DateTime? @map("next_run_on") @db.Date
+  id                   String    @id @default(uuid()) @db.Uuid
+  ledgerId             String    @map("ledger_id") @db.Uuid
+  enabled              Boolean   @default(true)
+  type                 String
+  // 本币金额；带原币时它是估算值，生成待确认时按当日汇率重算。
+  amountMicros         BigInt    @map("amount_micros")
+  originalCurrency     String?   @map("original_currency") @db.Char(3)
+  originalAmountMicros BigInt?   @map("original_amount_micros")
+  categoryId           String?   @map("category_id") @db.Uuid
+  subcategoryId        String?   @map("subcategory_id") @db.Uuid
+  accountId            String?   @map("account_id") @db.Uuid
+  subAccountId         String?   @map("sub_account_id") @db.Uuid
+  fromAccountId        String?   @map("from_account_id") @db.Uuid
+  fromSubAccountId     String?   @map("from_sub_account_id") @db.Uuid
+  toAccountId          String?   @map("to_account_id") @db.Uuid
+  toSubAccountId       String?   @map("to_sub_account_id") @db.Uuid
+  personId             String?   @map("person_id") @db.Uuid
+  note                 String?
+  relationPayload      Json?     @map("relation_payload") @db.JsonB
+  insuranceId          String?   @map("insurance_id") @db.Uuid
+  itemId               String?   @map("item_id") @db.Uuid
+  subscriptionId       String?   @map("subscription_id") @db.Uuid
+  repeatRule           String    @map("repeat_rule")
+  startDate            DateTime  @map("start_date") @db.Date
+  nextRunOn            DateTime? @map("next_run_on") @db.Date
   /// 指定时间：当天几点生成待确认（本地 HH:mm，24 小时制）。
   /// 为空 = 未指定，`next_run_on` 到期后 worker 下一轮就生成，不看时刻。
-  runTime          String?   @map("run_time")
-  createdBy        String    @map("created_by") @db.Uuid
-  updatedBy        String?   @map("updated_by") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
+  runTime              String?   @map("run_time")
+  createdBy            String    @map("created_by") @db.Uuid
+  updatedBy            String?   @map("updated_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
 
   @@map("auto_rules")
 }
@@ -458,6 +469,8 @@ model AutoPendingTransaction {
   status                 String
   type                   String
   amountMicros           BigInt    @map("amount_micros")
+  originalCurrency       String?   @map("original_currency") @db.Char(3)
+  originalAmountMicros   BigInt?   @map("original_amount_micros")
   categoryId             String?   @map("category_id") @db.Uuid
   subcategoryId          String?   @map("subcategory_id") @db.Uuid
   accountId              String?   @map("account_id") @db.Uuid
@@ -487,35 +500,37 @@ model AutoPendingTransaction {
 }
 
 model QuickTemplate {
-  id               String    @id @default(uuid()) @db.Uuid
-  ledgerId         String    @map("ledger_id") @db.Uuid
-  type             String
-  name             String?
-  amountMicros     BigInt?   @map("amount_micros")
-  categoryId       String?   @map("category_id") @db.Uuid
-  subcategoryId    String?   @map("subcategory_id") @db.Uuid
-  accountId        String?   @map("account_id") @db.Uuid
-  subAccountId     String?   @map("sub_account_id") @db.Uuid
-  fromAccountId    String?   @map("from_account_id") @db.Uuid
-  fromSubAccountId String?   @map("from_sub_account_id") @db.Uuid
-  toAccountId      String?   @map("to_account_id") @db.Uuid
-  toSubAccountId   String?   @map("to_sub_account_id") @db.Uuid
-  personId         String?   @map("person_id") @db.Uuid
-  note             String?
-  relationPayload  Json?     @map("relation_payload") @db.JsonB
-  insuranceId      String?   @map("insurance_id") @db.Uuid
-  itemId           String?   @map("item_id") @db.Uuid
+  id                   String    @id @default(uuid()) @db.Uuid
+  ledgerId             String    @map("ledger_id") @db.Uuid
+  type                 String
+  name                 String?
+  amountMicros         BigInt?   @map("amount_micros")
+  originalCurrency     String?   @map("original_currency") @db.Char(3)
+  originalAmountMicros BigInt?   @map("original_amount_micros")
+  categoryId           String?   @map("category_id") @db.Uuid
+  subcategoryId        String?   @map("subcategory_id") @db.Uuid
+  accountId            String?   @map("account_id") @db.Uuid
+  subAccountId         String?   @map("sub_account_id") @db.Uuid
+  fromAccountId        String?   @map("from_account_id") @db.Uuid
+  fromSubAccountId     String?   @map("from_sub_account_id") @db.Uuid
+  toAccountId          String?   @map("to_account_id") @db.Uuid
+  toSubAccountId       String?   @map("to_sub_account_id") @db.Uuid
+  personId             String?   @map("person_id") @db.Uuid
+  note                 String?
+  relationPayload      Json?     @map("relation_payload") @db.JsonB
+  insuranceId          String?   @map("insurance_id") @db.Uuid
+  itemId               String?   @map("item_id") @db.Uuid
   /// 关联物品的方式：consumable=耗材/维修（计入耗材合计），purchase=购入（只挂流水）。
   /// 为空按 consumable 处理，与交易关联的默认一致。
-  itemLinkKind     String?   @map("item_link_kind")
-  subscriptionId   String?   @map("subscription_id") @db.Uuid
-  directEnabled    Boolean   @default(false) @map("direct_enabled")
-  sortOrder        Int       @default(0) @map("sort_order")
-  createdBy        String    @map("created_by") @db.Uuid
-  updatedBy        String?   @map("updated_by") @db.Uuid
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt       DateTime? @map("archived_at") @db.Timestamptz(6)
+  itemLinkKind         String?   @map("item_link_kind")
+  subscriptionId       String?   @map("subscription_id") @db.Uuid
+  directEnabled        Boolean   @default(false) @map("direct_enabled")
+  sortOrder            Int       @default(0) @map("sort_order")
+  createdBy            String    @map("created_by") @db.Uuid
+  updatedBy            String?   @map("updated_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
 
   @@index([fromAccountId])
   @@index([toAccountId])
@@ -523,28 +538,28 @@ model QuickTemplate {
 }
 
 model Plan {
-  id                String    @id @default(uuid()) @db.Uuid
-  ledgerId          String    @map("ledger_id") @db.Uuid
-  kind              String
-  metric            String
-  name              String
-  limitAmountMicros BigInt?   @map("limit_amount_micros")
-  limitCount        Int?      @map("limit_count")
-  startDate         DateTime  @map("start_date") @db.Date
-  repeatRule        String    @map("repeat_rule")
-  matchRule         Json?     @map("match_rule") @db.JsonB
-  foresightEnabled  Boolean   @default(false) @map("foresight_enabled")
+  id                   String    @id @default(uuid()) @db.Uuid
+  ledgerId             String    @map("ledger_id") @db.Uuid
+  kind                 String
+  metric               String
+  name                 String
+  limitAmountMicros    BigInt?   @map("limit_amount_micros")
+  limitCount           Int?      @map("limit_count")
+  startDate            DateTime  @map("start_date") @db.Date
+  repeatRule           String    @map("repeat_rule")
+  matchRule            Json?     @map("match_rule") @db.JsonB
+  foresightEnabled     Boolean   @default(false) @map("foresight_enabled")
   // 开启后周期不再自动翻页：本期结束仍停在本期，用户确认后才前进（见 PlanPeriod）。
   periodConfirmEnabled Boolean   @default(false) @map("period_confirm_enabled")
   // 开启确认时记下的游标起点（当时所在周期的起始日）；为空表示还没开启过。
   // 没有它，存量计划的游标会从 startDate 那一期开始，用户要补确认几十次。
   periodConfirmAnchor  DateTime? @map("period_confirm_anchor") @db.Date
-  createdBy         String    @map("created_by") @db.Uuid
-  updatedBy         String?   @map("updated_by") @db.Uuid
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  stoppedAt         DateTime? @map("stopped_at") @db.Timestamptz(6)
-  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdBy            String    @map("created_by") @db.Uuid
+  updatedBy            String?   @map("updated_by") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  stoppedAt            DateTime? @map("stopped_at") @db.Timestamptz(6)
+  archivedAt           DateTime? @map("archived_at") @db.Timestamptz(6)
 
   @@index([ledgerId, stoppedAt, archivedAt])
   @@map("plans")
@@ -717,6 +732,8 @@ model Subscription {
   provider        String?
   planName        String?   @map("plan_name")
   priceMicros     BigInt?   @map("price_micros")
+  // 费用币种；空 = 账本本币。
+  currency        String?   @db.Char(3)
   billingCycle    String?   @map("billing_cycle")
   paymentMethod   String?   @map("payment_method")
   autoRenew       Boolean   @default(false) @map("auto_renew")
@@ -1143,4 +1160,23 @@ model RestoreRecord {
 
   @@index([startedAt])
   @@map("restore_records")
+}
+
+/// 汇率：1 单位 fromCurrency = rate 单位 toCurrency。
+/// ledgerId 为空 = 数据源自动抓取（全局共享）；非空 = 该账本手填，优先于自动。
+/// 唯一性由迁移 56 的两条部分唯一索引保证（Prisma 无法表达）。
+model ExchangeRate {
+  id           String   @id @default(uuid()) @db.Uuid
+  ledgerId     String?  @map("ledger_id") @db.Uuid
+  fromCurrency String   @map("from_currency") @db.Char(3)
+  toCurrency   String   @map("to_currency") @db.Char(3)
+  rateDate     DateTime @map("rate_date") @db.Date
+  rate         Decimal  @db.Decimal(24, 10)
+  source       String
+  createdBy    String?  @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([fromCurrency, toCurrency, rateDate(sort: Desc)], map: "exchange_rates_pair_date_idx")
+  @@map("exchange_rates")
 }

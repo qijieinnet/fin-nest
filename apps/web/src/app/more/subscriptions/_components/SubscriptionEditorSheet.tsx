@@ -6,6 +6,7 @@ import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttachmentPicker,
+  CurrencySelect,
   DateWheelPicker,
   ReminderSchedulesEditor,
   toReminderDrafts,
@@ -26,9 +27,9 @@ import {
 import { useNotifyCandidates } from "@/lib/data/notifications";
 import { useAttachments, useSubscriptionCategories } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { currencyDecimals, currencySymbolOf, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { useBaseCurrency, useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { SubscriptionCategoryManagerSheet } from "./SubscriptionCategoryManagerSheet";
 import {
   BILLING_CYCLE_OPTIONS,
@@ -235,7 +236,12 @@ export function SubscriptionEditorSheet({
   const queryClient = useQueryClient();
   const { pop, push } = useSheetStack();
   const { showToast } = useToast();
-  const decimalPlaces = useDecimalPlaces();
+  const ledgerDecimalPlaces = useDecimalPlaces();
+  const { code: baseCurrency } = useBaseCurrency();
+  // 费用币种：$20/月的 Claude、¥68 的 iCloud 各记各的；为空 = 本币。
+  const [currency, setCurrency] = useState(subscription?.currency ?? baseCurrency);
+  const decimalPlaces =
+    currency === baseCurrency ? ledgerDecimalPlaces : currencyDecimals(currency);
   const isEditing = Boolean(subscription);
 
   const categoriesQuery = useSubscriptionCategories(ledgerId);
@@ -252,7 +258,13 @@ export function SubscriptionEditorSheet({
   const [categoryId, setCategoryId] = useState(subscription?.categoryId ?? "");
   const [provider, setProvider] = useState(subscription?.provider ?? "");
   const [planName, setPlanName] = useState(subscription?.planName ?? "");
-  const [price, setPrice] = useState(() => microsToInput(subscription?.priceMicros, { decimalPlaces }));
+  const [price, setPrice] = useState(() =>
+    microsToInput(subscription?.priceMicros, {
+      decimalPlaces: subscription?.currency
+        ? currencyDecimals(subscription.currency)
+        : ledgerDecimalPlaces,
+    }),
+  );
   const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle ?? "monthly");
   const [paymentMethod, setPaymentMethod] = useState(subscription?.paymentMethod ?? "");
   const [autoRenew, setAutoRenew] = useState(subscription?.autoRenew ?? false);
@@ -333,6 +345,7 @@ export function SubscriptionEditorSheet({
         provider: provider.trim() || undefined,
         planName: planName.trim() || undefined,
         priceMicros: priceParsed?.amountMicros,
+        currency: currency === baseCurrency ? null : currency,
         billingCycle: billingCycle || undefined,
         paymentMethod: paymentMethod.trim() || undefined,
         autoRenew,
@@ -492,9 +505,19 @@ export function SubscriptionEditorSheet({
               label={t("费用")}
               onChange={(event) => setPrice(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={currencySymbolOf(currency)}
               value={price}
             />
+            <span className="transaction-form__divider" />
+            <div className="account-form__select-row">
+              <span>{t("币种")}</span>
+              <CurrencySelect
+                onChange={setCurrency}
+                pinned={baseCurrency}
+                value={currency}
+                variant="row"
+              />
+            </div>
             <span className="transaction-form__divider" />
             <SelectRow
               label={t("计费周期")}

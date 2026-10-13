@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { CURRENCY_CODES } from "@fin-nest/shared";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -63,6 +64,11 @@ export class CreateSubscriptionDto {
   @IsString()
   @Matches(/^(0|[1-9]\d*)$/)
   priceMicros?: string;
+
+  @ApiPropertyOptional({ example: "USD", description: "费用币种；不传 / null 为账本本币" })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  currency?: string | null;
 
   @ApiPropertyOptional({ description: "计费周期：weekly/monthly/quarterly/yearly/custom 等" })
   @IsOptional()

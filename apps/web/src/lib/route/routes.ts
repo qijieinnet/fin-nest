@@ -9,6 +9,7 @@ export const routes = {
   autoAccounting: "/more/auto",
   quickTemplates: "/more/quick",
   recordSettings: "/more/settings",
+  fxRates: "/more/fx",
   systemSettings: "/more/system",
   feishu: "/more/feishu",
   notifications: "/more/notifications",

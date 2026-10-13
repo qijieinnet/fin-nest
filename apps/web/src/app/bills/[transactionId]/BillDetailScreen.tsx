@@ -43,11 +43,12 @@ import {
   type CategoryLookup,
   resolveCategoryDisplay,
 } from "@/lib/data/options";
-import { formatMicros } from "@/lib/money";
+import { formatCurrencyMicros, formatMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
-import { useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
+import { formatFxRate, impliedFxRate } from "@fin-nest/shared";
+import { useBaseCurrency, useDecimalPlaces, useLedger, useSheetStack, useToast } from "@/providers";
 import { DeleteBillConfirmDialog } from "../_components/DeleteBillConfirmDialog";
 import { EditBillScreen } from "./edit/EditBillScreen";
 import { localized, msg, t } from "@/lib/i18n";
@@ -358,6 +359,7 @@ export function BillDetailScreen({
   const pendingItem = isPendingMode
     ? pendingQuery.data?.find((item) => item.id === pendingId)
     : undefined;
+  const { code: baseCurrency } = useBaseCurrency();
   // 把待确认记录映射成 TransactionDetail 形状，复用同一套详情渲染。
   const pendingDetail = useMemo<TransactionDetail | null>(() => {
     if (!pendingItem) return null;
@@ -372,7 +374,11 @@ export function BillDetailScreen({
       type: pendingItem.type,
       grossAmountMicros: pendingItem.amountMicros,
       effectiveAmountMicros: pendingItem.amountMicros,
-      currency: "CNY",
+      currency: baseCurrency,
+      originalCurrency: pendingItem.originalCurrency,
+      originalAmountMicros: pendingItem.originalAmountMicros,
+      toCurrency: null,
+      toAmountMicros: null,
       occurredOn: pendingItem.scheduledFor,
       categoryId: pendingItem.categoryId,
       subcategoryId: pendingItem.subcategoryId,
@@ -410,7 +416,7 @@ export function BillDetailScreen({
       })),
       links: pendingAssetLinks(pendingItem),
     };
-  }, [pendingItem, categories, people]);
+  }, [pendingItem, categories, people, baseCurrency]);
   const transaction = isPendingMode ? pendingDetail : transactionQuery.data;
   const attachmentItems = useMemo(
     () => attachmentRecords.map((attachment) => toAttachmentItem(attachment)),
@@ -616,6 +622,30 @@ export function BillDetailScreen({
         label: t("有效金额"),
         value: signedAmount(detail, detail.effectiveAmountMicros, decimalPlaces),
       });
+    }
+
+    // 外币：本币是折算后的入账金额，原币是实际发生的那笔；汇率由两者反推（就是实际成交价）。
+    if (detail.originalCurrency && detail.originalAmountMicros) {
+      amountRows.push({
+        label: t("原币金额"),
+        value: formatCurrencyMicros(detail.originalAmountMicros, detail.originalCurrency),
+      });
+      if (detail.toCurrency && detail.toAmountMicros) {
+        amountRows.push({
+          label: t("转入金额"),
+          value: formatCurrencyMicros(detail.toAmountMicros, detail.toCurrency),
+        });
+      }
+      const rate = impliedFxRate(
+        BigInt(detail.originalAmountMicros),
+        BigInt(detail.grossAmountMicros),
+      );
+      if (rate) {
+        amountRows.push({
+          label: t("汇率"),
+          value: `1 ${detail.originalCurrency} = ${formatFxRate(rate)} ${detail.currency}`,
+        });
+      }
     }
 
     const metaRows: DetailRow[] = [];

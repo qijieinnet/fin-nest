@@ -276,6 +276,15 @@ export function MoreScreen() {
           </button>
           <button
             className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+            onClick={() => router.push(routes.fxRates)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("汇率")}</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">{t("外币折算本币")}</span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
             onClick={() => router.push(routes.systemSettings)}
             type="button"
           >

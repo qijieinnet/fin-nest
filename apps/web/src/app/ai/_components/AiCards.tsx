@@ -5,7 +5,7 @@ import { useState } from "react";
 import { CategoryIcon } from "@/components/business";
 import { Button, Tabs } from "@/components/ui";
 import type { AiCard, AiDraftFields } from "@/lib/api";
-import { formatMicros } from "@/lib/money";
+import { currencySymbolOf, formatCurrencyMicros, formatMicros } from "@/lib/money";
 import { useLedger } from "@/providers";
 import { formatMonthShort, localized, msg, t } from "@/lib/i18n";
 
@@ -35,8 +35,7 @@ const STATS_PALETTE = [
 ];
 
 function currencySymbol(currency = "CNY"): string {
-  const known: Record<string, string> = { CNY: "¥", USD: "$", EUR: "€", GBP: "£", JPY: "¥" };
-  return known[currency] ?? `${currency} `;
+  return currencySymbolOf(currency);
 }
 
 export function amount(micros: string, currency?: string): string {
@@ -177,6 +176,14 @@ export function TransactionDraftCard({
           >
             {amount(draft.grossAmountMicros, currency)}
           </span>
+          {draft.originalCurrency && draft.originalAmountMicros ? (
+            <span className="text-[11px] text-[var(--color-text-muted)] [font-variant-numeric:tabular-nums]">
+              {formatCurrencyMicros(draft.originalAmountMicros, draft.originalCurrency)}
+              {draft.toCurrency && draft.toAmountMicros
+                ? ` → ${formatCurrencyMicros(draft.toAmountMicros, draft.toCurrency)}`
+                : ""}
+            </span>
+          ) : null}
           {confirmed ? (
             <span className="ai-draft__status is-confirmed">
               <Check size={12} strokeWidth={3} />
@@ -762,7 +769,14 @@ export function AccountBalancesCard({
                 }}
               >
                 {account.isLiability ? "-" : ""}
-                {amount(account.balanceMicros, currency)}
+                {account.currency && account.currency !== currency
+                  ? formatCurrencyMicros(account.balanceMicros, account.currency)
+                  : amount(account.balanceMicros, currency)}
+                {account.currency && account.currency !== currency && account.baseBalanceMicros ? (
+                  <span className="block text-right text-[11px] font-normal text-[var(--color-text-muted)]">
+                    ≈ {amount(account.baseBalanceMicros, currency)}
+                  </span>
+                ) : null}
               </span>
             </div>
           ))}

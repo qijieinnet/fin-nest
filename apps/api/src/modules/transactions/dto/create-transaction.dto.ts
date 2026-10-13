@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CURRENCY_CODES } from "@fin-nest/shared";
 
 const moneyPattern = /^(0|[1-9]\d*)$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -56,11 +57,39 @@ export class CreateTransactionDto {
   @Matches(datePattern)
   occurredOn!: string;
 
-  @ApiPropertyOptional({ example: "CNY" })
+  @ApiPropertyOptional({ example: "CNY", description: "必须等于账本本币；不传即本币" })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  currency?: string;
+
+  @ApiPropertyOptional({
+    example: "USD",
+    description:
+      "外币那一侧的币种（不能是本币），与 originalAmountMicros 成对出现；grossAmountMicros 仍是本币金额",
+  })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  originalCurrency?: string | null;
+
+  @ApiPropertyOptional({ example: "10000000" })
   @IsOptional()
   @IsString()
-  @Matches(/^[A-Z]{3}$/)
-  currency?: string;
+  @Matches(moneyPattern)
+  originalAmountMicros?: string | null;
+
+  @ApiPropertyOptional({
+    example: "HKD",
+    description: "仅转账：转出、转入都是外币且币种不同时，转入侧币种（须等于转入账户币种）",
+  })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  toCurrency?: string | null;
+
+  @ApiPropertyOptional({ example: "78000000" })
+  @IsOptional()
+  @IsString()
+  @Matches(moneyPattern)
+  toAmountMicros?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

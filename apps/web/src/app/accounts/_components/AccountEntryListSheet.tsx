@@ -7,10 +7,12 @@ import { t } from "@/lib/i18n";
 
 type AccountEntryListSheetProps = {
   accountType: string;
+  /** 账户币种：流水金额按它显示。 */
+  currency?: string | null;
   entries: AccountEntry[];
 };
 
-export function AccountEntryListSheet({ accountType, entries }: AccountEntryListSheetProps) {
+export function AccountEntryListSheet({ accountType, currency, entries }: AccountEntryListSheetProps) {
   if (entries.length === 0) {
     return (
       <div className="py-6">
@@ -46,7 +48,7 @@ export function AccountEntryListSheet({ accountType, entries }: AccountEntryList
                 }`}
               >
                 {positive ? "+" : "−"}
-                {formatMoney(abs)}
+                {formatMoney(abs, currency)}
               </span>
             </div>
           </div>

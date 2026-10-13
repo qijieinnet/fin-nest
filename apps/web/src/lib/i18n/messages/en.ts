@@ -1761,6 +1761,87 @@ export const en = {
   选择语言: "Choose language",
   "界面偏好仅影响本设备，语言与安全设置对账号所有设备生效":
     "Display preferences apply to this device only; language and security settings apply to all your devices",
+  "≈ {value}": "≈ {value}",
+  人民币: "Chinese Yuan",
+  "余额与流水都按账户币种记；外币账户在净资产、合计里按汇率折成本币":
+    "Balances and entries are kept in the account currency; foreign-currency accounts are converted to the base currency for net worth and totals",
+  加元: "Canadian Dollar",
+  币种: "Currency",
+  新加坡元: "Singapore Dollar",
+  新台币: "New Taiwan Dollar",
+  新西兰元: "New Zealand Dollar",
+  日元: "Japanese Yen",
+  本币: "Base currency",
+  欧元: "Euro",
+  泰铢: "Thai Baht",
+  港币: "Hong Kong Dollar",
+  澳元: "Australian Dollar",
+  澳门元: "Macanese Pataca",
+  瑞士法郎: "Swiss Franc",
+  "统计、预算和净资产都按本币计；外币可以在账户和记账时单独选。账本里有账户或记账数据后本币不能再改。":
+    "Stats, budgets and net worth use the base currency; foreign currencies can be chosen per account and per transaction. The base currency can't be changed once the ledger has accounts or records.",
+  "缺少 {currency} 汇率，未计入净资产": "No {currency} exchange rate — not included in net worth",
+  美元: "US Dollar",
+  英镑: "British Pound",
+  账户币种创建后不可修改: "The account currency can't be changed after creation",
+  选择币种: "Choose currency",
+  韩元: "South Korean Won",
+  马来西亚林吉特: "Malaysian Ringgit",
+  "1 {currency} 折合多少 {base}": "How many {base} is 1 {currency}",
+  保存汇率: "Save rate",
+  "删除后这一天按自动获取的或更早的汇率折算。":
+    "After deleting, this day will use the automatic rate or an earlier one.",
+  "删除失败，请稍后重试": "Couldn't delete. Please try again later.",
+  "删除这条手填汇率？": "Delete this manual rate?",
+  加载汇率: "Loading exchange rates",
+  在用的外币: "Foreign currencies in use",
+  外币: "Foreign currency",
+  外币折算本币: "Convert to base currency",
+  手填: "Manual",
+  手填汇率: "Enter rate manually",
+  手填记录: "Manual rates",
+  "数据源不提供这个币种，需要手填":
+    "The rate source doesn't cover this currency — enter it manually",
+  "新建外币账户、记一笔外币账，或给订阅设外币后会出现在这里。":
+    "Currencies appear here once you add a foreign-currency account, record a foreign-currency transaction, or price a subscription in one.",
+  "暂时取不到，稍后会自动重试，也可以先手填":
+    "Not available yet — will retry automatically, or enter it manually",
+  "本币 {base} · 外币汇率每天自动从欧洲央行获取，也可以手填覆盖":
+    "Base currency {base} · Rates are fetched daily from the European Central Bank; you can override them manually",
+  "本币 {base} · 未启用自动获取（FX_PROVIDER），外币汇率需要手填":
+    "Base currency {base} · Automatic rates are off (FX_PROVIDER); enter foreign rates manually",
+  欧洲央行: "ECB",
+  汇率: "Exchange rates",
+  汇率已保存: "Exchange rate saved",
+  汇率日期: "Rate date",
+  "缺少 {currencies} 的汇率，这些外币账户未计入净资产。去补录 ›":
+    "Missing exchange rates for {currencies}; those accounts aren't in net worth. Add rates ›",
+  缺汇率: "No rate",
+  "记账按交易日当天或之前最近一天的汇率折算；同一天手填的优先于自动获取的。":
+    "Transactions use the rate on or before their date; on the same day, manual rates take precedence over automatic ones.",
+  还没有用到外币: "No foreign currencies yet",
+  "取不到 {currency} 汇率，请手动填写折合本币金额":
+    "No {currency} exchange rate — please enter the base-currency amount",
+  "请填写 {currency} 金额": "Please enter the {currency} amount",
+  请填写折合本币金额: "Please enter the base-currency amount",
+  账户入账: "Credited to account",
+  账户扣款: "Charged to account",
+  转入金额: "Amount received",
+  "1 {from} = {rate} {to} · {date} · {source}": "1 {from} = {rate} {to} · {date} · {source}",
+  "正在取汇率…": "Fetching exchange rate…",
+  "取不到汇率，请直接填写实际金额（也可以去「更多 › 汇率」补录）":
+    "No exchange rate — enter the actual amount (or add a rate under More › Exchange rates)",
+  "折合 {currency}": "In {currency}",
+  原币金额: "Original amount",
+  "上方金额是本币估算；每次记账按当天汇率重算。":
+    "The amount above is a base-currency estimate; each entry is recalculated at that day's rate.",
+  "今日汇率 1 {currency} = {rate} {base}": "Today: 1 {currency} = {rate} {base}",
+  "取不到 {currency} 汇率：本币金额请手填，记账时也会沿用它":
+    "No {currency} rate available: enter the base amount manually; it will be used when recording",
+  "每期金额（本币估算）": "Amount per period (base estimate)",
+  "预设金额（本币估算）": "Preset amount (base estimate)",
+  "缺少 {currencies} 汇率的订阅未计入合计，去补录 ›": "Subscriptions without a {currencies} rate are excluded from the total. Add rates ›",
+  "正在按汇率折算本币金额…": "Converting to the base currency…",
 } as const satisfies Record<string, string>;
 
 export type MessageKey = keyof typeof en;

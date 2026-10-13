@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, X } from "lucide-react";
 import { useState } from "react";
+import { CurrencySelect } from "@/components/business";
 import { IconButton, EmojiPicker } from "@/components/ui";
 import { cn } from "@/lib/format/class-names";
 import {
@@ -12,6 +13,7 @@ import {
   type Ledger,
   ledgerPath,
 } from "@/lib/api";
+import { DEFAULT_CURRENCY } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useLedger, useSheetStack, useToast } from "@/providers";
 import { t } from "@/lib/i18n";
@@ -35,13 +37,20 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
   const [name, setName] = useState(ledger?.name ?? "");
   const [icon, setIcon] = useState(ledger?.icon?.trim() || DEFAULT_ICON);
   const [decimals, setDecimals] = useState(ledger?.amountDecimalPlaces ?? DEFAULT_DECIMALS);
+  const [currency, setCurrency] = useState(ledger?.currency ?? DEFAULT_CURRENCY);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   const mutation = useMutation({
     // 错误已在表单内联展示，跳过全局 toast 避免双重提示。
     meta: { suppressErrorToast: true },
     mutationFn: () => {
-      const body = { name: name.trim(), icon, amountDecimalPlaces: decimals };
+      // 本币没改就不传：后端对「有数据后改本币」直接拒绝，没改的字段不该触发这道校验。
+      const body = {
+        name: name.trim(),
+        icon,
+        amountDecimalPlaces: decimals,
+        ...(!ledger || currency !== ledger.currency ? { currency } : {}),
+      };
       if (ledger) {
         return apiRequest<Ledger>(ledgerPath(ledger.id), {
           method: "PATCH",
@@ -73,7 +82,8 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
     (!ledger ||
       trimmedName !== ledger.name ||
       icon !== (ledger.icon?.trim() || DEFAULT_ICON) ||
-      decimals !== (ledger.amountDecimalPlaces ?? DEFAULT_DECIMALS));
+      decimals !== (ledger.amountDecimalPlaces ?? DEFAULT_DECIMALS) ||
+      currency !== ledger.currency);
 
   const submit = () => {
     if (canSubmit) mutation.mutate();
@@ -148,6 +158,23 @@ export function CreateLedgerSheet({ ledger }: CreateLedgerSheetProps) {
               );
             })}
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3 rounded-[13px] bg-[var(--color-bg-surface)] px-4 py-3 shadow-[var(--shadow-soft)]">
+            <span className="flex-1 text-[15px] font-medium text-[var(--color-text-primary)]">
+              {t("本币")}
+            </span>
+            <CurrencySelect
+              onChange={setCurrency}
+              pinned={DEFAULT_CURRENCY}
+              value={currency}
+              variant="row"
+            />
+          </div>
+          <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+            {t("统计、预算和净资产都按本币计；外币可以在账户和记账时单独选。账本里有账户或记账数据后本币不能再改。")}
+          </p>
         </div>
 
         {mutation.isError ? (

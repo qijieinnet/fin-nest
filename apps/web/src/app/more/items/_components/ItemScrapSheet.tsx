@@ -7,7 +7,7 @@ import { useState } from "react";
 import { DateWheelPicker } from "@/components/business";
 import { IconButton } from "@/components/ui";
 import { apiRequest, getApiErrorMessage, ledgerApiPath, type ItemAsset } from "@/lib/api";
-import { parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { todayKey } from "./item-utils";
@@ -134,7 +134,7 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
               label={t("出售价格")}
               onChange={(event) => setSellPrice(event.target.value)}
               placeholder={t("选填")}
-              prefix="¥"
+              prefix={baseCurrencySymbol()}
               value={sellPrice}
             />
           </div>

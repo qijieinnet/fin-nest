@@ -10,6 +10,10 @@ export function templateToSeed(template: QuickTemplate): TransactionSeed {
   return {
     type: template.type,
     grossAmountMicros: template.amountMicros,
+    // 外币模板：表单按原币显示，本币按记账日汇率重新折算（模板里存的只是估算）。
+    originalCurrency: template.originalCurrency,
+    originalAmountMicros: template.originalAmountMicros,
+    fxRecompute: Boolean(template.originalCurrency),
     categoryId: template.categoryId,
     subcategoryId: template.subcategoryId,
     personId: template.personId,

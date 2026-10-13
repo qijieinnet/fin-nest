@@ -13,17 +13,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import {
-  defaultFilterValue,
-  EmptyState,
-  filterButtonItem,
-  FilterSheet,
-  LoadingState,
-  MoneyText,
-  SwipeActionRow,
-  TransactionGroup,
-  TransactionRow,
-} from "@/components/business";
+import { defaultFilterValue, EmptyState, filterButtonItem, FilterSheet, LoadingState, MoneyText, originalAmountProps, SwipeActionRow, TransactionGroup, TransactionRow } from "@/components/business";
 import {
   DotBadge,
   EdgeFade,
@@ -45,7 +35,7 @@ import { useInsurances, useSubscriptions } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { useIdleRoutePrefetch } from "@/lib/nav/useIdleRoutePrefetch";
-import { formatMicros } from "@/lib/money";
+import { baseCurrencySymbol, formatMicros } from "@/lib/money";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useDecimalPlaces, useLedger, usePreferences, useSheetStack } from "@/providers";
@@ -249,7 +239,7 @@ export function BillsScreenMobile() {
             {t("{value}支出", { value: periodLabel(model.filterValue) })}
           </p>
           <p className="mt-1.5 flex items-baseline gap-0.5">
-            <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
+            <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">{baseCurrencySymbol()}</span>
             <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
               {formatMicros(totals.expenseMicros, { currencySymbol: "", decimalPlaces })}
             </span>
@@ -357,6 +347,7 @@ export function BillsScreenMobile() {
                     >
                       <TransactionRow
                         onClick={() => router.push(routes.bill(transaction.id))}
+                        {...originalAmountProps(transaction)}
                         {...rowProps(transaction, model.accounts, model.categoryLookup)}
                       />
                     </SwipeActionRow>

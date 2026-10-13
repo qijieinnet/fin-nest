@@ -64,6 +64,7 @@ export function DesktopSidebar() {
     { dot: pendingCount > 0, label: t("自动记账"), route: routes.autoAccounting },
     { label: t("快速记账"), route: routes.quickTemplates },
     { label: t("记账设置"), route: routes.recordSettings },
+    { label: t("汇率"), route: routes.fxRates },
     { label: t("系统设置"), route: routes.systemSettings },
     { label: t("通知"), route: routes.notifications },
     ...(feishuEnabled ? [{ label: t("飞书机器人"), route: routes.feishu }] : []),

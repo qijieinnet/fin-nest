@@ -204,6 +204,7 @@ async function main() {
   await assertPlanPeriodBackupRestore({ owner });
   await assertLegacyInvestBackupRestore({ owner });
   await feishuDbConstraints({ userId: owner.userId, ledgerId: ledger.id });
+  await assertMultiCurrency({ owner });
   const keyCount = await prisma.idempotencyKey.count({ where: { userId: owner.userId } });
   assert.ok(keyCount >= 2);
   if (process.env.E2E_SYSTEM_BACKUP === "1") {
@@ -243,12 +244,486 @@ async function main() {
           "plan_period_backup_restore",
           "legacy_invest_backup_restore",
           "feishu_db_constraints",
+          "multi_currency",
           ...(process.env.E2E_SYSTEM_BACKUP === "1" ? ["system_backup_restore"] : []),
         ],
       },
       null,
       2,
     ),
+  );
+}
+
+/**
+ * 多币种（docs/MULTI_CURRENCY_PLAN.md）：本币锁定、外币账户、按账户币种落账、跨币种转账、
+ * 汇率接口（手填 + 经本币交叉）、净资产折算与缺汇率提示、规则/模板/订阅、备份恢复、Excel。
+ * 依赖 e2e 环境不配 FX_PROVIDER（默认 none）：汇率全部手填，结果确定。
+ */
+async function assertMultiCurrency({ owner }) {
+  const token = owner.token;
+  const expectError = async (method, url, body, code, status = 400) => {
+    const result = await api(method, url, { token, body, expected: status });
+    assert.equal(result.code, code, JSON.stringify(result));
+  };
+
+  // ---- 本币：目录外拒绝；空账本可改，有数据后锁定 ----
+  await api("POST", "/ledgers", {
+    token,
+    expected: 400,
+    body: { name: `E2E FX Bad ${stamp}`, currency: "XXX" },
+  });
+  const ledger = await api("POST", "/ledgers", {
+    token,
+    expected: 201,
+    body: { name: `E2E FX ${stamp}`, currency: "USD" },
+  });
+  touched.ledgerIds.add(ledger.id);
+  const base = `/ledgers/${ledger.id}`;
+  await api("PATCH", base, { token, body: { currency: "CNY" } });
+  assert.equal((await api("GET", base, { token })).currency, "CNY");
+
+  const cny = await api("POST", `${base}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `FX CNY ${stamp}`, balanceMicros: "1000000000" },
+  });
+  assert.equal(cny.currency, "CNY");
+  await expectError("PATCH", base, { currency: "USD" }, "LEDGER_CURRENCY_LOCKED");
+  // 改名等其它字段不受影响，带上相同的本币也不算修改。
+  await api("PATCH", base, { token, body: { currency: "CNY", name: `E2E FX ${stamp}` } });
+
+  const usd = await api("POST", `${base}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `FX USD ${stamp}`, currency: "USD", balanceMicros: "100000000" },
+  });
+  assert.equal(usd.currency, "USD");
+  const hkd = await api("POST", `${base}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `FX HKD ${stamp}`, currency: "HKD" },
+  });
+  await expectError(
+    "POST",
+    `${base}/accounts`,
+    { type: "receivable", name: `FX Recv ${stamp}`, currency: "USD" },
+    "RELATION_ACCOUNT_CURRENCY",
+  );
+  // 账户币种建账后不可改：PATCH 不接受 currency（forbidNonWhitelisted）。
+  await api("PATCH", `${base}/accounts/${usd.id}`, {
+    token,
+    expected: 400,
+    body: { currency: "CNY" },
+  });
+  const category = await api("POST", `${base}/categories`, {
+    token,
+    expected: 201,
+    body: { type: "expense", name: `FX Food ${stamp}` },
+  });
+
+  // ---- 汇率：手填 + 查询 + 交叉 ----
+  // 全局行是数据源抓取的缓存（随时可重新抓），清掉本场景用到的币种，结果只取决于下面的手填汇率；
+  // 否则同一个库里之前抓过的 ECB 汇率（日期更近）会盖过手填值。
+  await prisma.exchangeRate.deleteMany({
+    where: {
+      ledgerId: null,
+      OR: [
+        { fromCurrency: { in: ["USD", "HKD", "JPY"] } },
+        { toCurrency: { in: ["USD", "HKD", "JPY"] } },
+      ],
+    },
+  });
+  const rateDay = addDaysIso(-10);
+  await api("PUT", `${base}/fx/rates`, {
+    token,
+    body: { currency: "USD", date: rateDay, rate: "7" },
+  });
+  await api("PUT", `${base}/fx/rates`, {
+    token,
+    body: { currency: "HKD", date: rateDay, rate: "0.9" },
+  });
+  await expectError("PUT", `${base}/fx/rates`, { currency: "CNY", date: rateDay, rate: "1" }, "FX_RATE_BASE_CURRENCY");
+  const usdRate = await api("GET", `${base}/fx/rate?from=USD`, { token });
+  assert.equal(usdRate.quote.rate, "7");
+  assert.equal(usdRate.quote.source, "manual");
+  assert.equal(usdRate.quote.date, rateDay);
+  // CNY→USD 走反向
+  assert.equal((await api("GET", `${base}/fx/rate?from=CNY&to=USD`, { token })).quote.rate, "0.1428571429");
+  // USD→HKD 经本币交叉：7 / 0.9
+  assert.equal((await api("GET", `${base}/fx/rate?from=USD&to=HKD`, { token })).quote.rate, "7.7777777778");
+  assert.equal((await api("GET", `${base}/fx/rate?from=JPY`, { token })).quote, null);
+  const overview = await api("GET", `${base}/fx/rates`, { token });
+  assert.equal(overview.baseCurrency, "CNY");
+  assert.deepEqual(
+    overview.currencies.map((row) => row.currency),
+    ["HKD", "USD"],
+  );
+  assert.equal(overview.manualRates.length, 2);
+
+  // ---- 记账：币种校验 ----
+  const expense = (extra) => ({
+    type: "expense",
+    occurredOn: todayIso(),
+    categoryId: category.id,
+    ...extra,
+  });
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    expense({ grossAmountMicros: "1000000", currency: "USD" }),
+    "TRANSACTION_CURRENCY_MISMATCH",
+  );
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    expense({ grossAmountMicros: "70000000", accountId: usd.id }),
+    "FX_ACCOUNT_CURRENCY_MISMATCH",
+  );
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    expense({ grossAmountMicros: "70000000", originalCurrency: "CNY", originalAmountMicros: "1" }),
+    "FX_ORIGINAL_IS_BASE",
+  );
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    expense({ grossAmountMicros: "70000000", originalCurrency: "USD" }),
+    "FX_ORIGINAL_INCOMPLETE",
+  );
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    expense({
+      grossAmountMicros: "70000000",
+      accountId: usd.id,
+      originalCurrency: "HKD",
+      originalAmountMicros: "80000000",
+    }),
+    "FX_ACCOUNT_CURRENCY_MISMATCH",
+  );
+
+  const balances = async () => {
+    const accounts = await api("GET", `${base}/accounts`, { token });
+    return Object.fromEntries(accounts.map((account) => [account.id, account]));
+  };
+
+  // 美元卡刷 $10，本币 ¥70：账户按 USD 扣 10。
+  const usdExpense = await api("POST", `${base}/transactions`, {
+    token,
+    expected: 201,
+    idempotencyKey: `fx-usd-expense-${stamp}`,
+    body: expense({
+      grossAmountMicros: "70000000",
+      accountId: usd.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "10000000",
+    }),
+  });
+  assert.equal(usdExpense.currency, "CNY");
+  assert.equal(usdExpense.originalCurrency, "USD");
+  assert.equal(usdExpense.entries[0].amountDeltaMicros, "-10000000");
+  // 本币卡刷 $5（卡按 ¥36 入账）：账户按本币扣 36。
+  const cardExpense = await api("POST", `${base}/transactions`, {
+    token,
+    expected: 201,
+    body: expense({
+      grossAmountMicros: "36000000",
+      accountId: cny.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "5000000",
+    }),
+  });
+  assert.equal(cardExpense.entries[0].amountDeltaMicros, "-36000000");
+  let snapshot = await balances();
+  assert.equal(snapshot[usd.id].balanceMicros, "90000000");
+  assert.equal(snapshot[cny.id].balanceMicros, "964000000");
+
+  // 转账 CNY → USD：本币转出 ¥700，美元转入 $100。
+  await api("POST", `${base}/transactions`, {
+    token,
+    expected: 201,
+    body: {
+      type: "transfer",
+      occurredOn: todayIso(),
+      grossAmountMicros: "700000000",
+      fromAccountId: cny.id,
+      toAccountId: usd.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "100000000",
+    },
+  });
+  // 转账 USD → HKD：两侧都是外币，原币是转出侧，to_* 是转入侧。
+  await expectError(
+    "POST",
+    `${base}/transactions`,
+    {
+      type: "transfer",
+      occurredOn: todayIso(),
+      grossAmountMicros: "70000000",
+      fromAccountId: usd.id,
+      toAccountId: hkd.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "10000000",
+    },
+    "FX_ACCOUNT_CURRENCY_MISMATCH",
+  );
+  const crossTransfer = await api("POST", `${base}/transactions`, {
+    token,
+    expected: 201,
+    body: {
+      type: "transfer",
+      occurredOn: todayIso(),
+      grossAmountMicros: "70000000",
+      fromAccountId: usd.id,
+      toAccountId: hkd.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "10000000",
+      toCurrency: "HKD",
+      toAmountMicros: "77780000",
+    },
+  });
+  assert.equal(crossTransfer.toCurrency, "HKD");
+  snapshot = await balances();
+  assert.equal(snapshot[cny.id].balanceMicros, "264000000");
+  assert.equal(snapshot[usd.id].balanceMicros, "180000000");
+  assert.equal(snapshot[hkd.id].balanceMicros, "77780000");
+  // 折合本币：$180 × 7、HK$77.78 × 0.9
+  assert.equal(snapshot[usd.id].baseBalanceMicros, "1260000000");
+  assert.equal(snapshot[hkd.id].baseBalanceMicros, "70002000");
+  assert.equal(snapshot[usd.id].fxRate.rate, "7");
+  assert.equal(snapshot[cny.id].baseBalanceMicros, "264000000");
+
+  // 编辑：$10 改成 $20（¥140），冲正后按新原币重扣；删除再冲回去。
+  const edited = await api("PATCH", `${base}/transactions/${usdExpense.id}`, {
+    token,
+    body: expense({
+      grossAmountMicros: "140000000",
+      accountId: usd.id,
+      originalCurrency: "USD",
+      originalAmountMicros: "20000000",
+    }),
+  });
+  assert.equal(edited.originalAmountMicros, "20000000");
+  assert.equal((await balances())[usd.id].balanceMicros, "170000000");
+  await api("DELETE", `${base}/transactions/${usdExpense.id}`, { token });
+  assert.equal((await balances())[usd.id].balanceMicros, "190000000");
+
+  // 批量改账户：带 USD 原币的那笔挪到港币卡对不上币种 → 跳过而不是整批失败。
+  const batch = await api("POST", `${base}/transactions/batch`, {
+    token,
+    expected: 200,
+    body: { transactionIds: [cardExpense.id], field: "account", accountId: hkd.id },
+  });
+  assert.equal(batch.updated, 0);
+  assert.equal(batch.skipped, 1);
+
+  // 统计只看本币：支出 ¥36（美元那笔已删除）。
+  const summary = await api("GET", `${base}/transactions/summary?type=expense`, { token });
+  assert.equal(summary.expenseMicros, "36000000");
+
+  // ---- 净资产：按汇率折算；缺汇率的币种不计入并报出来 ----
+  await api("POST", `${base}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `FX JPY ${stamp}`, currency: "JPY", balanceMicros: "1000000000" },
+  });
+  const netWorth = await api("GET", `${base}/stats/net-worth?range=week`, { token });
+  // ¥264 + $190×7 + HK$77.78×0.9 = 264 + 1330 + 70.002
+  assert.equal(netWorth.netWorthMicros, "1664002000");
+  assert.deepEqual(netWorth.missingCurrencies, ["JPY"]);
+  assert.equal(netWorth.points.at(-1).netWorthMicros, "1664002000");
+  // 只有很久以后的汇率不能拿来兜底（几个月后的汇率折算今天的余额是错的）：仍算缺汇率。
+  await api("PUT", `${base}/fx/rates`, {
+    token,
+    body: { currency: "JPY", date: addDaysIso(30), rate: "0.06" },
+  });
+  assert.equal((await api("GET", `${base}/fx/rate?from=JPY`, { token })).quote, null);
+  assert.deepEqual(
+    (await api("GET", `${base}/stats/net-worth?range=week`, { token })).missingCurrencies,
+    ["JPY"],
+  );
+  // 净资产与单次查询同口径：只有明天的汇率时，今天的余额照样能折算。
+  await api("PUT", `${base}/fx/rates`, {
+    token,
+    body: { currency: "TWD", date: addDaysIso(1), rate: "0.2" },
+  });
+  const twd = await api("POST", `${base}/accounts`, {
+    token,
+    expected: 201,
+    body: { type: "savings", name: `FX TWD ${stamp}`, currency: "TWD", balanceMicros: "100000000" },
+  });
+  const withTwd = await api("GET", `${base}/stats/net-worth?range=week`, { token });
+  assert.ok(!withTwd.missingCurrencies.includes("TWD"), JSON.stringify(withTwd.missingCurrencies));
+  assert.equal((await balances())[twd.id].baseBalanceMicros, "20000000");
+  // 下面断言里的净资产不含这个 TWD 账户：归档前先清零。
+  await api("POST", `${base}/accounts/${twd.id}/adjustments`, {
+    token,
+    expected: 201,
+    body: { balanceAfterMicros: "0" },
+  });
+  await api("DELETE", `${base}/accounts/${twd.id}`, { token });
+  // 7 天内的下一条可以接受（周末 / 手填日期比交易晚一两天）。
+  assert.equal(
+    (await api("GET", `${base}/fx/rate?from=JPY&date=${addDaysIso(25)}`, { token })).quote.rate,
+    "0.06",
+  );
+  await api("PUT", `${base}/fx/rates`, { token, body: { currency: "JPY", date: rateDay, rate: "0.05" } });
+  const withJpy = await api("GET", `${base}/stats/net-worth?range=week`, { token });
+  assert.equal(withJpy.netWorthMicros, "1714002000");
+  assert.deepEqual(withJpy.missingCurrencies, []);
+  // 汇率变动只影响折算，不动原币余额：USD 汇率改成 8 → 多出 $190 × 1。
+  await api("PUT", `${base}/fx/rates`, { token, body: { currency: "USD", date: todayIso(), rate: "8" } });
+  const afterMove = await api("GET", `${base}/stats/net-worth?range=week`, { token });
+  assert.equal(afterMove.netWorthMicros, "1904002000");
+  assert.equal((await balances())[usd.id].balanceMicros, "190000000");
+  // 曲线早于今天的点仍按当时的汇率 7。
+  assert.equal(afterMove.points[0].netWorthMicros, withJpy.points[0].netWorthMicros);
+
+  // ---- 规则 / 模板 / 订阅 ----
+  await expectError(
+    "POST",
+    `${base}/auto-rules`,
+    {
+      type: "expense",
+      amountMicros: "100000000",
+      originalCurrency: "HKD",
+      originalAmountMicros: "100000000",
+      categoryId: category.id,
+      accountId: usd.id,
+      repeatRule: "monthly",
+      startDate: addDaysIso(30),
+    },
+    "FX_ACCOUNT_CURRENCY_MISMATCH",
+  );
+  const rule = await api("POST", `${base}/auto-rules`, {
+    token,
+    expected: 201,
+    body: {
+      type: "expense",
+      amountMicros: "140000000",
+      originalCurrency: "USD",
+      originalAmountMicros: "20000000",
+      categoryId: category.id,
+      accountId: usd.id,
+      repeatRule: "monthly",
+      startDate: addDaysIso(30),
+    },
+  });
+  assert.equal(rule.originalCurrency, "USD");
+  // 只改金额不提原币：原币保持；显式清空原币：外币账户对不上 → 拒绝。
+  const ruleKept = await api("PATCH", `${base}/auto-rules/${rule.id}`, {
+    token,
+    body: { amountMicros: "150000000" },
+  });
+  assert.equal(ruleKept.originalAmountMicros, "20000000");
+  await expectError(
+    "PATCH",
+    `${base}/auto-rules/${rule.id}`,
+    { originalCurrency: null, originalAmountMicros: null },
+    "FX_ACCOUNT_CURRENCY_MISMATCH",
+  );
+
+  const template = await api("POST", `${base}/quick-templates`, {
+    token,
+    expected: 201,
+    body: {
+      type: "expense",
+      name: `FX Template ${stamp}`,
+      amountMicros: "100000000",
+      originalCurrency: "USD",
+      originalAmountMicros: "15000000",
+      categoryId: category.id,
+      accountId: usd.id,
+      directEnabled: true,
+    },
+  });
+  // 直接记账按今天的汇率（8）重算本币：$15 → ¥120，美元卡扣 $15。
+  const run = await api("POST", `${base}/quick-templates/${template.id}/run`, {
+    token,
+    expected: 201,
+    idempotencyKey: `fx-template-${stamp}`,
+  });
+  assert.equal(run.grossAmountMicros, "120000000");
+  assert.equal(run.originalAmountMicros, "15000000");
+  assert.equal((await balances())[usd.id].balanceMicros, "175000000");
+
+  const subscription = await api("POST", `${base}/subscriptions`, {
+    token,
+    expected: 201,
+    body: { name: `FX Sub ${stamp}`, priceMicros: "20000000", currency: "USD", billingCycle: "monthly" },
+  });
+  assert.equal(subscription.currency, "USD");
+
+  // ---- 账本 JSON 备份：账户币种、原币、手填汇率都跟着走 ----
+  const exported = await fetch(`${baseUrl}${base}/export/json`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(exported.status, 200);
+  const backupText = await exported.text();
+  const form = new FormData();
+  form.append("confirmLedgerName", `E2E FX ${stamp}`);
+  form.append("file", new Blob([backupText], { type: "application/json" }), "backup.json");
+  const restored = await fetch(`${baseUrl}${base}/import/json`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: form,
+  });
+  assert.equal(restored.status, 201, await restored.text());
+  const restoredAccounts = await api("GET", `${base}/accounts`, { token });
+  const byName = Object.fromEntries(restoredAccounts.map((account) => [account.name, account]));
+  assert.equal(byName[`FX USD ${stamp}`].currency, "USD");
+  assert.equal(byName[`FX USD ${stamp}`].balanceMicros, "175000000");
+  assert.equal(byName[`FX HKD ${stamp}`].balanceMicros, "77780000");
+  const restoredRates = await api("GET", `${base}/fx/rates`, { token });
+  assert.equal(restoredRates.manualRates.length, 6);
+  const restoredTransfers = await api("GET", `${base}/transactions?type=transfer`, { token });
+  const restoredCross = restoredTransfers.find((row) => row.toCurrency === "HKD");
+  assert.ok(restoredCross);
+  assert.equal(restoredCross.toAmountMicros, "77780000");
+  const restoredSubs = await api("GET", `${base}/subscriptions`, { token });
+  assert.equal(restoredSubs[0].currency, "USD");
+
+  // ---- Excel：新列能导出；旧表头「金额(元)」仍能导入；原币对不上的行在预览阶段就报错 ----
+  const xlsx = await fetch(`${baseUrl}${base}/export/excel`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.equal(xlsx.status, 200);
+  const { default: ExcelJS } = await import("exceljs");
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(Buffer.from(await xlsx.arrayBuffer()));
+  const txHeaders = book.getWorksheet("流水").getRow(1).values.filter(Boolean);
+  for (const header of ["金额", "原币种", "原币金额", "转入币种", "转入金额"]) {
+    assert.ok(txHeaders.includes(header), `流水表缺少列 ${header}`);
+  }
+  const accountHeaders = book.getWorksheet("账户").getRow(1).values.filter(Boolean);
+  assert.ok(accountHeaders.includes("币种"));
+
+  const importBook = new ExcelJS.Workbook();
+  const sheet = importBook.addWorksheet("流水");
+  sheet.addRow(["ID", "日期", "类型", "金额(元)", "原币种", "原币金额", "分类", "账户"]);
+  sheet.addRow(["", todayIso(), "支出", 80, "USD", 10, `FX Food ${stamp}`, `FX USD ${stamp}`]);
+  sheet.addRow(["", todayIso(), "支出", 80, "HKD", 10, `FX Food ${stamp}`, `FX USD ${stamp}`]);
+  sheet.addRow(["", todayIso(), "支出", 80, "", "", `FX Food ${stamp}`, `FX USD ${stamp}`]);
+  const importForm = new FormData();
+  importForm.append(
+    "file",
+    new Blob([await importBook.xlsx.writeBuffer()], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    "fx.xlsx",
+  );
+  const preview = await fetch(`${baseUrl}${base}/import/excel?dryRun=true`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: importForm,
+  });
+  assert.equal(preview.status, 201, await preview.clone().text());
+  const previewBody = await preview.json();
+  assert.deepEqual(
+    previewBody.errors.map((error) => error.row),
+    [3, 4],
+    JSON.stringify(previewBody.errors),
   );
 }
 
@@ -3213,6 +3688,7 @@ async function cleanup() {
       await prisma.item.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.itemType.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.transaction.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
+      await prisma.exchangeRate.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.accountAdjustment.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.subAccount.deleteMany({ where: { ledgerId: { in: ledgerIds } } });
       await prisma.account.deleteMany({ where: { ledgerId: { in: ledgerIds } } });

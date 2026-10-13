@@ -17,7 +17,7 @@ import {
 } from "@/lib/api";
 import { useAttachments, useItemTypes } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { ItemTypeManagerSheet } from "./ItemTypeManagerSheet";
@@ -376,7 +376,7 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
               label={t("购买价格")}
               onChange={(event) => setPurchasePrice(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={baseCurrencySymbol()}
               value={purchasePrice}
             />
             <span className="transaction-form__divider" />

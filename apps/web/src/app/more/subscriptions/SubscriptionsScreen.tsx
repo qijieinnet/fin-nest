@@ -36,11 +36,13 @@ import {
   type Subscription,
   type SubscriptionCategory,
 } from "@/lib/api";
+import { parseFxRate } from "@fin-nest/shared";
+import { useFxOverview } from "@/lib/data/fx";
 import { useSubscriptionCategories, useSubscriptions } from "@/lib/data/records";
 import { useIsDesktop } from "@/lib/hooks/useIsDesktop";
 import { useIsPrimaryNavMenu } from "@/lib/nav/useNavMenuPlacement";
 import { cn } from "@/lib/format/class-names";
-import { parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { routes } from "@/lib/route/routes";
 import { useAppRouter } from "@/lib/route/useAppRouter";
@@ -67,6 +69,7 @@ import {
   categoryGlyph,
   formatDateLabel,
   formatMoney,
+  monthlyCostBaseMicros,
   monthlyCostMicros,
   renewalReminderDue,
   subscriptionStatus,
@@ -361,6 +364,7 @@ export function SubscriptionsScreen() {
   const router = useAppRouter();
   const queryClient = useQueryClient();
   const { ledgerId } = useLedger();
+  const fxOverviewQuery = useFxOverview(ledgerId);
   const { clear, push } = useSheetStack();
   const { showToast } = useToast();
   const decimalPlaces = useDecimalPlaces();
@@ -390,9 +394,26 @@ export function SubscriptionsScreen() {
     filterValue,
     decimalPlaces,
   );
+  // 月均合计按本币：外币订阅用「汇率」页的最新汇率折算，缺汇率的不计入（不能把美元当人民币加）。
+  const fxRates = new Map(
+    (fxOverviewQuery.data?.currencies ?? []).flatMap((row) => {
+      const rate = row.latest ? parseFxRate(row.latest.rate) : null;
+      return rate ? [[row.currency, rate] as const] : [];
+    }),
+  );
+  const unconvertedCurrencies = new Set<string>();
   const monthlyTotal = filtered
-    .reduce((sum, subscription) => sum + monthlyCostMicros(subscription), 0n)
+    .reduce((sum, subscription) => {
+      const monthly = monthlyCostBaseMicros(subscription, fxRates);
+      if (monthly === null) {
+        if (subscription.currency) unconvertedCurrencies.add(subscription.currency);
+        return sum;
+      }
+      return sum + monthly;
+    }, 0n)
     .toString();
+  // 汇率还在加载时不提示，免得一闪而过。
+  const missingRateCurrencies = fxOverviewQuery.data ? [...unconvertedCurrencies] : [];
   const spendTotal = filtered
     .reduce((sum, subscription) => sum + BigInt(subscription.totalSpendMicros ?? "0"), 0n)
     .toString();
@@ -678,11 +699,11 @@ export function SubscriptionsScreen() {
           {subscription.priceMicros ? (
             <span className="flex shrink-0 flex-col items-end gap-0.5">
               <span className="text-[15px] font-semibold text-[var(--color-text-primary)]">
-                {formatMoney(subscription.priceMicros)}
+                {formatMoney(subscription.priceMicros, subscription.currency)}
               </span>
               {monthly > 0n ? (
                 <span className="text-[11px] text-[var(--color-text-muted)]">
-                  {t("月均 {value}", { value: formatMoney(monthly) })}
+                  {t("月均 {value}", { value: formatMoney(monthly, subscription.currency) })}
                 </span>
               ) : null}
             </span>
@@ -843,12 +864,23 @@ export function SubscriptionsScreen() {
                 </div>
                 <p className="mt-1.5 flex items-baseline gap-0.5">
                   <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">
-                    ¥
+                    {baseCurrencySymbol()}
                   </span>
                   <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
                     {formatMoney(monthlyTotal)}
                   </span>
                 </p>
+                {missingRateCurrencies.length > 0 ? (
+                  <button
+                    className="mt-2 block text-left text-[12px] leading-4 text-[var(--color-text-muted)]"
+                    onClick={() => router.push(routes.fxRates)}
+                    type="button"
+                  >
+                    {t("缺少 {currencies} 汇率的订阅未计入合计，去补录 ›", {
+                      currencies: missingRateCurrencies.join(t("、")),
+                    })}
+                  </button>
+                ) : null}
                 <div className="mt-3.5 flex gap-7">
                   <div>
                     <div className="text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">

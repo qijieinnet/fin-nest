@@ -7,6 +7,7 @@ import type { BusinessOption } from "./business-types";
 import { AccountSelectRow } from "./TransactionFieldRows";
 import { InlineHint } from "./InlineHint";
 import { t } from "@/lib/i18n";
+import { baseCurrencySymbol } from "@/lib/money";
 
 export type RecoverablePayableItem = {
   accountId: string | null;
@@ -79,7 +80,7 @@ export function RecoverablePayableEditor({
               </div>
               <label className="biz-rp-editor__field biz-rp-editor__field--amount">
                 <span className="biz-rp-editor__amount">
-                  <span>¥</span>
+                  <span>{baseCurrencySymbol()}</span>
                   <input
                     aria-label={t("金额")}
                     inputMode="decimal"

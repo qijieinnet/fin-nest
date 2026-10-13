@@ -19,7 +19,7 @@ import {
   formatFullDate,
   personName,
   REPEAT_LABELS,
-  signedAmountText,
+  ruleAmountText,
   transactionTypeLabel,
   transferAccountSummary,
   upcomingDates,
@@ -100,7 +100,7 @@ export function AutoRuleDetailSheet({
           </span>
         </span>
         <strong className={`shrink-0 text-[21px] ${amountToneClass(rule.type)}`}>
-          {signedAmountText(rule.type, rule.amountMicros)}
+          {ruleAmountText(rule)}
         </strong>
       </div>
 

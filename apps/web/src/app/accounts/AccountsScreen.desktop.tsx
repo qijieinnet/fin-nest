@@ -21,6 +21,7 @@ import {
   accountSubtitle,
   accountTotalMicros,
   accountVisibleTotalMicros,
+  toBaseMicros,
   balanceLabel,
   formatDateLabel,
   formatMoney,
@@ -119,6 +120,7 @@ export function AccountsScreenDesktop() {
               assetsMicros={netWorth.assetsMicros}
               decimalPlaces={decimalPlaces}
               liabilitiesMicros={netWorth.liabilitiesMicros}
+              missingCurrencies={netWorth.missingCurrencies}
               netMicros={netWorth.netMicros}
             />
             {accounts.length === 0 ? (
@@ -209,7 +211,7 @@ function AccountRow({
         }`}
       >
         {liability && total !== 0n ? "−" : ""}
-        {formatMoney(total)}
+        {formatMoney(total, account.currency)}
       </span>
       <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
     </button>
@@ -302,7 +304,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
   const openEntryRecords = () =>
     push({
       title: t("资金变动记录"),
-      content: <AccountEntryListSheet accountType={account.type} entries={entries} />,
+      content: <AccountEntryListSheet accountType={account.type} currency={account.currency} entries={entries} />,
     });
   const openSubDetail = (subAccount: SubAccount) =>
     push({
@@ -319,15 +321,15 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
   const stats: Array<{ label: string; value: string; color?: string }> = [];
   if (account.type === "credit") {
     const limit = account.creditLimitMicros ? BigInt(account.creditLimitMicros) : null;
-    stats.push({ label: t("总额度"), value: limit !== null ? formatMoney(limit) : t("未设置") });
+    stats.push({ label: t("总额度"), value: limit !== null ? formatMoney(limit, account.currency) : t("未设置") });
     if (limit !== null) {
       const available = limit - total;
-      stats.push({ label: t("可用额度"), value: formatMoney(available > 0n ? available : 0n) });
+      stats.push({ label: t("可用额度"), value: formatMoney(available > 0n ? available : 0n, account.currency) });
     }
     stats.push({ label: t("账单日"), value: account.billDay ? t("每月 {billDay} 日", { billDay: account.billDay }) : "—" });
     stats.push({ label: t("还款日"), value: account.repayDay ? t("每月 {repayDay} 日", { repayDay: account.repayDay }) : "—" });
   } else if (account.type === "invest") {
-    stats.push(...investmentStatRows(account.investment));
+    stats.push(...investmentStatRows(account.investment, account.currency));
   } else if (isLend) {
     stats.push({ label: t("对方"), value: account.counterparty ?? "—" });
     stats.push({
@@ -354,7 +356,7 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
         {subAccount.name}
       </span>
       <span className="shrink-0 text-[15px] font-semibold text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
-        {formatMoney(subAccount.balanceMicros)}
+        {formatMoney(subAccount.balanceMicros, account.currency)}
       </span>
       <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={16} />
     </button>
@@ -421,12 +423,14 @@ function AccountDetailPanel({ accountId, onClose }: { accountId: string; onClose
           <p className="px-1 pb-3 text-xs text-[var(--color-text-muted)]">
             {t("按住右侧图标拖动排序，默认子账户也可调整位置。")}
           </p>
-          <SubAccountsSortList onReorder={model.handleReorderSub} rows={subAccountRows} />
+          <SubAccountsSortList currency={account.currency} onReorder={model.handleReorderSub} rows={subAccountRows} />
         </section>
       ) : (
         <>
       <AccountBalanceCard
         accountType={account.type}
+        currency={account.currency}
+        baseBalanceMicros={toBaseMicros(account, displayTotal)?.toString() ?? null}
         balanceColor={
           settled
             ? "var(--color-text-muted)"
@@ -556,7 +560,7 @@ function SubAccountDetailPanel({
   const isInvest = account.type === "invest";
   // 投资账户改余额＝更新市值，差额记为收益；其余账户是「记错了纠错」。
   const balanceEditLabel = isInvest ? t("更新市值") : t("修改余额");
-  const investStats = investmentStatRows(subAccount.investment);
+  const investStats = investmentStatRows(subAccount.investment, account.currency);
   // 账户至少要留一个子账户承接未指定子账户的记账，所以最后一个不给删。
   const canDeleteSub = account.subAccounts.length > 1;
 
@@ -651,6 +655,8 @@ function SubAccountDetailPanel({
 
       <AccountBalanceCard
         accountType={account.type}
+        currency={account.currency}
+        baseBalanceMicros={subAccount.baseBalanceMicros}
         balanceLabel={t("子账户余额")}
         balanceMicros={subAccountBalance.toString()}
         entries={entries}

@@ -10,6 +10,7 @@ import {
   serializeBigInts,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
+import { isSupportedCurrency } from "@fin-nest/shared";
 import { LedgersService } from "../ledgers/ledgers.service";
 
 type Row = Record<string, any>;
@@ -79,6 +80,7 @@ export class BackupService {
       quickTemplates,
       reminderSchedules,
       entryReminder,
+      exchangeRates,
     ] = await Promise.all([
       client.recordSetting.findUnique({ where: { ledgerId } }),
       client.budgetSetting.findUnique({ where: { ledgerId } }),
@@ -107,6 +109,8 @@ export class BackupService {
       // 换个实例恢复对不上人（用户 id 不同），因此恢复出来的档位是「配好了时间但没有接收人」。
       client.reminderSchedule.findMany({ where, orderBy: { createdAt: "asc" } }),
       client.entryReminder.findUnique({ where: { ledgerId } }),
+      // 只带本账本手填的汇率；数据源抓取的全局汇率换实例后可以重新抓。
+      client.exchangeRate.findMany({ where, orderBy: { rateDate: "asc" } }),
     ]);
     const insuranceIds = insurances.map((row) => row.id);
     const insuranceInsuredPeople = insuranceIds.length
@@ -158,6 +162,7 @@ export class BackupService {
         quickTemplates,
         reminderSchedules,
         entryReminder,
+        exchangeRates: exchangeRates.map((row) => ({ ...row, rate: row.rate.toFixed() })),
       }) as Record<string, unknown>,
     };
   }
@@ -184,6 +189,12 @@ export class BackupService {
     }
     assertBackupEnvelope(parsed);
     const data = parsed.data as Record<string, Row[] | Row | null>;
+    // 金额全都按备份账本的本币记：恢复后目标账本的本币跟着备份走（数据已整体覆盖，不存在换算问题）。
+    const backupCurrency = (parsed as { ledger?: { currency?: unknown } }).ledger?.currency;
+    const baseCurrency =
+      typeof backupCurrency === "string" && isSupportedCurrency(backupCurrency)
+        ? backupCurrency
+        : ledger.currency;
     const rows = (key: string): Row[] => {
       const value = data[key];
       if (value == null) return [];
@@ -194,7 +205,20 @@ export class BackupService {
 
     const counts = await this.txs.run(async (tx) => {
       await this.wipeLedgerData(tx, ledgerId, userId);
-      const inserted = await this.insertBackupData(tx, ledgerId, userId, data, rows);
+      if (baseCurrency !== ledger.currency) {
+        await tx.ledger.update({
+          where: { id: ledgerId },
+          data: { currency: baseCurrency, updatedBy: userId },
+        });
+      }
+      const inserted = await this.insertBackupData(
+        tx,
+        ledgerId,
+        userId,
+        data,
+        rows,
+        baseCurrency,
+      );
       await this.audit.write(
         {
           source: "user",
@@ -286,6 +310,7 @@ export class BackupService {
     await tx.person.deleteMany({ where });
     await tx.category.deleteMany({ where });
     await tx.account.deleteMany({ where });
+    await tx.exchangeRate.deleteMany({ where });
     void userId;
   }
 
@@ -295,7 +320,26 @@ export class BackupService {
     userId: string,
     data: Record<string, Row[] | Row | null>,
     rows: (key: string) => Row[],
+    baseCurrency: string,
   ): Promise<Record<string, number>> {
+    // 旧备份（多币种之前）没有这些字段：账户币种 = 本币，原币字段为空，行为与之前一致。
+    const currencyOr = (value: unknown, fallback: string | null): string | null =>
+      typeof value === "string" && isSupportedCurrency(value) ? value : fallback;
+    const originalOf = (row: Row) => {
+      const currency = currencyOr(row.originalCurrency, null);
+      const amount = bi(row.originalAmountMicros);
+      return currency && amount !== null && currency !== baseCurrency
+        ? { originalCurrency: currency, originalAmountMicros: amount }
+        : { originalCurrency: null, originalAmountMicros: null };
+    };
+    const transactionFxOf = (row: Row) => {
+      const original = originalOf(row);
+      const toCurrency = original.originalCurrency ? currencyOr(row.toCurrency, null) : null;
+      const toAmountMicros = toCurrency ? bi(row.toAmountMicros) : null;
+      return toCurrency && toAmountMicros !== null
+        ? { ...original, toCurrency, toAmountMicros }
+        : { ...original, toCurrency: null, toAmountMicros: null };
+    };
     // 全部重新生成 UUID：同一实例重复恢复/复制账本时不会主键冲突。
     const maps = {
       category: newIdMap(rows("categories")),
@@ -459,6 +503,7 @@ export class BackupService {
       type: row.type,
       name: row.name,
       icon: row.icon ?? null,
+      currency: currencyOr(row.currency, baseCurrency)!,
       personId: ref(maps.person, row.personId),
       balanceMicros: bi(row.balanceMicros) ?? 0n,
       includeInNetWorth: Boolean(row.includeInNetWorth ?? true),
@@ -619,6 +664,7 @@ export class BackupService {
         provider: row.provider ?? null,
         planName: row.planName ?? null,
         priceMicros: bi(row.priceMicros),
+        currency: currencyOr(row.currency, null),
         billingCycle: row.billingCycle ?? null,
         paymentMethod: row.paymentMethod ?? null,
         autoRenew: Boolean(row.autoRenew),
@@ -657,7 +703,8 @@ export class BackupService {
       type: row.type,
       grossAmountMicros: bi(row.grossAmountMicros) ?? 0n,
       effectiveAmountMicros: bi(row.effectiveAmountMicros) ?? 0n,
-      currency: row.currency ?? "CNY",
+      currency: baseCurrency,
+      ...transactionFxOf(row),
       occurredOn: dt(row.occurredOn)!,
       occurredAt: dt(row.occurredAt)!,
       categoryId: ref(maps.category, row.categoryId),
@@ -823,6 +870,7 @@ export class BackupService {
       enabled: Boolean(row.enabled ?? true),
       type: row.type,
       amountMicros: bi(row.amountMicros) ?? 0n,
+      ...originalOf(row),
       categoryId: ref(maps.category, row.categoryId),
       subcategoryId: ref(maps.subcategory, row.subcategoryId),
       accountId: ref(maps.account, row.accountId),
@@ -858,6 +906,7 @@ export class BackupService {
         status: row.status,
         type: row.type,
         amountMicros: bi(row.amountMicros) ?? 0n,
+        ...originalOf(row),
         categoryId: ref(maps.category, row.categoryId),
         subcategoryId: ref(maps.subcategory, row.subcategoryId),
         accountId: ref(maps.account, row.accountId),
@@ -891,6 +940,7 @@ export class BackupService {
         type: row.type,
         name: row.name ?? null,
         amountMicros: bi(row.amountMicros),
+        ...originalOf(row),
         categoryId: ref(maps.category, row.categoryId),
         subcategoryId: ref(maps.subcategory, row.subcategoryId),
         accountId: ref(maps.account, row.accountId),
@@ -911,6 +961,28 @@ export class BackupService {
         createdBy: userId,
         updatedBy: userId,
         archivedAt: dt(row.archivedAt),
+        createdAt: dt(row.createdAt) ?? undefined,
+      }),
+    );
+
+    counts.exchangeRates = await createManyChunked(
+      tx.exchangeRate,
+      rows("exchangeRates").filter(
+        (row) =>
+          isSupportedCurrency(row.fromCurrency) &&
+          isSupportedCurrency(row.toCurrency) &&
+          row.fromCurrency !== row.toCurrency &&
+          row.rate != null,
+      ),
+      (row) => ({
+        id: randomUUID(),
+        ledgerId,
+        fromCurrency: row.fromCurrency,
+        toCurrency: row.toCurrency,
+        rateDate: dt(row.rateDate)!,
+        rate: new Prisma.Decimal(String(row.rate)),
+        source: "manual",
+        createdBy: userId,
         createdAt: dt(row.createdAt) ?? undefined,
       }),
     );

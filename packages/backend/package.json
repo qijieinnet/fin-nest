@@ -18,6 +18,7 @@
   "dependencies": {
     "@fin-nest/config": "workspace:*",
     "@fin-nest/db": "workspace:*",
+    "@fin-nest/shared": "workspace:*",
     "@nestjs/common": "^11.1.27",
     "archiver": "^7.0.1",
     "exceljs": "^4.4.0",

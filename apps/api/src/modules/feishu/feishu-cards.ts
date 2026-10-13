@@ -1,3 +1,4 @@
+import { currencyDecimals } from "@fin-nest/shared";
 import type { AiCard, AiDraftFields } from "../ai/ai-cards";
 import { microsToYuan } from "../ai/ai-money";
 import { formatMicros, progressBar } from "./feishu-money";
@@ -124,7 +125,16 @@ function draftStatusNote(card: Extract<AiCard, { kind: "transaction_draft" }>): 
 
 function draftFields(draft: AiDraftFields, ctx: CardRenderContext): string[] {
   const fields = [
-    `**金额**\n${formatMicros(draft.grossAmountMicros, ctx.decimalPlaces, draft.currency ?? ctx.currency)}`,
+    `**金额**\n${formatMicros(draft.grossAmountMicros, ctx.decimalPlaces, draft.currency ?? ctx.currency)}${
+      // 外币草稿：本币是按汇率折出来的，原币才是用户说的那个数，两者都要看得到。
+      draft.originalCurrency && draft.originalAmountMicros
+        ? `（${formatMicros(draft.originalAmountMicros, currencyDecimals(draft.originalCurrency), draft.originalCurrency)}${
+            draft.toCurrency && draft.toAmountMicros
+              ? ` → ${formatMicros(draft.toAmountMicros, currencyDecimals(draft.toCurrency), draft.toCurrency)}`
+              : ""
+          }）`
+        : ""
+    }`,
     `**日期**\n${draft.occurredOn}${draft.occurredTime ? ` ${draft.occurredTime}` : ""}`,
   ];
 
@@ -387,9 +397,13 @@ function renderAccountBalancesCard(
         card.accounts
           .map((account) => {
             // 负债账户的 balanceMicros 是记为正数的欠款，展示成负向更符合直觉。
+            // 外币账户按账户币种显示原币余额（旧卡片没有 currency，沿用卡片币种）。
+            const accountCurrency = account.currency ?? currency;
+            const places =
+              accountCurrency === currency ? ctx.decimalPlaces : currencyDecimals(accountCurrency);
             const amount = account.isLiability
-              ? `-${formatMicros(account.balanceMicros, ctx.decimalPlaces, currency)}`
-              : formatMicros(account.balanceMicros, ctx.decimalPlaces, currency);
+              ? `-${formatMicros(account.balanceMicros, places, accountCurrency)}`
+              : formatMicros(account.balanceMicros, places, accountCurrency);
             return `${escapeMd(account.name)}${COLUMN_GAP}${amount}`;
           })
           .join("\n"),

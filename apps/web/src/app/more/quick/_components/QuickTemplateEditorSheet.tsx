@@ -48,6 +48,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
 import { localized, msg, t } from "@/lib/i18n";
+import { OriginalAmountCard, useOriginalAmount } from "../../_components/OriginalAmountCard";
 
 type QuickTemplateEditorSheetProps = {
   accounts: Account[];
@@ -146,6 +147,14 @@ export function QuickTemplateEditorSheet({
   const [type, setType] = useState<TransactionType>(template?.type ?? "expense");
   const [name, setName] = useState(template?.name ?? "");
   const [amount, setAmount] = useState(() => microsToInput(template?.amountMicros, { decimalPlaces }));
+  // 外币模板：直接记账时按当天汇率把原币折成本币，上面的本币金额只是估算 / 兜底。
+  const original = useOriginalAmount({
+    initialCurrency: template?.originalCurrency,
+    initialMicros: template?.originalAmountMicros,
+    ledgerId,
+    baseValue: amount,
+    onSuggestBase: setAmount,
+  });
   const [categoryId, setCategoryId] = useState<string | null>(
     template?.type === "transfer"
       ? null
@@ -351,6 +360,8 @@ export function QuickTemplateEditorSheet({
       if (hasAmount && (!parsedAmount.ok || BigInt(parsedAmount.amountMicros) <= 0n)) {
         throw new Error(t("请输入有效金额"));
       }
+      const originalPayload = original.payload();
+      if (!originalPayload.ok) throw new Error(originalPayload.message);
       const account =
         !isTransfer && accountEnabled ? resolveAccountSelection(accounts, accountId) : {};
       const relations = isTransfer
@@ -363,6 +374,8 @@ export function QuickTemplateEditorSheet({
         type,
         name: name.trim() || undefined,
         amountMicros: amountMicros ?? undefined,
+        originalCurrency: originalPayload.originalCurrency,
+        originalAmountMicros: originalPayload.originalAmountMicros,
         categoryId: isTransfer ? null : category.categoryId,
         subcategoryId: isTransfer ? null : (category.subcategoryId ?? undefined),
         accountId: isTransfer ? null : (account.accountId ?? undefined),
@@ -533,7 +546,7 @@ export function QuickTemplateEditorSheet({
               type === "income" && "transaction-form__amount--income",
             )}
             decimalPlaces={decimalPlaces}
-            label={t("预设金额")}
+            label={original.foreign ? t("预设金额（本币估算）") : t("预设金额")}
             onValueChange={setAmount}
             placeholder={t("留空则记账时再输入")}
             value={amount}
@@ -541,6 +554,7 @@ export function QuickTemplateEditorSheet({
         </div>
 
         <div className="transaction-form__cards">
+          <OriginalAmountCard state={original} />
           <FieldCard className="transaction-form__note-card" label={t("名称")}>
             <div className="transaction-form__note-row">
               <span>{t("名称")}</span>

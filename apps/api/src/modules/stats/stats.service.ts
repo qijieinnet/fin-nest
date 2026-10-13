@@ -3,6 +3,7 @@ import { Prisma } from "@fin-nest/db";
 import {
   currentMonthKey,
   dateKey,
+  FxRateService,
   monthRange,
   parseDateOnly,
   PrismaService,
@@ -158,6 +159,7 @@ export class StatsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgers: LedgersService,
+    private readonly fx: FxRateService,
   ) {}
 
   /**
@@ -336,7 +338,7 @@ export class StatsService {
     groupByPerson = false,
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
-    return buildNetWorthSeries(this.prisma, ledgerId, range, groupByPerson);
+    return buildNetWorthSeries(this.prisma, this.fx, ledgerId, range, groupByPerson);
   }
 
   /** 收支走势：按 range（近1周/近1个月按天，近6个月/近1年按月）分桶汇总支出与收入。 */

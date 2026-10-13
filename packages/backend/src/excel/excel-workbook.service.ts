@@ -245,16 +245,20 @@ export class ExcelWorkbookService {
       "使用说明：",
       "1. 每个工作表第一列都是 ID：由系统导出的行带有 ID，请勿修改；你新增的行请将 ID 留空，导入时会识别为新增。",
       "2. 已有行（带 ID）的修改和删除不会同步回账本，导入只处理新增行。",
-      "3. 日期格式：YYYY-MM-DD（如 2026-07-03）。金额单位为元，最多 2 位小数。",
+      "3. 日期格式：YYYY-MM-DD（如 2026-07-03）。金额按主单位填写（如元、美元），最多 2 位小数。",
       "4. 「流水」表按名称引用其他表：分类、子分类、账户、成员、保险、物品等填对应名称即可；" +
         "名称可以是账本里已有的，也可以是本文件其他表里新增的行。",
       "5. 流水类型：支出 / 收入 / 转账。支出收入填「账户」，转账填「转出账户」「转入账户」。",
       "6. 「往来关联」用于支出里可收回、收入里需归还等场景，格式：账户名/可收回/金额，多条用中文分号；分隔。" +
         "示例：张三借款/可收回/200（要求该账户是可收回或需归还类型）。",
       "7. 「关联保险」「关联物品」填对应名称，多个用中文顿号、分隔。",
-      "8. 新增账户可填「余额(元)」作为期初余额；新增子账户的余额同样为期初余额。",
+      "8. 新增账户可填「余额」作为期初余额；新增子账户的余额同样为期初余额。" +
+        "「币种」留空为账本本币；外币账户的余额、信用额度按账户币种填写（建好后币种不能再改）。",
       "9. 「计划」「预算」表仅导出查看，导入时忽略。",
       "10. 导入时任何一行有错误，整个文件都不会导入；请根据错误提示修正后重试。",
+      "11. 多币种：「金额」始终是账本本币。外币消费在「原币种」「原币金额」填外币（如 USD / 10）；" +
+        "外币账户记账时原币种必须是账户币种。转出、转入都是外币且币种不同（如 USD→HKD）时，" +
+        "再填「转入币种」「转入金额」。往来关联金额按本币填写。",
     ];
     for (const line of lines) sheet.addRow([line]);
     sheet.getRow(1).font = { bold: true, size: 14 };
@@ -305,6 +309,10 @@ export class ExcelWorkbookService {
         occurredOn: dateToText(transaction.occurredOn),
         type: labelOf(TRANSACTION_TYPE_LABELS, transaction.type),
         amount: microsToYuanNumber(transaction.grossAmountMicros),
+        originalCurrency: transaction.originalCurrency ?? "",
+        originalAmount: microsToYuanNumber(transaction.originalAmountMicros),
+        toCurrency: transaction.toCurrency ?? "",
+        toAmount: microsToYuanNumber(transaction.toAmountMicros),
         category: category?.name ?? "",
         subcategory: subcategory?.name ?? "",
         account: transaction.accountId
@@ -337,6 +345,8 @@ export class ExcelWorkbookService {
         createdAt: dateTimeToText(transaction.createdAt),
       });
       row.getCell("amount").numFmt = MONEY_FORMAT;
+      row.getCell("originalAmount").numFmt = MONEY_FORMAT;
+      row.getCell("toAmount").numFmt = MONEY_FORMAT;
     }
     return sheet;
   }
@@ -389,6 +399,7 @@ export class ExcelWorkbookService {
         name: account.name,
         icon: account.icon ?? "",
         person: account.personId ? (data.personById.get(account.personId)?.name ?? "") : "",
+        currency: account.currency,
         balance: microsToYuanNumber(account.balanceMicros),
         includeInNetWorth: labelOf(BOOLEAN_LABELS, String(account.includeInNetWorth)),
         creditLimit: microsToYuanNumber(account.creditLimitMicros),
@@ -484,6 +495,7 @@ export class ExcelWorkbookService {
         provider: subscription.provider ?? "",
         planName: subscription.planName ?? "",
         price: microsToYuanNumber(subscription.priceMicros),
+        currency: subscription.currency ?? "",
         billingCycle: labelOf(BILLING_CYCLE_LABELS, subscription.billingCycle),
         paymentMethod: subscription.paymentMethod ?? "",
         autoRenew: labelOf(BOOLEAN_LABELS, String(subscription.autoRenew)),

@@ -1,5 +1,5 @@
 import type { ItemAsset, ItemType, Transaction } from "@/lib/api";
-import { formatMicros } from "@/lib/money";
+import { baseCurrencySymbol, formatMicros } from "@/lib/money";
 import { t } from "@/lib/i18n";
 
 /** 常用物品类型的推荐图标，未匹配的自定义类型用兜底图标。 */
@@ -130,7 +130,7 @@ export function itemAverageMicros(totalMicros: bigint, spans: number): number {
 export function formatAverage(totalMicros: bigint, spans: number): string {
   if (!Number.isFinite(spans) || spans < 0) return "—";
   return formatMicros(BigInt(Math.round(itemAverageMicros(totalMicros, spans))), {
-    currencySymbol: "¥",
+    currencySymbol: baseCurrencySymbol(),
     trimTrailingZeros: true,
   });
 }

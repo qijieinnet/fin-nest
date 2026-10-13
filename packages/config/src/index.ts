@@ -109,6 +109,13 @@ const EnvSchema = z.object({
   // 单次搜索回传给模型的条数上限。调大会线性推高上下文与 token 成本。
   SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(10).default(5),
 
+  // 汇率数据源（多币种）：外币记账自动折算本币、外币账户折算净资产时用。
+  //   frankfurter = Frankfurter（欧洲央行参考汇率，免 key；FX_BASE_URL 可指向自建实例）
+  //   none        = 不联网，汇率只能在「记账设置 › 汇率」里手填（不配时的默认值）
+  // 数据源请求都有超时、失败只记日志：内网 NAS 连不上外网时不影响记账，只是需要手填汇率。
+  FX_PROVIDER: z.enum(["frankfurter", "none"]).default("none"),
+  FX_BASE_URL: z.string().url().optional(),
+
   // 飞书机器人（可选）：两者都配置时启用，走长连接（WSClient），不需要公网回调地址，
   // 因而也不需要 Encrypt Key / Verification Token。未配置时整个飞书模块不注册、不建连接。
   FEISHU_APP_ID: z.string().min(1).optional(),

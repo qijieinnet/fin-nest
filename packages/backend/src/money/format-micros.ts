@@ -6,20 +6,11 @@
  * 这个是给人看的（补齐账本小数位、加千分位、带币种符号）。
  */
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  CNY: "¥",
-  USD: "$",
-  EUR: "€",
-  GBP: "£",
-  JPY: "¥",
-  HKD: "HK$",
-  TWD: "NT$",
-};
+import { currencySymbolOf } from "@fin-nest/shared";
 
-/** 未收录的币种直接用三字母代码前缀，不猜符号。 */
+/** 币种符号（目录在 `@fin-nest/shared`）；未收录的币种直接用三字母代码前缀，不猜符号。 */
 export function currencySymbol(currency?: string | null): string {
-  if (!currency) return "";
-  return CURRENCY_SYMBOLS[currency.toUpperCase()] ?? `${currency.toUpperCase()} `;
+  return currencySymbolOf(currency);
 }
 
 /**

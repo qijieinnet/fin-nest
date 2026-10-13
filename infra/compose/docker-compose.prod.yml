@@ -46,6 +46,9 @@ x-app-env: &app-env
   SEARCH_API_KEY: ${SEARCH_API_KEY:-}
   SEARCH_BASE_URL: ${SEARCH_BASE_URL:-}
   SEARCH_MAX_RESULTS: ${SEARCH_MAX_RESULTS:-5}
+  # 汇率数据源（多币种）：frankfurter = 欧洲央行参考汇率（免 key）；none = 不联网、汇率只能手填。
+  # 连不上外网也不影响记账，只是外币要在「记账设置 › 汇率」里手填。
+  FX_PROVIDER: ${FX_PROVIDER:-frankfurter}
   # 飞书机器人（可选）：两者需同时配置，只配一半会启动报错。
   FEISHU_APP_ID: ${FEISHU_APP_ID:-}
   FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}

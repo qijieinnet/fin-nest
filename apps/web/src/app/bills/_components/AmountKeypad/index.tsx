@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { PopoverMenu } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
-import { groupMoneyDisplay } from "@/lib/money";
+import { baseCurrencySymbol, groupMoneyDisplay } from "@/lib/money";
 import { TYPE_TAB_ITEMS } from "../_model/transaction-form-utils";
 import {
   applyKeypadKey,
@@ -42,6 +42,8 @@ export type KeypadTab = {
 type AmountKeypadProps = {
   amount: string;
   canSubmit: boolean;
+  /** 金额页签上的币种符号（外币记账时跟着入账币种走）；不传为本币。 */
+  currencySymbol?: string;
   decimalPlaces: number;
   /** 半屏形态：账单列表弹出的快捷记账用，各页签统一为屏幕一半高。 */
   halfScreen?: boolean;
@@ -71,6 +73,7 @@ type AmountKeypadProps = {
 export function AmountKeypad({
   amount,
   canSubmit,
+  currencySymbol,
   decimalPlaces,
   halfScreen = false,
   onAmountChange,
@@ -180,7 +183,9 @@ export function AmountKeypad({
       {
         id: "amount",
         label: t("金额"),
-        value: amount ? `¥${groupMoneyDisplay(amount)}` : undefined,
+        value: amount
+          ? `${currencySymbol ?? baseCurrencySymbol()}${groupMoneyDisplay(amount)}`
+          : undefined,
         panel: (
           <NumericPanel
             decimalPlaces={decimalPlaces}
@@ -193,7 +198,7 @@ export function AmountKeypad({
       ...tabs,
     ],
     // handleKey 依赖 state，随 state 一起重建即可。
-    [amount, decimalPlaces, state, tabs],
+    [amount, currencySymbol, decimalPlaces, state, tabs],
   );
 
   // 页签集合随类型变（转账没有分类）。当前页签被切没了，展示上有 allTabs[0] 兜底，

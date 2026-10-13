@@ -99,10 +99,19 @@ function autoConfirmedRenewalDate(
     nextRenewalDate: Date | null;
     billingCycle: string | null;
     priceMicros: bigint | null;
+    currency: string | null;
     remindLeadValue: number | null;
     remindLeadUnit: string | null;
   },
-  linkedTransactions: Array<{ type: string; effectiveAmountMicros: bigint; occurredOn: Date }>,
+  linkedTransactions: Array<{
+    type: string;
+    grossAmountMicros: bigint;
+    effectiveAmountMicros: bigint;
+    occurredOn: Date;
+    currency: string;
+    originalCurrency: string | null;
+    originalAmountMicros: bigint | null;
+  }>,
   today: Date,
 ): Date | null {
   if (subscription.terminatedAt) return null;
@@ -121,10 +130,24 @@ function autoConfirmedRenewalDate(
   const windowStart = windowFrom.getTime();
   const windowEnd = next.getTime();
   const price = subscription.priceMicros;
+  // 外币订阅（$20/月）按交易的原币金额比；交易没有同币种的原币时（直接记的本币）不算付过——
+  // 拿本币金额去比外币价格没有意义。订阅币种为空 = 本币，按有效金额比，与之前一致。
+  const paidIn = (tx: (typeof linkedTransactions)[number]): bigint | null => {
+    if (!subscription.currency || subscription.currency === tx.currency) {
+      return tx.effectiveAmountMicros;
+    }
+    if (tx.originalCurrency !== subscription.currency || tx.originalAmountMicros === null) {
+      return null;
+    }
+    // 与本币分支同口径看「有效」部分：关联（可收回等）把这笔冲掉了多少，原币就按同比例扣掉。
+    const gross = tx.grossAmountMicros;
+    if (gross <= 0n) return null;
+    return (tx.originalAmountMicros * tx.effectiveAmountMicros) / gross;
+  };
   const paid = linkedTransactions.some(
     (tx) =>
       tx.type === "expense" &&
-      tx.effectiveAmountMicros >= price &&
+      (paidIn(tx) ?? -1n) >= price &&
       tx.occurredOn.getTime() >= windowStart &&
       tx.occurredOn.getTime() < windowEnd,
   );
@@ -1163,6 +1186,7 @@ export class AssetsService {
       provider: input.provider,
       planName: input.planName,
       priceMicros: input.priceMicros ? BigInt(input.priceMicros) : null,
+      currency: input.currency ?? null,
       billingCycle: input.billingCycle,
       paymentMethod: input.paymentMethod,
       autoRenew: input.autoRenew ?? false,
@@ -1186,6 +1210,7 @@ export class AssetsService {
       provider: input.provider,
       planName: input.planName,
       priceMicros: input.priceMicros === undefined ? undefined : BigInt(input.priceMicros),
+      currency: input.currency === undefined ? undefined : (input.currency ?? null),
       billingCycle: input.billingCycle,
       paymentMethod: input.paymentMethod,
       autoRenew: input.autoRenew,

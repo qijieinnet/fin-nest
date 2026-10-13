@@ -8,7 +8,8 @@ import { apiRequest, getApiErrorMessage, ledgerApiPath } from "@/lib/api";
 import { createClientId } from "@/lib/id/client-id";
 import { parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
+import { useSheetStack, useToast } from "@/providers";
+import { useAccountCurrency } from "./useAccountCurrency";
 import { t } from "@/lib/i18n";
 
 type SubAccountAddSheetProps = {
@@ -20,7 +21,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
   const queryClient = useQueryClient();
   const { pop } = useSheetStack();
   const { showToast } = useToast();
-  const decimalPlaces = useDecimalPlaces();
+  const { decimalPlaces, symbol } = useAccountCurrency(ledgerId, accountId);
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
 
@@ -80,7 +81,7 @@ export function SubAccountAddSheet({ accountId, ledgerId }: SubAccountAddSheetPr
           label={t("初始余额（选填）")}
           onChange={(event) => setBalance(event.target.value)}
           placeholder="0.00"
-          prefix="¥"
+          prefix={symbol}
           value={balance}
         />
       </div>

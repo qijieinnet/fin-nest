@@ -1,6 +1,8 @@
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+import type { Transaction } from "@/lib/api";
 import { cn } from "@/lib/format/class-names";
+import { formatCurrencyMicros } from "@/lib/money";
 import { CategoryIcon } from "./CategoryIcon";
 import { MoneyText } from "./MoneyText";
 import type { TransactionType } from "./business-types";
@@ -15,6 +17,9 @@ type TransactionRowProps = {
   icon?: ReactNode;
   meta?: ReactNode;
   onClick?: () => void;
+  /** 外币交易的原币金额（主金额仍是本币），显示在金额下方。 */
+  originalCurrency?: string | null;
+  originalAmountMicros?: string | null;
   personName?: string;
   recordName?: string;
   time?: string;
@@ -30,6 +35,8 @@ export function TransactionRow({
   icon,
   meta,
   onClick,
+  originalAmountMicros,
+  originalCurrency,
   personName,
   title,
   type,
@@ -46,6 +53,13 @@ export function TransactionRow({
       </span>
       <span className="biz-transaction-row__side">
         <MoneyText amountMicros={amountMicros} tone={type} trimTrailingZeros />
+        {originalCurrency && originalAmountMicros ? (
+          <small>
+            {formatCurrencyMicros(originalAmountMicros, originalCurrency, {
+              trimTrailingZeros: true,
+            })}
+          </small>
+        ) : null}
         {meta ? <small>{meta}</small> : null}
       </span>
       {onClick ? (
@@ -102,4 +116,14 @@ export function TransactionGroup({
       <div className="biz-transaction-group__rows">{children}</div>
     </section>
   );
+}
+
+/** 交易 → TransactionRow 的原币显示字段（各列表的 rowProps 之外单独展开，免得每处都改）。 */
+export function originalAmountProps(
+  transaction: Pick<Transaction, "originalCurrency" | "originalAmountMicros">,
+): Pick<TransactionRowProps, "originalCurrency" | "originalAmountMicros"> {
+  return {
+    originalCurrency: transaction.originalCurrency,
+    originalAmountMicros: transaction.originalAmountMicros,
+  };
 }

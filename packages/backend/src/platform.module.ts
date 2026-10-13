@@ -4,6 +4,7 @@ import { BackgroundJobsService } from "./background-jobs/background-jobs.service
 import { ApiExceptionFilter } from "./errors/api-exception.filter";
 import { ExcelWorkbookService } from "./excel/excel-workbook.service";
 import { FeishuClient } from "./feishu/feishu-client";
+import { FxRateService } from "./fx/fx-rate.service";
 import { IdempotencyService } from "./idempotency/idempotency.service";
 import { NotificationTargetsResolver } from "./notifications/notification-targets.resolver";
 import { NotificationService } from "./notifications/notification.service";
@@ -27,6 +28,7 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     ExcelWorkbookService,
     IdempotencyService,
     FeishuClient,
+    FxRateService,
     WebPushClient,
     PushDeliveryService,
     NotificationService,
@@ -43,6 +45,7 @@ import { DatabaseTransactionService } from "./transactions/database-transaction.
     ExcelWorkbookService,
     IdempotencyService,
     FeishuClient,
+    FxRateService,
     WebPushClient,
     PushDeliveryService,
     NotificationService,

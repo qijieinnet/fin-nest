@@ -3,11 +3,13 @@ import {
   AppError,
   AuditLogService,
   DatabaseTransactionService,
+  FxRateService,
   IdempotencyService,
   parseDateOnly,
   PrismaService,
   PrismaTransactionClient,
 } from "@fin-nest/backend";
+import { convertMicros } from "@fin-nest/shared";
 import { buildInvestmentSummary, indexRevaluationSums } from "./investment";
 import { CreateAccountDto } from "./dto/create-account.dto";
 import { UpdateAccountDto } from "./dto/update-account.dto";
@@ -66,11 +68,16 @@ export class AccountsService {
     private readonly audit: AuditLogService,
     private readonly ledgers: LedgersService,
     private readonly idempotency: IdempotencyService,
+    private readonly fx: FxRateService,
   ) {}
 
   async list(ledgerId: string, userId: string) {
     await this.ledgers.assertMember(ledgerId, userId);
-    const [accounts, subAccounts, people, revaluationSums] = await Promise.all([
+    const [ledger, accounts, subAccounts, people, revaluationSums] = await Promise.all([
+      this.prisma.client.ledger.findFirstOrThrow({
+        where: { id: ledgerId },
+        select: { currency: true },
+      }),
       this.prisma.client.account.findMany({
         where: { ledgerId, archivedAt: null },
         orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
@@ -93,10 +100,24 @@ export class AccountsService {
     ]);
     const peopleById = new Map(people.map((person) => [person.id, person]));
     const revaluation = indexRevaluationSums(revaluationSums);
+    // 外币账户按最新汇率折成本币：前端的分组合计、净资产卡都用折合值相加，不能把原币直接加起来。
+    const quotes = new Map<string, Awaited<ReturnType<FxRateService["findRate"]>>>();
+    for (const currency of new Set(accounts.map((account) => account.currency))) {
+      if (currency === ledger.currency) continue;
+      quotes.set(currency, await this.fx.findRate(ledgerId, currency, ledger.currency));
+    }
+    const toBase = (currency: string, micros: bigint): string | null => {
+      if (currency === ledger.currency) return micros.toString();
+      const quote = quotes.get(currency);
+      return quote ? convertMicros(micros, quote.rateScaled).toString() : null;
+    };
     return accounts.map((account) => {
       const person = account.personId ? peopleById.get(account.personId) : undefined;
+      const quote = quotes.get(account.currency);
       return {
         ...account,
+        baseBalanceMicros: toBase(account.currency, account.balanceMicros),
+        fxRate: quote ? { rate: quote.rate, date: quote.date, source: quote.source } : null,
         investment: buildInvestmentSummary(
           account.type,
           account.balanceMicros,
@@ -106,6 +127,7 @@ export class AccountsService {
           .filter((subAccount) => subAccount.accountId === account.id)
           .map((subAccount) => ({
             ...subAccount,
+            baseBalanceMicros: toBase(account.currency, subAccount.balanceMicros),
             investment: buildInvestmentSummary(
               account.type,
               subAccount.balanceMicros,
@@ -325,6 +347,15 @@ export class AccountsService {
     if (mustStayNonNegative(input.type) && balanceMicros < 0n) {
       throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
     }
+    const ledger = await this.prisma.client.ledger.findFirstOrThrow({
+      where: { id: ledgerId },
+      select: { currency: true },
+    });
+    const currency = input.currency ?? ledger.currency;
+    // 往来账户承接交易的「关联金额」，那是和有效金额同口径的本币，账户也只能是本币。
+    if (!isMoneyAccountType(input.type) && currency !== ledger.currency) {
+      throw new AppError("RELATION_ACCOUNT_CURRENCY", "往来账户只能使用账本本币", 400);
+    }
     await this.assertPerson(ledgerId, input.personId);
     return this.idempotency.run(
       { scope: `account.create:${ledgerId}`, key: idempotencyKey, userId },
@@ -336,6 +367,7 @@ export class AccountsService {
               type: input.type,
               name: input.name,
               icon: input.icon,
+              currency,
               personId: input.personId || null,
               balanceMicros,
               includeInNetWorth: input.includeInNetWorth ?? true,

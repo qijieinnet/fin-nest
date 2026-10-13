@@ -13,6 +13,7 @@ import {
   cellToMicrosString,
   cellToText,
   ColumnDef,
+  columnForHeader,
   DatabaseTransactionService,
   IMPORT_MAX_TRANSACTION_ROWS,
   INSURANCE_COLUMNS,
@@ -33,8 +34,14 @@ import {
   valueOfLabel,
 } from "@fin-nest/backend";
 import { Prisma } from "@fin-nest/db";
+import { isSupportedCurrency } from "@fin-nest/shared";
 import ExcelJS from "exceljs";
 import { LedgersService } from "../ledgers/ledgers.service";
+import {
+  normalizeTransactionFx,
+  sideAmount,
+  transferAmounts,
+} from "../transactions/transaction-fx";
 import { TransactionsService } from "../transactions/transactions.service";
 import { BULK_TX_OPTIONS } from "./backup.service";
 
@@ -72,6 +79,7 @@ type PlannedAccount = {
   name: string;
   icon: string | null;
   personRef: Ref | null;
+  currency: string;
   balanceMicros: string;
   includeInNetWorth: boolean;
   creditLimitMicros: string | null;
@@ -124,6 +132,7 @@ type PlannedSubscription = {
   provider: string | null;
   planName: string | null;
   priceMicros: string | null;
+  currency: string | null;
   billingCycle: string | null;
   paymentMethod: string | null;
   autoRenew: boolean;
@@ -136,6 +145,10 @@ type PlannedTransaction = {
   type: string;
   occurredOn: string;
   grossAmountMicros: string;
+  originalCurrency: string | null;
+  originalAmountMicros: string | null;
+  toCurrency: string | null;
+  toAmountMicros: string | null;
   categoryRef: Ref | null;
   subcategoryRef: Ref | null;
   accountRef: Ref | null;
@@ -152,10 +165,12 @@ type PlannedTransaction = {
   note: string | null;
 };
 
-type AccountInfo = { ref: Ref; type: string };
+type AccountInfo = { ref: Ref; type: string; currency: string };
 
 /** 校验阶段构建的名称解析表：数据库活跃行 ∪ 本文件新增行。 */
 type Registry = {
+  /** 账本本币：账户币种缺省值、流水原币校验都要用。 */
+  baseCurrency: string;
   categoryByKey: Map<string, Ref>; // `${type}:${name}`
   subcategoryByKey: Map<string, Ref>; // `${type}:${categoryName}:${name}`
   personByName: Map<string, Ref>;
@@ -354,6 +369,7 @@ export class ExcelImportService {
       subscriptions,
       subscriptionCategories,
       transactions,
+      ledger,
     ] = await Promise.all([
       client.category.findMany({ where: { ...where, archivedAt: null } }),
       client.subcategory.findMany({ where: { ...where, archivedAt: null } }),
@@ -366,11 +382,13 @@ export class ExcelImportService {
       client.subscription.findMany({ where: { ...where, deletedAt: null } }),
       client.subscriptionCategory.findMany({ where }),
       client.transaction.findMany({ where, select: { id: true } }),
+      client.ledger.findFirstOrThrow({ where: { id: ledgerId }, select: { currency: true } }),
     ]);
 
     const categoryById = new Map(categories.map((row) => [row.id, row]));
     const accountById = new Map(accounts.map((row) => [row.id, row]));
     const registry: Registry = {
+      baseCurrency: ledger.currency,
       categoryByKey: new Map(categories.map((row) => [`${row.type}:${row.name}`, { id: row.id }])),
       subcategoryByKey: new Map(
         subcategories
@@ -382,7 +400,10 @@ export class ExcelImportService {
       ),
       personByName: new Map(people.map((row) => [row.name, { id: row.id }])),
       accountByName: new Map(
-        accounts.map((row) => [row.name, { ref: { id: row.id }, type: row.type }]),
+        accounts.map((row) => [
+          row.name,
+          { ref: { id: row.id }, type: row.type, currency: row.currency },
+        ]),
       ),
       subAccountByKey: new Map(
         subAccounts
@@ -431,7 +452,7 @@ export class ExcelImportService {
     const columnByKey = new Map<string, number>();
     headerRow.eachCell((cell, colNumber) => {
       const header = cellToText(cell.value);
-      const column = columns.find((item) => item.header === header);
+      const column = columnForHeader(columns, header);
       if (column) columnByKey.set(column.key, colNumber);
     });
     if (!columnByKey.size) return;
@@ -687,10 +708,14 @@ export class ExcelImportService {
         if (seen.has(name)) throw new Error(`账户「${name}」在文件中重复`);
         const type = valueOfLabel(ACCOUNT_TYPE_LABELS, cellToText(value("type")));
         if (!type) throw new Error("账户类型必须是 储蓄/信用/投资/可收回/需归还 之一");
+        const currency = parseCurrencyCell(value("currency")) ?? registry.baseCurrency;
+        if (!["savings", "credit", "invest"].includes(type) && currency !== registry.baseCurrency) {
+          throw new Error("往来账户只能使用账本本币");
+        }
         seen.add(name);
         const includeText = cellToText(value("includeInNetWorth"));
         const ref: Ref = { id: null };
-        registry.accountByName.set(name, { ref, type });
+        registry.accountByName.set(name, { ref, type, currency });
         const personName = cellToText(value("person"));
         plan.accounts.push({
           ref,
@@ -701,6 +726,7 @@ export class ExcelImportService {
           personRef: personName
             ? this.resolveOrPlanPerson(registry, plan, counts, personName)
             : null,
+          currency,
           balanceMicros: hasCellValue(value("balance"))
             ? cellToMicrosString(value("balance"), { allowNegative: true })
             : "0",
@@ -979,6 +1005,7 @@ export class ExcelImportService {
           provider: cellToText(value("provider")) || null,
           planName: cellToText(value("planName")) || null,
           priceMicros: hasCellValue(value("price")) ? cellToMicrosString(value("price")) : null,
+          currency: parseCurrencyCell(value("currency")),
           billingCycle,
           paymentMethod: cellToText(value("paymentMethod")) || null,
           autoRenew: cellToText(value("autoRenew")) === "是",
@@ -1021,11 +1048,31 @@ export class ExcelImportService {
         );
         if (BigInt(grossAmountMicros) <= 0n) throw new Error("金额必须大于 0");
 
+        const originalCurrency = parseCurrencyCell(value("originalCurrency"));
+        const toCurrency = parseCurrencyCell(value("toCurrency"));
+        const fxInput = {
+          type,
+          originalCurrency,
+          originalAmountMicros: hasCellValue(value("originalAmount"))
+            ? toPositiveMicrosString(cellToMicrosString(value("originalAmount")))
+            : null,
+          toCurrency,
+          toAmountMicros: hasCellValue(value("toAmount"))
+            ? toPositiveMicrosString(cellToMicrosString(value("toAmount")))
+            : null,
+        };
+        // 与交易服务同一套规则，在预览阶段就把币种问题报到行上，而不是等后台任务失败。
+        const fx = normalizeTransactionFx(fxInput, registry.baseCurrency);
+
         const planned: PlannedTransaction = {
           row: rowNumber,
           type,
           occurredOn,
           grossAmountMicros,
+          originalCurrency: fxInput.originalCurrency,
+          originalAmountMicros: fxInput.originalAmountMicros,
+          toCurrency: fxInput.toCurrency,
+          toAmountMicros: fxInput.toAmountMicros,
           categoryRef: null,
           subcategoryRef: null,
           accountRef: null,
@@ -1063,6 +1110,13 @@ export class ExcelImportService {
           if (from.accountRef === to.accountRef && from.subAccountRef === to.subAccountRef) {
             throw new Error("转出和转入账户不能相同");
           }
+          transferAmounts(
+            fx,
+            registry.baseCurrency,
+            BigInt(grossAmountMicros),
+            from.currency,
+            to.currency,
+          );
           if (cellToText(value("relations"))) throw new Error("转账不支持往来关联");
         } else {
           const categoryName = cellToText(value("category"));
@@ -1100,6 +1154,7 @@ export class ExcelImportService {
           if (pair) {
             planned.accountRef = pair.accountRef;
             planned.subAccountRef = pair.subAccountRef;
+            sideAmount(fx, registry.baseCurrency, BigInt(grossAmountMicros), pair.currency, "account");
           } else if (settings?.acctRequired) {
             throw new Error("当前账本要求流水必须填写账户");
           }
@@ -1213,7 +1268,7 @@ export class ExcelImportService {
     accountName: string,
     subAccountName: string,
     label: string,
-  ): { accountRef: Ref; subAccountRef: Ref | null } | null {
+  ): { accountRef: Ref; subAccountRef: Ref | null; currency: string } | null {
     if (!accountName) {
       if (subAccountName) throw new Error(`填写${label}子账户时必须同时填写${label}账户`);
       return null;
@@ -1223,11 +1278,13 @@ export class ExcelImportService {
     if (!["savings", "credit", "invest"].includes(account.type)) {
       throw new Error(`${label}账户只能选择储蓄、信用或投资账户`);
     }
-    if (!subAccountName) return { accountRef: account.ref, subAccountRef: null };
+    if (!subAccountName) {
+      return { accountRef: account.ref, subAccountRef: null, currency: account.currency };
+    }
     const subAccount = registry.subAccountByKey.get(`${accountName}:${subAccountName}`);
     if (!subAccount)
       throw new Error(`${label}子账户「${subAccountName}」不存在（可先在子账户表新增）`);
-    return { accountRef: account.ref, subAccountRef: subAccount };
+    return { accountRef: account.ref, subAccountRef: subAccount, currency: account.currency };
   }
 
   /** 往来关联格式：账户名/计入可收回|产生需归还|冲减可收回|冲减需归还/金额元，多条用；分隔。 */
@@ -1270,6 +1327,9 @@ export class ExcelImportService {
         if (account.type !== expectedType) {
           throw new Error(`往来账户「${accountName}」类型与「${relationKindLabel}」不匹配`);
         }
+        if (account.currency !== registry.baseCurrency) {
+          throw new Error("往来账户只能使用账本本币");
+        }
         const amountMicros = cellToMicrosString(amountText);
         if (BigInt(amountMicros) <= 0n) throw new Error("往来关联金额必须大于 0");
         return {
@@ -1299,6 +1359,10 @@ export class ExcelImportService {
             type: planned.type,
             grossAmountMicros: planned.grossAmountMicros,
             occurredOn: planned.occurredOn,
+            originalCurrency: planned.originalCurrency,
+            originalAmountMicros: planned.originalAmountMicros,
+            toCurrency: planned.toCurrency,
+            toAmountMicros: planned.toAmountMicros,
             categoryId: refId(planned.categoryRef),
             subcategoryId: refId(planned.subcategoryRef),
             personId: refId(planned.personRef),
@@ -1443,6 +1507,7 @@ export class ExcelImportService {
           type: planned.type,
           name: planned.name,
           icon: planned.icon,
+          currency: planned.currency,
           personId: refId(planned.personRef),
           balanceMicros,
           includeInNetWorth: planned.includeInNetWorth,
@@ -1567,6 +1632,7 @@ export class ExcelImportService {
           provider: planned.provider,
           planName: planned.planName,
           priceMicros: planned.priceMicros ? BigInt(planned.priceMicros) : null,
+          currency: planned.currency,
           billingCycle: planned.billingCycle,
           paymentMethod: planned.paymentMethod,
           autoRenew: planned.autoRenew,
@@ -1589,6 +1655,14 @@ function refId(ref: Ref | null): string | undefined {
 function toPositiveMicrosString(micros: string): string {
   const value = BigInt(micros);
   return (value < 0n ? -value : value).toString();
+}
+
+/** 币种单元格：空 → null；必须是支持的三字母代码（大小写不敏感）。 */
+function parseCurrencyCell(value: unknown): string | null {
+  const text = cellToText(value).toUpperCase();
+  if (!text) return null;
+  if (!isSupportedCurrency(text)) throw new Error(`不支持的币种「${text}」`);
+  return text;
 }
 
 function hasCellValue(value: unknown): boolean {

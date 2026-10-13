@@ -14,7 +14,7 @@ import {
   type PlanPeriodProgress,
   type PlanProgressResult,
 } from "@/lib/api";
-import { formatMicros, microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, formatMicros, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { parseLimitCount, periodShortLabel } from "./plan-utils";
@@ -186,7 +186,7 @@ export function PlanPeriodConfirmSheet({
                 label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
                 onChange={(event) => setNextLimit(event.target.value)}
                 placeholder="0"
-                prefix={isCount ? undefined : "¥"}
+                prefix={isCount ? undefined : baseCurrencySymbol()}
                 value={nextLimit}
               />
             </div>

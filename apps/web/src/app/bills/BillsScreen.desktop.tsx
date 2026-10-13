@@ -18,7 +18,7 @@ import {
   categoryRowProps,
   TRANSFER_ICON,
 } from "@/lib/data/options";
-import { formatMicros } from "@/lib/money";
+import { formatCurrencyMicros, formatMicros } from "@/lib/money";
 import { useDecimalPlaces, useSheetStack } from "@/providers";
 import { BillDetailScreen } from "./[transactionId]/BillDetailScreen";
 import { BatchEditDialog, type BatchFieldPatch } from "./_components/BatchEditDialog";
@@ -331,6 +331,15 @@ export function BillsScreenDesktop() {
                               className="desktop-amount"
                               tone={transaction.type}
                             />
+                            {transaction.originalCurrency && transaction.originalAmountMicros ? (
+                              <span className="block text-[12px] text-[var(--color-text-muted)]">
+                                {formatCurrencyMicros(
+                                  transaction.originalAmountMicros,
+                                  transaction.originalCurrency,
+                                  { trimTrailingZeros: true },
+                                )}
+                              </span>
+                            ) : null}
                           </td>
                         </tr>
                       );

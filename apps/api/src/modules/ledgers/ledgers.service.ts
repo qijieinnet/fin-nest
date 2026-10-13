@@ -70,6 +70,7 @@ export class LedgersService {
 
   async update(ledgerId: string, userId: string, input: UpdateLedgerDto) {
     await this.assertOwner(ledgerId, userId);
+    if (input.currency !== undefined) await this.assertCurrencyChangeable(ledgerId, input.currency);
     return this.prisma.client.ledger.update({
       where: { id: ledgerId },
       data: {
@@ -309,6 +310,40 @@ export class LedgersService {
     const role = await this.assertMember(ledgerId, userId);
     if (role !== "owner") {
       throw new AppError("LEDGER_OWNER_REQUIRED", "需要账本所有者权限", 403);
+    }
+  }
+
+  /**
+   * 本币只能在「账本里还没有任何金额」时改：账户余额、交易、规则/模板/档案/计划/预算里的金额
+   * 都是按本币记的，改本币不会（也不该）去换算它们，只会让 ¥1000 一夜之间变成 $1000。
+   * 含已归档 / 软删的行：它们仍参与净资产曲线与历史统计。
+   */
+  private async assertCurrencyChangeable(ledgerId: string, currency: string): Promise<void> {
+    const ledger = await this.prisma.client.ledger.findFirst({
+      where: { id: ledgerId, deletedAt: null },
+      select: { currency: true },
+    });
+    if (!ledger || ledger.currency === currency) return;
+    const db = this.prisma.client;
+    const where = { ledgerId };
+    const counts = await Promise.all([
+      db.account.count({ where }),
+      db.transaction.count({ where }),
+      db.autoRule.count({ where }),
+      db.quickTemplate.count({ where }),
+      db.subscription.count({ where }),
+      db.item.count({ where }),
+      db.insurance.count({ where }),
+      db.plan.count({ where }),
+      db.categoryBudget.count({ where }),
+      db.budgetSetting.count({ where: { ledgerId, totalAmountMicros: { not: null } } }),
+    ]);
+    if (counts.some((count) => count > 0)) {
+      throw new AppError(
+        "LEDGER_CURRENCY_LOCKED",
+        "账本里已有账户或记账数据，本币不能再修改",
+        400,
+      );
     }
   }
 

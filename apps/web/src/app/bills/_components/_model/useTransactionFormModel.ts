@@ -38,7 +38,7 @@ import { createClientId } from "@/lib/id/client-id";
 import { microsToInput } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useAppRouter } from "@/lib/route/useAppRouter";
-import { useDecimalPlaces, useToast } from "@/providers";
+import { useBaseCurrency, useDecimalPlaces, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../../more/insurances/_components/insurance-utils";
 import { formatDateLabel, typeGlyph } from "../../../more/items/_components/item-utils";
 import { categoryGlyph } from "../../../more/subscriptions/_components/subscription-utils";
@@ -53,6 +53,7 @@ import {
   type PendingAttachment,
   type PendingPatchBody,
 } from "./transaction-form-utils";
+import { useTransactionFx } from "./useTransactionFx";
 import { t } from "@/lib/i18n";
 
 export type TransactionSeed = {
@@ -60,6 +61,13 @@ export type TransactionSeed = {
   /** 记账日期（YYYY-MM-DD）。选择快捷模板时用于保留用户已选日期，不随模板重置为今天。 */
   occurredOn?: string | null;
   grossAmountMicros?: string | null;
+  /** 外币预填（快捷模板 / AI 草稿）：原币与转入侧，口径同交易。 */
+  originalCurrency?: string | null;
+  originalAmountMicros?: string | null;
+  toCurrency?: string | null;
+  toAmountMicros?: string | null;
+  /** 原币是准的、本币只是估算（快捷模板）：回显后按记账日汇率重新折算本币。 */
+  fxRecompute?: boolean;
   categoryId?: string | null;
   subcategoryId?: string | null;
   personId?: string | null;
@@ -133,6 +141,7 @@ export function useTransactionFormModel({
   const categories = categoriesQuery.data ?? [];
   const accounts = accountsQuery.data ?? [];
   const decimalPlaces = useDecimalPlaces();
+  const { code: baseCurrency } = useBaseCurrency();
   const idempotencyKey = useRef(idempotencyKeyOverride ?? createClientId("transaction"));
 
   const seedAmountMicros =
@@ -186,7 +195,33 @@ export function useTransactionFormModel({
     ),
   );
   const [note, setNote] = useState(initial?.note ?? pending?.note ?? seed?.note ?? "");
-  const [accountEnabled, setAccountEnabled] = useState(Boolean(seedAccountSelection));
+  const [accountEnabledState, setAccountEnabledState] = useState(Boolean(seedAccountSelection));
+  const fx = useTransactionFx({
+    ledgerId,
+    type,
+    accounts,
+    accountsLoaded: !accountsQuery.isPending,
+    accountEnabled: accountEnabledState,
+    accountSel,
+    fromSel,
+    toSel,
+    occurredOn,
+    amount,
+    setAmount,
+    baseCurrency,
+    ledgerDecimalPlaces: decimalPlaces,
+    initial: initial
+      ? initial
+      : pending
+        ? {
+            grossAmountMicros: pending.amountMicros,
+            originalCurrency: pending.originalCurrency,
+            originalAmountMicros: pending.originalAmountMicros,
+          }
+        : seed,
+  });
+  const accountEnabled = accountEnabledState;
+  const setAccountEnabled = setAccountEnabledState;
   const [personEnabled, setPersonEnabled] = useState(
     Boolean(initial?.personId ?? pending?.personId ?? seed?.personId),
   );
@@ -319,11 +354,16 @@ export function useTransactionFormModel({
   const showNoteCard = visibleFields.note !== false;
   const showAttachmentCard = type !== "transfer" && visibleFields.attachments !== false;
 
+  // 外币：金额是入账币种，校验与提交都先折成本币口径（grossInput）再交给原有的工具函数。
+  const fxResult = fx.buildFx();
+  const fxMessage = fxResult.ok ? null : fxResult.message;
+  const grossInput = fxResult.ok ? fxResult.value.grossInput : amount;
   const validationMessage = useMemo(
     () =>
+      fxMessage ??
       computeValidationMessage({
         type,
-        amount,
+        amount: grossInput,
         decimalPlaces,
         accounts,
         categories,
@@ -344,6 +384,8 @@ export function useTransactionFormModel({
       categoryId,
       decimalPlaces,
       fromSel,
+      fxMessage,
+      grossInput,
       personId,
       personRequired,
       toSel,
@@ -515,6 +557,7 @@ export function useTransactionFormModel({
   // 连续记账：提交成功后不关闭页面，清空本次输入，仅保留日期、分类、人员。
   function resetForContinuousEntry() {
     setAmount("");
+    fx.resetFx();
     setNote("");
     setAccountEnabled(false);
     setAccountSel(null);
@@ -547,10 +590,15 @@ export function useTransactionFormModel({
       showToast({ tone: "error", message: validationMessage });
       return;
     }
+    if (!fxResult.ok) {
+      showToast({ tone: "error", message: fxResult.message });
+      return;
+    }
+    const fxFields = fxResult.value.fields;
     const result = isPendingMode
       ? buildPendingPatch({
           type,
-          amount,
+          amount: grossInput,
           decimalPlaces,
           occurredOn,
           accounts,
@@ -568,7 +616,7 @@ export function useTransactionFormModel({
         })
       : buildPayload({
           type,
-          amount,
+          amount: grossInput,
           decimalPlaces,
           occurredOn,
           accounts,
@@ -599,7 +647,18 @@ export function useTransactionFormModel({
       showToast({ tone: "error", message: result.message });
       return;
     }
-    mutation.mutate(result.value);
+    if (isPendingMode) {
+      // 待确认没有 to_*（规则/模板不支持两侧都是外币的转账），原币字段显式给 null 才能清掉。
+      const patch: PendingPatchBody = {
+        ...(result.value as PendingPatchBody),
+        originalCurrency: fxFields.originalCurrency ?? null,
+        originalAmountMicros: fxFields.originalAmountMicros ?? null,
+      };
+      mutation.mutate(patch);
+      return;
+    }
+    const input: TransactionInput = { ...(result.value as TransactionInput), ...fxFields };
+    mutation.mutate(input);
   }
 
   function addAttachments(files: File[]) {
@@ -724,6 +783,8 @@ export function useTransactionFormModel({
     selectedSubscriptionId,
     setSelectedSubscriptionId,
     subscriptionOptions,
+    // 币种
+    fx,
     // 提交
     decimalPlaces,
     validationMessage,

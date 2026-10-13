@@ -99,3 +99,18 @@ test("恢复附件 key 固定长度且不拼接旧 object key", () => {
   assert.ok(key.length < 100);
   assert.ok(!key.includes("ledgers/"));
 });
+
+test("恢复升级前的系统备份：账户缺币种时按所属账本本币补齐（同迁移 56）", async () => {
+  const { upgradeLegacyRow } = await import("@fin-nest/backend");
+  const context = { ledgerCurrency: new Map([["ledger-usd", "USD"]]) };
+  const legacy = { id: "a1", ledgerId: "ledger-usd", balanceMicros: 1n };
+  upgradeLegacyRow("accounts", legacy, context);
+  assert.equal(legacy.currency, "USD");
+  const orphan = { id: "a2", ledgerId: "missing" };
+  upgradeLegacyRow("accounts", orphan, context);
+  assert.equal(orphan.currency, "CNY");
+  // 新备份自带币种，不动。
+  const current = { id: "a3", ledgerId: "ledger-usd", currency: "HKD" };
+  upgradeLegacyRow("accounts", current, context);
+  assert.equal(current.currency, "HKD");
+});

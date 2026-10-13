@@ -18,6 +18,7 @@ function subAccount(overrides: Partial<SubAccount>): SubAccount {
     sortOrder: 0,
     isDefault: false,
     investment: null,
+    baseBalanceMicros: "0",
     archivedAt: null,
     ...overrides,
   };
@@ -32,7 +33,10 @@ function account(overrides: Partial<Account>): Account {
     icon: null,
     personId: null,
     person: null,
+    currency: "CNY",
     balanceMicros: "0",
+    baseBalanceMicros: null,
+    fxRate: null,
     includeInNetWorth: true,
     creditLimitMicros: null,
     investment: null,
@@ -109,6 +113,38 @@ describe("account net worth helpers", () => {
       assetsMicros: 0n,
       liabilitiesMicros: 80000000n,
       netMicros: -80000000n,
+      missingCurrencies: [],
+    });
+  });
+
+  it("converts foreign-currency accounts with their latest rate", () => {
+    const accounts = [
+      account({ id: "cny", balanceMicros: "100000000" }),
+      account({
+        id: "usd",
+        currency: "USD",
+        balanceMicros: "10000000",
+        fxRate: { rate: "7.1", date: "2026-10-09", source: "frankfurter" },
+      }),
+    ];
+    expect(netWorthSummary(accounts)).toEqual({
+      assetsMicros: 171000000n,
+      liabilitiesMicros: 0n,
+      netMicros: 171000000n,
+      missingCurrencies: [],
+    });
+  });
+
+  it("leaves accounts without a rate out of the totals and reports them", () => {
+    const accounts = [
+      account({ id: "cny", balanceMicros: "100000000" }),
+      account({ id: "jpy", currency: "JPY", balanceMicros: "5000000000", fxRate: null }),
+    ];
+    expect(netWorthSummary(accounts)).toEqual({
+      assetsMicros: 100000000n,
+      liabilitiesMicros: 0n,
+      netMicros: 100000000n,
+      missingCurrencies: ["JPY"],
     });
   });
 });

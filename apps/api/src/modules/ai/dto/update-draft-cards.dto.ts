@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CURRENCY_CODES } from "@fin-nest/shared";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -30,6 +31,26 @@ export class AiDraftInputDto {
   @ApiProperty({ description: "YYYY-MM-DD" })
   @IsString()
   occurredOn!: string;
+
+  @ApiPropertyOptional({ description: "原币种（外币草稿），与 originalAmountMicros 成对" })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  originalCurrency?: string;
+
+  @ApiPropertyOptional({ description: "原币金额 micros 字符串" })
+  @IsOptional()
+  @Matches(/^\d{1,19}$/)
+  originalAmountMicros?: string;
+
+  @ApiPropertyOptional({ description: "转入币种（两侧都是外币且币种不同的转账）" })
+  @IsOptional()
+  @IsIn(CURRENCY_CODES)
+  toCurrency?: string;
+
+  @ApiPropertyOptional({ description: "转入金额 micros 字符串" })
+  @IsOptional()
+  @Matches(/^\d{1,19}$/)
+  toAmountMicros?: string;
 
   @ApiPropertyOptional({ description: "HH:mm，识图草稿的交易时分（仅展示）" })
   @IsOptional()

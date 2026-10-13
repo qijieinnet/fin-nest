@@ -19,7 +19,7 @@ apps/
   web/      # Next.js Web（纯前端交互层，经同源 /api 代理调 API）
 packages/
   backend/  # api/worker 共享平台：Prisma 注入、事务封装、幂等、审计日志、background_jobs、通知推送、飞书客户端、异常过滤器、BigInt 序列化
-  db/       # Prisma schema + 迁移 + client（55 个模型）
+  db/       # Prisma schema + 迁移 + client（56 个模型）
   shared/   # 前后端共享常量/类型（金额单位等）
   config/   # 环境变量读取与校验（zod，见 §9 环境变量）
   eslint-config/ tsconfig/
@@ -38,7 +38,8 @@ Web 路由（`apps/web/src/app/`）：`/login` `/register` `/ledgers`（含 join
 
 - **认证与管理**：邮箱/账号+密码注册登录；首个注册用户自动成为系统管理员并获得默认账本；管理员可开关注册、禁用/启用用户、授予/撤销管理员（保底最后一名管理员）、管理 service token。改密吊销其它会话；禁用用户即时吊销全部会话。
 - **应用锁（启动验证）**：账号级设置（更多 → 系统设置），开关存 `users.app_lock_enabled`，开启后该用户在任何设备/浏览器整页加载都先弹锁定屏。iPhone/iPad 注册 WebAuthn 平台 passkey（Face ID / Touch ID），公钥与计数器存 `app_lock_credentials`，解锁走 `POST /auth/app-lock/unlock/options` 下发 challenge → 断言回传 `POST /auth/app-lock/unlock` 由服务端验签；其他设备或回退场景输入登录密码走 `POST /auth/password/verify`（按用户限速）。开关与凭证都在服务端，换浏览器登录后自动恢复，代价是解锁必须能连上 API（离线时两条路都走不通）。RP ID 取 `APP_LOCK_RP_ID` 或 `WEB_ORIGIN` 第一项的 hostname，改动会让已注册凭证全部失效。前端 localStorage 只留两份开关缓存（`fin-nest:app-lock-enabled`、`fin-nest:app-lock-skip-feishu`），供整页加载首帧同步判断是否上锁，真值以 `PublicUser.appLockEnabled` / `appLockSkipInFeishu` 为准。**飞书内免验证**（`users.app_lock_skip_in_feishu`，默认开启）：在飞书客户端 UA 下跳过这道锁——能打开页面就已经过了飞书自己的登录态与设备锁，再验一次是重复动作；只在飞书里生效，普通浏览器不受该开关影响。缓存缺失时按「免验证」处理（与设置项默认值一致），关掉了这个开关的用户由服务端兜底那一步补锁。定位仍是隐私锁，session token 本身不受影响。**会话过期时的解锁**：session TTL 30 天且不滑动续期，过期后 `/auth/password/verify` 只会回 401「请先登录」——此时锁屏不放行到登录页，而是拿本机记住的账号（`fin_nest_last_login`，登录/`/auth/me` 时写入，仅主动退出登录时清除）+ 用户刚输入的这个密码直接调 `POST /auth/login` 续期，成功后写回当前用户并解锁；本机没记住账号才撤锁放行到登录页，锁屏另有「退出登录」出口。
-- **账本协作**：账本 CRUD/软删（仅 owner 可删）；成员管理；邀请码（明文只返回一次，库存 hash，默认 1 天）→ 加入申请（pending/approved/rejected/cancelled）→ owner 审批入伙。账本级币种与金额小数位。
+- **账本协作**：账本 CRUD/软删（仅 owner 可删）；成员管理；邀请码（明文只返回一次，库存 hash，默认 1 天）→ 加入申请（pending/approved/rejected/cancelled）→ owner 审批入伙。账本级本币与金额小数位；本币在账本有任何账户 / 交易 / 规则 / 档案 / 计划 / 预算金额后锁定（`LEDGER_CURRENCY_LOCKED`）。
+- **多币种**（设计与取舍见 [`docs/MULTI_CURRENCY_PLAN.md`](MULTI_CURRENCY_PLAN.md)）：币种目录在 `packages/shared/src/currency.ts`（16 种），汇率 10 位定点 bigint。**交易 gross/effective 永远是本币**，所以统计/预算/计划/AI 统计不感知币种；外币那一侧存 `original_currency/original_amount_micros`，两侧都是外币且不同币种的转账另存 `to_currency/to_amount_micros`。**账户有币种**（`accounts.currency`，建账后不可改，往来账户恒为本币），余额与流水按账户币种记；一笔交易落到哪个账户用哪个金额由 `transaction-fx.ts` 的 `sideAmount` 唯一决定，对不上就 400。汇率由 `FxRateService`（`packages/backend/src/fx`）统一提供：取 `<= 日期` 最近一条（同日手填优先），缺失/过时且启用数据源时补取，两个外币之间经本币交叉；worker 每天刷新在用外币。净资产（`/stats/net-worth`、`/statistics`）按币种回放后用**各时点**汇率折算，缺汇率的币种不计入并通过 `missingCurrencies` 返回；`/accounts` 带回每个账户的 `baseBalanceMicros` 与 `fxRate`。自动记账规则/待确认/快捷模板存原币（本币是估算，生成或直接记账时按当日汇率重算），订阅有费用币种。汇率接口 `GET/PUT/DELETE /ledgers/:id/fx/...`，前端「更多 › 汇率」。账本 JSON 备份带账户币种、原币与本账本手填汇率，恢复时目标账本本币跟随备份；Excel 加了币种 / 原币列，金额表头去掉「(元)」且导入兼容旧表头。
 - **记账**：支出/收入/转账；一级/二级分类（交易存快照，改名不影响历史）；人员（默认「我」）；账户/子账户绑定（是否必填由记账设置决定）；可收回/需归还四方向关联（原始金额 vs 有效金额）；附件；关联保险/物品/订阅；备注；多条件筛选 + 汇总卡片。
 - **账户**：储蓄/信用/投资（money 类，支持子账户）+ 可收回/需归还（往来类）；money 账户自动生成「默认子账户」，未指定子账户的记账落到默认子账户，恒有 `账户余额 = Σ子账户余额`；余额调整（生成调整记录 + 流水，不静默覆盖）；账户流水；归档要求先清零；账户/子账户拖拽排序；**归属人员**（`accounts.person_id`，可空＝未指定，五类账户通用，子账户不设），净资产卡可按人切换（见 §3「统计」）。
 - **计划与预算**：计划（支出限额/收入目标、金额/次数、周/月/年/不重复、`match_rule`、命中明细、历史周期、预知能力、停止/恢复）；重复计划可开启「周期结束需确认」，周期结束后卡片停在结算期，成员确认才前进，并可为紧邻下一期单独覆盖额度。确认与逐期额度稀疏存于 `plan_periods`；改起始日/重复规则会清空旧周期行并重新锚定。**逐期额度只作用于被覆盖的那一期**，确认弹层的默认值取计划本身的额度而非本期生效额度（否则改一次就会被一路延续下去）。已停止的计划没有「下一期」可开始，不再进结算态、不计红点、接口也拒绝确认，但确认行保留——恢复后游标接着原处继续。「卡片停在哪一期」由 `resolveDisplayPeriod` 单点判定，卡片 / 红点 / 确认接口三方共用，别处再加判断会让口径漂移。预算独立建模（月度总预算 + 分类预算，滚动自然月，不存历史周期）。
@@ -93,6 +94,7 @@ AI 联网搜索：只支持**固定端点的搜索服务**（`SEARCH_PROVIDER` �
 4. **投资账户的本金/收益是派生的，不是存的**：投资账户改余额写 `revaluation` 流水（其余账户仍是 `adjustment`），于是 `累计收益 = Σ revaluation`、`本金 = 当前余额 − 收益`，账户与子账户同一套推导（`accounts/investment.ts`，随 `/accounts` 列表返回）。没有任何接口能写本金——手填的旧字段 `investment_cost_micros` 已在 51 号迁移删除，因为它与余额天然会脱节（转入了钱但忘了改本金，收益就凭空虚高）。投资账户改余额时由用户选归类——`revaluation`（市值涨跌，进收益）或 `principal`（本金存取，进本金，用于卖出到没记账的卡这类账本里没有对手方账户的场景；有对手方时仍应记转账）；两者可事后互相改判（`PATCH /accounts/:id/entries/:entryId`），**改判只换 entry_type、金额一动不动**，所以余额与净资产曲线不受影响，这也是全仓库唯一修改已有 `account_entries` 行的地方。**存量数据有两条归一化路径且口径必须一致**：51 号迁移处理库里的旧数据，`BackupService` 的恢复路径处理旧备份（信封没有版本号，迁移只跑一次救不了之后导入的文件）。两处都只补「建账那一刻」的盈亏差额（旧建账表单的「当前余额」和「投入本金」是两个独立输入框，填不同的数是刻意的），不补建账之后的偏差（那是本金没跟着更新，属于本次要修掉的失准）。
 5. **编辑/删除交易 = 反向流水**：不物理删除旧流水，`reverseEntries` 按账户+子账户净额写 `reversal` 分录（允许作用于已归档账户），再应用新影响。
 6. **有效金额口径**：`effective = gross - Σ关联金额`（关联合计不得超过原始金额）；列表/统计/预算/计划用有效金额，账户流水用原始金额。
+6a. **币种口径**：交易 gross/effective、关联金额、规则/模板的 `amount_micros`、计划/预算/保险/物品金额都是**账本本币**；账户余额、`account_entries`、`account_adjustments` 是**账户币种**。不同币种的数字绝不直接相加，必须经 `FxRateService` / `fxRate` 折算，缺汇率就不计入并显式提示。
 7. **幂等**：金额写操作（交易创建、账户创建/调整、子账户创建、快捷直接记账等）支持 `Idempotency-Key` 头；实现为「预留占位→执行→落响应」，keyHash 含 scope+userId，失败释放、5 分钟遗留占位可接管。
 8. **自动化不直接写账**：自动记账/快捷模板只能生成待确认或调用 `TransactionsService`；确认待确认用「带 status 条件的 updateMany」防并发双记。
 9. **事务**：财务多表写在 `DatabaseTransactionService.run` 内（涉及行锁的放宽 timeout 到 20s，批量导入 300s）；跨表初始化用 advisory lock 防注册竞态。
@@ -112,7 +114,7 @@ AI 联网搜索：只支持**固定端点的搜索服务**（`SEARCH_PROVIDER` �
 - 附件 MIME 白名单（图片/PDF/Office/视频），无 SVG/HTML 等可执行类型；上限 20MB。
 - CORS 仅放行 `WEB_ORIGIN`（正常流量走同源 /api 代理，不跨域）。
 
-## 6. 数据模型速览（55 个模型）
+## 6. 数据模型速览（56 个模型）
 
 | 分组       | 模型                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------- |
@@ -130,6 +132,7 @@ AI 联网搜索：只支持**固定端点的搜索服务**（`SEARCH_PROVIDER` �
 | 文件       | File, Attachment                                                                      |
 | 系统备份   | BackupSetting, BackupRecord, RestoreRecord                                            |
 | 平台       | AuditLog, BackgroundJob, IdempotencyKey, ImportJob                                    |
+| 多币种     | ExchangeRate（汇率；ledgerId 为空 = 数据源全局行，非空 = 账本手填）                   |
 
 表结构以 `packages/db/prisma/schema.prisma` 为准；迁移在 `packages/db/prisma/migrations/`（含 citext/唯一部分索引/check constraint 等 raw SQL）。**迁移是显式步骤**（`pnpm db:migrate` / `db:deploy`），API/Worker 启动不自动迁移。迁移目录用**两位补零**前缀（`00_`..），保证 Prisma 字典序应用顺序 == 依赖顺序；新增迁移沿用递增两位前缀。
 
@@ -184,6 +187,7 @@ api 与 worker 另外把宿主机的 `BACKUP_HOST_DIR`（默认 `./fin-nest-back
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI Agent（可选）：三项都配置才启用                                                                                |
 | `AI_PROTOCOL`                             | AI 上游协议：`chat`（`/chat/completions`，默认）/ `responses`（OpenAI Responses API）；不填按 `AI_BASE_URL` 末段推断 |
 | `AI_VISION_MODEL`                         | AI 识图模型（可选）：配置后聊天页可上传账单图片批量生成草稿；复用 AI 的 base url/key/协议，主模型能识图时填同名（如 DeepSeek `deepseek-flash`） |
+| `FX_PROVIDER` / `FX_BASE_URL`             | 汇率数据源：`frankfurter`（欧洲央行参考汇率，免 key，compose 默认）/ `none`（不联网，只能手填；代码默认）。`FX_BASE_URL` 可指自建 Frankfurter。请求 5 秒超时、失败只记日志，不影响记账 |
 | `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL` / `SEARCH_MAX_RESULTS` | AI 联网搜索（可选，需先启用 AI）：`bocha`（博查，国内直连）/ `tavily` 需 `SEARCH_API_KEY`；`searxng`（自建、零 key）需 `SEARCH_BASE_URL` 指向实例且实例开启 json 输出。配了一半会在启动日志 warn 并保持关闭 |
 | `NEXT_PUBLIC_API_BASE_URL`                | 浏览器 API 前缀（默认 `/api`，同源代理）                                                                         |
 | `API_INTERNAL_URL`                        | web 容器内转发 /api 的目标                                                                                       |
@@ -197,6 +201,7 @@ api 与 worker 另外把宿主机的 `BACKUP_HOST_DIR`（默认 `./fin-nest-back
 | `docs/DESKTOP_UI_CHECKLIST.md`    | 桌面端双端走查清单（WP-C3）            |
 | `docs/FEISHU_BOT_PLAN.md`         | 飞书机器人接入方案（**待实施**）       |
 | `docs/NOTIFY_CHANNELS_PLAN.md`    | 推送渠道整合（飞书 + Web Push）方案    |
+| `docs/MULTI_CURRENCY_PLAN.md`     | 多币种方案（字段口径、汇率、各入口）   |
 | `AGENTS.md` / `CLAUDE.md`         | AI 协作须知（精简硬规则 + 指向本文件） |
 | `README.md`                       | 快速上手（安装/脚本）                  |
 | `infra/docker/README.md`          | 部署细节                               |

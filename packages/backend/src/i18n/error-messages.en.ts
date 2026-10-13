@@ -262,4 +262,23 @@ export const EN_ERROR_TEMPLATES: Record<string, string> = {
   "数据库条目行数不一致：{0}（清单 {1}，实际 {2}）":
     "Row count mismatch for {0} (manifest {1}, actual {2})",
   "备份缺少账本 Excel：{0}": "Backup is missing ledger Excel: {0}",
+  // 多币种
+  交易币种必须是账本本币: "The transaction currency must be the ledger's base currency",
+  原币种不能是账本本币: "The original currency cannot be the ledger's base currency",
+  原币种和原币金额需要同时填写: "Original currency and original amount must be provided together",
+  "原币金额必须大于 0": "The original amount must be greater than 0",
+  "取不到汇率，无法折算本币金额，请先在汇率设置里补录":
+    "No exchange rate is available to convert to the base currency. Add one in exchange rate settings first.",
+  "只有转出、转入都是外币且币种不同的转账才需要填写转入金额":
+    "A received amount is only needed for transfers between two different foreign currencies",
+  往来账户只能使用账本本币: "Receivable/payable accounts must use the ledger's base currency",
+  本币不需要汇率: "The base currency does not need an exchange rate",
+  "汇率必须大于 0": "The exchange rate must be greater than 0",
+  汇率记录不存在: "Exchange rate record not found",
+  账户币种与记账币种不一致: "The account currency does not match the transaction currency",
+  "账本里已有账户或记账数据，本币不能再修改":
+    "The base currency can no longer be changed because the ledger already has accounts or records",
+  转入币种和转入金额需要同时填写: "Received currency and received amount must be provided together",
+  转账的原币种必须是转出或转入账户的币种:
+    "For a transfer, the original currency must be the currency of the source or destination account",
 };

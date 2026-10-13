@@ -5,6 +5,7 @@ import {
   currentTimeKey,
   DatabaseTransactionService,
   dateKey,
+  FxRateService,
   nextRunDate,
   parseDateOnly,
   PrismaService,
@@ -25,6 +26,7 @@ export class AutoSchedulerService {
     private readonly prisma: PrismaService,
     private readonly txs: DatabaseTransactionService,
     private readonly jobs: BackgroundJobsService,
+    private readonly fx: FxRateService,
   ) {}
 
   async generateDuePending(payload: AutoSchedulePayload = {}): Promise<{ created: number; createdIds: string[] }> {
@@ -58,11 +60,23 @@ export class AutoSchedulerService {
         await this.scheduleRunTimeWakeup(rule.ledgerId, rule.runTime!);
         continue;
       }
+      // 外币规则：事务外先查一次今天的汇率，过时就让数据源补取（事务里只查库、不联网）。
+      if (rule.originalCurrency) await this.warmRate(rule.ledgerId, rule.originalCurrency);
       const ids = await this.txs.run((tx) => this.generateForRule(tx, rule, ruleUntil));
       created += ids.length;
       createdIds.push(...ids);
     }
     return { created, createdIds };
+  }
+
+  private async warmRate(ledgerId: string, currency: string): Promise<void> {
+    const ledger = await this.prisma.client.ledger.findFirst({
+      where: { id: ledgerId },
+      select: { currency: true },
+    });
+    if (ledger && ledger.currency !== currency) {
+      await this.fx.findRate(ledgerId, currency, ledger.currency, todayKey());
+    }
   }
 
   /**
@@ -96,6 +110,13 @@ export class AutoSchedulerService {
     let cursor = rule.nextRunOn;
     let nextRun: Date | null = cursor;
     const createdIds: string[] = [];
+    const ledger = rule.originalCurrency
+      ? await tx.ledger.findFirstOrThrow({
+          where: { id: rule.ledgerId },
+          select: { currency: true, amountDecimalPlaces: true },
+        })
+      : null;
+    const baseCurrency = ledger?.currency ?? null;
     while (cursor && cursor <= until) {
       const periodKey = dateKey(cursor);
       const existing = await tx.autoPendingTransaction.findUnique({
@@ -104,11 +125,26 @@ export class AutoSchedulerService {
       if (!existing) {
         // 业务字段整份由 autoPendingDataFromRule 搬运（清单按 DMMF 现算），
         // 这里只补「哪个账本、哪条规则」——加字段时不需要再回来改这一处。
+        const data = autoPendingDataFromRule(rule, { periodKey, scheduledFor: cursor });
+        // 外币规则：规则里的本币金额只是估算，按这一期入账日的汇率重算（只查库，事务里不联网；
+        // 汇率由 worker 每日刷新）。取不到汇率就沿用估算值，用户确认前还能改。
+        if (rule.originalCurrency && rule.originalAmountMicros !== null && baseCurrency) {
+          const rateDay = periodKey > todayKey() ? todayKey() : periodKey;
+          const converted = await this.fx.convert(
+            rule.ledgerId,
+            rule.originalAmountMicros,
+            rule.originalCurrency,
+            baseCurrency,
+            rateDay,
+            { fetchIfStale: false, client: tx, decimalPlaces: ledger?.amountDecimalPlaces },
+          );
+          if (converted && converted.amountMicros > 0n) data.amountMicros = converted.amountMicros;
+        }
         const pending = await tx.autoPendingTransaction.create({
           data: {
             ledgerId: rule.ledgerId,
             autoRuleId: rule.id,
-            ...autoPendingDataFromRule(rule, { periodKey, scheduledFor: cursor }),
+            ...data,
           },
         });
         createdIds.push(pending.id);

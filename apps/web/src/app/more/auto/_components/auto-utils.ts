@@ -7,7 +7,7 @@ import type {
   TransactionType,
 } from "@/lib/api";
 import { accountSelectionId } from "@/lib/data/options";
-import { formatMicros } from "@/lib/money";
+import { formatAmountIn } from "@/lib/money";
 import { localized, msg, t } from "@/lib/i18n";
 
 export const REPEAT_OPTIONS: Array<{ label: string; value: AutoRepeatRule }> = localized([
@@ -78,11 +78,26 @@ export function upcomingDates(startDate: string, repeatRule: AutoRepeatRule, cou
   return dates;
 }
 
-export function signedAmountText(type: TransactionType, amountMicros: string): string {
+export function signedAmountText(
+  type: TransactionType,
+  amountMicros: string,
+  currency?: string | null,
+): string {
   const amount = BigInt(amountMicros || "0");
-  if (type === "transfer") return formatMicros(amount, { trimTrailingZeros: true });
-  const signed = type === "income" ? amount : -amount;
-  return formatMicros(signed, { trimTrailingZeros: true });
+  const signed = type === "transfer" || type === "income" ? amount : -amount;
+  return formatAmountIn(signed, currency, { trimTrailingZeros: true });
+}
+
+/** 规则的每期金额：外币规则显示原币（那才是每期实际要付的），本币规则显示本币。 */
+export function ruleAmountText(rule: {
+  type: TransactionType;
+  amountMicros: string;
+  originalCurrency?: string | null;
+  originalAmountMicros?: string | null;
+}): string {
+  return rule.originalCurrency && rule.originalAmountMicros
+    ? signedAmountText(rule.type, rule.originalAmountMicros, rule.originalCurrency)
+    : signedAmountText(rule.type, rule.amountMicros);
 }
 
 export function amountToneClass(type: TransactionType): string {

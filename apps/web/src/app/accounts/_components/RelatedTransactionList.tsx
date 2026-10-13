@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { LoadingState, TransactionGroup, TransactionRow } from "@/components/business";
+import {
+  LoadingState,
+  originalAmountProps,
+  TransactionGroup,
+  TransactionRow,
+} from "@/components/business";
 import type { Account, Transaction } from "@/lib/api";
 import {
   accountName,
@@ -101,6 +106,7 @@ export function RelatedTransactionList({
             <TransactionRow
               key={transaction.id}
               onClick={() => openBill(transaction.id)}
+              {...originalAmountProps(transaction)}
               {...rowProps(transaction, accounts, categoryLookup)}
             />
           ))}

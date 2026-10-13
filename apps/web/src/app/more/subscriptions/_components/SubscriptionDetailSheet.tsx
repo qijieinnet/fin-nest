@@ -246,9 +246,9 @@ export function SubscriptionDetailSheet({
       <section className="grid grid-cols-2 gap-3">
         <StatCell
           label={t("单期费用")}
-          value={subscription.priceMicros ? formatMoney(subscription.priceMicros) : "—"}
+          value={subscription.priceMicros ? formatMoney(subscription.priceMicros, subscription.currency) : "—"}
         />
-        <StatCell label={t("月均折算")} value={monthly > 0n ? formatMoney(monthly) : "—"} />
+        <StatCell label={t("月均折算")} value={monthly > 0n ? formatMoney(monthly, subscription.currency) : "—"} />
         <StatCell label={t("累计花费")} value={formatMoney(subscription.totalExpenseMicros)} />
         <StatCell label={t("下次续费")} value={renewalText} />
       </section>
@@ -263,7 +263,7 @@ export function SubscriptionDetailSheet({
           <DetailRow label={t("套餐")} value={subscription.planName || t("未填写")} />
           <DetailRow
             label={t("费用")}
-            value={subscription.priceMicros ? formatMoney(subscription.priceMicros) : t("未填写")}
+            value={subscription.priceMicros ? formatMoney(subscription.priceMicros, subscription.currency) : t("未填写")}
           />
           <DetailRow label={t("计费周期")} value={billingCycleLabel(subscription.billingCycle)} />
           <DetailRow label={t("续费方式")} value={subscription.autoRenew ? t("自动续费") : t("手动续费")} />

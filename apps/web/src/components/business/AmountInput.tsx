@@ -5,9 +5,12 @@ import { useMemo } from "react";
 import { cleanMoneyInput, groupMoneyDisplay, parseMoneyToMicros } from "@/lib/money";
 import { cn } from "@/lib/format/class-names";
 import { t } from "@/lib/i18n";
+import { useBaseCurrency } from "@/providers";
 
 type AmountInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> & {
   allowNegative?: boolean;
+  /** 金额前的币种符号；不传为账本本币。外币账户 / 外币记账时传对应符号。 */
+  currencySymbol?: string;
   decimalPlaces?: number;
   error?: string;
   label?: string;
@@ -26,6 +29,7 @@ type AmountInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" |
 export function AmountInput({
   allowNegative = false,
   className,
+  currencySymbol,
   decimalPlaces = 2,
   error,
   label = t("金额"),
@@ -42,6 +46,8 @@ export function AmountInput({
     [allowNegative, decimalPlaces, value],
   );
   const visibleError = error ?? (!parsed.ok && value ? parsed.error : undefined);
+  const baseCurrency = useBaseCurrency();
+  const symbol = currencySymbol ?? baseCurrency.symbol;
 
   if (readOnlyDisplay) {
     return (
@@ -52,7 +58,7 @@ export function AmountInput({
           onClick={onDisplayActivate}
           type="button"
         >
-          <span className="biz-amount__currency">¥</span>
+          <span className="biz-amount__currency">{symbol}</span>
           <span className={cn("biz-amount__input", !value && "biz-amount__input--placeholder")}>
             {value ? groupMoneyDisplay(value) : "0.00"}
           </span>
@@ -66,7 +72,7 @@ export function AmountInput({
     <label className={cn("biz-amount", className)}>
       <span className="ui-field__label">{label}</span>
       <span className={cn("biz-amount__shell", visibleError && "biz-amount__shell--error")}>
-        <span className="biz-amount__currency">¥</span>
+        <span className="biz-amount__currency">{symbol}</span>
         <input
           className="biz-amount__input"
           inputMode="decimal"

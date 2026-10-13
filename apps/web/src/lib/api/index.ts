@@ -57,6 +57,9 @@ export type { ApiErrorPayload } from "./errors";
 export type {
   Account,
   AccountEntry,
+  FxManualRate,
+  FxOverview,
+  FxQuote,
   AccountPerson,
   AccountType,
   AdminUser,

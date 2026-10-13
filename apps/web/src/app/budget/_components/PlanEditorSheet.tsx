@@ -19,7 +19,7 @@ import {
 import { useAccounts, useCategories, usePeople } from "@/lib/data/records";
 import { categoryOptions, personOptions } from "@/lib/data/options";
 import type { BusinessFilterValue } from "@/components/business";
-import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { parseLimitCount, REPEAT_OPTIONS, todayKey } from "./plan-utils";
@@ -339,7 +339,7 @@ export function PlanEditorSheet({ defaultKind = "expense", ledgerId, plan }: Pla
                 label={t("{value}金额", { value: kind === "income" ? t("收入") : t("支出") })}
                 onChange={(event) => setLimitAmount(event.target.value)}
                 placeholder="0"
-                prefix="¥"
+                prefix={baseCurrencySymbol()}
                 value={limitAmount}
               />
             ) : (

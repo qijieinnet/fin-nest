@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { MoneyText } from "@/components/business";
-import { formatMicros } from "@/lib/money";
+import { baseCurrencySymbol, formatMicros } from "@/lib/money";
 import { useNetWorthSeries } from "@/lib/data/records";
+import { routes } from "@/lib/route/routes";
+import { useAppRouter } from "@/lib/route/useAppRouter";
 import { useLedger } from "@/providers";
 import { COLOR_MONEY_NEGATIVE, COLOR_MONEY_POSITIVE } from "./account-utils";
 import { TrendRangeSelect, type TrendRange } from "./TrendRangeSelect";
@@ -46,6 +48,8 @@ type NetWorthOverviewCardProps = {
   assetsMicros: bigint;
   liabilitiesMicros: bigint;
   decimalPlaces: number;
+  /** 本地按 /accounts 折算时缺汇率的币种（与净资产曲线接口的口径合并展示）。 */
+  missingCurrencies?: string[];
 };
 
 export function NetWorthOverviewCard({
@@ -53,8 +57,10 @@ export function NetWorthOverviewCard({
   assetsMicros,
   liabilitiesMicros,
   decimalPlaces,
+  missingCurrencies = [],
 }: NetWorthOverviewCardProps) {
   const { ledgerId } = useLedger();
+  const router = useAppRouter();
   const [range, setRange] = useState<TrendRange>("month6");
   const seriesQuery = useNetWorthSeries(ledgerId, range);
   const points = (seriesQuery.data?.points ?? []).map((point) => ({
@@ -100,6 +106,10 @@ export function NetWorthOverviewCard({
   // 账单约定：净资产上升（正）红、下降（负）绿。
   const deltaColor = delta >= 0n ? COLOR_MONEY_POSITIVE : COLOR_MONEY_NEGATIVE;
   const hasTrend = points.length > 1;
+  // 缺汇率的外币账户没计入净资产：必须说出来，否则净资产会悄悄少一块。
+  const missing = [
+    ...new Set([...missingCurrencies, ...(seriesQuery.data?.missingCurrencies ?? [])]),
+  ];
 
   return (
     <section className="rounded-[18px] bg-[var(--color-bg-surface)] p-5 shadow-[var(--shadow-soft)]">
@@ -114,7 +124,7 @@ export function NetWorthOverviewCard({
             >
               {delta === 0n ? "" : delta > 0n ? "+" : "−"}
               {formatMicros(deltaAbs, {
-                currencySymbol: "¥",
+                currencySymbol: baseCurrencySymbol(),
                 decimalPlaces,
                 trimTrailingZeros: true,
               })}
@@ -126,7 +136,7 @@ export function NetWorthOverviewCard({
         </div>
       </div>
       <p className="mt-1.5 flex items-baseline gap-0.5">
-        <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">¥</span>
+        <span className="text-[22px] font-semibold text-[var(--color-text-primary)]">{baseCurrencySymbol()}</span>
         <span className="text-[40px] font-bold leading-none tracking-tight text-[var(--color-text-primary)] [font-variant-numeric:tabular-nums]">
           {formatMicros(netMicros, { currencySymbol: "", decimalPlaces })}
         </span>
@@ -151,6 +161,18 @@ export function NetWorthOverviewCard({
           />
         </div>
       </div>
+
+      {missing.length > 0 ? (
+        <button
+          className="mt-3 block w-full rounded-[10px] bg-[var(--color-control-fill-muted)] px-3 py-2 text-left text-[12.5px] leading-5 text-[var(--color-text-secondary)]"
+          onClick={() => router.push(routes.fxRates)}
+          type="button"
+        >
+          {t("缺少 {currencies} 的汇率，这些外币账户未计入净资产。去补录 ›", {
+            currencies: missing.join(t("、")),
+          })}
+        </button>
+      ) : null}
 
       <svg
         aria-busy={seriesQuery.isPending || undefined}

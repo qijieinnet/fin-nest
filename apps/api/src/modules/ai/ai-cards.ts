@@ -16,7 +16,16 @@ export type AiDraftFields = {
   occurredOn: string;
   /** 交易时分 HH:mm：仅识图时图上有时间才写，用于待确认列表展示与核对；交易本身只存日期。 */
   occurredTime?: string;
+  /** 账本本币（grossAmountMicros 的币种）。 */
   currency?: string;
+  /**
+   * 外币那一侧的原币金额（多币种方案 §2.1）：用户说的是 $10、或者落在美元账户上时才有；
+   * grossAmountMicros 是后端按汇率折出来的本币金额。to_* 只用于两侧都是外币且币种不同的转账。
+   */
+  originalCurrency?: string;
+  originalAmountMicros?: string;
+  toCurrency?: string;
+  toAmountMicros?: string;
   categoryId?: string;
   categoryName?: string;
   subcategoryId?: string;
@@ -85,6 +94,10 @@ export type AiAccountBalance = {
   /** 归属人员名字，未指定归属时缺省。 */
   person?: string | null;
   balanceMicros: string;
+  /** 账户币种；缺省（旧卡片）= 卡片的 currency。 */
+  currency?: string;
+  /** 外币账户按最新汇率折合的本币余额；取不到汇率为 null。 */
+  baseBalanceMicros?: string | null;
   /** 负债类账户（信用/需归还）：balanceMicros 记为正数的欠款，前端展示为负向。 */
   isLiability: boolean;
 };

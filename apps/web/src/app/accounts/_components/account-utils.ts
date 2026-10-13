@@ -1,5 +1,6 @@
 import type { Account, AccountType, InvestmentSummary, SubAccount } from "@/lib/api";
-import { formatMicros } from "@/lib/money";
+import { convertMicros, parseFxRate } from "@fin-nest/shared";
+import { baseCurrencyCode, formatAmountIn } from "@/lib/money";
 import { localized, msg, t } from "@/lib/i18n";
 
 export type AccountGroupMeta = {
@@ -119,21 +120,57 @@ export function accountNetWorthMicros(account: Account): bigint {
   );
 }
 
+/**
+ * 账户币种金额 → 本币：本币账户原样返回；外币账户用后端随 /accounts 带回的最新汇率折算，
+ * 取不到汇率返回 null（调用方不计入合计并提示缺汇率）——不同币种的数字绝不能直接相加。
+ */
+export function toBaseMicros(
+  account: Pick<Account, "currency" | "fxRate">,
+  micros: bigint,
+): bigint | null {
+  if (!account.currency || account.currency === baseCurrencyCode()) return micros;
+  const rate = account.fxRate ? parseFxRate(account.fxRate.rate) : null;
+  return rate ? convertMicros(micros, rate) : null;
+}
+
+/** 账户对净资产的贡献（本币，负债为正数的欠款）；缺汇率为 null。 */
+export function accountNetWorthBaseMicros(account: Account): bigint | null {
+  return toBaseMicros(account, accountNetWorthMicros(account));
+}
+
 export type NetWorthSummary = {
   assetsMicros: bigint;
   liabilitiesMicros: bigint;
   netMicros: bigint;
+  /** 有余额却取不到汇率、因而没计入的外币。 */
+  missingCurrencies: string[];
 };
 
+/** 当前净资产（本币）。外币账户按最新汇率折算，缺汇率的不计入并报出来。 */
 export function netWorthSummary(accounts: Account[]): NetWorthSummary {
   let assetsMicros = 0n;
   let liabilitiesMicros = 0n;
+  const missing = new Set<string>();
   for (const account of accounts) {
-    const total = accountNetWorthMicros(account);
+    const total = accountNetWorthBaseMicros(account);
+    if (total === null) {
+      if (accountNetWorthMicros(account) !== 0n) missing.add(account.currency);
+      continue;
+    }
     if (isLiability(account.type)) liabilitiesMicros += total;
     else assetsMicros += total;
   }
-  return { assetsMicros, liabilitiesMicros, netMicros: assetsMicros - liabilitiesMicros };
+  return {
+    assetsMicros,
+    liabilitiesMicros,
+    netMicros: assetsMicros - liabilitiesMicros,
+    missingCurrencies: [...missing],
+  };
+}
+
+/** 一组账户的合计（本币）。 */
+export function groupTotalBaseMicros(accounts: Account[]): bigint {
+  return accounts.reduce((sum, account) => sum + (accountNetWorthBaseMicros(account) ?? 0n), 0n);
 }
 
 /**
@@ -152,9 +189,16 @@ export function balanceLabel(type: string): string {
   return t("账户余额");
 }
 
-export function formatMoney(micros: bigint | string | null | undefined): string {
+/**
+ * 账户页金额：不带符号、去尾零。传 currency 且是外币时带外币符号——外币账户的余额
+ * 不带符号会被当成本币看。
+ */
+export function formatMoney(
+  micros: bigint | string | null | undefined,
+  currency?: string | null,
+): string {
   if (micros === null || micros === undefined) return "—";
-  return formatMicros(typeof micros === "bigint" ? micros.toString() : micros, {
+  return formatAmountIn(typeof micros === "bigint" ? micros.toString() : micros, currency, {
     trimTrailingZeros: true,
   });
 }
@@ -178,7 +222,10 @@ const LOSS_COLOR = "var(--color-accent-income)";
  * 从没进出过钱、也没更新过市值的空桶（本金和收益都为 0）返回空数组：
  * 一个恒为 0 的假指标比不显示更碍眼——投资账户的默认桶经常就是这种空桶。
  */
-export function investmentStatRows(investment: InvestmentSummary | null): StatRowData[] {
+export function investmentStatRows(
+  investment: InvestmentSummary | null,
+  currency?: string | null,
+): StatRowData[] {
   if (!investment) return [];
   const cost = BigInt(investment.costMicros);
   const gain = BigInt(investment.gainMicros);
@@ -187,8 +234,8 @@ export function investmentStatRows(investment: InvestmentSummary | null): StatRo
   const abs = gain < 0n ? -gain : gain;
   const color = gain >= 0n ? GAIN_COLOR : LOSS_COLOR;
   const rows: StatRowData[] = [
-    { label: t("本金"), value: formatMoney(cost) },
-    { label: t("收益"), value: `${gain >= 0n ? "+" : "−"}${formatMoney(abs)}`, color },
+    { label: t("本金"), value: formatMoney(cost, currency) },
+    { label: t("收益"), value: `${gain >= 0n ? "+" : "−"}${formatMoney(abs, currency)}`, color },
   ];
   // 本金 ≤ 0（清仓后收回多于投入，或全部资金都是收益）时收益率没有意义，不展示。
   if (cost > 0n) {
@@ -223,7 +270,7 @@ export function defaultHandoverHint(account: Account | null, subAccount: SubAcco
 export function accountSubtitle(account: Account): string {
   if (account.type === "credit") {
     return account.creditLimitMicros
-      ? t("额度 {value}", { value: formatMoney(account.creditLimitMicros) })
+      ? t("额度 {value}", { value: formatMoney(account.creditLimitMicros, account.currency) })
       : "";
   }
   if (account.type === "invest") {
@@ -232,7 +279,7 @@ export function accountSubtitle(account: Account): string {
     const abs = profit < 0n ? -profit : profit;
     return t("收益 {value}{value2}", {
       value: profit >= 0n ? "+" : "−",
-      value2: formatMoney(abs).replace("¥", ""),
+      value2: formatMoney(abs, account.currency),
     });
   }
   if (isLendAccount(account.type)) return account.counterparty ?? "";

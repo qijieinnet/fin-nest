@@ -1,13 +1,25 @@
-import { monthRange, PrismaService } from "@fin-nest/backend";
+import {
+  dateKey,
+  FxRateService,
+  FxRateTable,
+  monthRange,
+  PrismaService,
+  todayKey,
+} from "@fin-nest/backend";
 
 /**
  * 净资产计算的共享实现（`/stats` 与 `/statistics/overview` 复用同一套口径）：
  * 资产为正、负债（信用/需归还）为负；尊重账户级总开关、默认桶开关与命名子账户各自的开关。
+ *
+ * 多币种：账户余额与流水都是账户自己的币种。回放先按币种分别求「某时点的原币净资产」，
+ * 再乘以**该时点**的汇率折成本币（当前值用最新汇率）。取不到汇率的币种不计入，
+ * 并通过 `missingCurrencies` 告诉前端去补汇率——静默按 1:1 加进去会让净资产错得离谱。
  */
 
 type NetWorthAccount = {
   id: string;
   type: string;
+  currency: string;
   balanceMicros: bigint;
   includeInNetWorth: boolean;
   personId: string | null;
@@ -68,11 +80,17 @@ function entryNetWorthDeltaMicros(
 export type NetWorthResult = {
   netWorthMicros: string;
   netWorthTrend: { month: string; netWorthMicros: string }[];
+  /** 有外币账户却取不到汇率的币种（未计入净资产）。 */
+  missingCurrencies: string[];
 };
 
 type NetWorthContext = {
-  /** 各活跃账户对当前净资产的有符号贡献；按人拆分时只挑其中一部分求和。 */
+  /** 各活跃账户对当前净资产的有符号贡献（账户币种）；按人拆分时只挑其中一部分求和。 */
   currentByAccount: Map<string, bigint>;
+  baseCurrency: string;
+  rates: FxRateTable;
+  /** 有余额或流水、却取不到汇率的币种。 */
+  missingCurrencies: Set<string>;
   entries: NetWorthEntry[];
   accountsById: Map<string, NetWorthAccount>;
   subsById: Map<string, NetWorthSub>;
@@ -82,10 +100,12 @@ type NetWorthContext = {
 /** 拉取自 `since` 起的净资产上下文（当前净资产 + 流水 + 索引），供各种粒度重建复用。 */
 async function loadNetWorthContext(
   prisma: PrismaService,
+  fx: FxRateService,
   ledgerId: string,
   since: Date,
 ): Promise<NetWorthContext> {
-  const [activeAccounts, activeSubs, trendAccounts] = await Promise.all([
+  const [ledger, activeAccounts, activeSubs, trendAccounts] = await Promise.all([
+    prisma.client.ledger.findFirstOrThrow({ where: { id: ledgerId }, select: { currency: true } }),
     prisma.client.account.findMany({ where: { ledgerId, archivedAt: null } }),
     prisma.client.subAccount.findMany({ where: { ledgerId, archivedAt: null } }),
     // 趋势需保留归档账户，避免归档后过去每个时段被静默改写。
@@ -119,17 +139,67 @@ async function loadNetWorthContext(
     ]),
   );
 
-  return { currentByAccount, entries, accountsById, subsById, subsByAccount };
+  const baseCurrency = ledger.currency;
+  const foreign = new Set(
+    trendAccounts
+      .map((account) => account.currency)
+      .filter((currency) => currency !== baseCurrency),
+  );
+  const today = todayKey();
+  // 最新汇率：先按今天查一次，过时或缺失时让数据源补取（worker 没跑、刚建的外币账户）。
+  for (const currency of foreign) await fx.findRate(ledgerId, currency, baseCurrency, today);
+  // 曲线最早的点在 since 当天；区间内缺历史汇率时让数据源补一次。
+  const fresh = await fx.loadTable(ledgerId, foreign, baseCurrency, dateKey(since), today, {
+    backfill: true,
+  });
+  const missingCurrencies = new Set([...foreign].filter((currency) => !fresh.has(currency)));
+
+  return {
+    currentByAccount,
+    baseCurrency,
+    rates: fresh,
+    missingCurrencies,
+    entries,
+    accountsById,
+    subsById,
+    subsByAccount,
+  };
 }
 
-/** 当前净资产；传 accountIds 则只统计这些账户（按人拆分用）。 */
-function currentNetWorth(ctx: NetWorthContext, accountIds?: ReadonlySet<string>): bigint {
-  let sum = 0n;
+/** 按币种累加后，用 date 当天（或之前最近一天）的汇率折成本币；缺汇率的币种跳过。 */
+function sumToBase(ctx: NetWorthContext, byCurrency: Map<string, bigint>, date: string): bigint {
+  let total = 0n;
+  for (const [currency, micros] of byCurrency) {
+    if (micros === 0n) continue;
+    const converted = ctx.rates.convert(micros, currency, date);
+    // 该时点取不到汇率：不计入，并报给前端提示补录（结果里的 missingCurrencies 在所有点算完后才取）。
+    if (converted === null) ctx.missingCurrencies.add(currency);
+    else total += converted;
+  }
+  return total;
+}
+
+function addTo(map: Map<string, bigint>, currency: string, micros: bigint) {
+  map.set(currency, (map.get(currency) ?? 0n) + micros);
+}
+
+/** 当前净资产（各币种原币合计）；传 accountIds 则只统计这些账户（按人拆分用）。 */
+function currentByCurrency(
+  ctx: NetWorthContext,
+  accountIds?: ReadonlySet<string>,
+): Map<string, bigint> {
+  const sums = new Map<string, bigint>();
   for (const [accountId, micros] of ctx.currentByAccount) {
     if (accountIds && !accountIds.has(accountId)) continue;
-    sum += micros;
+    const account = ctx.accountsById.get(accountId);
+    addTo(sums, account?.currency ?? ctx.baseCurrency, micros);
   }
-  return sum;
+  return sums;
+}
+
+/** 当前净资产（本币，按最新汇率）。 */
+function currentNetWorth(ctx: NetWorthContext, accountIds?: ReadonlySet<string>): bigint {
+  return sumToBase(ctx, currentByCurrency(ctx, accountIds), todayKey());
 }
 
 /**
@@ -137,14 +207,16 @@ function currentNetWorth(ctx: NetWorthContext, accountIds?: ReadonlySet<string>)
  * 传 accountIds 则当前值与回放都只看这些账户，得到该子集的历史净资产。
  */
 function netWorthAt(ctx: NetWorthContext, end: Date, accountIds?: ReadonlySet<string>): bigint {
-  const futureDelta = ctx.entries.reduce(
-    (sum, entry) =>
-      entry.occurredAt >= end && (!accountIds || accountIds.has(entry.accountId))
-        ? sum + entryNetWorthDeltaMicros(entry, ctx.accountsById, ctx.subsById)
-        : sum,
-    0n,
-  );
-  return currentNetWorth(ctx, accountIds) - futureDelta;
+  const byCurrency = currentByCurrency(ctx, accountIds);
+  for (const entry of ctx.entries) {
+    if (entry.occurredAt < end || (accountIds && !accountIds.has(entry.accountId))) continue;
+    const currency = ctx.accountsById.get(entry.accountId)?.currency ?? ctx.baseCurrency;
+    addTo(byCurrency, currency, -entryNetWorthDeltaMicros(entry, ctx.accountsById, ctx.subsById));
+  }
+  // 时段的「结束边界」是下一段的起点，汇率取边界前一刻那天的（末段 end = now 就是今天）。
+  const day = dateKey(new Date(end.getTime() - 1));
+  const today = todayKey();
+  return sumToBase(ctx, byCurrency, day > today ? today : day);
 }
 
 /**
@@ -153,17 +225,22 @@ function netWorthAt(ctx: NetWorthContext, end: Date, accountIds?: ReadonlySet<st
  */
 export async function buildNetWorth(
   prisma: PrismaService,
+  fx: FxRateService,
   ledgerId: string,
   months: string[],
 ): Promise<NetWorthResult> {
   const firstMonth = months[0];
   const since = firstMonth ? monthRange(firstMonth).start : new Date(0);
-  const ctx = await loadNetWorthContext(prisma, ledgerId, since);
+  const ctx = await loadNetWorthContext(prisma, fx, ledgerId, since);
   const netWorthTrend = months.map((month) => ({
     month,
     netWorthMicros: netWorthAt(ctx, monthRange(month).end).toString(),
   }));
-  return { netWorthMicros: currentNetWorth(ctx).toString(), netWorthTrend };
+  return {
+    netWorthMicros: currentNetWorth(ctx).toString(),
+    netWorthTrend,
+    missingCurrencies: [...ctx.missingCurrencies],
+  };
 }
 
 export type NetWorthRange = "week" | "month1" | "month6" | "year";
@@ -189,6 +266,8 @@ export type NetWorthSeries = {
   points: NetWorthPoint[];
   /** 只有显式要求按人拆分（`?groupBy=person`）且账本里有账户设过归属时才非空。 */
   people: NetWorthPersonSeries[];
+  /** 有外币账户却取不到汇率的币种（未计入净资产）。 */
+  missingCurrencies: string[];
 };
 
 function startOfDay(date: Date): Date {
@@ -290,12 +369,13 @@ async function groupAccountsByPerson(
  */
 export async function buildNetWorthSeries(
   prisma: PrismaService,
+  fx: FxRateService,
   ledgerId: string,
   range: NetWorthRange,
   groupByPerson = false,
 ): Promise<NetWorthSeries> {
   const { boundaries, since } = rangeBoundaries(range, new Date());
-  const ctx = await loadNetWorthContext(prisma, ledgerId, since);
+  const ctx = await loadNetWorthContext(prisma, fx, ledgerId, since);
   const points = boundaries.map((boundary) => ({
     label: boundary.label,
     netWorthMicros: netWorthAt(ctx, boundary.end).toString(),
@@ -314,5 +394,10 @@ export async function buildNetWorthSeries(
       netWorthMicros: netWorthAt(ctx, boundary.end, group.accountIds).toString(),
     })),
   }));
-  return { netWorthMicros: currentNetWorth(ctx).toString(), points, people };
+  return {
+    netWorthMicros: currentNetWorth(ctx).toString(),
+    points,
+    people,
+    missingCurrencies: [...ctx.missingCurrencies],
+  };
 }

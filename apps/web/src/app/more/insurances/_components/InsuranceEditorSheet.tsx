@@ -26,7 +26,7 @@ import {
 import { useNotifyCandidates } from "@/lib/data/notifications";
 import { useAttachments, useInsurance } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { microsToInput, parseMoneyToMicros } from "@/lib/money";
+import { baseCurrencySymbol, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import {
@@ -556,7 +556,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
               label={t("保额")}
               onChange={(event) => setCoverage(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={baseCurrencySymbol()}
               value={coverage}
             />
             <span className="transaction-form__divider" />
@@ -565,7 +565,7 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
               label={freqIsSingle ? t("保费") : premiumFreq === "month" ? t("每月保费") : t("每年保费")}
               onChange={(event) => setPremium(event.target.value)}
               placeholder="0.00"
-              prefix="¥"
+              prefix={baseCurrencySymbol()}
               value={premium}
             />
             {!freqIsSingle ? (

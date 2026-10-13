@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
+import { CURRENCY_CODES } from "@fin-nest/shared";
+import { IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
 
 export class CreateLedgerDto {
   @ApiProperty({ example: "家庭账本" })
@@ -15,8 +16,7 @@ export class CreateLedgerDto {
 
   @ApiPropertyOptional({ example: "CNY" })
   @IsOptional()
-  @IsString()
-  @Matches(/^[A-Z]{3}$/)
+  @IsIn(CURRENCY_CODES)
   currency?: string;
 
   @ApiPropertyOptional({ minimum: 0, maximum: 6, description: "金额展示小数位数" })

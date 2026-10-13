@@ -1,6 +1,7 @@
 export { AppLockGate } from "./AppLockProvider";
 export { AppProviders } from "./AppProviders";
 export { AuthProvider, useAuth } from "./AuthProvider";
+export { useBaseCurrency } from "./BaseCurrency";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
 export { DecimalPlacesProvider, useDecimalPlaces } from "./DecimalPlacesProvider";
 export { I18nProvider, useI18n } from "./I18nProvider";

@@ -16,6 +16,7 @@
 2. ledger-scoped 的 service 方法第一行 `assertMember/assertOwner`；查询 where 必带 `ledgerId`。
 3. 账户余额只能经 `AccountsService.applyEntry` 变更（内部行锁 + 写 `account_entries`）；编辑/删除交易走反向流水，不物理删旧流水。
 4. 统计/预算/计划用有效金额（原始 − 关联合计），账户流水用原始金额。
+4a. 多币种：交易金额、关联、规则/模板、计划/预算永远是账本本币；账户余额与流水是账户币种。不同币种不直接相加，经 `FxRateService` 折算、缺汇率就不计入并提示（见 `docs/MULTI_CURRENCY_PLAN.md`）。
 5. 金额写操作保留 `Idempotency-Key` 支持；财务多表写放在 `DatabaseTransactionService.run` 事务内。
 6. 自动记账/快捷模板/AI 不直接写交易表，只生成待确认或调用 `TransactionsService`。
 7. 改后端响应结构时，同步更新前端手写契约 `apps/web/src/lib/api/contracts.ts`（无编译期保护，靠自查）。桌面端双 UI 后，改后端响应需同步检查三处：`contracts.ts` + 移动 UI + 桌面 UI。
@@ -26,3 +27,7 @@
 ## 验证
 
 改动后至少跑 `pnpm typecheck`；后端行为改动跑 `pnpm e2e:api`（需本地 DB：`pnpm infra:up && pnpm db:migrate`）。
+
+## 本机飞书桥接隔离
+
+本地开发、测试服务禁止复用 Claude/Codex 桥接机器人的 App ID 或 Secret，也不要从 `~/.feishu-claude-bridge/.env`、`~/.feishu-codex-bridge` 等桥接配置中提取凭据。桥接机器人必须由对应桥接服务独占长连接。启动本地 API、Worker 或测试基础设施前清除继承的 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`（例如 `env -u FEISHU_APP_ID -u FEISHU_APP_SECRET <启动命令>`）；测试飞书功能时使用单独的测试应用。

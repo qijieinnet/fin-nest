@@ -97,7 +97,7 @@ export function AccountsSortList({ groups, onReorder }: AccountsSortListProps) {
                       )}
                     >
                       {liability && total !== 0n ? "−" : ""}
-                      {formatMoney(total)}
+                      {formatMoney(total, account.currency)}
                     </span>
                     <DragHandle
                       label={t("拖动排序 {name}", { name: account.name })}

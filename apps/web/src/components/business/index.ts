@@ -9,6 +9,7 @@ export { BudgetProgress } from "./BudgetProgress";
 export { CategoryIcon } from "./CategoryIcon";
 export { CategoryPicker } from "./CategoryPicker";
 export { CategoryRingChart } from "./CategoryRingChart";
+export { CurrencySelect } from "./CurrencySelect";
 export { DateWheelPicker } from "./DateWheelPicker";
 export { EmptyState } from "./EmptyState";
 export { FilterBar } from "./FilterBar";
@@ -38,7 +39,7 @@ export { CategorySelectionList } from "./CategorySelectionList";
 export { RecoverablePayableEditor } from "./RecoverablePayableEditor";
 export { SearchableOptionSelectRow } from "./SearchableOptionSelectRow";
 export { SwipeActionRow } from "./SwipeActionRow";
-export { TransactionGroup, TransactionRow } from "./TransactionRow";
+export { originalAmountProps, TransactionGroup, TransactionRow } from "./TransactionRow";
 export {
   AccountSelectionList,
   AccountSelectRow,

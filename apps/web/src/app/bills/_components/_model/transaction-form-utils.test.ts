@@ -14,7 +14,10 @@ function account(overrides: Partial<Account> & Pick<Account, "id" | "type">): Ac
     icon: null,
     personId: null,
     person: null,
+    currency: "CNY",
     balanceMicros: "0",
+    baseBalanceMicros: null,
+    fxRate: null,
     includeInNetWorth: true,
     creditLimitMicros: null,
     investment: null,
@@ -82,8 +85,18 @@ describe("splitInitialRelations", () => {
   it("buckets primary vs linked kinds and converts amounts", () => {
     const buckets = splitInitialRelations(
       [
-        { id: "r1", accountId: "acc_recv", relationKind: "receivable_from_expense", amountMicros: "30000000" },
-        { id: "r2", accountId: "acc_pay", relationKind: "payable_from_expense", amountMicros: "20000000" },
+        {
+          id: "r1",
+          accountId: "acc_recv",
+          relationKind: "receivable_from_expense",
+          amountMicros: "30000000",
+        },
+        {
+          id: "r2",
+          accountId: "acc_pay",
+          relationKind: "payable_from_expense",
+          amountMicros: "20000000",
+        },
       ],
       2,
     );
@@ -145,7 +158,12 @@ describe("buildPayload transfer", () => {
   });
 
   it("requires both from and to", () => {
-    const result = buildPayload({ ...basePayload, type: "transfer", fromSel: "acc_cash", toSel: null });
+    const result = buildPayload({
+      ...basePayload,
+      type: "transfer",
+      fromSel: "acc_cash",
+      toSel: null,
+    });
     expect(result).toEqual({ ok: false, message: "转账需要选择转出和转入账户" });
   });
 });
@@ -194,7 +212,13 @@ describe("buildRelations", () => {
     });
     expect(result).toEqual({
       ok: true,
-      value: [{ accountId: "acc_recv", relationKind: "receivable_from_expense", amountMicros: "30000000" }],
+      value: [
+        {
+          accountId: "acc_recv",
+          relationKind: "receivable_from_expense",
+          amountMicros: "30000000",
+        },
+      ],
     });
   });
 

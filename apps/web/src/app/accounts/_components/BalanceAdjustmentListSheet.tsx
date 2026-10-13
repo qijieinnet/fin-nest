@@ -67,6 +67,7 @@ export function BalanceAdjustmentListSheet({
   const { showToast } = useToast();
   const entriesQuery = useAccountEntries(ledgerId, accountId);
   const accountsQuery = useAccounts(ledgerId);
+  const currency = (accountsQuery.data ?? []).find((item) => item.id === accountId)?.currency;
 
   const entries = useMemo(() => {
     const all = entriesQuery.data ?? [];
@@ -155,13 +156,13 @@ export function BalanceAdjustmentListSheet({
               <span>
                 {t("调整前")}{" "}
                 <strong className="font-semibold text-[var(--color-text-primary)]">
-                  {formatMoney(beforeMicros)}
+                  {formatMoney(beforeMicros, currency)}
                 </strong>
               </span>
               <span className="text-right">
                 {t("调整后")}{" "}
                 <strong className="font-semibold text-[var(--color-text-primary)]">
-                  {formatMoney(afterMicros)}
+                  {formatMoney(afterMicros, currency)}
                 </strong>
               </span>
             </div>

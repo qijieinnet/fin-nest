@@ -1,3 +1,8 @@
+import {
+  LEGACY_UPGRADE_TABLES,
+  type LegacyUpgradeContext,
+  upgradeLegacyRow,
+} from "./legacy-rows";
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -863,9 +868,20 @@ export class SystemBackupService {
     const delegate = this.delegate(table.delegate, client);
     let buffer: Array<Record<string, unknown>> = [];
     let total = 0;
+    // 旧备份缺新加的必填列（如 accounts.currency）时按迁移口径补齐，见 legacy-rows.ts。
+    const legacyContext: LegacyUpgradeContext | null = LEGACY_UPGRADE_TABLES.has(table.name)
+      ? {
+          ledgerCurrency: new Map(
+            (await client.ledger.findMany({ select: { id: true, currency: true } })).map(
+              (ledger) => [ledger.id, ledger.currency] as const,
+            ),
+          ),
+        }
+      : null;
     for await (const line of lines) {
       if (!line.trim()) continue;
       const row = decodeRow(line, table.valueKinds);
+      if (legacyContext) upgradeLegacyRow(table.name, row, legacyContext);
       if (table.name === "files") {
         // 备份时对象就已经不存在的行：连同它的附件引用一起丢掉，恢复一次即清干净。
         if (typeof row.id === "string" && droppedFileIds.has(row.id)) continue;

@@ -1055,13 +1055,22 @@ function purchaseAnalysisService() {
       { terminatedAt: null, priceMicros: 1_200_000_000n, billingCycle: "yearly" },
       { terminatedAt: null, priceMicros: 99_000_000n, billingCycle: "custom" },
       { terminatedAt: new Date(), priceMicros: 50_000_000n, billingCycle: "monthly" },
+      // 外币订阅：$10/月 按汇率 7 折成 ¥70；JPY 订阅取不到汇率，不计入并单独报数。
+      { terminatedAt: null, priceMicros: 10_000_000n, currency: "USD", billingCycle: "monthly" },
+      { terminatedAt: null, priceMicros: 500_000_000n, currency: "JPY", billingCycle: "monthly" },
     ],
+  };
+  service.fx = {
+    findRate: async (_ledgerId, from) =>
+      from === "USD" ? { rate: "7", rateScaled: 70_000_000_000n } : null,
   };
   service.accounts = {
     list: async () => [
       {
         id: "acc-1",
         type: "savings",
+        currency: "CNY",
+        fxRate: null,
         balanceMicros: 10_000_000_000n,
         includeInNetWorth: true,
         personId: null,
@@ -1070,7 +1079,31 @@ function purchaseAnalysisService() {
       {
         id: "acc-2",
         type: "credit",
+        currency: "CNY",
+        fxRate: null,
         balanceMicros: 2_000_000_000n,
+        includeInNetWorth: true,
+        personId: null,
+        subAccounts: [],
+      },
+      // 外币储蓄：$1000 按最新汇率 7 折 ¥7000，计入可动用现金与净资产。
+      {
+        id: "acc-3",
+        type: "savings",
+        currency: "USD",
+        fxRate: { rate: "7", date: "2026-09-01", source: "manual" },
+        balanceMicros: 1_000_000_000n,
+        includeInNetWorth: true,
+        personId: null,
+        subAccounts: [],
+      },
+      // 取不到汇率的外币账户不计入（绝不能把日元当人民币加进去）。
+      {
+        id: "acc-4",
+        type: "savings",
+        currency: "JPY",
+        fxRate: null,
+        balanceMicros: 100_000_000_000n,
         includeInNetWorth: true,
         personId: null,
         subAccounts: [],
@@ -1153,16 +1186,17 @@ test("purchase analysis aggregates the facts a spending decision needs", async (
   assert.equal(result.spending.avgMonthlySurplusYuan, "5000");
   assert.equal(result.spending.months.length, 6);
 
-  // 可动用现金只认储蓄账户；信用账户记为负债。
-  assert.equal(result.balances.cashYuan, "10000");
+  // 可动用现金只认储蓄账户（外币按汇率折算，缺汇率的不计）；信用账户记为负债。
+  assert.equal(result.balances.cashYuan, "17000");
   assert.equal(result.balances.totalLiabilitiesYuan, "2000");
-  assert.equal(result.balances.netWorthYuan, "8000");
+  assert.equal(result.balances.netWorthYuan, "15000");
 
   assert.equal(result.budget.remainingYuan, "4000");
-  // 订阅折成月成本：月付 30 + 年付 1200/12；自定义周期折不出来，只报个数。
-  assert.equal(result.fixedCommitments.monthlySubscriptionCostYuan, "130");
+  // 订阅折成月成本：月付 30 + 年付 1200/12 + $10×7；自定义周期折不出来，只报个数；缺汇率的外币单独计数。
+  assert.equal(result.fixedCommitments.monthlySubscriptionCostYuan, "200");
   assert.equal(result.fixedCommitments.customCycleCount, 1);
-  assert.equal(result.fixedCommitments.activeSubscriptions, 3);
+  assert.equal(result.fixedCommitments.foreignWithoutRateCount, 1);
+  assert.equal(result.fixedCommitments.activeSubscriptions, 5);
 
   // 档案缺失时的兜底线索：备注里提到关键词的历史支出。
   assert.equal(result.pastPurchases[0].amountYuan, "4000");
@@ -1911,4 +1945,241 @@ test("draft tool insists on the deepest category level but lets quick templates 
     { requireLeafCategory: false },
   );
   assert.equal(template.ok, true);
+});
+
+// ---------- 多币种草稿 ----------
+
+function fxDraftService(rates = { USD: 70_000_000_000n, HKD: 9_000_000_000n }) {
+  const service = Object.create(AiService.prototype);
+  service.prisma = { client: { transaction: { findFirst: async () => null } } };
+  // 1 外币 = rate 本币（10 位定点）；本币→外币按倒数算，与 FxRateService.convert 的口径一致（含按币种舍入）。
+  // 与 FxRateService.convert 同口径：只按 options.decimalPlaces（缺省 2 位）舍入一次。
+  const round = (value, places = 2) => {
+    const step = 10n ** BigInt(6 - places);
+    return ((value * 2n + step) / (step * 2n)) * step;
+  };
+  service.fx = {
+    convert: async (_ledgerId, amount, from, to, _date, options = {}) => {
+      if (from === to) return { amountMicros: amount };
+      let raw = null;
+      if (to === "CNY" && rates[from]) raw = (amount * rates[from] + 5_000_000_000n) / 10_000_000_000n;
+      else if (from === "CNY" && rates[to]) raw = (amount * 10_000_000_000n + rates[to] / 2n) / rates[to];
+      // 两个外币之间经本币交叉（FxRateService.findRate 的口径）。
+      else if (rates[from] && rates[to]) raw = (amount * rates[from] + rates[to] / 2n) / rates[to];
+      return raw === null ? null : { amountMicros: round(raw, options.decimalPlaces) };
+    },
+  };
+  return service;
+}
+
+function fxDraftContext() {
+  return draftContext({
+    accounts: [
+      {
+        id: "acc-cny",
+        name: "招行储蓄卡",
+        type: "savings",
+        currency: "CNY",
+        subAccounts: [{ id: "sub-cny", name: "默认", isDefault: true }],
+      },
+      {
+        id: "acc-usd",
+        name: "美元卡",
+        type: "savings",
+        currency: "USD",
+        subAccounts: [{ id: "sub-usd", name: "默认", isDefault: true }],
+      },
+      {
+        id: "acc-hkd",
+        name: "港币卡",
+        type: "savings",
+        currency: "HKD",
+        subAccounts: [{ id: "sub-hkd", name: "默认", isDefault: true }],
+      },
+    ],
+  });
+}
+
+test("foreign-currency draft keeps the original amount and converts to the base currency", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  const result = await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "10",
+      currency: "USD",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+      accountId: "acc-cny",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  assert.equal(result.ok, true);
+  const { draft } = cards[0];
+  // 本币信用卡刷 $10：卡按本币入账，原币留作记录。
+  assert.equal(draft.grossAmountMicros, "70000000");
+  assert.equal(draft.currency, "CNY");
+  assert.equal(draft.originalCurrency, "USD");
+  assert.equal(draft.originalAmountMicros, "10000000");
+  // 折算出来的本币不算「按账本精度四舍五入」。
+  assert.equal(cards[0].originalAmountMicros, undefined);
+});
+
+test("drafts on a foreign account default to the account currency", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "12.5",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+      accountId: "acc-usd",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  const { draft } = cards[0];
+  assert.equal(draft.originalCurrency, "USD");
+  assert.equal(draft.originalAmountMicros, "12500000");
+  assert.equal(draft.grossAmountMicros, "87500000");
+});
+
+test("base-currency amount on a foreign account is converted into the account currency", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "70",
+      currency: "CNY",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+      accountId: "acc-usd",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  const { draft } = cards[0];
+  assert.equal(draft.grossAmountMicros, "70000000");
+  assert.equal(draft.originalCurrency, "USD");
+  assert.equal(draft.originalAmountMicros, "10000000");
+});
+
+test("a foreign account refuses a third currency instead of guessing", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  const result = await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "100",
+      currency: "HKD",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+      accountId: "acc-usd",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.error, /USD 账户/);
+  assert.equal(cards.length, 0);
+});
+
+test("missing exchange rates fail loudly instead of booking 1:1", async () => {
+  const service = fxDraftService({});
+  const cards = [];
+  const result = await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "1000",
+      currency: "JPY",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.error, /汇率/);
+  assert.equal(cards.length, 0);
+});
+
+test("transfers between two foreign currencies carry both sides", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  const result = await service.runDraftTool(
+    {
+      type: "transfer",
+      amountYuan: "100",
+      occurredOn: "2026-09-30",
+      fromAccountId: "acc-usd",
+      toAccountId: "acc-hkd",
+    },
+    fxDraftContext(),
+    cards,
+  );
+  assert.equal(result.ok, true);
+  const { draft } = cards[0];
+  // $100 → ¥700 → HK$777.78（经本币交叉折算）
+  assert.equal(draft.originalCurrency, "USD");
+  assert.equal(draft.originalAmountMicros, "100000000");
+  assert.equal(draft.grossAmountMicros, "700000000");
+  assert.equal(draft.toCurrency, "HKD");
+  assert.equal(draft.toAmountMicros, "777780000");
+});
+
+test("required-account default that is a foreign account is converted before the draft is built", async () => {
+  const service = fxDraftService();
+  const cards = [];
+  const context = fxDraftContext();
+  context.acctRequired = true;
+  // 列表第一个资金账户是美元卡：模型没给账户时默认落到它上面，原币要按美元卡算。
+  context.accounts = [context.accounts[1], context.accounts[0], context.accounts[2]];
+  const result = await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "70",
+      currency: "CNY",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+    },
+    context,
+    cards,
+  );
+  assert.equal(result.ok, true);
+  const { draft } = cards[0];
+  assert.equal(draft.accountId, "acc-usd");
+  assert.equal(draft.grossAmountMicros, "70000000");
+  assert.equal(draft.originalCurrency, "USD");
+  assert.equal(draft.originalAmountMicros, "10000000");
+});
+
+test("foreign drafts round to the ledger's decimal places exactly once", async () => {
+  const service = fxDraftService({ USD: 74_990_000_000n });
+  const cards = [];
+  const context = fxDraftContext();
+  context.amountDecimalPlaces = 0;
+  const result = await service.runDraftTool(
+    {
+      type: "expense",
+      amountYuan: "1",
+      currency: "USD",
+      occurredOn: "2026-09-30",
+      categoryId: "cat-food",
+      subcategoryId: "sub-lunch",
+    },
+    context,
+    cards,
+  );
+  assert.equal(result.ok, true);
+  // $1 × 7.499 = 7.499 → 0 位小数账本直接舍入成 7；先按分舍入成 7.50 再舍入会错成 8。
+  assert.equal(cards[0].draft.grossAmountMicros, "7000000");
 });

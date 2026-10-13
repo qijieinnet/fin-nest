@@ -14,6 +14,7 @@ function subAccount(overrides: Partial<SubAccount>): SubAccount {
     sortOrder: 0,
     isDefault: false,
     investment: null,
+    baseBalanceMicros: "0",
     archivedAt: null,
     ...overrides,
   };
@@ -28,7 +29,10 @@ function account(overrides: Partial<Account>): Account {
     icon: null,
     personId: null,
     person: null,
+    currency: "CNY",
     balanceMicros: "0",
+    baseBalanceMicros: null,
+    fxRate: null,
     includeInNetWorth: true,
     creditLimitMicros: null,
     investment: null,

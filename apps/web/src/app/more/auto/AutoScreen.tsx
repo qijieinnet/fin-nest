@@ -36,7 +36,7 @@ import {
   categorySummary,
   formatDateLabel,
   REPEAT_LABELS,
-  signedAmountText,
+  ruleAmountText,
   transactionTypeLabel,
   transferAccountSummary,
 } from "./_components/auto-utils";
@@ -300,7 +300,7 @@ export function AutoScreen() {
             </span>
           </button>
           <span className={`shrink-0 text-[16px] font-semibold ${amountToneClass(rule.type)}`}>
-            {signedAmountText(rule.type, rule.amountMicros)}
+            {ruleAmountText(rule)}
           </span>
           <Switch
             checked={rule.enabled}

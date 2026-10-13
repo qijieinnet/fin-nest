@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { EmptyState, LoadingState, TransactionGroup, TransactionRow } from "@/components/business";
+import {
+  EmptyState,
+  LoadingState,
+  originalAmountProps,
+  TransactionGroup,
+  TransactionRow,
+} from "@/components/business";
 import type { Account, Plan, Transaction } from "@/lib/api";
 import {
   accountName,
@@ -112,6 +118,7 @@ export function PlanMatchedListSheet({
                 <TransactionRow
                   key={transaction.id}
                   onClick={() => openBill(transaction.id)}
+                  {...originalAmountProps(transaction)}
                   {...rowProps(transaction, accounts, categoryLookup)}
                 />
               ))}
