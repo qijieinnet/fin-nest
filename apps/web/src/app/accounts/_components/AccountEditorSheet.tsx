@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, X } from "lucide-react";
-import { type ChangeEvent, useRef, useState } from "react";
+import { type ChangeEvent, type ReactNode, useRef, useState } from "react";
 import { CurrencySelect, DateWheelPicker, InlineHint } from "@/components/business";
 import { EmojiPicker, IconButton, PopoverMenu } from "@/components/ui";
 import {
@@ -15,7 +15,6 @@ import {
 } from "@/lib/api";
 import { usePeople } from "@/lib/data/records";
 import { createClientId } from "@/lib/id/client-id";
-import { currencyLabel } from "@/lib/data/currency-names";
 import { currencyDecimals, currencySymbolOf, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useBaseCurrency, useDecimalPlaces, useSheetStack, useToast } from "@/providers";
@@ -33,7 +32,8 @@ function parseOptionalDay(value: string, label: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   const day = Number.parseInt(trimmed, 10);
-  if (!Number.isInteger(day) || day < 1 || day > 31) throw new Error(t("{label}需为 1-31 的整数", { label }));
+  if (!Number.isInteger(day) || day < 1 || day > 31)
+    throw new Error(t("{label}需为 1-31 的整数", { label }));
   return day;
 }
 
@@ -51,14 +51,17 @@ function FieldRow({
   maxLength?: number;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
-  prefix?: string;
+  /** 币种符号或 `<CurrencySelect variant="symbol" />`，紧跟在标签后（「费用 ¥」）。 */
+  prefix?: ReactNode;
   value: string;
 }) {
   return (
     <label className="account-form__field-row">
-      <span>{label}</span>
+      <span>
+        {label}
+        {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+      </span>
       <span className="account-form__input-wrap">
-        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
         <input
           className="account-form__input"
           inputMode={inputMode}
@@ -193,10 +196,26 @@ export function AccountEditorSheet({
   const decimalPlaces =
     currency === baseCurrency ? ledgerDecimalPlaces : currencyDecimals(currency);
   const symbol = currencySymbolOf(currency);
+  // 建账时币种在第一个金额行的标签旁选（不单独占一行）；之后不可改，只显示符号。
+  // 往来账户恒为本币、子账户随父账户，都不给选。
+  const canChooseCurrency = !isEditing && !isSubAccountMode && !isLendType;
+  const currencyPrefix: ReactNode = canChooseCurrency ? (
+    <CurrencySelect
+      align="start"
+      onChange={setCurrencyChoice}
+      pinned={baseCurrency}
+      value={currency}
+      variant="symbol"
+    />
+  ) : (
+    symbol
+  );
   const [name, setName] = useState(subAccount?.name ?? account?.name ?? "");
   const [icon, setIcon] = useState(subAccount?.icon ?? account?.icon ?? "💵");
   const [balance, setBalance] = useState("");
-  const [creditLimit, setCreditLimit] = useState(() => microsToInput(account?.creditLimitMicros, { decimalPlaces }));
+  const [creditLimit, setCreditLimit] = useState(() =>
+    microsToInput(account?.creditLimitMicros, { decimalPlaces }),
+  );
   const [counterparty, setCounterparty] = useState(account?.counterparty ?? "");
   const [dueDate, setDueDate] = useState(account?.dueDate?.slice(0, 10) ?? "");
   const [billDay, setBillDay] = useState(account?.billDay ? String(account.billDay) : "");
@@ -209,9 +228,13 @@ export function AccountEditorSheet({
   const peopleQuery = usePeople(isSubAccountMode ? null : ledgerId);
   const people = peopleQuery.data ?? [];
   // 归档的人员不在 /people 里，但账户可能还挂着它：补一条进选项，免得显示成「未指定」。
-  const personOptions = account?.person && !people.some((item) => item.id === account.person!.id)
-    ? [...people, { id: account.person.id, name: t("{name}（已归档）", { name: account.person.name }) }]
-    : people;
+  const personOptions =
+    account?.person && !people.some((item) => item.id === account.person!.id)
+      ? [
+          ...people,
+          { id: account.person.id, name: t("{name}（已归档）", { name: account.person.name }) },
+        ]
+      : people;
   const selectedPersonName =
     personOptions.find((item) => item.id === personId)?.name ?? t("未指定");
 
@@ -249,7 +272,9 @@ export function AccountEditorSheet({
         );
       }
 
-      const limitParsed = creditLimit.trim() ? parseMoneyToMicros(creditLimit, { decimalPlaces }) : null;
+      const limitParsed = creditLimit.trim()
+        ? parseMoneyToMicros(creditLimit, { decimalPlaces })
+        : null;
       if (limitParsed && !limitParsed.ok) throw new Error(t("信用额度格式不正确"));
       const billDayValue = parseOptionalDay(billDay, t("账单日"));
       const repayDayValue = parseOptionalDay(repayDay, t("还款日"));
@@ -386,33 +411,6 @@ export function AccountEditorSheet({
           </div>
         ) : null}
 
-        {!isSubAccountMode && !isLendType ? (
-          <div className="transaction-form__card">
-            <div className="account-form__select-row">
-              <span>
-                {t("币种")}
-                {isEditing ? (
-                  <InlineHint text={t("账户币种创建后不可修改")} />
-                ) : (
-                  <InlineHint
-                    text={t("余额与流水都按账户币种记；外币账户在净资产、合计里按汇率折成本币")}
-                  />
-                )}
-              </span>
-              {isEditing ? (
-                <strong>{currencyLabel(currency)}</strong>
-              ) : (
-                <CurrencySelect
-                  onChange={setCurrencyChoice}
-                  pinned={baseCurrency}
-                  value={currency}
-                  variant="row"
-                />
-              )}
-            </div>
-          </div>
-        ) : null}
-
         <div className="transaction-form__card">
           <button
             className="account-form__select-row"
@@ -489,7 +487,7 @@ export function AccountEditorSheet({
               label={t("信用额度")}
               onChange={(event) => setCreditLimit(event.target.value)}
               placeholder="0.00"
-              prefix={symbol}
+              prefix={currencyPrefix}
               value={creditLimit}
             />
             {!isEditing ? (
@@ -524,7 +522,7 @@ export function AccountEditorSheet({
                 label={t("当前余额")}
                 onChange={(event) => setBalance(event.target.value)}
                 placeholder="0.00"
-                prefix={symbol}
+                prefix={currencyPrefix}
                 value={balance}
               />
             </div>
@@ -542,7 +540,7 @@ export function AccountEditorSheet({
               label={t("当前市值")}
               onChange={(event) => setBalance(event.target.value)}
               placeholder="0.00"
-              prefix={symbol}
+              prefix={currencyPrefix}
               value={balance}
             />
           </div>

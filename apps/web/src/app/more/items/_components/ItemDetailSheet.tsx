@@ -18,13 +18,13 @@ import {
   formatAverage,
   formatDateLabel,
   formatFixed1,
-  formatMoney,
   itemStatus,
   itemTotalMicros,
   itemUsedMonths,
   itemUsedYears,
   typeGlyph,
 } from "./item-utils";
+import { formatDetailMoney } from "@/lib/money";
 import { t } from "@/lib/i18n";
 
 type ItemDetailSheetProps = {
@@ -166,8 +166,11 @@ export function ItemDetailSheet({
       </div>
 
       <section className="grid grid-cols-2 gap-3">
-        <StatCell label={t("总价")} value={formatMoney(total)} />
-        <StatCell label={t("购买价格")} value={formatMoney(item.purchasePriceMicros ?? "0")} />
+        <StatCell label={t("总价")} value={formatDetailMoney(total)} />
+        <StatCell
+          label={t("购买价格")}
+          value={formatDetailMoney(item.purchasePriceMicros ?? "0")}
+        />
         <StatCell
           label={t("平均年价")}
           value={hasPurchaseDate ? formatAverage(total, usedYears) : "—"}
@@ -184,7 +187,10 @@ export function ItemDetailSheet({
         </h3>
         <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailRow label={t("类型")} value={typeName} />
-          <DetailRow label={t("购买价格")} value={formatMoney(item.purchasePriceMicros ?? "0")} />
+          <DetailRow
+            label={t("购买价格")}
+            value={formatDetailMoney(item.purchasePriceMicros ?? "0")}
+          />
           <DetailRow
             label={t("购买日期")}
             value={hasPurchaseDate ? formatDateLabel(item.purchaseDate) : t("未设置")}
@@ -201,7 +207,7 @@ export function ItemDetailSheet({
             label={t("使用月份")}
             value={hasPurchaseDate ? t("{value} 个月", { value: formatFixed1(usedMonths) }) : "—"}
           />
-          <DetailRow label={t("耗材总价")} value={formatMoney(consumables)} />
+          <DetailRow label={t("耗材总价")} value={formatDetailMoney(consumables)} />
           <DetailRow
             label={t("到达年限")}
             value={
@@ -213,7 +219,7 @@ export function ItemDetailSheet({
               <DetailRow label={t("报废日期")} value={formatDateLabel(item.scrapDate)} />
               <DetailRow
                 label={t("出售价格")}
-                value={item.sellPriceMicros ? formatMoney(item.sellPriceMicros) : t("未填写")}
+                value={item.sellPriceMicros ? formatDetailMoney(item.sellPriceMicros) : t("未填写")}
               />
             </>
           ) : null}
@@ -253,7 +259,7 @@ export function ItemDetailSheet({
             {t("关联记账")}
             {linked.length > 0 ? (
               <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
-                {t("耗材 {value}", { value: formatMoney(consumables) })}
+                {t("耗材 {value}", { value: formatDetailMoney(consumables) })}
               </span>
             ) : null}
           </span>

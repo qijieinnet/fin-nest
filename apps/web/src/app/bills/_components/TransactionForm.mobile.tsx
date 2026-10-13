@@ -17,7 +17,7 @@ import type { TransactionType } from "@/lib/api";
 import { orderedFieldsForType } from "@/lib/data/field-order";
 import { currencySymbolOf } from "@/lib/money";
 import { AmountKeypad } from "./AmountKeypad";
-import { TransactionFxFields } from "./TransactionFxFields";
+import { EntryCurrencySelect, TransactionFxFields } from "./TransactionFxFields";
 import { useKeypadTabs } from "./AmountKeypad/useKeypadTabs";
 import { quickEntrySeed } from "./_model/quick-entry-handoff";
 import {
@@ -211,7 +211,7 @@ export function TransactionFormMobile({
         />
         <AmountInput
           className="transaction-form__amount"
-          currencySymbol={currencySymbolOf(model.fx.entryCurrency)}
+          currencySlot={<EntryCurrencySelect fx={model.fx} />}
           decimalPlaces={model.fx.entryDecimalPlaces}
           label={t("金额")}
           onDisplayActivate={() => onKeypadOpenChange?.(true)}

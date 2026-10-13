@@ -71,7 +71,9 @@ export function PlanPeriodConfirmSheet({
   // 默认取计划本身的额度，不是本期生效额度：逐期覆盖是「只改这一期」的意思，
   // 若拿本期的覆盖值当下期默认值，用户改一次就会被无声地一路延续下去。
   const [nextLimit, setNextLimit] = useState(() =>
-    isCount ? String(plan.limitCount ?? "") : microsToInput(plan.limitAmountMicros, { decimalPlaces }),
+    isCount
+      ? String(plan.limitCount ?? "")
+      : microsToInput(plan.limitAmountMicros, { decimalPlaces }),
   );
 
   const target = isCount
@@ -94,7 +96,8 @@ export function PlanPeriodConfirmSheet({
         body.nextLimitCount = count;
       } else {
         const parsed = parseMoneyToMicros(nextLimit, { decimalPlaces });
-        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n) throw new Error(t("请填写大于 0 的金额"));
+        if (!parsed.ok || BigInt(parsed.amountMicros) <= 0n)
+          throw new Error(t("请填写大于 0 的金额"));
         body.nextLimitAmountMicros = parsed.amountMicros;
       }
       return apiRequest<PlanPeriodConfirmResult>(
@@ -112,7 +115,9 @@ export function PlanPeriodConfirmSheet({
         tone: "success",
         message:
           result.remainingPendingCount > 0
-            ? t("已确认，还有 {remainingPendingCount} 期待确认", { remainingPendingCount: result.remainingPendingCount })
+            ? t("已确认，还有 {remainingPendingCount} 期待确认", {
+                remainingPendingCount: result.remainingPendingCount,
+              })
             : t("已确认，开始新周期"),
       });
       pop();
@@ -142,7 +147,9 @@ export function PlanPeriodConfirmSheet({
       <div className="grid shrink-0 grid-cols-[var(--space-control-height)_1fr_var(--space-control-height)] items-center gap-3 pb-2">
         <IconButton icon={<X size={24} strokeWidth={2.3} />} label={t("关闭")} onClick={pop} />
         <h2 className="text-center text-base font-semibold text-[var(--color-text-primary)]">
-          {t("确认 {value}", { value: periodShortLabel(plan, progress.start, progress.endExclusive) })}
+          {t("确认 {value}", {
+            value: periodShortLabel(plan, progress.start, progress.endExclusive),
+          })}
         </h2>
         <IconButton
           disabled={confirm.isPending}
@@ -179,23 +186,36 @@ export function PlanPeriodConfirmSheet({
             label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
           >
             <div className="transaction-form__note-row">
-              <span>{t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}</span>
+              <span>
+                {t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
+                {isCount ? null : (
+                  <span className="account-form__label-currency">{baseCurrencySymbol()}</span>
+                )}
+              </span>
               <Input
                 aria-label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
                 inputMode={isCount ? "numeric" : "decimal"}
                 label={t("下期{value}", { value: isIncome ? t("目标") : t("限额") })}
                 onChange={(event) => setNextLimit(event.target.value)}
                 placeholder="0"
-                prefix={isCount ? undefined : baseCurrencySymbol()}
                 value={nextLimit}
               />
             </div>
           </FieldCard>
 
           <p className="px-1 text-xs leading-5 text-[var(--color-text-muted)]">
-            {t("{value}本期之后补记的账仍按记账日期算回本期，不受确认影响。{value2}", { value: nextPeriod
-              ? t("确认后卡片进入 {value}（该期已记 {recordedCount} 笔）。", { value: periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive), recordedCount: nextPeriod.recordedCount })
-              : t("确认后卡片进入下一期。"), value2: pendingConfirmCount > 1 ? t("确认后还有 {value} 期待确认。", { value: pendingConfirmCount - 1 }) : "" })}
+            {t("{value}本期之后补记的账仍按记账日期算回本期，不受确认影响。{value2}", {
+              value: nextPeriod
+                ? t("确认后卡片进入 {value}（该期已记 {recordedCount} 笔）。", {
+                    value: periodShortLabel(plan, nextPeriod.start, nextPeriod.endExclusive),
+                    recordedCount: nextPeriod.recordedCount,
+                  })
+                : t("确认后卡片进入下一期。"),
+              value2:
+                pendingConfirmCount > 1
+                  ? t("确认后还有 {value} 期待确认。", { value: pendingConfirmCount - 1 })
+                  : "",
+            })}
           </p>
         </div>
       </div>

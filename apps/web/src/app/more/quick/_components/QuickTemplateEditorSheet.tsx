@@ -48,7 +48,12 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { insuranceTypeMeta } from "../../insurances/_components/insurance-utils";
 import { localized, msg, t } from "@/lib/i18n";
-import { OriginalAmountCard, useOriginalAmount } from "../../_components/OriginalAmountCard";
+import {
+  OriginalAmountCard,
+  OriginalCurrencySelect,
+  originalAmountInputProps,
+  useOriginalAmount,
+} from "../../_components/OriginalAmountCard";
 
 type QuickTemplateEditorSheetProps = {
   accounts: Account[];
@@ -146,7 +151,9 @@ export function QuickTemplateEditorSheet({
 
   const [type, setType] = useState<TransactionType>(template?.type ?? "expense");
   const [name, setName] = useState(template?.name ?? "");
-  const [amount, setAmount] = useState(() => microsToInput(template?.amountMicros, { decimalPlaces }));
+  const [amount, setAmount] = useState(() =>
+    microsToInput(template?.amountMicros, { decimalPlaces }),
+  );
   // 外币模板：直接记账时按当天汇率把原币折成本币，上面的本币金额只是估算 / 兜底。
   const original = useOriginalAmount({
     initialCurrency: template?.originalCurrency,
@@ -176,7 +183,10 @@ export function QuickTemplateEditorSheet({
   const [personId, setPersonId] = useState<string | null>(template?.personId ?? null);
   const [note, setNote] = useState(template?.note ?? "");
   const initialBuckets = useMemo(
-    () => splitRelationBuckets(template?.relationPayload, (micros) => microsToInput(micros, { decimalPlaces })),
+    () =>
+      splitRelationBuckets(template?.relationPayload, (micros) =>
+        microsToInput(micros, { decimalPlaces }),
+      ),
     [decimalPlaces, template?.relationPayload],
   );
   const [primaryRelationsEnabled, setPrimaryRelationsEnabled] = useState(
@@ -410,7 +420,10 @@ export function QuickTemplateEditorSheet({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.quickTemplates(ledgerId) });
-      showToast({ tone: "success", message: isEditing ? t("快速记账已更新") : t("快速记账已创建") });
+      showToast({
+        tone: "success",
+        message: isEditing ? t("快速记账已更新") : t("快速记账已创建"),
+      });
       pop();
     },
   });
@@ -545,16 +558,15 @@ export function QuickTemplateEditorSheet({
               "transaction-form__amount",
               type === "income" && "transaction-form__amount--income",
             )}
-            decimalPlaces={decimalPlaces}
-            label={original.foreign ? t("预设金额（本币估算）") : t("预设金额")}
-            onValueChange={setAmount}
+            currencySlot={<OriginalCurrencySelect state={original} />}
+            label={t("预设金额")}
             placeholder={t("留空则记账时再输入")}
-            value={amount}
+            {...originalAmountInputProps(original, { value: amount, onValueChange: setAmount })}
           />
         </div>
 
         <div className="transaction-form__cards">
-          <OriginalAmountCard state={original} />
+          <OriginalAmountCard baseValue={amount} onBaseValueChange={setAmount} state={original} />
           <FieldCard className="transaction-form__note-card" label={t("名称")}>
             <div className="transaction-form__note-row">
               <span>{t("名称")}</span>
@@ -576,7 +588,10 @@ export function QuickTemplateEditorSheet({
               <RecoverablePayableEditor
                 accountOptions={primaryRelationOpts}
                 addLabel={t("添加{primaryRelationLabel}项目", { primaryRelationLabel })}
-                emptyText={t("还没有{primaryRelationLabel}项目，可到「账户」中先添加{primaryRelationLabel2}账户", { primaryRelationLabel, primaryRelationLabel2: primaryRelationLabel })}
+                emptyText={t(
+                  "还没有{primaryRelationLabel}项目，可到「账户」中先添加{primaryRelationLabel2}账户",
+                  { primaryRelationLabel, primaryRelationLabel2: primaryRelationLabel },
+                )}
                 enabled={primaryRelationsEnabled}
                 hint={
                   type === "income"
@@ -592,7 +607,10 @@ export function QuickTemplateEditorSheet({
               <RecoverablePayableEditor
                 accountOptions={linkedRelationOpts}
                 addLabel={t("添加{linkedRelationLabel}项目", { linkedRelationLabel })}
-                emptyText={t("还没有{linkedRelationLabel}项目，可到「账户」中先添加{linkedRelationLabel2}账户", { linkedRelationLabel, linkedRelationLabel2: linkedRelationLabel })}
+                emptyText={t(
+                  "还没有{linkedRelationLabel}项目，可到「账户」中先添加{linkedRelationLabel2}账户",
+                  { linkedRelationLabel, linkedRelationLabel2: linkedRelationLabel },
+                )}
                 enabled={linkedRelationsEnabled}
                 hint={
                   type === "income"

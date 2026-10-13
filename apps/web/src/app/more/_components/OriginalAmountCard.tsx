@@ -3,20 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { convertMicros, parseFxRate } from "@fin-nest/shared";
 import { CurrencySelect } from "@/components/business";
+import { currencyLabel } from "@/lib/data/currency-names";
 import { useFxRate } from "@/lib/data/fx";
-import {
-  cleanMoneyInput,
-  currencyDecimals,
-  currencySymbolOf,
-  microsToInput,
-  parseMoneyToMicros,
-} from "@/lib/money";
+import { cleanMoneyInput, currencyDecimals, microsToInput, parseMoneyToMicros } from "@/lib/money";
 import { useBaseCurrency, useDecimalPlaces } from "@/providers";
 import { t } from "@/lib/i18n";
 import { todayKey } from "../../bills/_components/_model/transaction-form-utils";
 
 /**
- * 自动记账规则 / 快捷模板的「外币」部分：选币种 + 填原币金额。
+ * 自动记账规则 / 快捷模板的「外币」部分。
+ * 币种在主金额前的符号上切换（OriginalCurrencySelect）：选了外币后主金额就是原币金额，
+ * 本币金额退到下方「折合本币」一行（OriginalAmountCard）。
  * 规则与模板里的本币金额只是估算，生成待确认 / 直接记账时后端会按当天汇率重算；
  * 这里按今天的汇率把估算值顺手填好（用户改过本币金额后就不再覆盖）。
  */
@@ -81,7 +78,11 @@ export function useOriginalAmount({
     baseCurrency,
     currency,
     setCurrency: (value: string) => {
+      if (value === currency) return;
       markInteraction();
+      // 主金额输入框随币种切换绑定的值：数字跟着走，免得先填数再改币种时输入「消失」。
+      if (!foreign && value !== baseCurrency && !amount) setAmount(baseValue);
+      if (foreign && value === baseCurrency && amount) onSuggestBase(amount);
       setCurrency(value);
     },
     amount,
@@ -91,6 +92,7 @@ export function useOriginalAmount({
     },
     foreign,
     decimalPlaces,
+    ledgerDecimalPlaces,
     rateText: rateQuery.data
       ? t("今日汇率 1 {currency} = {rate} {base}", {
           currency,
@@ -115,40 +117,64 @@ export function useOriginalAmount({
 
 export type OriginalAmountState = ReturnType<typeof useOriginalAmount>;
 
-export function OriginalAmountCard({ state }: { state: OriginalAmountState }) {
+/** 主金额前的币种切换。 */
+export function OriginalCurrencySelect({ state }: { state: OriginalAmountState }) {
+  return (
+    <CurrencySelect
+      align="start"
+      onChange={state.setCurrency}
+      pinned={state.baseCurrency}
+      value={state.currency}
+      variant="symbol"
+    />
+  );
+}
+
+/**
+ * 主金额 props：外币时绑定原币金额，本币时绑定本币金额（编辑器自己的 amount 状态）。
+ */
+export function originalAmountInputProps(
+  state: OriginalAmountState,
+  base: { value: string; onValueChange: (value: string) => void },
+) {
+  return state.foreign
+    ? {
+        decimalPlaces: state.decimalPlaces,
+        onValueChange: state.setAmount,
+        value: state.amount,
+      }
+    : { decimalPlaces: state.ledgerDecimalPlaces, ...base };
+}
+
+/** 外币时的「折合本币」估算行；本币时不渲染。 */
+export function OriginalAmountCard({
+  baseValue,
+  onBaseValueChange,
+  state,
+}: {
+  baseValue: string;
+  onBaseValueChange: (value: string) => void;
+  state: OriginalAmountState;
+}) {
+  if (!state.foreign) return null;
   return (
     <div className="transaction-form__card">
-      <div className="account-form__select-row">
-        <span>{t("币种")}</span>
-        <CurrencySelect
-          onChange={state.setCurrency}
-          pinned={state.baseCurrency}
-          value={state.currency}
-          variant="row"
-        />
-      </div>
-      {state.foreign ? (
-        <>
-          <span className="transaction-form__divider" />
-          <label className="account-form__field-row">
-            <span>{t("原币金额")}</span>
-            <span className="account-form__input-wrap">
-              <span className="account-form__prefix">{currencySymbolOf(state.currency)}</span>
-              <input
-                className="account-form__input"
-                inputMode="decimal"
-                onChange={(event) => state.setAmount(event.target.value)}
-                placeholder={state.decimalPlaces > 0 ? "0.00" : "0"}
-                value={state.amount}
-              />
-            </span>
-          </label>
-          <p className="px-4 pb-3 text-[12px] leading-4 text-[var(--color-text-muted)]">
-            {t("上方金额是本币估算；每次记账按当天汇率重算。")}
-            {state.rateText ? ` ${state.rateText}` : ""}
-          </p>
-        </>
-      ) : null}
+      <label className="account-form__field-row">
+        <span>{t("折合 {currency}", { currency: currencyLabel(state.baseCurrency) })}</span>
+        <span className="account-form__input-wrap">
+          <input
+            className="account-form__input"
+            inputMode="decimal"
+            onChange={(event) => onBaseValueChange(cleanMoneyInput(event.target.value))}
+            placeholder={state.ledgerDecimalPlaces > 0 ? "0.00" : "0"}
+            value={baseValue}
+          />
+        </span>
+      </label>
+      <p className="px-4 pb-3 text-[12px] leading-4 text-[var(--color-text-muted)]">
+        {t("本币金额是估算；每次记账按当天汇率重算。")}
+        {state.rateText ? ` ${state.rateText}` : ""}
+      </p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Settings2, X } from "lucide-react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AttachmentPicker,
@@ -31,11 +31,7 @@ import { currencyDecimals, currencySymbolOf, microsToInput, parseMoneyToMicros }
 import { queryKeys } from "@/lib/query/query-keys";
 import { useBaseCurrency, useDecimalPlaces, useSheetStack, useToast } from "@/providers";
 import { SubscriptionCategoryManagerSheet } from "./SubscriptionCategoryManagerSheet";
-import {
-  BILLING_CYCLE_OPTIONS,
-  categoryGlyph,
-  todayKey,
-} from "./subscription-utils";
+import { BILLING_CYCLE_OPTIONS, categoryGlyph, todayKey } from "./subscription-utils";
 import { localized, msg, t } from "@/lib/i18n";
 
 type SubscriptionEditorSheetProps = {
@@ -78,14 +74,17 @@ function FieldRow({
   maxLength?: number;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
-  prefix?: string;
+  /** 币种符号或 `<CurrencySelect variant="symbol" />`，紧跟在标签后（「费用 ¥」）。 */
+  prefix?: ReactNode;
   value: string;
 }) {
   return (
     <label className="account-form__field-row">
-      <span>{label}</span>
+      <span>
+        {label}
+        {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+      </span>
       <span className="account-form__input-wrap">
-        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
         <input
           className="account-form__input"
           inputMode={inputMode}
@@ -505,19 +504,17 @@ export function SubscriptionEditorSheet({
               label={t("费用")}
               onChange={(event) => setPrice(event.target.value)}
               placeholder="0.00"
-              prefix={currencySymbolOf(currency)}
+              prefix={
+                <CurrencySelect
+                  align="start"
+                  onChange={setCurrency}
+                  pinned={baseCurrency}
+                  value={currency}
+                  variant="symbol"
+                />
+              }
               value={price}
             />
-            <span className="transaction-form__divider" />
-            <div className="account-form__select-row">
-              <span>{t("币种")}</span>
-              <CurrencySelect
-                onChange={setCurrency}
-                pinned={baseCurrency}
-                value={currency}
-                variant="row"
-              />
-            </div>
             <span className="transaction-form__divider" />
             <SelectRow
               label={t("计费周期")}

@@ -100,7 +100,7 @@ export function AutoRuleDetailSheet({
           </span>
         </span>
         <strong className={`shrink-0 text-[21px] ${amountToneClass(rule.type)}`}>
-          {ruleAmountText(rule)}
+          {ruleAmountText(rule, { withSymbol: true })}
         </strong>
       </div>
 

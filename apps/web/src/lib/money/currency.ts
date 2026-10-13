@@ -5,7 +5,12 @@ import {
   DEFAULT_CURRENCY,
   isSupportedCurrency,
 } from "@fin-nest/shared";
-import { baseCurrencyCode, formatMicros, type FormatMoneyOptions } from "./format-money";
+import {
+  baseCurrencyCode,
+  baseCurrencySymbol,
+  formatMicros,
+  type FormatMoneyOptions,
+} from "./format-money";
 
 export { CURRENCIES, currencyDecimals, currencySymbolOf, DEFAULT_CURRENCY, isSupportedCurrency };
 
@@ -38,4 +43,19 @@ export function formatAmountIn(
   // 外币的符号与小数位都由币种决定，调用方给的（面向本币的）两项一律不用。
   const { showPositiveSign, trimTrailingZeros } = options;
   return formatCurrencyMicros(amount, currency, { showPositiveSign, trimTrailingZeros });
+}
+
+/**
+ * 详情页里单独展示的金额：本币也带符号、去尾零。列表为了紧凑本币不带符号，
+ * 但详情页的「费用 140」这种单个金额不带符号就看不出是哪种货币。空值显示「—」。
+ */
+export function formatDetailMoney(
+  amount: bigint | string | null | undefined,
+  currency?: string | null,
+): string {
+  if (amount === null || amount === undefined || amount === "") return "—";
+  return formatAmountIn(amount, currency, {
+    currencySymbol: baseCurrencySymbol(),
+    trimTrailingZeros: true,
+  });
 }

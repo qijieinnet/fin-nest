@@ -19,5 +19,6 @@ export {
   DEFAULT_CURRENCY,
   formatAmountIn,
   formatCurrencyMicros,
+  formatDetailMoney,
   isSupportedCurrency,
 } from "./currency";

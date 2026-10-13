@@ -9,9 +9,8 @@ import {
 import { AccountSelect, CategorySelect, DesktopDatePicker, FormSelect } from "@/components/desktop";
 import { Tabs } from "@/components/ui";
 import type { TransactionType } from "@/lib/api";
-import { currencySymbolOf } from "@/lib/money";
 import { TYPE_TAB_ITEMS } from "./_model/transaction-form-utils";
-import { TransactionFxFields } from "./TransactionFxFields";
+import { EntryCurrencySelect, TransactionFxFields } from "./TransactionFxFields";
 import type { TransactionFormRenderProps } from "./_model/useTransactionFormModel";
 import { t } from "@/lib/i18n";
 
@@ -60,7 +59,7 @@ export function TransactionFormDesktop({
         />
         <AmountInput
           className="transaction-form__amount"
-          currencySymbol={currencySymbolOf(model.fx.entryCurrency)}
+          currencySlot={<EntryCurrencySelect fx={model.fx} />}
           decimalPlaces={model.fx.entryDecimalPlaces}
           label={t("金额")}
           onValueChange={model.setAmount}

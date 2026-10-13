@@ -24,12 +24,12 @@ import { InsuranceEditorSheet } from "./InsuranceEditorSheet";
 import { InsuranceTransactionList } from "./InsuranceTransactionList";
 import {
   formatDateLabel,
-  formatMoney,
   insuranceStatus,
   insuranceTypeMeta,
   premiumFreqLabel,
   renewalLabel,
 } from "./insurance-utils";
+import { formatDetailMoney } from "@/lib/money";
 import { t } from "@/lib/i18n";
 
 type InsuranceDetailSheetProps = {
@@ -105,9 +105,18 @@ export function InsuranceDetailSheet({
       }),
     onSuccess: async () => {
       await invalidateInsurance();
-      const expired = insuranceStatus(detailQuery.data ?? { terminatedAt: null, endDate: null, remindLeadValue: null, remindLeadUnit: null }).key === "expired";
+      const expired =
+        insuranceStatus(
+          detailQuery.data ?? {
+            terminatedAt: null,
+            endDate: null,
+            remindLeadValue: null,
+            remindLeadUnit: null,
+          },
+        ).key === "expired";
       showToast({ tone: "success", message: expired ? t("保单已归档") : t("已终止续保") });
-    },  });
+    },
+  });
 
   const resumeInternal = useMutation({
     mutationFn: () =>
@@ -115,7 +124,8 @@ export function InsuranceDetailSheet({
     onSuccess: async () => {
       await invalidateInsurance();
       showToast({ tone: "success", message: t("已恢复保单") });
-    },  });
+    },
+  });
 
   const removeInternal = useMutation({
     mutationFn: () =>
@@ -124,7 +134,8 @@ export function InsuranceDetailSheet({
       await invalidateInsurance();
       showToast({ tone: "success", message: t("保单已删除") });
       pop();
-    },  });
+    },
+  });
 
   if (!insurance) {
     return <LoadingState rows={5} title={t("加载保单")} />;
@@ -189,7 +200,8 @@ export function InsuranceDetailSheet({
     .map((entry) => people.find((person) => person.id === entry.personId)?.name)
     .filter(Boolean)
     .join(t("、"));
-  const premiumLabel = insurance.premiumFreq === "single" ? t("保费") : premiumFreqLabel(insurance.premiumFreq);
+  const premiumLabel =
+    insurance.premiumFreq === "single" ? t("保费") : premiumFreqLabel(insurance.premiumFreq);
   const linked = insurance.linkedTransactions;
   const attachmentItems = attachmentRecords.map((attachment) => toAttachmentItem(attachment));
 
@@ -200,13 +212,17 @@ export function InsuranceDetailSheet({
           {meta.icon}
         </span>
         <span className="min-w-0 flex-1">
-          <strong className="block truncate text-[19px] text-[var(--color-text-primary)]">{insurance.name}</strong>
+          <strong className="block truncate text-[19px] text-[var(--color-text-primary)]">
+            {insurance.name}
+          </strong>
           <span className="mt-0.5 block truncate text-[13px] text-[var(--color-text-muted)]">
             {meta.label}
             {insurance.insurer ? ` · ${insurance.insurer}` : ""}
           </span>
         </span>
-        <span className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[status.tone]}`}>
+        <span
+          className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[status.tone]}`}
+        >
           {status.label}
         </span>
       </div>
@@ -215,19 +231,23 @@ export function InsuranceDetailSheet({
         <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4">
           <div className="text-[11px] font-medium text-[var(--color-text-muted)]">{t("保额")}</div>
           <div className="mt-1 text-[18px] font-bold text-[var(--color-text-primary)]">
-            {formatMoney(insurance.coverageMicros)}
+            {formatDetailMoney(insurance.coverageMicros)}
           </div>
         </div>
         <div className="rounded-[16px] bg-[var(--color-bg-surface)] p-4">
-          <div className="text-[11px] font-medium text-[var(--color-text-muted)]">{premiumLabel}</div>
+          <div className="text-[11px] font-medium text-[var(--color-text-muted)]">
+            {premiumLabel}
+          </div>
           <div className="mt-1 text-[18px] font-bold text-[var(--color-text-primary)]">
-            {formatMoney(insurance.premiumMicros)}
+            {formatDetailMoney(insurance.premiumMicros)}
           </div>
         </div>
       </section>
 
       <section>
-        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{t("保单信息")}</h3>
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+          {t("保单信息")}
+        </h3>
         <div className="overflow-hidden rounded-[16px] bg-[var(--color-bg-surface)]">
           <DetailRow label={t("险种")} value={meta.label} />
           {insurance.insurer ? <DetailRow label={t("保险公司")} value={insurance.insurer} /> : null}
@@ -238,7 +258,12 @@ export function InsuranceDetailSheet({
           ) : null}
           {insurance.policyNo ? <DetailRow label={t("保单号")} value={insurance.policyNo} /> : null}
           <DetailRow label={t("缴费周期")} value={premiumFreqLabel(insurance.premiumFreq)} />
-          {insurance.periods ? <DetailRow label={t("缴费期数")} value={t("{periods} 期", { periods: insurance.periods })} /> : null}
+          {insurance.periods ? (
+            <DetailRow
+              label={t("缴费期数")}
+              value={t("{periods} 期", { periods: insurance.periods })}
+            />
+          ) : null}
           {insurance.premiumFreq !== "single" && insurance.renewal ? (
             <DetailRow label={t("续费")} value={renewalLabel(insurance.renewal)} />
           ) : null}
@@ -250,7 +275,11 @@ export function InsuranceDetailSheet({
             insurance.reminders.map((reminder, index) => (
               <DetailRow
                 key={reminder.id}
-                label={insurance.reminders.length > 1 ? t("第 {value} 次提醒", { value: index + 1 }) : t("到期提醒")}
+                label={
+                  insurance.reminders.length > 1
+                    ? t("第 {value} 次提醒", { value: index + 1 })
+                    : t("到期提醒")
+                }
                 value={reminderSummary(reminder)}
               />
             ))
@@ -260,7 +289,9 @@ export function InsuranceDetailSheet({
 
       {insurance.coverageDesc ? (
         <section>
-          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{t("保障内容")}</h3>
+          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+            {t("保障内容")}
+          </h3>
           <div className="whitespace-pre-wrap rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {insurance.coverageDesc}
           </div>
@@ -269,7 +300,9 @@ export function InsuranceDetailSheet({
 
       {insurance.note ? (
         <section>
-          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{t("备注")}</h3>
+          <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+            {t("备注")}
+          </h3>
           <div className="rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-[15px] leading-6 text-[var(--color-text-primary)]">
             {insurance.note}
           </div>
@@ -286,7 +319,9 @@ export function InsuranceDetailSheet({
       ) : null}
 
       <section>
-        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">{t("关联记账")}</h3>
+        <h3 className="mb-2 px-1 text-[13px] font-semibold text-[var(--color-text-muted)]">
+          {t("关联记账")}
+        </h3>
         <button
           className="flex min-h-[52px] w-full items-center gap-3 rounded-[16px] bg-[var(--color-bg-surface)] px-4 py-3 text-left"
           onClick={openLinkedTransactions}
@@ -296,7 +331,7 @@ export function InsuranceDetailSheet({
             {t("关联记账")}
             {linked.length > 0 ? (
               <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
-                {t("合计 {value}", { value: formatMoney(insurance.totalExpenseMicros) })}
+                {t("合计 {value}", { value: formatDetailMoney(insurance.totalExpenseMicros) })}
               </span>
             ) : null}
           </span>
@@ -324,7 +359,11 @@ export function InsuranceDetailSheet({
             onClick={handleTerminate}
             variant="secondary"
           >
-            {terminatingState ? t("处理中…") : status.key === "expired" ? t("归档保单") : t("终止续保")}
+            {terminatingState
+              ? t("处理中…")
+              : status.key === "expired"
+                ? t("归档保单")
+                : t("终止续保")}
           </Button>
         ) : null}
         {insurance.terminatedAt ? (

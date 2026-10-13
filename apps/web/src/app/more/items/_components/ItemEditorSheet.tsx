@@ -61,9 +61,11 @@ function FieldRow({
 }) {
   return (
     <label className="account-form__field-row">
-      <span>{label}</span>
+      <span>
+        {label}
+        {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+      </span>
       <span className="account-form__input-wrap">
-        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
         <input
           className="account-form__input"
           inputMode={inputMode}
@@ -232,7 +234,9 @@ export function ItemEditorSheet({ item, ledgerId, onSaved }: ItemEditorSheetProp
 
   const save = useMutation({
     mutationFn: async () => {
-      const priceParsed = purchasePrice.trim() ? parseMoneyToMicros(purchasePrice, { decimalPlaces }) : null;
+      const priceParsed = purchasePrice.trim()
+        ? parseMoneyToMicros(purchasePrice, { decimalPlaces })
+        : null;
       if (priceParsed && !priceParsed.ok) throw new Error(t("购买价格格式不正确"));
       const expectedTrimmed = expectedYears.trim();
       if (expectedTrimmed && !/^\d+(\.\d{1,2})?$/.test(expectedTrimmed)) {

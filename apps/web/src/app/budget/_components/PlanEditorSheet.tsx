@@ -66,7 +66,10 @@ function TextFieldRow({
   return (
     <FieldCard className="transaction-form__note-card" label={label}>
       <div className="transaction-form__note-row">
-        <span>{label}</span>
+        <span>
+          {label}
+          {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+        </span>
         <Input
           aria-label={label}
           inputMode={inputMode}
@@ -74,7 +77,6 @@ function TextFieldRow({
           maxLength={maxLength}
           onChange={onChange}
           placeholder={placeholder}
-          prefix={prefix}
           value={value}
         />
       </div>

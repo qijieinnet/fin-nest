@@ -18,8 +18,12 @@ type CurrencySelectProps = {
   disabled?: boolean;
   align?: "start" | "end";
   className?: string;
-  /** 按钮里显示完整名称（建账本/建账户时）还是只显示代码（金额旁的小胶囊）。 */
-  variant?: "pill" | "row";
+  /**
+   * - row：完整名称（建账本 / 汇率这类「币种本身就是主角」的表单行）；
+   * - pill：代码小胶囊；
+   * - symbol：只显示符号 + 小箭头，嵌在金额输入框前面，字号颜色跟随外层（金额前缀）。
+   */
+  variant?: "pill" | "row" | "symbol";
 };
 
 /**
@@ -57,15 +61,27 @@ export function CurrencySelect({
         className={cn(
           variant === "pill"
             ? "flex items-center gap-0.5 rounded-full bg-[var(--color-control-fill-muted)] px-2.5 py-1 text-[12.5px] font-semibold text-[var(--color-text-secondary)]"
-            : "flex items-center gap-1 text-[15px] text-[var(--color-text-secondary)]",
+            : variant === "symbol"
+              ? "flex items-center gap-[0.12em] bg-transparent p-0 [font:inherit] [color:inherit]"
+              : "flex items-center gap-1 text-[15px] text-[var(--color-text-secondary)]",
           locked && "cursor-default",
         )}
         disabled={locked}
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
-        {variant === "row" && CURRENCY_NAMES[value] ? `${CURRENCY_NAMES[value]} ${value}` : value}
-        {locked ? null : <ChevronDown className="text-[var(--color-text-muted)]" size={13} />}
+        {variant === "symbol"
+          ? currencySymbolOf(value).trim()
+          : variant === "row" && CURRENCY_NAMES[value]
+            ? `${CURRENCY_NAMES[value]} ${value}`
+            : value}
+        {locked ? null : (
+          <ChevronDown
+            className="shrink-0 text-[var(--color-text-muted)]"
+            size={variant === "symbol" ? "0.55em" : 13}
+            strokeWidth={variant === "symbol" ? 2.6 : 2}
+          />
+        )}
       </button>
       <PopoverMenu align={align} groups={groups} onOpenChange={setOpen} open={open} />
     </div>

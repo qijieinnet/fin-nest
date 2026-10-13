@@ -1,6 +1,6 @@
 "use client";
 
-import type { InputHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { useMemo } from "react";
 import { cleanMoneyInput, groupMoneyDisplay, parseMoneyToMicros } from "@/lib/money";
 import { cn } from "@/lib/format/class-names";
@@ -11,6 +11,11 @@ type AmountInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" |
   allowNegative?: boolean;
   /** 金额前的币种符号；不传为账本本币。外币账户 / 外币记账时传对应符号。 */
   currencySymbol?: string;
+  /**
+   * 替换金额前的币种符号，通常放 `<CurrencySelect variant="symbol" />`：
+   * 币种不再单独占一行表单，点金额前的符号就能切换。
+   */
+  currencySlot?: ReactNode;
   decimalPlaces?: number;
   error?: string;
   label?: string;
@@ -29,6 +34,7 @@ type AmountInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" |
 export function AmountInput({
   allowNegative = false,
   className,
+  currencySlot,
   currencySymbol,
   decimalPlaces = 2,
   error,
@@ -48,6 +54,25 @@ export function AmountInput({
   const visibleError = error ?? (!parsed.ok && value ? parsed.error : undefined);
   const baseCurrency = useBaseCurrency();
   const symbol = currencySymbol ?? baseCurrency.symbol;
+  const currency = <span className="biz-amount__currency">{currencySlot ?? symbol}</span>;
+
+  if (readOnlyDisplay && currencySlot) {
+    // 币种可点时外壳不能整个是 <button>（按钮不能嵌套），只把数字部分做成唤起键盘的按钮。
+    return (
+      <div className={cn("biz-amount", className)}>
+        <span className="ui-field__label">{label}</span>
+        <div className={cn("biz-amount__shell", visibleError && "biz-amount__shell--error")}>
+          {currency}
+          <button className="biz-amount__display" onClick={onDisplayActivate} type="button">
+            <span className={cn("biz-amount__input", !value && "biz-amount__input--placeholder")}>
+              {value ? groupMoneyDisplay(value) : "0.00"}
+            </span>
+          </button>
+        </div>
+        {visibleError ? <span className="ui-field__error">{visibleError}</span> : null}
+      </div>
+    );
+  }
 
   if (readOnlyDisplay) {
     return (
@@ -72,7 +97,7 @@ export function AmountInput({
     <label className={cn("biz-amount", className)}>
       <span className="ui-field__label">{label}</span>
       <span className={cn("biz-amount__shell", visibleError && "biz-amount__shell--error")}>
-        <span className="biz-amount__currency">{symbol}</span>
+        {currency}
         <input
           className="biz-amount__input"
           inputMode="decimal"
@@ -98,4 +123,3 @@ export function AmountInput({
     </label>
   );
 }
-

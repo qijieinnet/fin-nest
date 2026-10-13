@@ -30,11 +30,11 @@ import {
   categoryGlyph,
   daysUntilRenewal,
   formatDateLabel,
-  formatMoney,
   monthlyCostMicros,
   renewalReminderDue,
   subscriptionStatus,
 } from "./subscription-utils";
+import { formatDetailMoney } from "@/lib/money";
 import { t } from "@/lib/i18n";
 
 type SubscriptionDetailSheetProps = {
@@ -119,7 +119,8 @@ export function SubscriptionDetailSheet({
       await invalidateSubscription();
       showToast({ tone: "success", message: t("已确认续费，续费日已顺延") });
       pop();
-    },  });
+    },
+  });
 
   // 未传入外部回调时（如从续费确认列表打开），详情自行处理退订/恢复/删除。
   const terminateInternal = useMutation({
@@ -130,7 +131,8 @@ export function SubscriptionDetailSheet({
     onSuccess: async () => {
       await invalidateSubscription();
       showToast({ tone: "success", message: t("已退订") });
-    },  });
+    },
+  });
 
   const resumeInternal = useMutation({
     mutationFn: () =>
@@ -140,7 +142,8 @@ export function SubscriptionDetailSheet({
     onSuccess: async () => {
       await invalidateSubscription();
       showToast({ tone: "success", message: t("已恢复订阅") });
-    },  });
+    },
+  });
 
   const removeInternal = useMutation({
     mutationFn: () =>
@@ -152,7 +155,8 @@ export function SubscriptionDetailSheet({
       setConfirmingDelete(false);
       showToast({ tone: "success", message: t("订阅已删除") });
       pop();
-    },  });
+    },
+  });
 
   if (!subscription) {
     return <LoadingState rows={5} title={t("加载订阅")} />;
@@ -246,10 +250,20 @@ export function SubscriptionDetailSheet({
       <section className="grid grid-cols-2 gap-3">
         <StatCell
           label={t("单期费用")}
-          value={subscription.priceMicros ? formatMoney(subscription.priceMicros, subscription.currency) : "—"}
+          value={
+            subscription.priceMicros
+              ? formatDetailMoney(subscription.priceMicros, subscription.currency)
+              : "—"
+          }
         />
-        <StatCell label={t("月均折算")} value={monthly > 0n ? formatMoney(monthly, subscription.currency) : "—"} />
-        <StatCell label={t("累计花费")} value={formatMoney(subscription.totalExpenseMicros)} />
+        <StatCell
+          label={t("月均折算")}
+          value={monthly > 0n ? formatDetailMoney(monthly, subscription.currency) : "—"}
+        />
+        <StatCell
+          label={t("累计花费")}
+          value={formatDetailMoney(subscription.totalExpenseMicros)}
+        />
         <StatCell label={t("下次续费")} value={renewalText} />
       </section>
 
@@ -263,10 +277,17 @@ export function SubscriptionDetailSheet({
           <DetailRow label={t("套餐")} value={subscription.planName || t("未填写")} />
           <DetailRow
             label={t("费用")}
-            value={subscription.priceMicros ? formatMoney(subscription.priceMicros, subscription.currency) : t("未填写")}
+            value={
+              subscription.priceMicros
+                ? formatDetailMoney(subscription.priceMicros, subscription.currency)
+                : t("未填写")
+            }
           />
           <DetailRow label={t("计费周期")} value={billingCycleLabel(subscription.billingCycle)} />
-          <DetailRow label={t("续费方式")} value={subscription.autoRenew ? t("自动续费") : t("手动续费")} />
+          <DetailRow
+            label={t("续费方式")}
+            value={subscription.autoRenew ? t("自动续费") : t("手动续费")}
+          />
           <DetailRow label={t("支付方式")} value={subscription.paymentMethod || t("未填写")} />
           <DetailRow
             label={t("开通日")}
@@ -286,7 +307,11 @@ export function SubscriptionDetailSheet({
             subscription.reminders.map((reminder, index) => (
               <DetailRow
                 key={reminder.id}
-                label={subscription.reminders.length > 1 ? t("第 {value} 次提醒", { value: index + 1 }) : t("到期提醒")}
+                label={
+                  subscription.reminders.length > 1
+                    ? t("第 {value} 次提醒", { value: index + 1 })
+                    : t("到期提醒")
+                }
                 value={reminderSummary(reminder)}
               />
             ))
@@ -330,7 +355,7 @@ export function SubscriptionDetailSheet({
             {t("关联记账")}
             {linked.length > 0 ? (
               <span className="ml-2 text-[13px] text-[var(--color-text-muted)]">
-                {t("花费 {value}", { value: formatMoney(subscription.totalExpenseMicros) })}
+                {t("花费 {value}", { value: formatDetailMoney(subscription.totalExpenseMicros) })}
               </span>
             ) : null}
           </span>

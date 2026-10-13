@@ -65,7 +65,12 @@ import {
   upcomingDates,
 } from "./auto-utils";
 import { localized, msg, t } from "@/lib/i18n";
-import { OriginalAmountCard, useOriginalAmount } from "../../_components/OriginalAmountCard";
+import {
+  OriginalAmountCard,
+  OriginalCurrencySelect,
+  originalAmountInputProps,
+  useOriginalAmount,
+} from "../../_components/OriginalAmountCard";
 
 type AutoRuleEditorSheetProps = {
   accounts: Account[];
@@ -569,15 +574,14 @@ export function AutoRuleEditorSheet({
               "transaction-form__amount",
               type === "income" && "transaction-form__amount--income",
             )}
-            decimalPlaces={decimalPlaces}
-            label={original.foreign ? t("每期金额（本币估算）") : t("每期金额")}
-            onValueChange={setAmount}
-            value={amount}
+            currencySlot={<OriginalCurrencySelect state={original} />}
+            label={t("每期金额")}
+            {...originalAmountInputProps(original, { value: amount, onValueChange: setAmount })}
           />
         </div>
 
         <div className="transaction-form__cards">
-          <OriginalAmountCard state={original} />
+          <OriginalAmountCard baseValue={amount} onBaseValueChange={setAmount} state={original} />
           {orderedFieldsForType(order, type).map(renderField)}
 
           {type !== "transfer" ? (

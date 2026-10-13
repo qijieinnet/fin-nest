@@ -3170,11 +3170,16 @@ select:focus-visible {
   min-width: 0;
 }
 
-.account-form__prefix {
+/* 金额行标签后的币种（符号或可切换的 CurrencySelect）：比标签轻一档，读起来像「费用 ¥」。 */
+.account-form__label-currency {
   color: var(--color-text-secondary);
-  flex: 0 0 auto;
-  font-size: 15px;
-  margin-right: 2px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+/* 表单行的标签本身是 inline-flex + gap，不再叠加外边距。 */
+.account-form__field-row .account-form__label-currency {
+  margin-left: 0;
 }
 
 .account-form__input {
@@ -7192,13 +7197,22 @@ select:focus-visible {
   color: rgba(60, 60, 67, 0.25);
 }
 
-button.biz-amount__shell {
+button.biz-amount__shell,
+.biz-amount__display {
   background: transparent;
   border: 0;
   cursor: pointer;
   padding: 0;
   text-align: left;
   width: 100%;
+}
+
+.biz-amount__display {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 /* 键盘展开时补出它的高度，否则表单靠后的字段被永久遮住、滚不到。 */

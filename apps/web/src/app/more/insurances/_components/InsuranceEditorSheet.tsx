@@ -124,9 +124,11 @@ function FieldRow({
 }) {
   return (
     <label className="account-form__field-row">
-      <span>{label}</span>
+      <span>
+        {label}
+        {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+      </span>
       <span className="account-form__input-wrap">
-        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
         <input
           className="account-form__input"
           inputMode={inputMode}
@@ -164,7 +166,9 @@ function SelectRow({
         >
           <span>{label}</span>
           <strong>
-            {selected ? `${selected.icon ? `${selected.icon} ` : ""}${selected.label}` : t("请选择")}
+            {selected
+              ? `${selected.icon ? `${selected.icon} ` : ""}${selected.label}`
+              : t("请选择")}
           </strong>
           <ChevronRight size={18} />
         </button>
@@ -266,8 +270,12 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
   const [method, setMethod] = useState(insurance?.method ?? "");
   const [paymentMethod, setPaymentMethod] = useState(insurance?.paymentMethod ?? "");
   const [insuredIds, setInsuredIds] = useState<string[]>([]);
-  const [coverage, setCoverage] = useState(() => microsToInput(insurance?.coverageMicros, { decimalPlaces }));
-  const [premium, setPremium] = useState(() => microsToInput(insurance?.premiumMicros, { decimalPlaces }));
+  const [coverage, setCoverage] = useState(() =>
+    microsToInput(insurance?.coverageMicros, { decimalPlaces }),
+  );
+  const [premium, setPremium] = useState(() =>
+    microsToInput(insurance?.premiumMicros, { decimalPlaces }),
+  );
   const [premiumFreq, setPremiumFreq] = useState(insurance?.premiumFreq ?? "year");
   const [periods, setPeriods] = useState(insurance?.periods ? String(insurance.periods) : "");
   const [renewal, setRenewal] = useState(insurance?.renewal ?? "auto");
@@ -353,7 +361,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
 
   const save = useMutation({
     mutationFn: async () => {
-      const coverageParsed = coverage.trim() ? parseMoneyToMicros(coverage, { decimalPlaces }) : null;
+      const coverageParsed = coverage.trim()
+        ? parseMoneyToMicros(coverage, { decimalPlaces })
+        : null;
       if (coverageParsed && !coverageParsed.ok) throw new Error(t("保额格式不正确"));
       const premiumParsed = premium.trim() ? parseMoneyToMicros(premium, { decimalPlaces }) : null;
       if (premiumParsed && !premiumParsed.ok) throw new Error(t("保费格式不正确"));
@@ -562,7 +572,9 @@ export function InsuranceEditorSheet({ insurance, ledgerId, people }: InsuranceE
             <span className="transaction-form__divider" />
             <FieldRow
               inputMode="decimal"
-              label={freqIsSingle ? t("保费") : premiumFreq === "month" ? t("每月保费") : t("每年保费")}
+              label={
+                freqIsSingle ? t("保费") : premiumFreq === "month" ? t("每月保费") : t("每年保费")
+              }
               onChange={(event) => setPremium(event.target.value)}
               placeholder="0.00"
               prefix={baseCurrencySymbol()}

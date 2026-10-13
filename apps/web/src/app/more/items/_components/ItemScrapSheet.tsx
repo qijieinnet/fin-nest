@@ -36,9 +36,11 @@ function FieldRow({
 }) {
   return (
     <label className="account-form__field-row">
-      <span>{label}</span>
+      <span>
+        {label}
+        {prefix ? <span className="account-form__label-currency">{prefix}</span> : null}
+      </span>
       <span className="account-form__input-wrap">
-        {prefix ? <span className="account-form__prefix">{prefix}</span> : null}
         <input
           className="account-form__input"
           inputMode={inputMode}
@@ -77,7 +79,9 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
 
   const scrap = useMutation({
     mutationFn: async () => {
-      const priceParsed = sellPrice.trim() ? parseMoneyToMicros(sellPrice, { decimalPlaces }) : null;
+      const priceParsed = sellPrice.trim()
+        ? parseMoneyToMicros(sellPrice, { decimalPlaces })
+        : null;
       if (priceParsed && !priceParsed.ok) throw new Error(t("出售价格格式不正确"));
       return apiRequest(ledgerApiPath(ledgerId, `/items/${item.id}/scrap`), {
         method: "POST",
@@ -123,7 +127,9 @@ export function ItemScrapSheet({ item, ledgerId }: ItemScrapSheetProps) {
       <div className="sheet-form-scroll flex-1 pb-6">
         <div className="transaction-form__cards">
           <p className="px-1 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            {t("填写报废 / 出售日期，「{name}」的使用时长将统计到该日为止，出售价格选填。", { name: item.name })}
+            {t("填写报废 / 出售日期，「{name}」的使用时长将统计到该日为止，出售价格选填。", {
+              name: item.name,
+            })}
           </p>
 
           <div className="transaction-form__card">

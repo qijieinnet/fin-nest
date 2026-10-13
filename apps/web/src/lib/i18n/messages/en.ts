@@ -1763,10 +1763,7 @@ export const en = {
     "Display preferences apply to this device only; language and security settings apply to all your devices",
   "≈ {value}": "≈ {value}",
   人民币: "Chinese Yuan",
-  "余额与流水都按账户币种记；外币账户在净资产、合计里按汇率折成本币":
-    "Balances and entries are kept in the account currency; foreign-currency accounts are converted to the base currency for net worth and totals",
   加元: "Canadian Dollar",
-  币种: "Currency",
   新加坡元: "Singapore Dollar",
   新台币: "New Taiwan Dollar",
   新西兰元: "New Zealand Dollar",
@@ -1783,7 +1780,6 @@ export const en = {
   "缺少 {currency} 汇率，未计入净资产": "No {currency} exchange rate — not included in net worth",
   美元: "US Dollar",
   英镑: "British Pound",
-  账户币种创建后不可修改: "The account currency can't be changed after creation",
   选择币种: "Choose currency",
   韩元: "South Korean Won",
   马来西亚林吉特: "Malaysian Ringgit",
@@ -1833,14 +1829,13 @@ export const en = {
     "No exchange rate — enter the actual amount (or add a rate under More › Exchange rates)",
   "折合 {currency}": "In {currency}",
   原币金额: "Original amount",
-  "上方金额是本币估算；每次记账按当天汇率重算。":
-    "The amount above is a base-currency estimate; each entry is recalculated at that day's rate.",
+  "本币金额是估算；每次记账按当天汇率重算。":
+    "The base-currency amount is an estimate; each entry is recalculated at that day's rate.",
   "今日汇率 1 {currency} = {rate} {base}": "Today: 1 {currency} = {rate} {base}",
   "取不到 {currency} 汇率：本币金额请手填，记账时也会沿用它":
     "No {currency} rate available: enter the base amount manually; it will be used when recording",
-  "每期金额（本币估算）": "Amount per period (base estimate)",
-  "预设金额（本币估算）": "Preset amount (base estimate)",
-  "缺少 {currencies} 汇率的订阅未计入合计，去补录 ›": "Subscriptions without a {currencies} rate are excluded from the total. Add rates ›",
+  "缺少 {currencies} 汇率的订阅未计入合计，去补录 ›":
+    "Subscriptions without a {currencies} rate are excluded from the total. Add rates ›",
   "正在按汇率折算本币金额…": "Converting to the base currency…",
 } as const satisfies Record<string, string>;
 
