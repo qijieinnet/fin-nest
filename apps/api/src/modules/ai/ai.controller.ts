@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Res,
   UploadedFiles,
@@ -26,6 +27,7 @@ import { AiChatRuns } from "./ai-chat-runs";
 import { AiService } from "./ai.service";
 import { ChatRequestDto } from "./dto/chat-request.dto";
 import { ListConversationsQueryDto } from "./dto/list-conversations-query.dto";
+import { UpdateAiPreferencesDto } from "./dto/update-ai-preferences.dto";
 import { UpdateCardStateDto } from "./dto/update-card-state.dto";
 import { UpdateDraftCardsDto } from "./dto/update-draft-cards.dto";
 
@@ -51,6 +53,23 @@ export class AiController {
   @ApiOkResponse()
   status(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
     return this.ai.status(ledgerId, (auth as SessionAuthContext).userId);
+  }
+
+  /** 当前用户在本账本的 AI 偏好（识图补充要求等），未设置过时返回空值。 */
+  @Get("preferences")
+  @ApiOkResponse()
+  getPreferences(@CurrentAuth() auth: AuthContext, @Param("ledgerId") ledgerId: string) {
+    return this.ai.getPreferences(ledgerId, (auth as SessionAuthContext).userId);
+  }
+
+  @Put("preferences")
+  @ApiOkResponse()
+  updatePreferences(
+    @CurrentAuth() auth: AuthContext,
+    @Param("ledgerId") ledgerId: string,
+    @Body() body: UpdateAiPreferencesDto,
+  ) {
+    return this.ai.updatePreferences(ledgerId, (auth as SessionAuthContext).userId, body);
   }
 
   @Get("conversations")

@@ -139,6 +139,10 @@ export function aiStatusPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/ai/status");
 }
 
+export function aiPreferencesPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/ai/preferences");
+}
+
 export function aiConversationsPath(ledgerId: string): string {
   return ledgerApiPath(ledgerId, "/ai/conversations");
 }

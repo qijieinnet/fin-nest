@@ -14,6 +14,7 @@ import {
   aiConversationsPath,
   aiMessageCardStatePath,
   aiMessageDraftsPath,
+  aiPreferencesPath,
   aiStatusPath,
   apiRequest,
   buildApiUrl,
@@ -25,6 +26,7 @@ import {
   type AiConversationSummary,
   type AiDraftInput,
   type AiMessage,
+  type AiPreferences,
   type AiStatus,
 } from "@/lib/api";
 import { linkSignals } from "@/lib/data/ai-chat-run";
@@ -39,6 +41,26 @@ export function useAiStatus(ledgerId: string | null) {
     queryFn: () => apiRequest<AiStatus>(aiStatusPath(ledgerId!)),
     enabled: Boolean(ledgerId),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** 当前用户在本账本的 AI 偏好（识图补充要求）。 */
+export function useAiPreferences(ledgerId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.aiPreferences(ledgerId ?? "none"),
+    queryFn: () => apiRequest<AiPreferences>(aiPreferencesPath(ledgerId!)),
+    enabled: Boolean(ledgerId) && enabled,
+  });
+}
+
+export function useUpdateAiPreferences(ledgerId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<AiPreferences>) =>
+      apiRequest<AiPreferences>(aiPreferencesPath(ledgerId!), { method: "PUT", body: input }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.aiPreferences(ledgerId ?? "none"), data);
+    },
   });
 }
 

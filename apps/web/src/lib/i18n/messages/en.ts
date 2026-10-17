@@ -191,6 +191,12 @@ export const en = {
   "一句话记账、查账，草稿经你确认才入账。":
     "Record and look up expenses in one sentence. Drafts are only recorded after you confirm.",
   识别账单截图: "Scan bill screenshots",
+  识图补充要求: "Bill scan instructions",
+  识图要求已保存: "Bill scan instructions saved",
+  "上传账单图片时，AI 会在默认识别规则之外额外遵守这里的要求。仅对你本人在当前账本生效；单次上传时在输入框里写的说明优先。":
+    "When you upload bill images, the AI follows these instructions on top of its default rules. They apply only to you in this ledger; notes typed with an individual upload take priority.",
+  "每行一条，例如：\n美团、饿了么的订单都记到「餐饮-外卖」\n超市小票按商品拆成多笔\n备注里加上「出差」二字\n退款记录不要识别":
+    "One per line, e.g.:\nFile all food delivery orders under Dining › Takeout\nSplit supermarket receipts into one entry per item\nAdd \"business trip\" to the note\nSkip refund records",
   "上传支付记录截图，批量生成草稿": "Upload payment screenshots to create drafts in bulk",
   思考中: "Thinking",
   "正在同步结果…": "Syncing results…",

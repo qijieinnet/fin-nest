@@ -58,6 +58,7 @@ export const queryKeys = {
   transaction: (ledgerId: string, transactionId: string) =>
     ["ledger", ledgerId, "transaction", transactionId] as const,
   aiStatus: (ledgerId: string) => ["ledger", ledgerId, "ai", "status"] as const,
+  aiPreferences: (ledgerId: string) => ["ledger", ledgerId, "ai", "preferences"] as const,
   aiConversations: (ledgerId: string) => ["ledger", ledgerId, "ai", "conversations"] as const,
   aiConversation: (ledgerId: string, conversationId: string) =>
     ["ledger", ledgerId, "ai", "conversations", conversationId] as const,

@@ -1020,6 +1020,21 @@ model AiMessage {
   @@map("ai_messages")
 }
 
+// AI 个人偏好，按「账本 + 用户」各一份（与会话一样私有）：补充要求里常会写本账本的分类/账户名，
+// 换个账本就不一定适用；家庭账本里各成员的习惯也不同。
+model AiPreference {
+  id                String   @id @default(uuid()) @db.Uuid
+  ledgerId          String   @map("ledger_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  // 识别账单图片时的长期补充要求（自由文本），只在带图的那一轮注入系统提示。null/空 = 未设置。
+  imageInstructions String?  @map("image_instructions")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([ledgerId, userId])
+  @@map("ai_preferences")
+}
+
 // 飞书机器人（可选启用，见 docs/FEISHU_BOT_PLAN.md）。
 // 未配置 FEISHU_APP_ID/SECRET 时这几张表不会被写入。
 

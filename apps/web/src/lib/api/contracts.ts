@@ -1165,6 +1165,12 @@ export type AiStatus = {
   vision: boolean;
 };
 
+/** 当前用户在本账本的 AI 偏好。 */
+export type AiPreferences = {
+  /** 识别账单图片时的长期补充要求；null = 未设置。 */
+  imageInstructions: string | null;
+};
+
 export type AiConversationSummary = {
   id: string;
   title: string | null;

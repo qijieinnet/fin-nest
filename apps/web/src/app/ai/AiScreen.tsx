@@ -14,6 +14,7 @@ import {
   PenLine,
   PieChart,
   Plus,
+  ScanText,
   Sparkles,
   Square,
   Target,
@@ -74,6 +75,7 @@ import {
   TransactionDraftCard,
   TransactionsCard,
 } from "./_components/AiCards";
+import { AiImageInstructionsSheet } from "./_components/AiImageInstructionsSheet";
 import {
   AiDraftBatchPanel,
   type DraftEntry,
@@ -309,6 +311,7 @@ export function AiScreen() {
   }, [input]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [imageInstructionsOpen, setImageInstructionsOpen] = useState(false);
   // 正在确认的草稿卡（"messageId:cardIndex"），用于按钮 loading 态与防连点。
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   // 正在作废的草稿卡（"messageId:cardIndex"），同上。
@@ -1069,6 +1072,17 @@ export function AiScreen() {
                       onSelect: () => setHistoryOpen(true),
                     },
                   ],
+                  ...(visionEnabled
+                    ? [
+                        [
+                          {
+                            icon: <ScanText size={18} />,
+                            label: t("识图补充要求"),
+                            onSelect: () => setImageInstructionsOpen(true),
+                          },
+                        ],
+                      ]
+                    : []),
                   [
                     {
                       icon: <NotebookPen size={18} />,
@@ -1405,6 +1419,12 @@ export function AiScreen() {
           if (!synced) showToast({ tone: "error", message: cardSyncFailedText() });
         }}
         open={editingDraft !== null}
+      />
+
+      <AiImageInstructionsSheet
+        ledgerId={ledgerId}
+        onClose={() => setImageInstructionsOpen(false)}
+        open={imageInstructionsOpen}
       />
 
       <BottomSheet
