@@ -4,6 +4,7 @@ import { ChartPie, type LucideIcon, MoreHorizontal, Sparkles } from "lucide-reac
 import { AppLogo } from "@/components/ui";
 import { DotBadge } from "@/components/ui/DotBadge";
 import { useAiStatus } from "@/lib/data/ai";
+import { usePendingAgentChangeRequests } from "@/lib/data/agent-tokens";
 import { useFeishuStatus } from "@/lib/data/feishu";
 import { useAutoPending } from "@/lib/data/records";
 import { resolveNavMenuLayout, SECONDARY_PREFETCH_ROUTES } from "@/lib/nav/navMenus";
@@ -33,6 +34,8 @@ export function DesktopSidebar() {
   const { preferences } = usePreferences();
   const autoPendingQuery = useAutoPending(currentLedger?.id ?? null);
   const pendingCount = autoPendingQuery.data?.length ?? 0;
+  const agentRequestCount =
+    usePendingAgentChangeRequests(currentLedger?.id ?? null).data?.length ?? 0;
   const aiStatusQuery = useAiStatus(currentLedger?.id ?? null);
   const aiEnabled = aiStatusQuery.data?.enabled === true;
   // 未配置飞书时隐藏入口，与移动端「更多」同一处理。
@@ -68,6 +71,7 @@ export function DesktopSidebar() {
     { label: t("系统设置"), route: routes.systemSettings },
     { label: t("通知"), route: routes.notifications },
     ...(feishuEnabled ? [{ label: t("飞书机器人"), route: routes.feishu }] : []),
+    { dot: agentRequestCount > 0, label: t("智能体接入"), route: routes.agents },
     { label: t("导入导出"), route: routes.importExport },
   ];
 
@@ -123,7 +127,7 @@ export function DesktopSidebar() {
           <div
             className={`desktop-sidebar__section-head${moreActive ? " desktop-sidebar__section-head--active" : ""}`}
           >
-            <DotBadge show={pendingCount > 0}>
+            <DotBadge show={pendingCount > 0 || agentRequestCount > 0}>
               <MoreHorizontal size={20} />
             </DotBadge>
             <span>{t("更多")}</span>

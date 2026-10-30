@@ -16,6 +16,7 @@ import {
   useQuickTemplates,
   useSubscriptions,
 } from "@/lib/data/records";
+import { usePendingAgentChangeRequests } from "@/lib/data/agent-tokens";
 import { useFeishuStatus } from "@/lib/data/feishu";
 import { type NavMenuKey, resolveNavMenuLayout } from "@/lib/nav/navMenus";
 import { resetSessionQueryCache } from "@/lib/query/session-cache";
@@ -67,6 +68,8 @@ export function MoreScreen() {
   const peopleCountText = peopleQuery.isPending ? t("加载中") : t("{value} 人", { value: peopleQuery.data?.length ?? 0 });
   const autoRules = autoRulesQuery.data ?? [];
   const autoPendingCount = autoPendingQuery.data?.length ?? 0;
+  const agentRequestCount =
+    usePendingAgentChangeRequests(currentLedger?.id ?? null).data?.length ?? 0;
   const autoCountText =
     autoRulesQuery.isPending || autoPendingQuery.isPending
       ? t("加载中")
@@ -318,6 +321,19 @@ export function MoreScreen() {
               <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
             </button>
           ) : null}
+          <button
+            className="flex w-full items-center px-[18px] py-[15px] text-left shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]"
+            onClick={() => router.push(routes.agents)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 text-base text-[var(--color-text-primary)]">{t("智能体接入")}</span>
+            <span className="shrink-0 text-[13px] text-[var(--color-text-muted)]">
+              {agentRequestCount > 0
+                ? t("{count} 条申请待批准", { count: agentRequestCount })
+                : t("MCP 与个人 token")}
+            </span>
+            <ChevronRight className="shrink-0 text-[var(--color-text-muted)]" size={18} />
+          </button>
           <button
             className="flex w-full items-center px-[18px] py-[15px] text-left"
             onClick={() => router.push(routes.importExport)}

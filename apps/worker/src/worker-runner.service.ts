@@ -98,6 +98,8 @@ export class WorkerRunnerService {
           created += result.created;
           // 刚生成的待确认立即入队推送；实际发送在本轮末尾统一 dispatch。
           await this.reminderScheduler.enqueueForPendings(result.createdIds);
+        } else if (job.type === "agent.drafts.notify") {
+          await this.reminderScheduler.enqueueForAgentDrafts(this.agentDraftsPayload(job.payload));
         } else if (job.type === "file.delete") {
           await this.fileDelete.deleteObject(this.fileDeletePayload(job.payload));
         } else {
@@ -128,6 +130,27 @@ export class WorkerRunnerService {
       ledgerId: typeof payload.ledgerId === "string" ? payload.ledgerId : undefined,
       until: typeof payload.until === "string" ? payload.until : undefined,
     };
+  }
+
+  private agentDraftsPayload(value: unknown): {
+    ledgerId: string;
+    agentTokenId: string;
+    since: Date;
+  } {
+    const payload =
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const since = typeof payload.since === "string" ? new Date(payload.since) : null;
+    if (
+      typeof payload.ledgerId !== "string" ||
+      typeof payload.agentTokenId !== "string" ||
+      !since ||
+      Number.isNaN(since.getTime())
+    ) {
+      throw new Error("Invalid agent.drafts.notify payload");
+    }
+    return { ledgerId: payload.ledgerId, agentTokenId: payload.agentTokenId, since };
   }
 
   private fileDeletePayload(value: unknown): FileDeletePayload {

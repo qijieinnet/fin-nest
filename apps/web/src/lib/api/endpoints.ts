@@ -185,6 +185,30 @@ export function feishuBindingPath(bindingId: string): string {
   return `/feishu/bindings/${encodeURIComponent(bindingId)}`;
 }
 
+/** 智能体个人 token（用户级）；MCP 端点本身在 `${API_BASE}/mcp`，由外部客户端直连。 */
+export const AGENT_TOKEN_ENDPOINTS = {
+  tokens: "/auth/agent-tokens",
+} as const;
+
+export function agentTokenPath(tokenId: string): string {
+  return `/auth/agent-tokens/${encodeURIComponent(tokenId)}`;
+}
+
+export function agentChangeRequestsPath(ledgerId: string): string {
+  return ledgerApiPath(ledgerId, "/agent-change-requests");
+}
+
+export function agentChangeRequestActionPath(
+  ledgerId: string,
+  requestId: string,
+  action: "approve" | "reject",
+): string {
+  return ledgerApiPath(
+    ledgerId,
+    `/agent-change-requests/${encodeURIComponent(requestId)}/${action}`,
+  );
+}
+
 /**
  * 推送通知（渠道整合后统一入口）。
  *

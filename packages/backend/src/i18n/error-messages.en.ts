@@ -6,6 +6,43 @@
  * 否则英文用户会看到中文原文（只是退化，不会出错）。`error-messages.spec`/脚本会列出缺失项。
  */
 export const EN_ERROR_MESSAGES: Record<string, string> = {
+  // 智能体 token 与 MCP 工具（apps/api/src/modules/mcp）
+  "外币交易的金额涉及汇率，请让用户在应用内修改":
+    "Amounts of foreign-currency transactions involve exchange rates. Ask the user to edit it in the app.",
+  没有要修改的内容: "Nothing to change",
+  "kind 只适用于投资账户": "kind only applies to investment accounts",
+  "申请不存在、已被处理，或不是当前 token 提交的":
+    "Request not found, already processed, or not submitted by this token",
+  申请不存在: "Request not found",
+  "idempotencyKey 已用于其它账本的申请": "This idempotencyKey was already used for a request in another ledger",
+  申请已被处理: "This request has already been processed",
+  "申请提交后目标已被修改或删除，为避免按过期的对比执行，请让智能体重新提交":
+    "The target changed or was deleted after the request was submitted. To avoid applying an outdated comparison, ask the agent to submit again.",
+  "idempotencyKey 已用于其它账本的草稿": "This idempotencyKey was already used for a draft in another ledger",
+  "草稿不存在、已被处理，或不是当前 token 起草的":
+    "Draft not found, already processed, or not drafted by this token",
+  "写入过于频繁，请稍后再试": "Too many writes. Please try again later.",
+  "权限必须包含只读（read）": "Permissions must include read",
+  "快捷模板不存在或不是你的模板": "Quick template not found or not yours",
+  "该模板未预设金额，请传 amount": "This template has no preset amount. Pass amount.",
+  "occurredOn 日期无效": "occurredOn is not a valid date",
+  "改币种时必须同时传 amount": "Pass amount together with currency",
+  "两侧都是外币且币种不同的转账无法起草，请让用户在应用内记账":
+    "Transfers between two different foreign currencies can't be drafted. Ask the user to record it in the app.",
+  过期时间必须晚于现在: "Expiration must be in the future",
+  "token 已吊销，无法修改": "This token has been revoked and cannot be changed",
+  "缺少智能体 token": "Missing agent token",
+  "智能体 token 无效或已过期": "Agent token is invalid or expired",
+  "来源 IP 不在该 token 的白名单内": "Source IP is not in this token's allowlist",
+  "调用过于频繁，请稍后再试": "Too many requests. Please try again later.",
+  "token 不存在": "Token not found",
+  金额下限不能大于上限: "The minimum amount cannot exceed the maximum",
+  "dateFrom 和 dateTo 必须同时提供": "dateFrom and dateTo must be provided together",
+  "month 必须是合法的 YYYY-MM": "month must be a valid YYYY-MM",
+  "该 token 无权访问此账本": "This token cannot access this ledger",
+  "dateFrom 日期无效": "dateFrom is not a valid date",
+  "dateTo 日期无效": "dateTo is not a valid date",
+  "dateFrom 不能晚于 dateTo": "dateFrom cannot be later than dateTo",
   服务暂时不可用: "Service temporarily unavailable",
   "AI 服务出错，请稍后重试": "The AI service ran into an error. Please try again later.",
   记录已存在: "Record already exists",
@@ -235,6 +272,16 @@ export const EN_ERROR_MESSAGES: Record<string, string> = {
 
 /** 带插值的文案：`{0}` `{1}` 按出现顺序对应模板字符串里的 `${}`。 */
 export const EN_ERROR_TEMPLATES: Record<string, string> = {
+  "参数校验失败：{0}": "Invalid arguments: {0}",
+  "不支持的币种：{0}": "Unsupported currency: {0}",
+  "缺少 {0}→{1} 在 {2} 的汇率：请让用户先在「更多 › 汇率」补录，或直接给出 {3} 金额":
+    "Missing the {0}→{1} rate for {2}. Ask the user to add it under More › Exchange rates, or give the amount in {3}.",
+  "账户「{0}」是 {1} 账户，只能记 {2} 或 {3} 金额":
+    "Account \u201c{0}\u201d is a {1} account; only {2} or {3} amounts are allowed",
+  "最多同时保留 {0} 个有效 token，请先吊销不用的":
+    "You can keep at most {0} active tokens. Revoke unused ones first.",
+  "IP 白名单格式不正确：{0}": "Invalid IP allowlist entry: {0}",
+  "{0} 金额格式无效（最多 {1} 位小数）": "{0} is not a valid amount (at most {1} decimal places)",
   "{0}：金额最多 {1} 位小数": "{0}: amount allows at most {1} decimal places",
   "第 {0} 笔已确认或已作废，不能再修改":
     "Item {0} has already been confirmed or voided and cannot be edited",

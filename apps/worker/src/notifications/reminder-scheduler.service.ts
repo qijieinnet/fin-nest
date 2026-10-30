@@ -329,22 +329,41 @@ export class ReminderSchedulerService {
     });
     if (!pendings.length) return { enqueued: 0 };
 
-    const targets = await this.prisma.client.reminderTarget.findMany({
-      where: {
-        sourceType: "auto_rule",
-        sourceId: { in: Array.from(new Set(pendings.map((p) => p.autoRuleId))) },
-      },
-    });
-    if (!targets.length) return { enqueued: 0 };
-
-    const targetsByRule = new Map<string, typeof targets>();
+    // 接收人：规则生成的推给规则上配置的接收人；智能体起草的推给 token 归属人
+    // （起草是他自己发起的，账本里其他成员不该被打扰）。
+    const ruleIds = compact(pendings.map((p) => (p.source === "auto_rule" ? p.autoRuleId : null)));
+    const tokenIds = compact(pendings.map((p) => (p.source === "agent" ? p.agentTokenId : null)));
+    const [targets, tokens] = await Promise.all([
+      ruleIds.length
+        ? this.prisma.client.reminderTarget.findMany({
+            where: { sourceType: "auto_rule", sourceId: { in: ruleIds } },
+          })
+        : [],
+      tokenIds.length
+        ? this.prisma.client.agentToken.findMany({
+            where: { id: { in: tokenIds } },
+            select: { id: true, userId: true },
+          })
+        : [],
+    ]);
+    const userIdsByRule = new Map<string, string[]>();
     for (const target of targets) {
-      const bucket = targetsByRule.get(target.sourceId) ?? [];
-      bucket.push(target);
-      targetsByRule.set(target.sourceId, bucket);
+      const bucket = userIdsByRule.get(target.sourceId) ?? [];
+      bucket.push(target.userId);
+      userIdsByRule.set(target.sourceId, bucket);
     }
+    const ownerByToken = new Map(tokens.map((token) => [token.id, token.userId]));
+    const userIdsOf = (pending: PendingRow): string[] => {
+      if (pending.source === "agent") {
+        const owner = pending.agentTokenId ? ownerByToken.get(pending.agentTokenId) : undefined;
+        return owner ? [owner] : [];
+      }
+      return pending.autoRuleId ? (userIdsByRule.get(pending.autoRuleId) ?? []) : [];
+    };
+    const allUserIds = pendings.flatMap(userIdsOf);
+    if (!allUserIds.length) return { enqueued: 0 };
 
-    const recipients = await this.recipients.resolve(targets.map((t) => t.userId));
+    const recipients = await this.recipients.resolve(allUserIds);
     // 卡片要和网页端的待确认详情展示同一组字段，因此分类/账户都要连二级一起取；
     // 关联项（应收/应付）的账户藏在 relationPayload 里，取账户名时要一并带上。
     const [ledgers, categories, subcategories, accounts, subAccounts, people, links] =
@@ -400,8 +419,8 @@ export class ReminderSchedulerService {
     let enqueued = 0;
     for (const pending of pendings) {
       const ledger = ledgerById.get(pending.ledgerId);
-      for (const target of targetsByRule.get(pending.autoRuleId) ?? []) {
-        const recipient = recipients.get(target.userId);
+      for (const userId of userIdsOf(pending)) {
+        const recipient = recipients.get(userId);
         // 目标写入时校验过成员身份，但那之后对方可能已退出账本，这里再挡一次。
         if (!recipient || !recipient.ledgerIds.has(pending.ledgerId)) continue;
         for (const delivery of recipient.targets) {
@@ -411,6 +430,168 @@ export class ReminderSchedulerService {
           if (created) enqueued += 1;
         }
       }
+    }
+    return { enqueued };
+  }
+
+  /**
+   * 智能体起草后的推送（`agent.drafts.notify` job，由 API 起草时延迟 20 秒排入、按 token 去重）。
+   *
+   * 智能体常常一口气起草好几笔：逐条推会刷屏，所以等这一阵起草结束再看——笔数不多时每笔一张
+   * 带「确认入账 / 删除待确认」的卡（与自动记账同一套动作），多了就合并成一张汇总卡，引导去
+   * 待确认页批量处理。逐条那条路的幂等由 dedupeKey 兜底；汇总卡按 job 的起始时刻去重。
+   */
+  async enqueueForAgentDrafts(input: {
+    ledgerId: string;
+    agentTokenId: string;
+    since: Date;
+  }): Promise<{ enqueued: number }> {
+    // 同一个任务覆盖这一阵里的草稿与变更申请：两类各自成卡，互不影响。
+    const drafts = await this.enqueueAgentDraftBatch(input);
+    const requests = await this.enqueueAgentRequestBatch(input);
+    return { enqueued: drafts.enqueued + requests.enqueued };
+  }
+
+  /**
+   * 变更申请一律合并成一张汇总卡、不挂按钮：改/删已入账交易与调整余额必须在应用里看过前后对比再批准，
+   * 不能像草稿那样在推送卡片上一点就生效。
+   */
+  private async enqueueAgentRequestBatch(input: {
+    ledgerId: string;
+    agentTokenId: string;
+    since: Date;
+  }): Promise<{ enqueued: number }> {
+    const requests = await this.prisma.client.agentChangeRequest.findMany({
+      where: {
+        ledgerId: input.ledgerId,
+        agentTokenId: input.agentTokenId,
+        status: "pending",
+        createdAt: { gte: input.since },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!requests.length) return { enqueued: 0 };
+    const [token, ledger] = await Promise.all([
+      this.prisma.client.agentToken.findUnique({
+        where: { id: input.agentTokenId },
+        select: { userId: true },
+      }),
+      this.prisma.client.ledger.findUnique({
+        where: { id: input.ledgerId },
+        select: { currency: true, amountDecimalPlaces: true },
+      }),
+    ]);
+    if (!token) return { enqueued: 0 };
+    const recipient = (await this.recipients.resolve([token.userId])).get(token.userId);
+    if (!recipient || !recipient.ledgerIds.has(input.ledgerId)) return { enqueued: 0 };
+
+    const fields: NotificationField[] = [];
+    push(fields, "来源", agentSourceLabel(requests[0]!.sourceLabel));
+    push(fields, "条数", `${requests.length} 条`);
+    for (const request of requests.slice(0, AGENT_DRAFT_SUMMARY_ROWS)) {
+      push(fields, REQUEST_KIND_LABELS[request.kind] ?? request.kind, describeRequest(request, ledger));
+    }
+    if (requests.length > AGENT_DRAFT_SUMMARY_ROWS) {
+      push(fields, "其余", `另有 ${requests.length - AGENT_DRAFT_SUMMARY_ROWS} 条，请在应用内查看`);
+    }
+    const occurrenceKey = `agent_requests:${input.agentTokenId}:${input.since.toISOString()}`;
+    let enqueued = 0;
+    for (const delivery of recipient.targets) {
+      const created = await this.notifications.enqueue({
+        ledgerId: input.ledgerId,
+        sourceType: "agent_request",
+        sourceId: requests[0]!.id,
+        ...deliveryFields(occurrenceKey, delivery),
+        occurrenceKey,
+        scheduledAt: new Date(),
+        payload: {
+          kind: "auto_pending",
+          title: `智能体提交了 ${requests.length} 条变更申请`,
+          leadDescription: "请在 Fin Nest「更多 › 智能体接入」中核对前后对比后批准",
+          fields,
+        },
+      });
+      if (created) enqueued += 1;
+    }
+    return { enqueued };
+  }
+
+  private async enqueueAgentDraftBatch(input: {
+    ledgerId: string;
+    agentTokenId: string;
+    since: Date;
+  }): Promise<{ enqueued: number }> {
+    const pendings = await this.prisma.client.autoPendingTransaction.findMany({
+      where: {
+        ledgerId: input.ledgerId,
+        source: "agent",
+        agentTokenId: input.agentTokenId,
+        status: "pending",
+        createdAt: { gte: input.since },
+      },
+      orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }],
+    });
+    if (!pendings.length) return { enqueued: 0 };
+    if (pendings.length <= AGENT_DRAFT_INDIVIDUAL_LIMIT) {
+      return this.enqueueForPendings(pendings.map((pending) => pending.id));
+    }
+
+    const [token, ledger] = await Promise.all([
+      this.prisma.client.agentToken.findUnique({
+        where: { id: input.agentTokenId },
+        select: { userId: true },
+      }),
+      this.prisma.client.ledger.findUnique({
+        where: { id: input.ledgerId },
+        select: { currency: true, amountDecimalPlaces: true },
+      }),
+    ]);
+    if (!token) return { enqueued: 0 };
+    const recipient = (await this.recipients.resolve([token.userId])).get(token.userId);
+    if (!recipient || !recipient.ledgerIds.has(input.ledgerId)) return { enqueued: 0 };
+
+    const occurrenceKey = `agent_drafts:${input.agentTokenId}:${input.since.toISOString()}`;
+    const fields: NotificationField[] = [];
+    push(fields, "来源", agentSourceLabel(pendings[0]!.sourceLabel));
+    push(fields, "笔数", `${pendings.length} 笔`);
+    for (const pending of pendings.slice(0, AGENT_DRAFT_SUMMARY_ROWS)) {
+      push(
+        fields,
+        `${dateKey(pending.scheduledFor)} ${TYPE_LABELS[pending.type] ?? pending.type}`,
+        [
+          signedAmount(pending.type, pending.amountMicros, ledger ?? undefined),
+          pending.note?.trim(),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+    if (pendings.length > AGENT_DRAFT_SUMMARY_ROWS) {
+      push(
+        fields,
+        "其余",
+        `另有 ${pendings.length - AGENT_DRAFT_SUMMARY_ROWS} 笔，请到待确认页查看`,
+      );
+    }
+
+    let enqueued = 0;
+    for (const delivery of recipient.targets) {
+      const created = await this.notifications.enqueue({
+        ledgerId: input.ledgerId,
+        // 汇总卡不挂按钮，sourceId 只用来让落地页能定位到账本里的一条待确认。
+        sourceType: "auto_pending",
+        sourceId: pendings[0]!.id,
+        ...deliveryFields(occurrenceKey, delivery),
+        occurrenceKey,
+        scheduledAt: new Date(),
+        payload: {
+          kind: "auto_pending",
+          title: `智能体提交了 ${pendings.length} 笔待确认`,
+          leadDescription: "请在 Fin Nest「待确认」中核对后入账",
+          fields,
+        },
+      });
+      if (created) enqueued += 1;
     }
     return { enqueued };
   }
@@ -696,9 +877,73 @@ const TYPE_LABELS: Record<string, string> = {
   transfer: "转账",
 };
 
+const REQUEST_KIND_LABELS: Record<string, string> = {
+  "transaction.update": "修改交易",
+  "transaction.delete": "删除交易",
+  "account.adjust": "调整余额",
+};
+
+/** 汇总卡上一条申请的一句话：交易给「日期 金额 分类/备注」，余额调整给「账户 → 新余额」。 */
+function describeRequest(
+  request: { kind: string; summary: unknown },
+  ledger: { currency: string; amountDecimalPlaces: number } | null,
+): string {
+  const summary = (request.summary ?? {}) as {
+    target?: Record<string, string | null>;
+    rows?: Array<{ field: string; before: string | null; after: string | null; currency?: string }>;
+  };
+  const target = summary.target ?? {};
+  if (request.kind === "account.adjust") {
+    const balance = summary.rows?.find((row) => row.field === "balance");
+    const currency = balance?.currency ?? ledger?.currency;
+    const after =
+      balance?.after != null
+        ? formatMicros(BigInt(balance.after), currency ? currencyDecimals(currency) : 2, currency)
+        : "";
+    return [target.account, target.subAccount].filter(Boolean).join(" / ") + ` → ${after}`;
+  }
+  const places = ledger?.amountDecimalPlaces ?? 2;
+  const currency = target.currency ?? ledger?.currency;
+  const money = (micros: string | null | undefined) =>
+    micros != null ? formatMicros(BigInt(micros), places, currency) : "空";
+  const head = [target.occurredOn, money(target.amountMicros), target.note || target.category]
+    .filter(Boolean)
+    .join(" ");
+  if (request.kind === "transaction.delete") return head;
+  // 修改申请把「改了什么」也写上，推送里就能大致判断要不要批。
+  const changes = (summary.rows ?? []).map((row) => {
+    const label = CHANGE_FIELD_LABELS[row.field] ?? row.field;
+    const before = row.before;
+    return row.field === "amount"
+      ? `${label} ${money(before)}→${money(row.after)}`
+      : `${label} ${before ?? "空"}→${row.after ?? "空"}`;
+  });
+  return changes.length ? `${head}（${changes.join("；")}）` : head;
+}
+
+const CHANGE_FIELD_LABELS: Record<string, string> = {
+  amount: "金额",
+  occurredOn: "日期",
+  category: "分类",
+  account: "账户",
+  fromAccount: "转出账户",
+  toAccount: "转入账户",
+  person: "人员",
+  note: "备注",
+};
+
+/** 一阵起草不超过这么多笔时逐条推（每张卡可直接确认），超过就合并成一张汇总卡。 */
+const AGENT_DRAFT_INDIVIDUAL_LIMIT = 3;
+/** 汇总卡里列出的笔数上限，其余只给数量。 */
+const AGENT_DRAFT_SUMMARY_ROWS = 5;
+
 type PendingRow = {
   id: string;
   ledgerId: string;
+  source: string;
+  autoRuleId: string | null;
+  agentTokenId: string | null;
+  sourceLabel: string | null;
   type: string;
   amountMicros: bigint;
   originalCurrency: string | null;
@@ -799,6 +1044,7 @@ function buildPendingOccurrence(
       ),
     );
   }
+  if (pending.source === "agent") push(fields, "来源", agentSourceLabel(pending.sourceLabel));
   push(fields, "计划入账日期", dateKey(pending.scheduledFor));
   push(fields, "人员", name(pending.personId));
   push(fields, "备注", pending.note?.trim() || null);
@@ -832,7 +1078,7 @@ function buildPendingOccurrence(
     scheduledAt: new Date(),
     payload: {
       kind: "auto_pending",
-      title: "自动记账待确认",
+      title: pending.source === "agent" ? "智能体记账待确认" : "自动记账待确认",
       leadDescription: "",
       amount: {
         text: signedAmount(pending.type, pending.amountMicros, ledger),
@@ -846,6 +1092,10 @@ function buildPendingOccurrence(
       ],
     },
   };
+}
+
+function agentSourceLabel(label: string | null): string {
+  return label ? `智能体「${label}」` : "智能体";
 }
 
 /** 值为空就整条字段不出现（详情页在这些位置也不显示空行）。 */

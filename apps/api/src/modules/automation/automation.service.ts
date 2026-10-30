@@ -61,6 +61,35 @@ type AccountPair = {
 
 const MONEY_ACCOUNT_TYPES = ["savings", "credit", "invest"];
 
+/** 起草后多久推送：给智能体一口气起草多笔留出时间，好合并成一张汇总卡。 */
+const AGENT_DRAFT_NOTIFY_DELAY_MS = 20_000;
+
+type AutoPendingRow = Prisma.AutoPendingTransactionGetPayload<Record<string, never>>;
+
+/** 智能体草稿入参：金额已由调用方按币种换算成 micros（本币 + 可选原币），这里不再碰汇率。 */
+export type AgentPendingInput = {
+  idempotencyKey: string;
+  type: "expense" | "income" | "transfer";
+  occurredOn: string;
+  amountMicros: bigint;
+  originalCurrency?: string | null;
+  originalAmountMicros?: bigint | null;
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  subAccountId?: string;
+  fromAccountId?: string;
+  fromSubAccountId?: string;
+  toAccountId?: string;
+  toSubAccountId?: string;
+  personId?: string;
+  note?: string;
+  insuranceId?: string;
+  itemId?: string;
+  itemLinkKind?: "consumable" | "purchase";
+  subscriptionId?: string;
+};
+
 @Injectable()
 export class AutomationService {
   constructor(
@@ -416,11 +445,17 @@ export class AutomationService {
       ledgerId,
       userId,
       this.pendingToTransaction(pending),
-      { source: "auto", sourceId: pending.id, auditAction: "auto_pending.confirm" },
+      {
+        // 智能体起草的记来源 agent，账单详情据此显示「智能体」，与规则生成的区分开。
+        source: pending.source === "agent" ? "agent" : "auto",
+        sourceId: pending.id,
+        auditAction: "auto_pending.confirm",
+      },
     );
     await this.linkAssets(tx, ledgerId, transaction.id, {
       insuranceId: pending.insuranceId,
       itemId: pending.itemId,
+      itemLinkKind: pending.itemLinkKind,
       subscriptionId: pending.subscriptionId,
     });
     // 带 status 条件的原子更新：并发确认同一条时，后提交的事务在这里更新到 0 行并回滚，
@@ -447,6 +482,209 @@ export class AutomationService {
     await this.prisma.client.autoPendingTransaction.update({
       where: { id: pendingId },
       data: { status: "deleted", deletedBy: userId, deletedAt: new Date(), updatedBy: userId },
+    });
+  }
+
+  // ---------- 智能体草稿（MCP，docs/MCP_PLAN.md §4） ----------
+
+  /**
+   * 智能体起草一笔交易 → 一条 source='agent' 的待确认，由用户确认后才入账。
+   *
+   * 起草时就把它按确认时的同一条路径试算一遍（建交易 → 回滚）：分类/账户/人员归属、记账设置的
+   * 必填项、外币与账户币种、关联合计……任何一项不过都当场报给智能体去改，而不是留一条
+   * 用户点「确认」才失败的草稿。同一 token 重复提交同一个 idempotencyKey 返回已有那条。
+   */
+  async createAgentPending(
+    ledgerId: string,
+    userId: string,
+    agent: { tokenId: string; tokenName: string },
+    input: AgentPendingInput,
+  ): Promise<{ pending: AutoPendingRow; replayed: boolean }> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.findAgentPendingByKey(agent.tokenId, input.idempotencyKey);
+    if (existing) {
+      if (existing.ledgerId !== ledgerId) {
+        throw new AppError("AGENT_DRAFT_KEY_CONFLICT", "idempotencyKey 已用于其它账本的草稿", 409);
+      }
+      return { pending: existing, replayed: true };
+    }
+
+    const isTransfer = input.type === "transfer";
+    const data = {
+      ledgerId,
+      source: "agent",
+      autoRuleId: null,
+      agentTokenId: agent.tokenId,
+      sourceLabel: agent.tokenName,
+      periodKey: input.idempotencyKey,
+      scheduledFor: parseDateOnly(input.occurredOn),
+      status: "pending",
+      type: input.type,
+      amountMicros: input.amountMicros,
+      originalCurrency: input.originalCurrency ?? null,
+      originalAmountMicros: input.originalAmountMicros ?? null,
+      categoryId: isTransfer ? null : (input.categoryId ?? null),
+      subcategoryId: isTransfer ? null : (input.subcategoryId ?? null),
+      accountId: isTransfer ? null : (input.accountId ?? null),
+      subAccountId: isTransfer ? null : (input.subAccountId ?? null),
+      fromAccountId: isTransfer ? (input.fromAccountId ?? null) : null,
+      fromSubAccountId: isTransfer ? (input.fromSubAccountId ?? null) : null,
+      toAccountId: isTransfer ? (input.toAccountId ?? null) : null,
+      toSubAccountId: isTransfer ? (input.toSubAccountId ?? null) : null,
+      personId: input.personId ?? null,
+      note: input.note?.trim() || null,
+      insuranceId: isTransfer ? null : (input.insuranceId ?? null),
+      itemId: isTransfer ? null : (input.itemId ?? null),
+      itemLinkKind: !isTransfer && input.itemId ? (input.itemLinkKind ?? null) : null,
+      subscriptionId: isTransfer ? null : (input.subscriptionId ?? null),
+    } satisfies Omit<Prisma.AutoPendingTransactionUncheckedCreateInput, "relationPayload">;
+
+    await this.assertAutoPayload(ledgerId, input.type, {
+      ...data,
+      amountMicros: data.amountMicros.toString(),
+      originalAmountMicros: data.originalAmountMicros?.toString() ?? null,
+    });
+    await this.dryRunPending(ledgerId, userId, {
+      ...data,
+      id: "00000000-0000-0000-0000-000000000000",
+      relationPayload: null,
+      confirmedTransactionId: null,
+      confirmedBy: null,
+      confirmedAt: null,
+      deletedBy: null,
+      deletedAt: null,
+      updatedBy: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    let pending: AutoPendingRow;
+    try {
+      pending = await this.prisma.client.autoPendingTransaction.create({
+        data: { ...data, relationPayload: Prisma.JsonNull },
+      });
+    } catch (error) {
+      // 并发重试同一个 key：部分唯一索引挡住后一条，返回先写入的那条。
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const raced = await this.findAgentPendingByKey(agent.tokenId, input.idempotencyKey);
+        if (raced) return { pending: raced, replayed: true };
+      }
+      throw error;
+    }
+    await this.scheduleAgentNotify(ledgerId, agent.tokenId, pending.createdAt);
+    return { pending, replayed: false };
+  }
+
+  /** 只能改本 token 起草且仍待确认的草稿；字段校验沿用待确认编辑（与网页端编辑同一条路径）。 */
+  async updateAgentPending(
+    ledgerId: string,
+    userId: string,
+    tokenId: string,
+    pendingId: string,
+    input: UpdateAutoPendingDto & { itemLinkKind?: "consumable" | "purchase" | null },
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertOwnAgentPending(ledgerId, tokenId, pendingId);
+    const { itemLinkKind, ...rest } = input;
+    const updated = await this.updatePending(ledgerId, pendingId, userId, rest);
+    if (itemLinkKind === undefined) return updated;
+    return this.prisma.client.autoPendingTransaction.update({
+      where: { id: pendingId },
+      data: { itemLinkKind: updated.itemId ? itemLinkKind : null, updatedBy: userId },
+    });
+  }
+
+  async withdrawAgentPending(ledgerId: string, userId: string, tokenId: string, pendingId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    await this.assertOwnAgentPending(ledgerId, tokenId, pendingId);
+    await this.deletePending(ledgerId, pendingId, userId);
+  }
+
+  /** 本 token 起草的草稿现在的状态：pending / confirmed（附交易 id）/ deleted。 */
+  async agentPendingStatus(
+    ledgerId: string,
+    userId: string,
+    tokenId: string,
+    pendingIds: string[],
+  ) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const rows = await this.prisma.client.autoPendingTransaction.findMany({
+      where: { id: { in: pendingIds }, ledgerId, source: "agent", agentTokenId: tokenId },
+      select: {
+        id: true,
+        status: true,
+        confirmedTransactionId: true,
+        confirmedAt: true,
+        deletedAt: true,
+      },
+    });
+    const found = new Map(rows.map((row) => [row.id, row]));
+    return pendingIds.map((id) => found.get(id) ?? { id, status: "not_found" as const });
+  }
+
+  private findAgentPendingByKey(tokenId: string, key: string) {
+    return this.prisma.client.autoPendingTransaction.findFirst({
+      where: { source: "agent", agentTokenId: tokenId, periodKey: key },
+    });
+  }
+
+  private async assertOwnAgentPending(ledgerId: string, tokenId: string, pendingId: string) {
+    const pending = await this.prisma.client.autoPendingTransaction.findFirst({
+      where: { id: pendingId, ledgerId, source: "agent", agentTokenId: tokenId, status: "pending" },
+      select: { id: true },
+    });
+    if (!pending) {
+      throw new AppError(
+        "AGENT_DRAFT_NOT_FOUND",
+        "草稿不存在、已被处理，或不是当前 token 起草的",
+        404,
+      );
+    }
+  }
+
+  /** 按确认时的路径建一次交易再整体回滚：校验口径与「确认入账」完全一致。 */
+  private async dryRunPending(ledgerId: string, userId: string, pending: AutoPendingRow) {
+    const rollback = new Error("agent-draft-dry-run");
+    try {
+      await this.txs.run(
+        async (tx) => {
+          await this.transactions.createInsideExistingTransactionLight(
+            tx,
+            ledgerId,
+            userId,
+            this.pendingToTransaction(pending),
+            { source: "agent" },
+          );
+          throw rollback;
+        },
+        { timeout: 20_000 },
+      );
+    } catch (error) {
+      if (error !== rollback) throw error;
+    }
+  }
+
+  /**
+   * 起草（或提交变更申请）后排一个延迟推送任务（worker 的 `agent.drafts.notify`）：等这一阵结束再推，
+   * 同一 token + 账本已有待执行的任务就不再排——那个任务会把这期间起草/申请的都算进去。
+   */
+  async scheduleAgentNotify(ledgerId: string, tokenId: string, since: Date) {
+    const queued = await this.prisma.client.backgroundJob.findFirst({
+      where: {
+        type: "agent.drafts.notify",
+        status: "pending",
+        AND: [
+          { payload: { path: ["agentTokenId"], equals: tokenId } },
+          { payload: { path: ["ledgerId"], equals: ledgerId } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (queued) return;
+    await this.jobs.enqueue({
+      type: "agent.drafts.notify",
+      payload: { ledgerId, agentTokenId: tokenId, since: since.toISOString() },
+      runAfter: new Date(Date.now() + AGENT_DRAFT_NOTIFY_DELAY_MS),
     });
   }
 

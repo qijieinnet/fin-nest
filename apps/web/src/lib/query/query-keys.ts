@@ -14,6 +14,8 @@ export const queryKeys = {
     ["ledger", ledgerId, "transaction-creators"] as const,
   ledgerJoinRequests: (ledgerId: string) => ["ledger", ledgerId, "join-requests"] as const,
   reminderSummary: (ledgerId: string) => ["ledger", ledgerId, "reminder-summary"] as const,
+  agentChangeRequests: (ledgerId: string) =>
+    ["ledger", ledgerId, "agent-change-requests"] as const,
   categories: (ledgerId: string) => ["ledger", ledgerId, "categories"] as const,
   people: (ledgerId: string) => ["ledger", ledgerId, "people"] as const,
   accounts: (ledgerId: string) => ["ledger", ledgerId, "accounts"] as const,
@@ -66,6 +68,8 @@ export const queryKeys = {
   // 因此切换账本时会被一并清理。这是有意的：绑定卡片上展示当前账本名，重取一次更省心。
   feishuStatus: ["feishu", "status"] as const,
   feishuBindings: ["feishu", "bindings"] as const,
+  // 智能体 token 是用户级的；同飞书绑定，切账本时被一并清理也无妨。
+  agentTokens: ["agent-tokens"] as const,
   // 通知设置与单条推送都是用户级的（渠道开关、设备订阅都不随账本变）。key 根既不是
   // "auth" 也不是 "ledgers"，所以切账本时会被一并清掉——与上面的飞书绑定同一处理：
   // 多取一次的代价远小于为它们单开一条豁免规则。

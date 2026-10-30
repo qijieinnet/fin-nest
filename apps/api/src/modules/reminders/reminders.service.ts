@@ -54,6 +54,7 @@ export class RemindersService {
       budgetSetting,
       categoryBudgets,
       monthExpenses,
+      agentRequests,
     ] = await Promise.all([
       this.prisma.client.autoPendingTransaction.count({ where: { ledgerId, status: "pending" } }),
       role === "owner"
@@ -73,6 +74,8 @@ export class RemindersService {
           occurredOn: { gte: monthStart, lt: monthEnd },
         },
       }),
+      // 智能体提交、等待批准的变更申请（改/删已入账交易、调整余额）。
+      this.prisma.client.agentChangeRequest.count({ where: { ledgerId, status: "pending" } }),
     ]);
 
     const periodsByPlan = groupPlanPeriods(planPeriods);
@@ -90,6 +93,7 @@ export class RemindersService {
       planOverLimit,
       planPendingConfirm,
       budgetOverLimit,
+      agentRequests,
     });
     return { total: Object.values(items).reduce((sum, count) => sum + count, 0), items };
   }

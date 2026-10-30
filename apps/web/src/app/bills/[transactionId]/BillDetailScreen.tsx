@@ -56,6 +56,7 @@ import { localized, msg, t } from "@/lib/i18n";
 const TYPE_LABELS: Record<string, string> = localized({ expense: msg("支出"), income: msg("收入"), transfer: msg("转账") });
 
 const SOURCE_LABELS: Record<string, string> = localized({
+  agent: msg("智能体"),
   ai: msg("AI 识别"),
   auto: msg("自动记账"),
   import: msg("导入"),
@@ -196,7 +197,7 @@ function pendingAssetLinks(pending: AutoPendingTransaction): TransactionLink[] {
       id: `${pending.id}:item`,
       linkedType: "item",
       linkedId: pending.itemId,
-      linkKind: "consumable",
+      linkKind: pending.itemLinkKind ?? "consumable",
     });
   }
   if (pending.subscriptionId) {
@@ -650,6 +651,16 @@ export function BillDetailScreen({
 
     const metaRows: DetailRow[] = [];
     if (isPendingMode) {
+      // 智能体草稿与规则生成的待确认共用这一页，来源要说清楚——用户确认前得知道是谁起草的。
+      metaRows.push({
+        label: t("来源"),
+        value:
+          pendingItem?.source === "agent"
+            ? pendingItem.sourceLabel
+              ? t("智能体「{name}」", { name: pendingItem.sourceLabel })
+              : t("智能体")
+            : t("自动记账"),
+      });
       metaRows.push({ label: t("生成时间"), value: formatDateFull(detail.createdAt) });
       metaRows.push({ label: t("状态"), value: t("待确认") });
     } else {

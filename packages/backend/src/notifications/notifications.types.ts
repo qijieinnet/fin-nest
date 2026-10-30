@@ -12,7 +12,9 @@ export type NotificationSourceType =
   | "subscription"
   | "auto_pending"
   | "insurance"
-  | "entry_reminder";
+  | "entry_reminder"
+  /** 智能体变更申请（汇总卡，不挂按钮：改/删已入账数据要在应用里看过前后对比再批准）。 */
+  | "agent_request";
 
 /**
  * reminder_targets.source_id 指向的对象：接收人挂在「档位 / 规则」上，不挂在单次事件上。

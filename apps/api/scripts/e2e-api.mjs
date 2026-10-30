@@ -37,6 +37,9 @@ async function main() {
   await assertLocalePreference(owner.token);
   await assertAppLockFlow(owner.token, requester.token);
   await assertAdminUserSessions(owner, requester);
+  await assertAgentMcp({ owner, requester });
+  await assertAgentMcpWrites({ owner });
+  await assertAgentMcpChangeRequests({ owner });
   const ledger = await api("POST", "/ledgers", {
     token: owner.token,
     expected: 201,
@@ -223,6 +226,9 @@ async function main() {
           "auth",
           "app_lock",
           "admin_user_sessions",
+          "agent_mcp",
+          "agent_mcp_writes",
+          "agent_mcp_change_requests",
           "ledger",
           "partial_patch",
           "transaction_crud",
@@ -1670,6 +1676,850 @@ async function health() {
   } catch {
     return false;
   }
+}
+
+/**
+ * MCP 写入（P2）：草稿进待确认、用户确认后才入账；token 之间的草稿隔离；幂等；
+ * 档案/账户/计划写工具；审计；推送任务；账本 JSON 备份恢复后智能体草稿仍可确认。
+ */
+async function assertAgentMcpWrites({ owner }) {
+  const ledger = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E MCP Write ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(ledger.id);
+  const base = `/ledgers/${ledger.id}`;
+  const account = await api("POST", `${base}/accounts`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "savings", name: `MCPW Cash ${stamp}`, balanceMicros: "100000000" },
+  });
+  const expenseCategory = await api("POST", `${base}/categories`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "expense", name: `MCPW Food ${stamp}` },
+  });
+  const incomeCategory = await api("POST", `${base}/categories`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "income", name: `MCPW Salary ${stamp}` },
+  });
+  const allScopes = ["read", "drafts:write", "accounts:write", "assets:write", "plans:write"];
+
+  // ---- scope：read 必选；工具按 scope 注册 ----
+  const noRead = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 400,
+    body: { name: "no read", scopes: ["drafts:write"] },
+  });
+  assert.equal(noRead.code, "AGENT_TOKEN_READ_REQUIRED");
+  const writer = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCPW ${stamp}`, scopes: allScopes, ledgerIds: [ledger.id] },
+  });
+  const other = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCPW other ${stamp}`, scopes: ["read", "drafts:write"] },
+  });
+  const reader = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCPW reader ${stamp}`, scopes: ["read"] },
+  });
+  const toolNames = (await mcpRpc(writer.token, "tools/list")).result.tools.map((tool) => tool.name);
+  for (const name of [
+    "draft_transaction",
+    "update_draft",
+    "withdraw_draft",
+    "get_draft_status",
+    "create_account",
+    "create_item",
+    "create_subscription",
+    "create_insurance",
+    "create_plan",
+    "set_category_budget",
+  ]) {
+    assert.ok(toolNames.includes(name), name);
+  }
+  const readerTools = (await mcpRpc(reader.token, "tools/list")).result.tools.map((tool) => tool.name);
+  assert.equal(readerTools.includes("draft_transaction"), false);
+  const init = await mcpRpc(writer.token, "initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "fin-nest-e2e", version: "1" },
+  });
+  assert.match(init.result.instructions, /待确认/);
+
+  // ---- 起草：只进待确认，余额不动；同一 key 重放；非法引用当场拒绝 ----
+  const draftKey = `${prefix}-draft-1`;
+  const draftArgs = {
+    ledgerId: ledger.id,
+    idempotencyKey: draftKey,
+    type: "expense",
+    amount: "12.5",
+    occurredOn: todayIso(),
+    categoryId: expenseCategory.id,
+    accountId: account.id,
+    note: "mcp draft lunch",
+  };
+  const drafted = await mcpCall(writer.token, "draft_transaction", draftArgs);
+  assert.equal(drafted.isError, false, JSON.stringify(drafted.data));
+  const draft = drafted.data.draft;
+  assert.equal(draft.source, "agent");
+  assert.equal(draft.status, "pending");
+  assert.equal(draft.amount, "12.5");
+  assert.equal(draft.sourceLabel, `MCPW ${stamp}`);
+  assert.match(drafted.data.message, /尚未入账/);
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "100000000");
+  const replay = await mcpCall(writer.token, "draft_transaction", draftArgs);
+  assert.equal(replay.data.draft.id, draft.id);
+  assert.equal(
+    await prisma.autoPendingTransaction.count({ where: { ledgerId: ledger.id, source: "agent" } }),
+    1,
+  );
+  const wrongCategory = await mcpCall(writer.token, "draft_transaction", {
+    ...draftArgs,
+    idempotencyKey: `${prefix}-draft-bad`,
+    categoryId: incomeCategory.id,
+  });
+  assert.equal(wrongCategory.isError, true);
+  const tooPrecise = await mcpCall(writer.token, "draft_transaction", {
+    ...draftArgs,
+    idempotencyKey: `${prefix}-draft-bad2`,
+    amount: "1.234",
+  });
+  assert.equal(tooPrecise.isError, true);
+  const pendingList = await api("GET", `${base}/auto-pending-transactions`, { token: owner.token });
+  assert.ok(pendingList.some((row) => row.id === draft.id && row.source === "agent"));
+
+  // ---- 推送任务：起草后排了一个（且只有一个）延迟任务 ----
+  const notifyJobs = await prisma.backgroundJob.findMany({
+    where: { type: "agent.drafts.notify", status: "pending" },
+  });
+  const ownJobs = notifyJobs.filter(
+    (job) => job.payload?.agentTokenId === writer.id && job.payload?.ledgerId === ledger.id,
+  );
+  assert.equal(ownJobs.length, 1);
+
+  // ---- 修改：本 token 可改，别的 token 改不了、撤不回 ----
+  const updated = await mcpCall(writer.token, "update_draft", {
+    ledgerId: ledger.id,
+    draftId: draft.id,
+    amount: "20",
+    note: "mcp draft dinner",
+  });
+  assert.equal(updated.isError, false, JSON.stringify(updated.data));
+  assert.equal(updated.data.draft.amount, "20");
+  assert.equal(updated.data.draft.note, "mcp draft dinner");
+  const foreignUpdate = await mcpCall(other.token, "update_draft", {
+    ledgerId: ledger.id,
+    draftId: draft.id,
+    amount: "1",
+  });
+  assert.equal(foreignUpdate.data.code, "AGENT_DRAFT_NOT_FOUND");
+  const foreignWithdraw = await mcpCall(other.token, "withdraw_draft", {
+    ledgerId: ledger.id,
+    draftId: draft.id,
+  });
+  assert.equal(foreignWithdraw.data.code, "AGENT_DRAFT_NOT_FOUND");
+
+  // ---- 用户确认后才入账：来源 agent、余额变化、状态可查 ----
+  const confirmed = await api("POST", `${base}/auto-pending-transactions/${draft.id}/confirm`, {
+    token: owner.token,
+    expected: 201,
+  });
+  assert.equal(confirmed.source, "agent");
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "80000000");
+  const status = await mcpCall(writer.token, "get_draft_status", {
+    ledgerId: ledger.id,
+    draftIds: [draft.id],
+  });
+  assert.equal(status.data.drafts[0].status, "confirmed");
+  assert.equal(status.data.drafts[0].confirmedTransactionId, confirmed.id);
+  const lateWithdraw = await mcpCall(writer.token, "withdraw_draft", {
+    ledgerId: ledger.id,
+    draftId: draft.id,
+  });
+  assert.equal(lateWithdraw.isError, true);
+
+  // ---- 撤回：仍待确认的可撤回 ----
+  const second = await mcpCall(writer.token, "draft_transaction", {
+    ...draftArgs,
+    idempotencyKey: `${prefix}-draft-2`,
+    amount: "3",
+  });
+  const withdrawn = await mcpCall(writer.token, "withdraw_draft", {
+    ledgerId: ledger.id,
+    draftId: second.data.draft.id,
+  });
+  assert.equal(withdrawn.isError, false);
+  assert.equal(
+    (
+      await mcpCall(writer.token, "get_draft_status", {
+        ledgerId: ledger.id,
+        draftIds: [second.data.draft.id],
+      })
+    ).data.drafts[0].status,
+    "deleted",
+  );
+
+  // ---- 账户：余额恒为 0，可改信息 ----
+  const createdAccount = await mcpCall(writer.token, "create_account", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-account-1`,
+    type: "credit",
+    name: `MCPW Card ${stamp}`,
+    creditLimit: "5000",
+    billDay: 5,
+  });
+  assert.equal(createdAccount.isError, false, JSON.stringify(createdAccount.data));
+  assert.equal(createdAccount.data.account.balance, "0");
+  const createdAccountAgain = await mcpCall(writer.token, "create_account", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-account-1`,
+    type: "credit",
+    name: `MCPW Card ${stamp}`,
+  });
+  assert.equal(createdAccountAgain.data.account.id, createdAccount.data.account.id);
+  const renamedAccount = await mcpCall(writer.token, "update_account", {
+    ledgerId: ledger.id,
+    accountId: createdAccount.data.account.id,
+    name: `MCPW Card renamed ${stamp}`,
+  });
+  assert.equal(renamedAccount.data.account.name, `MCPW Card renamed ${stamp}`);
+  const subAccount = await mcpCall(writer.token, "create_sub_account", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-sub-1`,
+    accountId: account.id,
+    name: `MCPW Sub ${stamp}`,
+  });
+  assert.equal(subAccount.isError, false, JSON.stringify(subAccount.data));
+  assert.equal(subAccount.data.subAccount.balance, "0");
+
+  // ---- 物品 / 订阅 / 保险 ----
+  const item = await mcpCall(writer.token, "create_item", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-item-1`,
+    name: `MCPW Phone ${stamp}`,
+    purchasePrice: "4999",
+    purchaseDate: todayIso(),
+    expectedYears: "3",
+  });
+  assert.equal(item.isError, false, JSON.stringify(item.data));
+  assert.equal(item.data.item.purchasePrice, "4999");
+  const itemAgain = await mcpCall(writer.token, "create_item", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-item-1`,
+    name: `MCPW Phone ${stamp}`,
+  });
+  assert.equal(itemAgain.data.item.id, item.data.item.id);
+  assert.equal(
+    (await mcpCall(writer.token, "scrap_item", {
+      ledgerId: ledger.id,
+      itemId: item.data.item.id,
+      sellPrice: "1500",
+    })).isError,
+    false,
+  );
+  assert.equal(
+    (await mcpCall(writer.token, "restore_item", { ledgerId: ledger.id, itemId: item.data.item.id }))
+      .isError,
+    false,
+  );
+  // 起草时关联物品并标为「购入」，确认后交易关联方式随之落库。
+  const purchaseDraft = await mcpCall(writer.token, "draft_transaction", {
+    ...draftArgs,
+    idempotencyKey: `${prefix}-draft-purchase`,
+    amount: "4999",
+    itemId: item.data.item.id,
+    itemLinkKind: "purchase",
+  });
+  assert.equal(purchaseDraft.isError, false, JSON.stringify(purchaseDraft.data));
+  const purchase = await api(
+    "POST",
+    `${base}/auto-pending-transactions/${purchaseDraft.data.draft.id}/confirm`,
+    { token: owner.token, expected: 201 },
+  );
+  const purchaseLink = await prisma.transactionLink.findFirst({
+    where: { transactionId: purchase.id, linkedType: "item" },
+  });
+  assert.equal(purchaseLink?.linkKind, "purchase");
+
+  const subscription = await mcpCall(writer.token, "create_subscription", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-sub-svc-1`,
+    name: `MCPW Music ${stamp}`,
+    price: "15",
+    billingCycle: "monthly",
+    nextRenewalDate: todayIso(),
+  });
+  assert.equal(subscription.isError, false, JSON.stringify(subscription.data));
+  const subscriptionId = subscription.data.subscription.id;
+  assert.equal(
+    (await mcpCall(writer.token, "terminate_subscription", { ledgerId: ledger.id, subscriptionId }))
+      .isError,
+    false,
+  );
+  assert.equal(
+    (await mcpCall(writer.token, "resume_subscription", { ledgerId: ledger.id, subscriptionId }))
+      .isError,
+    false,
+  );
+  const insurance = await mcpCall(writer.token, "create_insurance", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-ins-1`,
+    type: "medical",
+    name: `MCPW Health ${stamp}`,
+    premium: "300",
+    premiumFreq: "year",
+  });
+  assert.equal(insurance.isError, false, JSON.stringify(insurance.data));
+  const badInsurance = await mcpCall(writer.token, "create_insurance", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-ins-bad`,
+    type: "medical",
+    name: "",
+  });
+  assert.equal(badInsurance.isError, true);
+
+  // ---- 计划与预算 ----
+  const plan = await mcpCall(writer.token, "create_plan", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-plan-1`,
+    kind: "expense",
+    metric: "amount",
+    name: `MCPW Food limit ${stamp}`,
+    limitAmount: "800",
+    startDate: `${todayIso().slice(0, 7)}-01`,
+    repeatRule: "monthly",
+    matchRule: { categoryIds: [expenseCategory.id] },
+  });
+  assert.equal(plan.isError, false, JSON.stringify(plan.data));
+  const planId = plan.data.plan.id;
+  assert.equal((await mcpCall(writer.token, "stop_plan", { ledgerId: ledger.id, planId })).isError, false);
+  assert.equal(
+    (await mcpCall(writer.token, "restore_plan", { ledgerId: ledger.id, planId })).isError,
+    false,
+  );
+  assert.equal(
+    (await mcpCall(writer.token, "set_monthly_budget", {
+      ledgerId: ledger.id,
+      enabled: true,
+      totalAmount: "3000",
+    })).isError,
+    false,
+  );
+  const categoryBudget = await mcpCall(writer.token, "set_category_budget", {
+    ledgerId: ledger.id,
+    categoryId: expenseCategory.id,
+    amount: "1000",
+  });
+  assert.equal(categoryBudget.isError, false, JSON.stringify(categoryBudget.data));
+  const progress = (
+    await mcpCall(writer.token, "get_budget_progress", { ledgerId: ledger.id })
+  ).data;
+  assert.equal(progress.total.budget, "3000");
+
+  // ---- 审计：每次写工具都留了 token 维度的记录 ----
+  const auditRows = await prisma.auditLog.findMany({
+    where: { ledgerId: ledger.id, action: "mcp.tool_call" },
+  });
+  assert.ok(auditRows.length >= 10);
+  assert.ok(auditRows.every((row) => row.metadata?.agentTokenId));
+
+  // ---- 账本 JSON 备份恢复：智能体草稿保留来源快照、可照常确认 ----
+  const keptDraft = await mcpCall(writer.token, "draft_transaction", {
+    ...draftArgs,
+    idempotencyKey: `${prefix}-draft-kept`,
+    amount: "7",
+  });
+  assert.equal(keptDraft.isError, false, JSON.stringify(keptDraft.data));
+  const exported = await fetch(`${baseUrl}${base}/export/json`, {
+    headers: { authorization: `Bearer ${owner.token}` },
+  });
+  assert.equal(exported.status, 200);
+  const form = new FormData();
+  form.append("confirmLedgerName", ledger.name);
+  form.append("file", new Blob([await exported.text()], { type: "application/json" }), "backup.json");
+  const restored = await fetch(`${baseUrl}${base}/import/json`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${owner.token}` },
+    body: form,
+  });
+  assert.equal(restored.status, 201, await restored.text());
+  const restoredDrafts = await prisma.autoPendingTransaction.findMany({
+    where: { ledgerId: ledger.id, source: "agent", status: "pending" },
+  });
+  assert.equal(restoredDrafts.length, 1);
+  assert.equal(restoredDrafts[0].agentTokenId, null);
+  assert.equal(restoredDrafts[0].sourceLabel, `MCPW ${stamp}`);
+  const restoredConfirm = await api(
+    "POST",
+    `${base}/auto-pending-transactions/${restoredDrafts[0].id}/confirm`,
+    { token: owner.token, expected: 201 },
+  );
+  assert.equal(restoredConfirm.source, "agent");
+}
+
+/**
+ * MCP 变更申请（P3）：改/删已入账交易、调整余额只能提交申请；申请时试算校验；用户批准才执行，
+ * 批准是原子的（重复批准 409）；申请后目标被改过则拒绝执行并标 failed；驳回、撤回与 token 隔离。
+ */
+async function assertAgentMcpChangeRequests({ owner }) {
+  const ledger = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E MCP Change ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(ledger.id);
+  const base = `/ledgers/${ledger.id}`;
+  const account = await api("POST", `${base}/accounts`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "savings", name: `MCPC Cash ${stamp}`, balanceMicros: "100000000" },
+  });
+  const expenseCategory = await api("POST", `${base}/categories`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "expense", name: `MCPC Food ${stamp}` },
+  });
+  const incomeCategory = await api("POST", `${base}/categories`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "income", name: `MCPC Salary ${stamp}` },
+  });
+  const expenseBody = {
+    type: "expense",
+    grossAmountMicros: "30000000",
+    occurredOn: todayIso(),
+    currency: "CNY",
+    categoryId: expenseCategory.id,
+    accountId: account.id,
+    note: "mcp change lunch",
+  };
+  const expense = await api("POST", `${base}/transactions`, {
+    token: owner.token,
+    expected: 201,
+    body: expenseBody,
+  });
+  const changer = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCPC ${stamp}`, scopes: ["read", "changes:write"], ledgerIds: [ledger.id] },
+  });
+  const other = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCPC other ${stamp}`, scopes: ["read", "changes:write"] },
+  });
+  const tools = (await mcpRpc(changer.token, "tools/list")).result.tools.map((tool) => tool.name);
+  for (const name of [
+    "request_transaction_update",
+    "request_transaction_delete",
+    "request_balance_adjustment",
+    "get_change_requests",
+    "withdraw_change_request",
+  ]) {
+    assert.ok(tools.includes(name), name);
+  }
+  assert.equal(tools.includes("draft_transaction"), false);
+
+  // ---- 修改申请：不立即生效；幂等；无变化/非法修改当场拒绝 ----
+  const updateArgs = {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-update`,
+    transactionId: expense.id,
+    reason: "小票金额是 25",
+    amount: "25",
+    note: "mcp change lunch fixed",
+  };
+  const requested = await mcpCall(changer.token, "request_transaction_update", updateArgs);
+  assert.equal(requested.isError, false, JSON.stringify(requested.data));
+  const request = requested.data.request;
+  assert.equal(request.status, "pending");
+  assert.equal(request.kind, "transaction.update");
+  assert.match(requested.data.message, /尚未生效/);
+  const amountRow = request.summary.rows.find((row) => row.field === "amount");
+  assert.deepEqual([amountRow.before, amountRow.after], ["30000000", "25000000"]);
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "70000000");
+  const replayed = await mcpCall(changer.token, "request_transaction_update", updateArgs);
+  assert.equal(replayed.data.request.id, request.id);
+  const noChange = await mcpCall(changer.token, "request_transaction_update", {
+    ...updateArgs,
+    idempotencyKey: `${prefix}-req-noop`,
+    amount: "30",
+    note: "mcp change lunch",
+  });
+  assert.equal(noChange.data.code, "AGENT_REQUEST_NO_CHANGE");
+  const invalid = await mcpCall(changer.token, "request_transaction_update", {
+    ...updateArgs,
+    idempotencyKey: `${prefix}-req-invalid`,
+    categoryId: incomeCategory.id,
+  });
+  assert.equal(invalid.isError, true);
+  const summary = await api("GET", `${base}/reminder-summary`, { token: owner.token });
+  assert.equal(summary.items.agentRequests, 1);
+  assert.ok(
+    (await prisma.backgroundJob.findMany({ where: { type: "agent.drafts.notify" } })).some(
+      (job) => job.payload?.agentTokenId === changer.id,
+    ),
+  );
+
+  // ---- 批准 = 执行：金额与余额随之变化，重复批准 409 ----
+  const listed = await api("GET", `${base}/agent-change-requests`, { token: owner.token });
+  assert.ok(listed.some((row) => row.id === request.id));
+  const approved = await api("POST", `${base}/agent-change-requests/${request.id}/approve`, {
+    token: owner.token,
+  });
+  assert.equal(approved.status, "approved");
+  assert.equal(approved.resultId, expense.id);
+  const updatedTx = await api("GET", `${base}/transactions/${expense.id}`, { token: owner.token });
+  assert.equal(updatedTx.grossAmountMicros, "25000000");
+  assert.equal(updatedTx.note, "mcp change lunch fixed");
+  assert.equal(updatedTx.categoryId, expenseCategory.id);
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "75000000");
+  const again = await api("POST", `${base}/agent-change-requests/${request.id}/approve`, {
+    token: owner.token,
+    expected: 409,
+  });
+  assert.equal(again.code, "AGENT_REQUEST_ALREADY_PROCESSED");
+  const status = await mcpCall(changer.token, "get_change_requests", {
+    ledgerId: ledger.id,
+    requestIds: [request.id],
+  });
+  assert.equal(status.data.requests[0].status, "approved");
+
+  // ---- 过期保护：申请后用户自己改过这笔交易，批准被拒绝并标为 failed ----
+  const staleRequest = await mcpCall(changer.token, "request_transaction_update", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-stale`,
+    transactionId: expense.id,
+    reason: "改日期",
+    note: "agent note",
+  });
+  await api("PATCH", `${base}/transactions/${expense.id}`, {
+    token: owner.token,
+    body: { ...expenseBody, grossAmountMicros: "26000000", note: "user edited" },
+  });
+  const staleApprove = await api(
+    "POST",
+    `${base}/agent-change-requests/${staleRequest.data.request.id}/approve`,
+    { token: owner.token, expected: 409 },
+  );
+  assert.equal(staleApprove.code, "AGENT_REQUEST_STALE");
+  const failedRow = await prisma.agentChangeRequest.findUnique({
+    where: { id: staleRequest.data.request.id },
+  });
+  assert.equal(failedRow.status, "failed");
+  assert.ok(failedRow.error);
+  assert.equal(
+    (await api("GET", `${base}/transactions/${expense.id}`, { token: owner.token })).note,
+    "user edited",
+  );
+
+  // ---- 驳回与撤回；别的 token 撤不回 ----
+  const toReject = await mcpCall(changer.token, "request_transaction_update", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-reject`,
+    transactionId: expense.id,
+    reason: "试试",
+    note: "rejected note",
+  });
+  await api("POST", `${base}/agent-change-requests/${toReject.data.request.id}/reject`, {
+    token: owner.token,
+    expected: 204,
+  });
+  assert.equal(
+    (await prisma.agentChangeRequest.findUnique({ where: { id: toReject.data.request.id } })).status,
+    "rejected",
+  );
+  const toWithdraw = await mcpCall(changer.token, "request_transaction_update", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-withdraw`,
+    transactionId: expense.id,
+    reason: "试试",
+    note: "withdrawn note",
+  });
+  const foreign = await mcpCall(other.token, "withdraw_change_request", {
+    ledgerId: ledger.id,
+    requestId: toWithdraw.data.request.id,
+  });
+  assert.equal(foreign.data.code, "AGENT_REQUEST_NOT_FOUND");
+  const withdrawn = await mcpCall(changer.token, "withdraw_change_request", {
+    ledgerId: ledger.id,
+    requestId: toWithdraw.data.request.id,
+  });
+  assert.equal(withdrawn.isError, false);
+  assert.equal(
+    (await mcpCall(other.token, "get_change_requests", { ledgerId: ledger.id })).data.requests.length,
+    0,
+  );
+
+  // ---- 余额调整申请 ----
+  const adjust = await mcpCall(changer.token, "request_balance_adjustment", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-adjust`,
+    accountId: account.id,
+    balance: "200",
+    reason: "以银行 App 余额为准",
+  });
+  assert.equal(adjust.isError, false, JSON.stringify(adjust.data));
+  const balanceRow = adjust.data.request.summary.rows.find((row) => row.field === "balance");
+  assert.deepEqual([balanceRow.before, balanceRow.after], ["74000000", "200000000"]);
+  await api("POST", `${base}/agent-change-requests/${adjust.data.request.id}/approve`, {
+    token: owner.token,
+  });
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "200000000");
+  const negative = await mcpCall(changer.token, "request_balance_adjustment", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-adjust-same`,
+    accountId: account.id,
+    balance: "200",
+    reason: "没变化",
+  });
+  assert.equal(negative.data.code, "AGENT_REQUEST_NO_CHANGE");
+
+  // ---- 删除申请：批准后交易软删、流水冲正 ----
+  const del = await mcpCall(changer.token, "request_transaction_delete", {
+    ledgerId: ledger.id,
+    idempotencyKey: `${prefix}-req-delete`,
+    transactionId: expense.id,
+    reason: "重复记账",
+  });
+  assert.equal(del.isError, false, JSON.stringify(del.data));
+  await api("POST", `${base}/agent-change-requests/${del.data.request.id}/approve`, {
+    token: owner.token,
+  });
+  await api("GET", `${base}/transactions/${expense.id}`, { token: owner.token, expected: 404 });
+  assert.equal(await accountBalance(ledger.id, account.id, owner.token), "226000000");
+
+  // ---- 审计 ----
+  const approvals = await prisma.auditLog.count({
+    where: { ledgerId: ledger.id, action: "agent_change_request.approve" },
+  });
+  assert.equal(approvals, 3);
+}
+
+/** MCP Streamable HTTP（无状态）的一次 JSON-RPC 请求。 */
+async function mcpRpc(agentToken, method, params, expected = 200) {
+  const response = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      ...(agentToken ? { authorization: `Bearer ${agentToken}` } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }),
+  });
+  const text = await response.text();
+  assert.equal(response.status, expected, `${method}: ${text}`);
+  return JSON.parse(text);
+}
+
+/** 调一个 MCP 工具，返回 { isError, data }（data 为工具结果 JSON）。 */
+async function mcpCall(agentToken, name, args = {}) {
+  const body = await mcpRpc(agentToken, "tools/call", { name, arguments: args });
+  const text = body.result.content[0].text;
+  return {
+    isError: body.result.isError === true,
+    data: text.startsWith("{") ? JSON.parse(text) : text,
+  };
+}
+
+/**
+ * 智能体接入（MCP，docs/MCP_PLAN.md）：个人 token 的创建/列表/吊销与鉴权失败路径、账本白名单、
+ * 非成员账本被拒、Streamable HTTP 无状态握手，以及只读工具的金额口径（主单位字符串而非 micros）。
+ */
+async function assertAgentMcp({ owner, requester }) {
+  const base = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E MCP ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(base.id);
+  const other = await api("POST", "/ledgers", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `E2E MCP Other ${stamp}`, currency: "CNY" },
+  });
+  touched.ledgerIds.add(other.id);
+  const account = await api("POST", `/ledgers/${base.id}/accounts`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "savings", name: `MCP Cash ${stamp}`, balanceMicros: "100000000" },
+  });
+  const category = await api("POST", `/ledgers/${base.id}/categories`, {
+    token: owner.token,
+    expected: 201,
+    body: { type: "expense", name: `MCP Food ${stamp}` },
+  });
+  const expense = await api("POST", `/ledgers/${base.id}/transactions`, {
+    token: owner.token,
+    expected: 201,
+    body: {
+      type: "expense",
+      grossAmountMicros: "12500000",
+      occurredOn: todayIso(),
+      currency: "CNY",
+      categoryId: category.id,
+      accountId: account.id,
+      note: "mcp e2e lunch",
+    },
+  });
+
+  // ---- token 管理：白名单账本须是自己所在的；CIDR 校验；明文只出现一次 ----
+  await api("POST", "/auth/agent-tokens", {
+    token: requester.token,
+    expected: 403,
+    body: { name: "not member", scopes: ["read"], ledgerIds: [base.id] },
+  });
+  const badIp = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 400,
+    body: { name: "bad ip", scopes: ["read"], allowedIps: ["10.0.0.0/33"] },
+  });
+  assert.equal(badIp.code, "AGENT_TOKEN_INVALID_IP");
+  await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 400,
+    body: { name: "bad scope", scopes: ["admin"] },
+  });
+  const created = await api("POST", "/auth/agent-tokens", {
+    token: owner.token,
+    expected: 201,
+    body: { name: `MCP ${stamp}`, scopes: ["read"], ledgerIds: [base.id] },
+  });
+  assert.match(created.token, /^fn_pat_/);
+  assert.equal(created.tokenSuffix, created.token.slice(-4));
+  const listed = await api("GET", "/auth/agent-tokens", { token: owner.token });
+  const listedRow = listed.find((row) => row.id === created.id);
+  assert.ok(listedRow);
+  assert.equal(listedRow.token, undefined);
+  assert.equal(
+    (await api("GET", "/auth/agent-tokens", { token: requester.token })).some(
+      (row) => row.id === created.id,
+    ),
+    false,
+  );
+  await api("DELETE", `/auth/agent-tokens/${created.id}`, { token: requester.token, expected: 404 });
+
+  // ---- 鉴权失败路径与方法限制 ----
+  const rpc = mcpRpc;
+  const call = mcpCall;
+  assert.equal((await rpc(null, "tools/list", null, 401)).code, "AGENT_TOKEN_REQUIRED");
+  assert.equal((await rpc(owner.token, "tools/list", null, 401)).code, "AGENT_TOKEN_REQUIRED");
+  assert.equal((await rpc("fn_pat_forged", "tools/list", null, 401)).code, "AGENT_TOKEN_INVALID");
+  assert.equal((await fetch(`${baseUrl}/mcp`)).status, 405);
+
+  // ---- 握手与工具清单：只读 token 只看得到只读工具 ----
+  const init = await rpc(created.token, "initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "fin-nest-e2e", version: "1" },
+  });
+  assert.equal(init.result.serverInfo.name, "fin-nest");
+  const tools = (await rpc(created.token, "tools/list")).result.tools;
+  assert.ok(tools.length >= 15);
+  assert.ok(tools.every((tool) => tool.annotations?.readOnlyHint === true));
+
+  // ---- 账本白名单：只列出、只允许访问 base ----
+  const ledgers = (await call(created.token, "list_ledgers")).data.ledgers;
+  assert.deepEqual(
+    ledgers.map((ledger) => ledger.id),
+    [base.id],
+  );
+  const denied = await call(created.token, "get_ledger_context", { ledgerId: other.id });
+  assert.equal(denied.isError, true);
+  assert.equal(denied.data.code, "AGENT_TOKEN_LEDGER_DENIED");
+  const malformed = await call(created.token, "get_ledger_context", { ledgerId: "not-a-uuid" });
+  assert.equal(malformed.isError, true);
+
+  // ---- 只读工具：id 可发现，金额是主单位字符串 ----
+  const context = (await call(created.token, "get_ledger_context", { ledgerId: base.id })).data;
+  assert.ok(context.accounts.some((row) => row.id === account.id));
+  assert.ok(context.categories.some((row) => row.id === category.id));
+  const query = (
+    await call(created.token, "query_transactions", {
+      ledgerId: base.id,
+      categoryIds: [category.id],
+      minAmount: "12.5",
+    })
+  ).data;
+  assert.equal(query.total, 1);
+  assert.equal(query.expenseTotal, "12.5");
+  assert.equal(query.transactions[0].id, expense.id);
+  assert.equal(query.transactions[0].effectiveAmount, "12.5");
+  assert.equal(query.transactions[0].occurredOn, todayIso());
+  const badAmount = await call(created.token, "query_transactions", {
+    ledgerId: base.id,
+    minAmount: "1.234",
+  });
+  assert.equal(badAmount.isError, true);
+  const detail = (
+    await call(created.token, "get_transaction", { ledgerId: base.id, transactionId: expense.id })
+  ).data;
+  assert.equal(detail.grossAmount, "12.5");
+  const stats = (
+    await call(created.token, "get_period_stats", { ledgerId: base.id, direction: "expense" })
+  ).data;
+  assert.equal(stats.expense.total, "12.5");
+  assert.equal(stats.income, undefined);
+  const balances = (await call(created.token, "list_accounts", { ledgerId: base.id })).data;
+  assert.equal(balances.netWorth, "87.5");
+  assert.equal(balances.accounts.find((row) => row.id === account.id).balance, "87.5");
+  const entries = (
+    await call(created.token, "list_account_entries", { ledgerId: base.id, accountId: account.id })
+  ).data;
+  const expenseEntry = entries.entries.find((row) => row.transactionId === expense.id);
+  assert.equal(expenseEntry?.amountDelta, "-12.5");
+  assert.equal(expenseEntry.balanceAfter, "87.5");
+  for (const name of [
+    "list_plans",
+    "get_budget_progress",
+    "list_items",
+    "list_subscriptions",
+    "list_insurances",
+    "list_auto_rules",
+    "list_pending",
+    "get_reminder_summary",
+  ]) {
+    const result = await call(created.token, name, { ledgerId: base.id });
+    assert.equal(result.isError, false, `${name}: ${JSON.stringify(result.data)}`);
+  }
+  assert.equal(
+    (await call(created.token, "get_fx_rate", { ledgerId: base.id, from: "CNY" })).data.rate,
+    "1",
+  );
+
+  // ---- 非成员：不限账本的 token 也拿不到别人账本的数据 ----
+  const outsider = await api("POST", "/auth/agent-tokens", {
+    token: requester.token,
+    expected: 201,
+    body: { name: `MCP outsider ${stamp}`, scopes: ["read"] },
+  });
+  const outsiderResult = await call(outsider.token, "list_accounts", { ledgerId: base.id });
+  assert.equal(outsiderResult.isError, true);
+  assert.equal(
+    (await call(outsider.token, "list_ledgers")).data.ledgers.some((row) => row.id === base.id),
+    false,
+  );
+
+  // ---- 修改与吊销：改名不影响使用，吊销后立即 401 ----
+  const renamed = await api("PATCH", `/auth/agent-tokens/${created.id}`, {
+    token: owner.token,
+    body: { name: `MCP renamed ${stamp}` },
+  });
+  assert.equal(renamed.name, `MCP renamed ${stamp}`);
+  await api("DELETE", `/auth/agent-tokens/${created.id}`, { token: owner.token, expected: 204 });
+  assert.equal((await rpc(created.token, "tools/list", null, 401)).code, "AGENT_TOKEN_INVALID");
+  await api("PATCH", `/auth/agent-tokens/${created.id}`, {
+    token: owner.token,
+    expected: 409,
+    body: { name: "again" },
+  });
 }
 
 async function register(label) {
@@ -3637,6 +4487,28 @@ async function cleanup() {
       .catch(() => undefined);
     await prisma.feishuEvent
       .deleteMany({ where: { eventId: { contains: stamp } } })
+      .catch(() => undefined);
+    // 智能体 token 是用户级的，外键指向 users，须在删用户前清掉；它起草的待确认又指向 token，先删。
+    const agentTokenIds = (
+      await prisma.agentToken.findMany({ where: { userId: { in: userIds } }, select: { id: true } })
+    ).map((row) => row.id);
+    if (agentTokenIds.length) {
+      await prisma.autoPendingTransaction.deleteMany({
+        where: { agentTokenId: { in: agentTokenIds } },
+      });
+    }
+    // 变更申请指向账本、用户与 token，三者删除前都得先清掉它。
+    await prisma.agentChangeRequest.deleteMany({
+      where: {
+        OR: [
+          { ledgerId: { in: ledgerIds } },
+          { requestedBy: { in: userIds } },
+          { decidedBy: { in: userIds } },
+        ],
+      },
+    });
+    await prisma.agentToken
+      .deleteMany({ where: { userId: { in: userIds } } })
       .catch(() => undefined);
     // Web Push 订阅是用户级的（不挂账本），与飞书绑定同一批清理。
     await prisma.pushSubscription

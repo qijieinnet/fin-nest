@@ -2,6 +2,11 @@
   "extends": "@fin-nest/tsconfig/nestjs.json",
   "compilerOptions": {
     "baseUrl": ".",
+    // moduleResolution=Node 不读 package.json 的 exports；MCP SDK 只经 exports 暴露子路径，
+    // 这里把类型指到它的 CJS 产物（运行时 require 本身会按 exports 解析，不受影响）。
+    "paths": {
+      "@modelcontextprotocol/sdk/*": ["node_modules/@modelcontextprotocol/sdk/dist/cjs/*"]
+    },
     "types": ["node", "multer"],
     "outDir": "dist",
     "rootDir": "src"

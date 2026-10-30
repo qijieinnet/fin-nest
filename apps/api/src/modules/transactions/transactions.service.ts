@@ -78,7 +78,7 @@ function relationAccountEntry(relationKind: string, amountMicros: bigint) {
 }
 
 export type CreateTransactionOptions = {
-  source?: "manual" | "quick" | "auto" | "import" | "ai";
+  source?: "manual" | "quick" | "auto" | "import" | "ai" | "agent";
   sourceId?: string | null;
   auditAction?: string;
 };
@@ -278,75 +278,87 @@ export class TransactionsService {
   ) {
     await this.ledgers.assertMember(ledgerId, userId);
     // 更新会先冲正旧分录再写新分录，每条都加账户行锁，放宽默认 5s 事务超时。
-    return this.txs.run(
-      async (tx) => {
-        const existing = await tx.transaction.findFirst({
-          where: { id: transactionId, ledgerId, deletedAt: null },
-        });
-        if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+    return this.txs.run((tx) => this.updateWithin(tx, ledgerId, transactionId, userId, input), {
+      timeout: 20_000,
+    });
+  }
 
-        await this.reverseEntries(
-          tx,
-          ledgerId,
-          transactionId,
-          userId,
-          new Date(),
-          "transaction.update.reversal",
-        );
-        await tx.transactionAccountRelation.deleteMany({ where: { ledgerId, transactionId } });
-        const normalized = await this.normalize(tx, ledgerId, input);
-        const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
+  /**
+   * update 的事务体，供需要把「改交易」与自己的写入放进同一事务的调用方使用
+   * （智能体变更申请：抢占申请状态 + 核对版本 + 改交易必须一起提交或一起回滚）。
+   * 调用方负责 assertMember。
+   */
+  async updateWithin(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    transactionId: string,
+    userId: string,
+    input: UpdateTransactionDto,
+  ) {
+    const existing = await tx.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
+    if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
 
-        const updated = await tx.transaction.update({
-          where: { id: transactionId },
-          data: {
-            type: input.type,
-            grossAmountMicros: normalized.grossAmountMicros,
-            effectiveAmountMicros: normalized.effectiveAmountMicros,
-            currency: normalized.baseCurrency,
-            ...normalized.fx,
-            occurredOn: parseDateOnly(input.occurredOn),
-            occurredAt: parseDateOnly(input.occurredOn),
-            categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
-            subcategoryId: input.type === "transfer" ? null : (input.subcategoryId ?? null),
-            categorySnapshot: normalized.categorySnapshot ?? Prisma.JsonNull,
-            personId: input.personId ?? null,
-            personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
-            accountId: input.type === "transfer" ? null : (input.accountId ?? null),
-            subAccountId: resolved.subAccountId,
-            fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
-            fromSubAccountId: resolved.fromSubAccountId,
-            toAccountId: input.type === "transfer" ? input.toAccountId : null,
-            toSubAccountId: resolved.toSubAccountId,
-            note: input.note ?? null,
-            updatedBy: userId,
-          },
-        });
-
-        await this.writeRelationsAndEntries(
-          tx,
-          ledgerId,
-          updated.id,
-          userId,
-          resolved.input,
-          normalized,
-        );
-        await this.replaceAssetLinks(tx, ledgerId, updated.id, input);
-        await this.audit.write(
-          {
-            source: "user",
-            actorUserId: userId,
-            ledgerId,
-            action: "transaction.update",
-            entityType: "transaction",
-            entityId: updated.id,
-          },
-          tx,
-        );
-        return this.getWithRelations(tx, ledgerId, updated.id);
-      },
-      { timeout: 20_000 },
+    await this.reverseEntries(
+      tx,
+      ledgerId,
+      transactionId,
+      userId,
+      new Date(),
+      "transaction.update.reversal",
     );
+    await tx.transactionAccountRelation.deleteMany({ where: { ledgerId, transactionId } });
+    const normalized = await this.normalize(tx, ledgerId, input);
+    const resolved = await this.resolveSubAccounts(tx, ledgerId, input);
+
+    const updated = await tx.transaction.update({
+      where: { id: transactionId },
+      data: {
+        type: input.type,
+        grossAmountMicros: normalized.grossAmountMicros,
+        effectiveAmountMicros: normalized.effectiveAmountMicros,
+        currency: normalized.baseCurrency,
+        ...normalized.fx,
+        occurredOn: parseDateOnly(input.occurredOn),
+        occurredAt: parseDateOnly(input.occurredOn),
+        categoryId: input.type === "transfer" ? null : (input.categoryId ?? null),
+        subcategoryId: input.type === "transfer" ? null : (input.subcategoryId ?? null),
+        categorySnapshot: normalized.categorySnapshot ?? Prisma.JsonNull,
+        personId: input.personId ?? null,
+        personSnapshot: normalized.personSnapshot ?? Prisma.JsonNull,
+        accountId: input.type === "transfer" ? null : (input.accountId ?? null),
+        subAccountId: resolved.subAccountId,
+        fromAccountId: input.type === "transfer" ? input.fromAccountId : null,
+        fromSubAccountId: resolved.fromSubAccountId,
+        toAccountId: input.type === "transfer" ? input.toAccountId : null,
+        toSubAccountId: resolved.toSubAccountId,
+        note: input.note ?? null,
+        updatedBy: userId,
+      },
+    });
+
+    await this.writeRelationsAndEntries(
+      tx,
+      ledgerId,
+      updated.id,
+      userId,
+      resolved.input,
+      normalized,
+    );
+    await this.replaceAssetLinks(tx, ledgerId, updated.id, input);
+    await this.audit.write(
+      {
+        source: "user",
+        actorUserId: userId,
+        ledgerId,
+        action: "transaction.update",
+        entityType: "transaction",
+        entityId: updated.id,
+      },
+      tx,
+    );
+    return this.getWithRelations(tx, ledgerId, updated.id);
   }
 
   /**
@@ -551,39 +563,99 @@ export class TransactionsService {
   async delete(ledgerId: string, transactionId: string, userId: string): Promise<void> {
     await this.ledgers.assertMember(ledgerId, userId);
     // 删除会冲正每条分录（各自加账户行锁），放宽默认 5s 事务超时。
-    await this.txs.run(
-      async (tx) => {
-        const existing = await tx.transaction.findFirst({
-          where: { id: transactionId, ledgerId, deletedAt: null },
-        });
-        if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
-        await this.reverseEntries(
-          tx,
-          ledgerId,
-          transactionId,
-          userId,
-          new Date(),
-          "transaction.delete.reversal",
-        );
-        await tx.transaction.update({
-          where: { id: transactionId },
-          data: { deletedAt: new Date(), deletedBy: userId, updatedBy: userId },
-        });
-        await this.audit.write(
-          {
-            source: "user",
-            actorUserId: userId,
-            ledgerId,
-            action: "transaction.delete",
-            entityType: "transaction",
-            entityId: transactionId,
-          },
-          tx,
-        );
-      },
-      { timeout: 20_000 },
+    await this.txs.run((tx) => this.deleteWithin(tx, ledgerId, transactionId, userId), {
+      timeout: 20_000,
+    });
+    await this.deleteAttachmentsOf(ledgerId, transactionId);
+  }
+
+  /** delete 的事务体（同 updateWithin）；附件删除要在提交之后另调 deleteAttachmentsOf。 */
+  async deleteWithin(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    transactionId: string,
+    userId: string,
+  ): Promise<void> {
+    const existing = await tx.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
+    if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+    await this.reverseEntries(
+      tx,
+      ledgerId,
+      transactionId,
+      userId,
+      new Date(),
+      "transaction.delete.reversal",
     );
+    await tx.transaction.update({
+      where: { id: transactionId },
+      data: { deletedAt: new Date(), deletedBy: userId, updatedBy: userId },
+    });
+    await this.audit.write(
+      {
+        source: "user",
+        actorUserId: userId,
+        ledgerId,
+        action: "transaction.delete",
+        entityType: "transaction",
+        entityId: transactionId,
+      },
+      tx,
+    );
+  }
+
+  /** 交易软删后清理其附件（对象存储删除失败会入 file.delete 重试，不在数据库事务内）。 */
+  async deleteAttachmentsOf(ledgerId: string, transactionId: string): Promise<void> {
     await this.files.deleteAttachmentsForOwner(ledgerId, "transaction", transactionId);
+  }
+
+  /**
+   * 交易当前的完整编辑输入（含关联与保险/物品链接），供「只改一两个字段」的调用方在其上覆盖后
+   * 整体提交给 update——update 是整笔替换，漏带关联会被当成删除。
+   */
+  async currentUpdateInput(ledgerId: string, transactionId: string, userId: string) {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const existing = await this.prisma.client.transaction.findFirst({
+      where: { id: transactionId, ledgerId, deletedAt: null },
+    });
+    if (!existing) throw new AppError("TRANSACTION_NOT_FOUND", "交易不存在", 404);
+    const [relations, links] = await Promise.all([
+      this.prisma.client.transactionAccountRelation.findMany({
+        where: { ledgerId, transactionId },
+        orderBy: { createdAt: "asc" },
+      }),
+      this.prisma.client.transactionLink.findMany({
+        where: { ledgerId, transactionId },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+    return {
+      transaction: existing,
+      input: this.reconstructUpdateInput(existing, relations, links),
+    };
+  }
+
+  /** 按 update 的完整路径试算一次再回滚：校验口径与真正修改完全一致，不留任何写入。 */
+  async dryRunUpdate(
+    ledgerId: string,
+    transactionId: string,
+    userId: string,
+    input: UpdateTransactionDto,
+  ): Promise<void> {
+    await this.ledgers.assertMember(ledgerId, userId);
+    const rollback = new Error("transaction-update-dry-run");
+    try {
+      await this.txs.run(
+        async (tx) => {
+          await this.updateWithin(tx, ledgerId, transactionId, userId, input);
+          throw rollback;
+        },
+        { timeout: 20_000 },
+      );
+    } catch (error) {
+      if (error !== rollback) throw error;
+    }
   }
 
   private async createInsideTransaction(

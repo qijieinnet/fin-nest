@@ -36,6 +36,7 @@ import {
   groupByDay,
   timeRangeFromFilter,
 } from "../_components/bill-utils";
+import { usePendingAgentChangeRequests } from "@/lib/data/agent-tokens";
 import { t } from "@/lib/i18n";
 
 // 按账本缓存筛选条件，进出详情页（路由跳转会重挂载）后仍保留。模块级变量在客户端导航间不清空。
@@ -75,6 +76,8 @@ export function useBillsModel() {
   const creatorsQuery = useTransactionCreators(ledgerId);
   const autoPendingQuery = useAutoPending(ledgerId);
   const pendingCount = autoPendingQuery.data?.length ?? 0;
+  // 智能体提交、等待批准的变更申请（审批入口在「更多 › 智能体接入」）。
+  const agentRequestCount = usePendingAgentChangeRequests(ledgerId).data?.length ?? 0;
 
   const accounts = accountsQuery.data ?? [];
   const transactions = useMemo(
@@ -193,6 +196,7 @@ export function useBillsModel() {
     totals,
     balanceMicros,
     pendingCount,
+    agentRequestCount,
     budget,
     showBudget,
     filterCategoryOptions,

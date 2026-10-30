@@ -4,6 +4,7 @@ import { BackendPlatformModule } from "@fin-nest/backend";
 import { RestoreMaintenanceGuard } from "./guards/restore-maintenance.guard";
 import { HealthController } from "./health/health.controller";
 import { AccountsModule } from "./modules/accounts/accounts.module";
+import { AgentRequestsModule } from "./modules/agent-requests/agent-requests.module";
 import { AiModule } from "./modules/ai/ai.module";
 import { AssetsModule } from "./modules/assets/assets.module";
 import { AutomationModule } from "./modules/automation/automation.module";
@@ -13,6 +14,7 @@ import { FeishuModule } from "./modules/feishu/feishu.module";
 import { FilesModule } from "./modules/files/files.module";
 import { FxModule } from "./modules/fx/fx.module";
 import { LedgersModule } from "./modules/ledgers/ledgers.module";
+import { McpModule } from "./modules/mcp/mcp.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { PlansModule } from "./modules/plans/plans.module";
 import { RecordsModule } from "./modules/records/records.module";
@@ -31,6 +33,8 @@ import { TransactionsModule } from "./modules/transactions/transactions.module";
     AuthModule,
     LedgersModule,
     AccountsModule,
+    McpModule,
+    AgentRequestsModule,
     AiModule,
     AssetsModule,
     AutomationModule,

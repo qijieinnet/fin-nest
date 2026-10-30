@@ -2848,6 +2848,7 @@ export class AiService {
       planOverLimit: "计划超限",
       planPendingConfirm: "计划周期待确认",
       budgetOverLimit: "预算超支",
+      agentRequests: "智能体变更申请待批准",
     };
     return {
       ok: true as const,

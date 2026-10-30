@@ -269,6 +269,8 @@ export class BackupService {
     });
     await tx.entryReminder.deleteMany({ where });
     await tx.autoPendingTransaction.deleteMany({ where });
+    // 智能体变更申请不随账本备份：它指向的交易/账户在恢复后全部换了 id，留着只会是批不了的孤儿申请。
+    await tx.agentChangeRequest.deleteMany({ where });
     // 自动记账规则的接收人同样要先清，否则规则删了、reminder_targets 留下孤儿行。
     await tx.reminderTarget.deleteMany({
       where: {
@@ -900,7 +902,11 @@ export class BackupService {
       (row) => ({
         id: maps.pending.get(row.id)!,
         ledgerId,
-        autoRuleId: ref(maps.autoRule, row.autoRuleId)!,
+        // 智能体草稿不属于规则；起草它的 token 是用户级、不随账本备份，恢复后只留名称快照。
+        ...(row.source === "agent"
+          ? { source: "agent", autoRuleId: null, agentTokenId: null }
+          : { autoRuleId: ref(maps.autoRule, row.autoRuleId)! }),
+        sourceLabel: row.sourceLabel ?? null,
         periodKey: row.periodKey,
         scheduledFor: dt(row.scheduledFor)!,
         status: row.status,
@@ -920,6 +926,7 @@ export class BackupService {
         relationPayload: remapRelationPayload(row.relationPayload, maps),
         insuranceId: ref(maps.insurance, row.insuranceId),
         itemId: ref(maps.item, row.itemId),
+        itemLinkKind: row.itemLinkKind ?? null,
         subscriptionId: ref(maps.subscription, row.subscriptionId),
         confirmedTransactionId: ref(maps.transaction, row.confirmedTransactionId),
         confirmedBy: row.confirmedBy ? userId : null,

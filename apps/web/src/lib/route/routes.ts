@@ -12,6 +12,7 @@ export const routes = {
   fxRates: "/more/fx",
   systemSettings: "/more/system",
   feishu: "/more/feishu",
+  agents: "/more/agents",
   notifications: "/more/notifications",
   /** 推送通知点进来的落地页：展示提醒内容，并承接飞书卡片上的那组动作。 */
   notification: (notificationId: string) => `/n/${notificationId}`,

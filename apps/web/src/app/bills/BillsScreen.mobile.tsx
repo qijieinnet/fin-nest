@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ClipboardCheck,
   Ellipsis,
+  GitPullRequestArrow,
   Pencil,
   Plus,
   Trash2,
@@ -155,13 +156,17 @@ export function BillsScreenMobile() {
                 },
                 // 有待确认记录、待确认续费、保险到期提醒或启用账本切换时显示「更多」入口。
                 ...(model.pendingCount > 0 ||
+                model.agentRequestCount > 0 ||
                 dueRenewalCount > 0 ||
                 dueInsuranceCount > 0 ||
                 showLedgerSwitcher
                   ? [
                       {
                         dot:
-                          model.pendingCount > 0 || dueRenewalCount > 0 || dueInsuranceCount > 0,
+                          model.pendingCount > 0 ||
+                          model.agentRequestCount > 0 ||
+                          dueRenewalCount > 0 ||
+                          dueInsuranceCount > 0,
                         icon: <Ellipsis size={22} />,
                         label: t("更多"),
                         onClick: () => setMoreMenuOpen((open) => !open),
@@ -196,6 +201,20 @@ export function BillsScreenMobile() {
                         ),
                         label: t("待确认"),
                         onSelect: () => router.push(routes.billsPending),
+                      },
+                    ]
+                  : [],
+                model.agentRequestCount > 0
+                  ? [
+                      {
+                        description: t("{count} 条待批准", { count: model.agentRequestCount }),
+                        icon: (
+                          <DotBadge show>
+                            <GitPullRequestArrow size={18} />
+                          </DotBadge>
+                        ),
+                        label: t("智能体变更申请"),
+                        onSelect: () => router.push(routes.agents),
                       },
                     ]
                   : [],

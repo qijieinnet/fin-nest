@@ -858,10 +858,18 @@ export type AutoRule = {
 
 export type AutoPendingStatus = "pending" | "confirmed" | "deleted";
 
+/** 待确认的来源：自动记账规则生成，或外部智能体经 MCP 起草（docs/MCP_PLAN.md §4）。 */
+export type AutoPendingSource = "auto_rule" | "agent";
+
 export type AutoPendingTransaction = {
   id: string;
   ledgerId: string;
-  autoRuleId: string;
+  source: AutoPendingSource;
+  /** 规则生成的才有；智能体草稿为空。 */
+  autoRuleId: string | null;
+  agentTokenId: string | null;
+  /** 起草时 token 名称的快照（智能体草稿），token 改名/吊销后仍可显示。 */
+  sourceLabel: string | null;
   periodKey: string;
   scheduledFor: string;
   status: AutoPendingStatus;
@@ -883,6 +891,8 @@ export type AutoPendingTransaction = {
   relationPayload: AutoRelation[] | null;
   insuranceId: string | null;
   itemId: string | null;
+  /** 关联物品的方式；为空按 consumable（耗材）。 */
+  itemLinkKind: "consumable" | "purchase" | null;
   subscriptionId: string | null;
   confirmedTransactionId: string | null;
   confirmedAt: string | null;
@@ -1429,6 +1439,100 @@ export type FeishuBinding = {
 export type FeishuBindCode = {
   code: string;
   expiresAt: string;
+};
+
+/**
+ * 智能体个人 token（GET /auth/agent-tokens，见 docs/MCP_PLAN.md）。不含明文；
+ * `ledgerIds` 为空 = 我所在的全部账本。
+ */
+export type AgentToken = {
+  id: string;
+  name: string;
+  /** 明文末 4 位，用于区分多个 token。 */
+  tokenSuffix: string;
+  ledgerIds: string[];
+  scopes: AgentTokenScope[];
+  allowedIps: string[];
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  createdAt: string;
+};
+
+/** read 必选；写入类见 docs/MCP_PLAN.md §3。 */
+export type AgentTokenScope =
+  | "read"
+  | "drafts:write"
+  | "accounts:write"
+  | "assets:write"
+  | "plans:write"
+  | "changes:write";
+
+export type AgentChangeRequestKind = "transaction.update" | "transaction.delete" | "account.adjust";
+
+export type AgentChangeRequestStatus = "pending" | "approved" | "rejected" | "withdrawn" | "failed";
+
+/** 前后对比的一行。amount / balance 的值是 micros 字符串，按 currency 格式化。 */
+export type AgentChangeSummaryRow = {
+  field:
+    | "amount"
+    | "occurredOn"
+    | "category"
+    | "account"
+    | "fromAccount"
+    | "toAccount"
+    | "person"
+    | "note"
+    | "balance"
+    | "adjustKind"
+    | string;
+  before: string | null;
+  after: string | null;
+  currency?: string;
+};
+
+/**
+ * 智能体变更申请（GET /ledgers/:id/agent-change-requests，docs/MCP_PLAN.md §6）。
+ * summary 是申请时生成的快照；批准时若目标已被改过，后端拒绝执行并标 failed。
+ */
+export type AgentChangeRequest = {
+  id: string;
+  ledgerId: string;
+  agentTokenId: string | null;
+  sourceLabel: string | null;
+  requestedBy: string;
+  kind: AgentChangeRequestKind;
+  targetId: string;
+  summary: {
+    /** 交易：occurredOn/type/amountMicros/currency/category/note；余额调整：account/subAccount/accountType。 */
+    target: Record<string, string | null>;
+    rows: AgentChangeSummaryRow[];
+  };
+  reason: string | null;
+  status: AgentChangeRequestStatus;
+  error: string | null;
+  resultId: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+};
+
+/** POST /auth/agent-tokens：明文 token 只在这次响应里出现。 */
+export type CreatedAgentToken = AgentToken & { token: string };
+
+export type CreateAgentTokenInput = {
+  name: string;
+  ledgerIds?: string[];
+  scopes: AgentTokenScope[];
+  allowedIps?: string[];
+  expiresAt?: string;
+};
+
+export type UpdateAgentTokenInput = {
+  name?: string;
+  ledgerIds?: string[];
+  scopes?: AgentTokenScope[];
 };
 
 /** GET /auth/feishu/config（公开）。未启用时 appId 为 null，前端跳过整条免登流程。 */

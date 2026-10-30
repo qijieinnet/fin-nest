@@ -101,6 +101,64 @@ model ServiceToken {
   @@map("service_tokens")
 }
 
+// 智能体个人 token（MCP 接入，见 docs/MCP_PLAN.md）：绑定到用户，身份只由 token 决定。
+model AgentToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String
+  tokenHash   String    @unique @map("token_hash")
+  // 明文末 4 位，仅供列表里区分多个 token。
+  tokenSuffix String    @map("token_suffix")
+  // 空数组 = 该用户所在的全部账本。
+  ledgerIds   String[]  @default([]) @map("ledger_ids") @db.Uuid
+  scopes      String[]  @default([])
+  allowedIps  String[]  @default([]) @map("allowed_ips")
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+  lastUsedIp  String?   @map("last_used_ip")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt])
+  @@map("agent_tokens")
+}
+
+// 智能体变更申请（MCP P3，见 docs/MCP_PLAN.md §6）：改/删已入账交易、调整余额，用户批准后才执行。
+model AgentChangeRequest {
+  id             String    @id @default(uuid()) @db.Uuid
+  ledgerId       String    @map("ledger_id") @db.Uuid
+  agentTokenId   String?   @map("agent_token_id") @db.Uuid
+  /// token 名称快照。
+  sourceLabel    String?   @map("source_label")
+  /// token 归属人（发起申请的身份）。
+  requestedBy    String    @map("requested_by") @db.Uuid
+  /// transaction.update / transaction.delete / account.adjust
+  kind           String
+  /// 交易 id 或账户 id（不设外键，见迁移注释）。
+  targetId       String    @map("target_id") @db.Uuid
+  /// 申请时目标的版本：交易的 updatedAt，或余额调整前的余额（micros）。批准时不一致即拒绝。
+  targetVersion  String    @map("target_version")
+  /// 批准时交给领域 service 的输入。
+  payload        Json      @db.JsonB
+  /// 给人看的前后对比：[{ label, before, after }]。
+  summary        Json      @db.JsonB
+  reason         String?
+  idempotencyKey String    @map("idempotency_key")
+  /// pending / approved / rejected / withdrawn / failed
+  status         String    @default("pending")
+  error          String?
+  /// 执行结果：交易 id 或余额调整记录 id。
+  resultId       String?   @map("result_id") @db.Uuid
+  decidedBy      String?   @map("decided_by") @db.Uuid
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([ledgerId, status, createdAt])
+  @@map("agent_change_requests")
+}
+
 model Ledger {
   id                  String    @id @default(uuid()) @db.Uuid
   name                String
@@ -463,7 +521,14 @@ model AutoRule {
 model AutoPendingTransaction {
   id                     String    @id @default(uuid()) @db.Uuid
   ledgerId               String    @map("ledger_id") @db.Uuid
-  autoRuleId             String    @map("auto_rule_id") @db.Uuid
+  /// 来源：auto_rule=自动记账规则生成（autoRuleId 必填）；agent=外部智能体经 MCP 起草（autoRuleId 为空）。
+  source                 String    @default("auto_rule")
+  autoRuleId             String?   @map("auto_rule_id") @db.Uuid
+  /// 起草它的智能体 token；账本备份恢复到别处时置空。
+  agentTokenId           String?   @map("agent_token_id") @db.Uuid
+  /// token 名称快照，token 改名/吊销后待确认页仍能显示来源。
+  sourceLabel            String?   @map("source_label")
+  /// 规则生成的待确认：周期键；智能体草稿：调用方传入的幂等键（按 token 部分唯一）。
   periodKey              String    @map("period_key")
   scheduledFor           DateTime  @map("scheduled_for") @db.Date
   status                 String
@@ -484,6 +549,8 @@ model AutoPendingTransaction {
   relationPayload        Json?     @map("relation_payload") @db.JsonB
   insuranceId            String?   @map("insurance_id") @db.Uuid
   itemId                 String?   @map("item_id") @db.Uuid
+  /// 关联物品的方式（同快捷模板）：为空按 consumable。规则生成的恒为空。
+  itemLinkKind           String?   @map("item_link_kind")
   subscriptionId         String?   @map("subscription_id") @db.Uuid
   confirmedTransactionId String?   @map("confirmed_transaction_id") @db.Uuid
   confirmedBy            String?   @map("confirmed_by") @db.Uuid

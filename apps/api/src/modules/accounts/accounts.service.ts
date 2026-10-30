@@ -56,7 +56,7 @@ export function isLiabilityAccountType(type: string): boolean {
   return type === "credit" || type === "payable";
 }
 
-function mustStayNonNegative(type: string): boolean {
+export function mustStayNonNegative(type: string): boolean {
   return type === "credit" || type === "receivable" || type === "payable";
 }
 
@@ -471,77 +471,88 @@ export class AccountsService {
     userId: string,
     input: AdjustAccountDto,
   ) {
-    return this.txs.run(
-      async (tx) => {
-        // delta 由“当前余额”算出，读之前必须锁行，否则并发写会让 delta 基于过期余额。
-        await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
-        const account = await tx.account.findFirst({
-          where: { id: accountId, ledgerId, archivedAt: null },
-        });
-        if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
-        // money 账户余额已拆到子账户，未指定子账户时落到默认子账户，保持“账户余额 = Σ子账户”不变式。
-        const targetSubAccountId =
-          input.subAccountId ??
-          (isMoneyAccountType(account.type)
-            ? await this.findDefaultSubAccountId(tx, ledgerId, accountId)
-            : null);
-        const subAccount = targetSubAccountId
-          ? await tx.subAccount.findFirst({
-              where: { id: targetSubAccountId, accountId, ledgerId, archivedAt: null },
-            })
-          : null;
-        if (targetSubAccountId && !subAccount)
-          throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
-        const before = subAccount?.balanceMicros ?? account.balanceMicros;
-        const after = BigInt(input.balanceAfterMicros);
-        if (mustStayNonNegative(account.type) && after < 0n) {
-          throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
-        }
-        const delta = after - before;
+    return this.txs.run((tx) => this.adjustWithin(tx, ledgerId, accountId, userId, input), {
+      timeout: 20_000,
+    });
+  }
 
-        const adjustment = await tx.accountAdjustment.create({
-          data: {
-            ledgerId,
-            accountId,
-            subAccountId: targetSubAccountId,
-            balanceBeforeMicros: before,
-            balanceAfterMicros: after,
-            deltaMicros: delta,
-            note: input.note,
-            createdBy: userId,
-          },
-        });
-        await this.applyEntry(tx, {
-          ledgerId,
-          accountId,
-          subAccountId: targetSubAccountId,
-          // 投资账户的余额修改分两种，由调用方指定（不传按市值涨跌）：
-          //   revaluation 市值涨跌 → 进收益
-          //   principal   本金存取 → 进本金（卖出到没记账的卡这类没有对手方账户的场景）
-          // 其余账户一律 adjustment（记错了纠错），语义与投资账户不同，不能混用同一类型。
-          entryType:
-            account.type === "invest" ? (input.kind ?? "revaluation") : "adjustment",
-          amountDeltaMicros: delta,
-          adjustmentId: adjustment.id,
-          note: input.note,
-          occurredAt: new Date(),
-          createdBy: userId,
-        });
-        await this.audit.write(
-          {
-            source: "user",
-            actorUserId: userId,
-            ledgerId,
-            action: "account.adjust",
-            entityType: "account_adjustment",
-            entityId: adjustment.id,
-          },
-          tx,
-        );
-        return adjustment;
+  /**
+   * adjust 的事务体，供需要把「改余额」与自己的写入放进同一事务的调用方使用
+   * （智能体变更申请的批准）。调用方负责 assertMember 与幂等。
+   */
+  async adjustWithin(
+    tx: PrismaTransactionClient,
+    ledgerId: string,
+    accountId: string,
+    userId: string,
+    input: AdjustAccountDto,
+  ) {
+    // delta 由“当前余额”算出，读之前必须锁行，否则并发写会让 delta 基于过期余额。
+    await tx.$executeRaw`SELECT id FROM accounts WHERE id = ${accountId}::uuid FOR UPDATE`;
+    const account = await tx.account.findFirst({
+      where: { id: accountId, ledgerId, archivedAt: null },
+    });
+    if (!account) throw new AppError("ACCOUNT_NOT_FOUND", "账户不存在", 404);
+    // money 账户余额已拆到子账户，未指定子账户时落到默认子账户，保持“账户余额 = Σ子账户”不变式。
+    const targetSubAccountId =
+      input.subAccountId ??
+      (isMoneyAccountType(account.type)
+        ? await this.findDefaultSubAccountId(tx, ledgerId, accountId)
+        : null);
+    const subAccount = targetSubAccountId
+      ? await tx.subAccount.findFirst({
+          where: { id: targetSubAccountId, accountId, ledgerId, archivedAt: null },
+        })
+      : null;
+    if (targetSubAccountId && !subAccount)
+      throw new AppError("SUB_ACCOUNT_NOT_FOUND", "子账户不存在", 404);
+    const before = subAccount?.balanceMicros ?? account.balanceMicros;
+    const after = BigInt(input.balanceAfterMicros);
+    if (mustStayNonNegative(account.type) && after < 0n) {
+      throw new AppError("ACCOUNT_BALANCE_NEGATIVE", "账户余额不能小于 0", 400);
+    }
+    const delta = after - before;
+
+    const adjustment = await tx.accountAdjustment.create({
+      data: {
+        ledgerId,
+        accountId,
+        subAccountId: targetSubAccountId,
+        balanceBeforeMicros: before,
+        balanceAfterMicros: after,
+        deltaMicros: delta,
+        note: input.note,
+        createdBy: userId,
       },
-      { timeout: 20_000 },
+    });
+    await this.applyEntry(tx, {
+      ledgerId,
+      accountId,
+      subAccountId: targetSubAccountId,
+      // 投资账户的余额修改分两种，由调用方指定（不传按市值涨跌）：
+      //   revaluation 市值涨跌 → 进收益
+      //   principal   本金存取 → 进本金（卖出到没记账的卡这类没有对手方账户的场景）
+      // 其余账户一律 adjustment（记错了纠错），语义与投资账户不同，不能混用同一类型。
+      entryType:
+        account.type === "invest" ? (input.kind ?? "revaluation") : "adjustment",
+      amountDeltaMicros: delta,
+      adjustmentId: adjustment.id,
+      note: input.note,
+      occurredAt: new Date(),
+      createdBy: userId,
+    });
+    await this.audit.write(
+      {
+        source: "user",
+        actorUserId: userId,
+        ledgerId,
+        action: "account.adjust",
+        entityType: "account_adjustment",
+        entityId: adjustment.id,
+      },
+      tx,
     );
+    return adjustment;
   }
 
   /**
